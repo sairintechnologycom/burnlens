@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import aiosqlite
 
@@ -53,6 +54,36 @@ async def init_db(db_path: str) -> None:
         await db.commit()
 
     logger.debug("Database initialized at %s", db_path)
+
+
+async def get_requests_for_export(
+    db_path: str,
+    days: int = 7,
+    team: str | None = None,
+    feature: str | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch requests for CSV export, optionally filtered by team/feature tag."""
+    from datetime import datetime, timedelta, timezone
+
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    query = "SELECT * FROM requests WHERE timestamp >= ?"
+    params: list[Any] = [since]
+
+    if team:
+        query += " AND json_extract(tags, '$.team') = ?"
+        params.append(team)
+    if feature:
+        query += " AND json_extract(tags, '$.feature') = ?"
+        params.append(feature)
+
+    query += " ORDER BY timestamp ASC"
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 async def insert_request(db_path: str, record: RequestRecord) -> int:

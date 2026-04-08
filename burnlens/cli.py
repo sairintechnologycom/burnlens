@@ -405,6 +405,39 @@ def analyze(
 
 
 @app.command()
+def export(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(7, "--days", "-d", help="Number of days to export"),
+    output: Path = typer.Option(
+        "burnlens_export.csv", "--output", "-o", help="Output CSV file path"
+    ),
+    team: Optional[str] = typer.Option(None, "--team", help="Filter by tag_team"),
+    feature: Optional[str] = typer.Option(None, "--feature", help="Filter by tag_feature"),
+) -> None:
+    """Export request data to CSV."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.export import export_to_csv
+        from burnlens.storage.database import get_requests_for_export
+
+        rows = await get_requests_for_export(
+            cfg.db_path, days=days, team=team, feature=feature
+        )
+
+        if not rows:
+            console.print("[yellow]No requests found for the given filters.[/yellow]")
+            return
+
+        export_to_csv(rows, output)
+        console.print(
+            f"Exporting {len(rows)} requests to {output}... [green]done.[/green]"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command()
 def ui(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
