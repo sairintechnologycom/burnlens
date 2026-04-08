@@ -38,6 +38,14 @@ alerts:
   # Per-request cost guard (future: will reject requests over this limit).
   # per_request_limit_usd: 1.00
 
+# ── Email (for `burnlens report --email`) ─────────────────────────────────────
+# email:
+#   smtp_host: smtp.gmail.com
+#   smtp_port: 587
+#   smtp_user: you@gmail.com
+#   smtp_password: your-app-password
+#   from: "BurnLens <you@gmail.com>"
+
 # ── Per-team budget limits ────────────────────────────────────────────────────
 # Teams are identified by the X-BurnLens-Tag-Team header on each request.
 # budgets:

@@ -9,6 +9,17 @@ import yaml
 
 
 @dataclass
+class EmailConfig:
+    """SMTP email configuration for sending reports."""
+
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    from_addr: str | None = None
+
+
+@dataclass
 class BudgetConfig:
     """Per-period budget limits."""
 
@@ -52,6 +63,7 @@ class BurnLensConfig:
     google_upstream: str = "https://generativelanguage.googleapis.com"
 
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
+    email: EmailConfig = field(default_factory=EmailConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -122,6 +134,18 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         budgets=team_budgets,
     )
     kwargs["alerts"] = alerts
+
+    # Email config
+    email_data = data.get("email", {}) or {}
+    if email_data:
+        email = EmailConfig(
+            smtp_host=email_data.get("smtp_host"),
+            smtp_port=int(email_data.get("smtp_port", 587)),
+            smtp_user=email_data.get("smtp_user"),
+            smtp_password=email_data.get("smtp_password"),
+            from_addr=email_data.get("from"),
+        )
+        kwargs["email"] = email
 
     return BurnLensConfig(**kwargs)
 
