@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import httpx
 
@@ -22,6 +22,9 @@ from burnlens.proxy.providers import ProviderConfig, strip_proxy_prefix
 from burnlens.proxy.streaming import extract_usage_from_stream, should_buffer_chunk
 from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
+
+if TYPE_CHECKING:
+    from burnlens.alerts.engine import AlertEngine
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +151,7 @@ async def handle_request(
     body_bytes: bytes,
     query_string: str,
     db_path: str,
+    alert_engine: "AlertEngine | None" = None,
 ) -> tuple[int, dict[str, str], bytes | None, AsyncIterator[bytes] | None]:
     """Forward a request upstream and return (status, headers, body, stream).
 
@@ -186,6 +190,7 @@ async def handle_request(
             db_path=db_path,
             start_ms=start_ms,
             request_path=path,
+            alert_engine=alert_engine,
         )
     else:
         return await _handle_non_streaming(
@@ -201,6 +206,7 @@ async def handle_request(
             db_path=db_path,
             start_ms=start_ms,
             request_path=path,
+            alert_engine=alert_engine,
         )
 
 
@@ -217,6 +223,7 @@ async def _handle_non_streaming(
     db_path: str,
     start_ms: float,
     request_path: str,
+    alert_engine: "AlertEngine | None" = None,
 ) -> tuple[int, dict[str, str], bytes, None]:
     """Forward a non-streaming request and log asynchronously."""
     response = await client.request(
@@ -254,6 +261,8 @@ async def _handle_non_streaming(
         system_prompt_hash=system_hash,
     )
     asyncio.create_task(_log_record(db_path, record))
+    if alert_engine is not None:
+        asyncio.create_task(alert_engine.check_and_dispatch())
 
     # Pass through response headers, stripping hop-by-hop
     resp_headers = {
@@ -278,6 +287,7 @@ async def _handle_streaming(
     db_path: str,
     start_ms: float,
     request_path: str,
+    alert_engine: "AlertEngine | None" = None,
 ) -> tuple[int, dict[str, str], None, AsyncIterator[bytes]]:
     """Forward a streaming request; log usage after stream ends."""
     req = client.build_request(
@@ -311,6 +321,7 @@ async def _handle_streaming(
                     duration_ms=duration_ref[0],
                     status_code=response.status_code,
                     request_path=request_path,
+                    alert_engine=alert_engine,
                 )
             )
 
@@ -333,6 +344,7 @@ async def _log_streaming_usage(
     duration_ms: int,
     status_code: int,
     request_path: str,
+    alert_engine: "AlertEngine | None" = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
@@ -356,3 +368,5 @@ async def _log_streaming_usage(
         system_prompt_hash=system_hash,
     )
     await _log_record(db_path, record)
+    if alert_engine is not None:
+        asyncio.create_task(alert_engine.check_and_dispatch())

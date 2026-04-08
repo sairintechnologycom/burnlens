@@ -1,8 +1,21 @@
 """Budget tracking and forecasting."""
 from __future__ import annotations
 
+import calendar
+import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
+
+from burnlens.storage.queries import get_total_cost
+
+if TYPE_CHECKING:
+    from burnlens.config import BurnLensConfig
+
+logger = logging.getLogger(__name__)
+
+# Thresholds that trigger alerts (percentage of budget used).
+DEFAULT_THRESHOLDS = (80.0, 90.0, 100.0)
 
 
 @dataclass
@@ -44,6 +57,19 @@ class BudgetStatus:
         return max(0.0, (self.budget_usd or 0.0) - self.spent_usd)
 
 
+@dataclass
+class BudgetAlert:
+    """A threshold crossing that should be dispatched to alert channels."""
+
+    period: str           # "daily" | "weekly" | "monthly"
+    budget_usd: float
+    spent_usd: float
+    pct_used: float
+    threshold: float      # which threshold triggered, e.g. 80.0
+    forecast_usd: float
+    period_start: str     # ISO date string, e.g. "2026-04-01"
+
+
 def compute_budget_status(
     spent_usd: float,
     budget_usd: float | None,
@@ -73,3 +99,111 @@ def compute_budget_status(
         elapsed_days=float(elapsed_days),
         forecast_usd=forecast_usd,
     )
+
+
+def _period_start_iso(period: str, now: datetime) -> str:
+    """Return ISO timestamp for the start of the given period."""
+    if period == "daily":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "weekly":
+        # Monday of current week
+        start = now - timedelta(days=now.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:  # monthly
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start.isoformat()
+
+
+def _period_days(period: str, now: datetime) -> int:
+    """Return total days in the budget period."""
+    if period == "daily":
+        return 1
+    if period == "weekly":
+        return 7
+    # monthly: actual days in current month
+    return calendar.monthrange(now.year, now.month)[1]
+
+
+def _elapsed_days(period: str, now: datetime) -> float:
+    """Return how many days have elapsed in the current period."""
+    if period == "daily":
+        # fraction of the day elapsed
+        return max((now.hour * 3600 + now.minute * 60 + now.second) / 86400, 1 / 1440)
+    if period == "weekly":
+        return max(now.weekday() + 1, 1)  # Monday=1, Sunday=7
+    return max(float(now.day), 1.0)
+
+
+class BudgetTracker:
+    """Checks configured budget periods against actual spend and returns alerts."""
+
+    def __init__(self, config: "BurnLensConfig", db_path: str) -> None:
+        self._config = config
+        self._db_path = db_path
+
+    def _budget_map(self) -> dict[str, float | None]:
+        """Return {period: budget_usd} for all configured periods."""
+        cfg = self._config.alerts
+        budget_cfg = cfg.budget
+
+        result: dict[str, float | None] = {
+            "daily": budget_cfg.daily_usd,
+            "weekly": budget_cfg.weekly_usd,
+            "monthly": budget_cfg.monthly_usd,
+        }
+
+        # Backward-compat: budget_limit_usd maps to monthly if monthly not set
+        if result["monthly"] is None and cfg.budget_limit_usd is not None:
+            result["monthly"] = cfg.budget_limit_usd
+
+        # Drop periods with no budget configured
+        return {k: v for k, v in result.items() if v is not None}
+
+    async def check_thresholds(
+        self,
+        thresholds: tuple[float, ...] = DEFAULT_THRESHOLDS,
+    ) -> list[BudgetAlert]:
+        """Query DB spend per period and return any threshold crossings.
+
+        Only returns alerts for thresholds the caller hasn't already seen
+        (deduplication is the caller's responsibility).
+        """
+        budgets = self._budget_map()
+        if not budgets:
+            return []
+
+        alerts: list[BudgetAlert] = []
+        now = datetime.now(timezone.utc)
+
+        for period, budget_usd in budgets.items():
+            if budget_usd is None or budget_usd <= 0:
+                continue
+
+            since = _period_start_iso(period, now)
+            try:
+                spent = await get_total_cost(self._db_path, since=since)
+            except Exception as exc:
+                logger.warning("budget check failed for %s period: %s", period, exc)
+                continue
+
+            total_days = _period_days(period, now)
+            elapsed = _elapsed_days(period, now)
+            daily_rate = spent / elapsed if elapsed > 0 else 0.0
+            forecast = daily_rate * total_days
+            pct = (spent / budget_usd) * 100.0
+
+            for threshold in sorted(thresholds):
+                if pct >= threshold:
+                    alerts.append(
+                        BudgetAlert(
+                            period=period,
+                            budget_usd=budget_usd,
+                            spent_usd=spent,
+                            pct_used=pct,
+                            threshold=threshold,
+                            forecast_usd=forecast,
+                            period_start=since[:10],  # date portion only
+                        )
+                    )
+
+        return alerts
