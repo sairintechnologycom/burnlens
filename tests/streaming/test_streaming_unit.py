@@ -42,17 +42,17 @@ from .conftest import (
 # ---------------------------------------------------------------------------
 
 def openai_provider():
-    return get_provider_for_path("/openai/v1/chat/completions")
+    return get_provider_for_path("/proxy/openai/v1/chat/completions")
 
 
 def anthropic_provider():
-    return get_provider_for_path("/anthropic/v1/messages")
+    return get_provider_for_path("/proxy/anthropic/v1/messages")
 
 
 async def call_streaming(
     client: httpx.AsyncClient,
     provider=None,
-    path: str = "/openai/v1/chat/completions",
+    path: str = "/proxy/openai/v1/chat/completions",
     model: str = "gpt-4o-mini",
     db_path: str = "",
     tag_feature: str = "chat",
@@ -108,7 +108,7 @@ class TestHandleRequestDispatch:
             status, headers, body, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=make_headers(),
                 body_bytes=make_body(stream=False),
@@ -230,7 +230,7 @@ class TestShouldBufferChunk:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=make_headers(),
                 body_bytes=make_body(model="o1"),
@@ -346,7 +346,7 @@ class TestTagExtraction:
             status, headers, body, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=make_headers(tag_customer="acme-corp"),
                 body_bytes=make_body(),
@@ -372,7 +372,7 @@ class TestTagExtraction:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers={"authorization": "Bearer sk-test",
                          "content-type": "application/json"},
@@ -452,7 +452,7 @@ class TestHeaderCleaning:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=headers,
                 body_bytes=make_body(),
@@ -483,7 +483,7 @@ class TestUpstreamErrors:
             status, _, body, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=make_headers(),
                 body_bytes=make_body(stream=False),
@@ -518,7 +518,7 @@ class TestUpstreamErrors:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=make_headers(),
                 body_bytes=make_body(),
@@ -550,7 +550,7 @@ class TestUpstreamErrors:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=openai_provider(),
-                path="/openai/v1/chat/completions",
+                path="/proxy/openai/v1/chat/completions",
                 method="POST",
                 headers=make_headers(),
                 body_bytes=make_body(),
@@ -591,7 +591,7 @@ class TestAnthropicStreaming:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=anthropic_provider(),
-                path="/anthropic/v1/messages",
+                path="/proxy/anthropic/v1/messages",
                 method="POST",
                 headers=make_headers(provider="anthropic", tag_feature="summarize"),
                 body_bytes=json.dumps({
@@ -626,7 +626,7 @@ class TestAnthropicStreaming:
             _, _, _, stream = await handle_request(
                 client=client,
                 provider=anthropic_provider(),
-                path="/anthropic/v1/messages",
+                path="/proxy/anthropic/v1/messages",
                 method="POST",
                 headers=make_headers(provider="anthropic"),
                 body_bytes=json.dumps({
@@ -666,7 +666,7 @@ class TestConcurrentStreams:
                 _, _, _, stream = await handle_request(
                     client=client,
                     provider=openai_provider(),
-                    path="/openai/v1/chat/completions",
+                    path="/proxy/openai/v1/chat/completions",
                     method="POST",
                     headers=make_headers(tag_feature=tag),
                     body_bytes=make_body(),
@@ -704,7 +704,7 @@ class TestConcurrentStreams:
                 _, _, _, stream = await handle_request(
                     client=client,
                     provider=openai_provider(),
-                    path="/openai/v1/chat/completions",
+                    path="/proxy/openai/v1/chat/completions",
                     method="POST",
                     headers=make_headers(tag_feature=tag),
                     body_bytes=make_body(),
