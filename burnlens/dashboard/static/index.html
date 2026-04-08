@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BurnLens</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🔥 BurnLens</h1>
+    <p class="tagline">LLM API cost tracker</p>
+  </header>
+
+  <main>
+    <section class="summary-cards" id="summary-cards">
+      <div class="card">
+        <div class="card-label">Total Spend</div>
+        <div class="card-value" id="total-cost">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total Requests</div>
+        <div class="card-value" id="total-requests">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Models Used</div>
+        <div class="card-value" id="models-used">—</div>
+      </div>
+    </section>
+
+    <section class="chart-section">
+      <h2>Cost by Model</h2>
+      <canvas id="model-chart" height="100"></canvas>
+    </section>
+
+    <section class="table-section">
+      <h2>Recent Requests</h2>
+      <table id="requests-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th>In</th>
+            <th>Out</th>
+            <th>Cost</th>
+            <th>ms</th>
+          </tr>
+        </thead>
+        <tbody id="requests-body">
+          <tr><td colspan="7">Loading…</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
