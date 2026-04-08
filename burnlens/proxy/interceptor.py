@@ -25,8 +25,60 @@ from burnlens.storage.models import RequestRecord
 
 if TYPE_CHECKING:
     from burnlens.alerts.engine import AlertEngine
+    from burnlens.config import CustomerBudgetsConfig
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Customer spend cache (60-second TTL to avoid DB hit on every request)
+# ---------------------------------------------------------------------------
+
+_customer_spend_cache: dict[str, tuple[float, float]] = {}  # customer -> (spend, timestamp)
+_CUSTOMER_CACHE_TTL = 60.0  # seconds
+
+
+def _get_cached_customer_spend(customer: str) -> float | None:
+    """Return cached spend for a customer, or None if cache miss/expired."""
+    entry = _customer_spend_cache.get(customer)
+    if entry is None:
+        return None
+    spend, cached_at = entry
+    if time.monotonic() - cached_at > _CUSTOMER_CACHE_TTL:
+        del _customer_spend_cache[customer]
+        return None
+    return spend
+
+
+def _set_cached_customer_spend(customer: str, spend: float) -> None:
+    """Cache the spend value for a customer."""
+    _customer_spend_cache[customer] = (spend, time.monotonic())
+
+
+async def check_customer_budget(
+    customer: str,
+    db_path: str,
+    customer_budgets: "CustomerBudgetsConfig",
+) -> tuple[bool, float, float]:
+    """Check if customer is within budget.
+
+    Returns (allowed, spent, limit). If no budget applies, allowed is True.
+    """
+    # Determine budget limit for this customer
+    limit = customer_budgets.customers.get(customer)
+    if limit is None:
+        limit = customer_budgets.default
+    if limit is None:
+        return True, 0.0, 0.0
+
+    # Check cache first
+    spent = _get_cached_customer_spend(customer)
+    if spent is None:
+        from burnlens.storage.database import get_spend_by_customer_this_month
+        all_spend = await get_spend_by_customer_this_month(db_path)
+        spent = all_spend.get(customer, 0.0)
+        _set_cached_customer_spend(customer, spent)
+
+    return spent < limit, spent, limit
 
 # ---------------------------------------------------------------------------
 # Known upstream error patterns → human-readable hints
@@ -215,6 +267,7 @@ async def handle_request(
     query_string: str,
     db_path: str,
     alert_engine: "AlertEngine | None" = None,
+    customer_budgets: "CustomerBudgetsConfig | None" = None,
 ) -> tuple[int, dict[str, str], bytes | None, AsyncIterator[bytes] | None]:
     """Forward a request upstream and return (status, headers, body, stream).
 
@@ -229,6 +282,22 @@ async def handle_request(
         upstream_path = f"{upstream_path}?{query_string}"
 
     tags = _extract_tags(headers)
+
+    # --- Customer budget enforcement (BEFORE forwarding) ---
+    customer = tags.get("customer")
+    if customer and customer_budgets:
+        allowed, spent, limit = await check_customer_budget(
+            customer, db_path, customer_budgets,
+        )
+        if not allowed:
+            reject_body = json.dumps({
+                "error": "budget_exceeded",
+                "customer": customer,
+                "spent": round(spent, 2),
+                "limit": round(limit, 2),
+            }).encode()
+            return 429, {"content-type": "application/json"}, reject_body, None
+
     clean_headers = _clean_request_headers(headers)
     streaming = _is_streaming(body_bytes, upstream_path)
 

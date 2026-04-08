@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from burnlens.analysis.budget import BudgetAlert, BudgetTracker, DEFAULT_THRESHOLDS
 from burnlens.alerts.slack import SlackWebhookAlert
 from burnlens.alerts.terminal import TerminalAlert
-from burnlens.storage.database import get_spend_by_team_this_month
+from burnlens.storage.database import get_spend_by_customer_this_month, get_spend_by_team_this_month
 from burnlens.storage.queries import get_usage_by_model
 
 if TYPE_CHECKING:
@@ -23,6 +23,17 @@ class TeamBudgetAlert:
     team: str
     spent: float
     limit: float
+    severity: str  # "WARNING" or "CRITICAL"
+
+
+@dataclass
+class CustomerBudgetAlert:
+    """Alert for a customer approaching or exceeding their budget."""
+
+    customer: str
+    spent: float
+    limit: float
+    pct: float
     severity: str  # "WARNING" or "CRITICAL"
 
 logger = logging.getLogger(__name__)
@@ -138,6 +149,74 @@ class AlertEngine:
 
         if self._slack:
             await self._slack.send(alert, top_model)
+
+
+    async def check_and_dispatch_customer_budgets(self) -> list[CustomerBudgetAlert]:
+        """Check per-customer budgets and dispatch any alerts.
+
+        Safe to call with asyncio.create_task — all errors are caught.
+        """
+        try:
+            return await self._run_customer_checks()
+        except Exception as exc:
+            logger.error("Customer budget check error: %s", exc)
+            return []
+
+    async def _run_customer_checks(self) -> list[CustomerBudgetAlert]:
+        alerts = await check_customer_budgets(self._config, self._db_path)
+        for alert in alerts:
+            key = ("customer", alert.customer, alert.severity)
+            if key in self._fired:
+                continue
+            self._fired.add(key)
+            logger.warning(
+                "Customer budget %s: %s spent $%.4f / $%.2f (%.1f%%)",
+                alert.severity, alert.customer, alert.spent, alert.limit, alert.pct,
+            )
+            if self._config.alerts.terminal:
+                from rich.console import Console
+                _console = Console(stderr=True)
+                color = "red" if alert.severity == "CRITICAL" else "yellow"
+                _console.print(
+                    f"[{color}][{alert.severity}][/{color}] Customer '{alert.customer}': "
+                    f"${alert.spent:.4f} / ${alert.limit:.2f} ({alert.pct:.1f}%)"
+                )
+        return alerts
+
+
+async def check_customer_budgets(
+    config: "BurnLensConfig",
+    db_path: str,
+) -> list[CustomerBudgetAlert]:
+    """Check per-customer spend against configured limits.
+
+    Returns alerts for customers at:
+    - WARNING at 80% of limit
+    - CRITICAL at 100% of limit
+    """
+    cust_cfg = config.alerts.customer_budgets
+    if not cust_cfg.customers and cust_cfg.default is None:
+        return []
+
+    spend_by_customer = await get_spend_by_customer_this_month(db_path)
+    alerts: list[CustomerBudgetAlert] = []
+
+    # Check all customers that have spend
+    for customer, spent in spend_by_customer.items():
+        limit = cust_cfg.customers.get(customer, cust_cfg.default)
+        if limit is None or limit <= 0:
+            continue
+        pct = spent / limit * 100
+        if pct >= 100:
+            alerts.append(CustomerBudgetAlert(
+                customer=customer, spent=spent, limit=limit, pct=pct, severity="CRITICAL",
+            ))
+        elif pct >= 80:
+            alerts.append(CustomerBudgetAlert(
+                customer=customer, spent=spent, limit=limit, pct=pct, severity="WARNING",
+            ))
+
+    return alerts
 
 
 async def check_team_budgets(

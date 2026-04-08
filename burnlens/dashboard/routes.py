@@ -16,7 +16,7 @@ from burnlens.storage.queries import (
     get_usage_by_model,
     get_usage_by_tag,
 )
-from burnlens.storage.database import get_spend_by_team_this_month
+from burnlens.storage.database import get_spend_by_team_this_month, get_top_customers_by_cost
 from burnlens.analysis.waste import run_all_detectors
 from burnlens.analysis.budget import compute_budget_status
 
@@ -245,6 +245,50 @@ async def team_budgets(request: Request) -> list:
             "spent": round(spent, 6),
             "limit": limit,
             "pct_used": round(pct, 1),
+            "status": status,
+        })
+    return result
+
+
+# ----------------------------------------------------- /api/customers
+
+@router.get("/customers")
+async def customers(request: Request) -> list:
+    """Per-customer cost tracking with budget status."""
+    db = _db_path(request)
+    config = getattr(request.app.state, "config", None)
+
+    cust_budgets = None
+    if config and config.alerts and config.alerts.customer_budgets:
+        cust_budgets = config.alerts.customer_budgets
+
+    rows = await get_top_customers_by_cost(db)
+    result = []
+    for r in rows:
+        customer = r["customer"]
+        limit = None
+        if cust_budgets:
+            limit = cust_budgets.customers.get(customer, cust_budgets.default)
+
+        pct = (r["total_cost"] / limit * 100) if limit and limit > 0 else None
+        if pct is not None:
+            if pct >= 100:
+                status = "EXCEEDED"
+            elif pct >= 80:
+                status = "WARNING"
+            else:
+                status = "OK"
+        else:
+            status = "NO_LIMIT"
+
+        result.append({
+            "customer": customer,
+            "request_count": r["request_count"],
+            "input_tokens": r["input_tokens"],
+            "output_tokens": r["output_tokens"],
+            "total_cost": round(r["total_cost"], 6),
+            "budget": limit,
+            "pct_used": round(pct, 1) if pct is not None else None,
             "status": status,
         })
     return result

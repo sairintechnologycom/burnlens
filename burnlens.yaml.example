@@ -46,6 +46,14 @@ alerts:
 #   smtp_password: your-app-password
 #   from: "BurnLens <you@gmail.com>"
 
+# ── Per-customer budget limits ────────────────────────────────────────────────
+# Customers are identified by the X-BurnLens-Tag-Customer header on each request.
+# Requests from customers who exceed their budget will be rejected with HTTP 429.
+# customer_budgets:
+#   acme-corp: 50.00
+#   beta-user: 10.00
+#   default: 5.00           # applied to any unrecognised customer
+
 # ── Per-team budget limits ────────────────────────────────────────────────────
 # Teams are identified by the X-BurnLens-Tag-Team header on each request.
 # budgets:
