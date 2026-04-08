@@ -30,6 +30,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
         global _http_client, _config
         _config = config
         app.state.db_path = config.db_path
+        app.state.config = config
 
         # Init DB (creates tables if needed)
         await init_db(config.db_path)

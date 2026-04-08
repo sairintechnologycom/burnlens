@@ -3,59 +3,120 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BurnLens</title>
-  <base href="/ui/" />
+  <title>BurnLens — LLM Cost Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>🔥 BurnLens</h1>
-    <p class="tagline">LLM API cost tracker</p>
-  </header>
 
-  <main>
-    <section class="summary-cards" id="summary-cards">
-      <div class="card">
-        <div class="card-label">Total Spend</div>
-        <div class="card-value" id="total-cost">—</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Total Requests</div>
-        <div class="card-value" id="total-requests">—</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Models Used</div>
-        <div class="card-value" id="models-used">—</div>
-      </div>
-    </section>
+<header>
+  <div class="header-left">
+    <span class="logo">&#x1f525; BurnLens</span>
+    <span class="tagline">LLM API cost tracker</span>
+  </div>
+  <div class="header-right">
+    <select id="period-select" title="Time period">
+      <option value="1d">Last 24h</option>
+      <option value="7d" selected>Last 7 days</option>
+      <option value="30d">Last 30 days</option>
+      <option value="90d">Last 90 days</option>
+    </select>
+    <span class="refresh-indicator" id="refresh-indicator" title="Auto-refreshes every 10s">&#x25cf;</span>
+  </div>
+</header>
 
-    <section class="chart-section">
-      <h2>Cost by Model</h2>
-      <canvas id="model-chart" height="100"></canvas>
-    </section>
+<main>
 
-    <section class="table-section">
+  <!-- KPI cards -->
+  <section class="kpi-grid">
+    <div class="card">
+      <div class="card-label">Total Spend</div>
+      <div class="card-value" id="kpi-cost">—</div>
+      <div class="card-sub" id="kpi-cost-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Requests</div>
+      <div class="card-value" id="kpi-requests">—</div>
+      <div class="card-sub" id="kpi-requests-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Avg Cost / Request</div>
+      <div class="card-value" id="kpi-avg">—</div>
+      <div class="card-sub" id="kpi-avg-sub"></div>
+    </div>
+    <div class="card" id="budget-card">
+      <div class="card-label">Budget Used</div>
+      <div class="card-value" id="kpi-budget">—</div>
+      <div class="card-sub" id="kpi-budget-sub"></div>
+      <div class="budget-bar-wrap" id="budget-bar-wrap" style="display:none">
+        <div class="budget-bar" id="budget-bar"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Charts row -->
+  <section class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost Timeline</h2>
+      </div>
+      <canvas id="timeline-chart"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost by Model</h2>
+      </div>
+      <canvas id="model-chart"></canvas>
+    </div>
+  </section>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost by Feature</h2>
+        <span class="chart-note">tagged with <code>X-BurnLens-Tag-Feature</code></span>
+      </div>
+      <canvas id="feature-chart"></canvas>
+    </div>
+    <div class="chart-card waste-card">
+      <div class="chart-header">
+        <h2>Waste Alerts</h2>
+      </div>
+      <div id="waste-panel">
+        <div class="loading-text">Analyzing…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent requests table -->
+  <section class="table-card">
+    <div class="chart-header">
       <h2>Recent Requests</h2>
-      <table id="requests-table">
+      <span class="chart-note" id="requests-count"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
         <thead>
           <tr>
             <th>Time</th>
             <th>Provider</th>
             <th>Model</th>
-            <th>In</th>
-            <th>Out</th>
+            <th>Feature</th>
+            <th>Tokens In</th>
+            <th>Tokens Out</th>
             <th>Cost</th>
-            <th>ms</th>
+            <th>Latency</th>
           </tr>
         </thead>
         <tbody id="requests-body">
-          <tr><td colspan="7">Loading…</td></tr>
+          <tr><td colspan="8" class="loading-text">Loading…</td></tr>
         </tbody>
       </table>
-    </section>
-  </main>
+    </div>
+  </section>
 
-  <script src="app.js"></script>
+</main>
+
+<script src="app.js"></script>
 </body>
 </html>
