@@ -18,6 +18,14 @@ class BudgetConfig:
 
 
 @dataclass
+class TeamBudgetsConfig:
+    """Per-team monthly budget limits."""
+
+    global_usd: float | None = None
+    teams: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class AlertsConfig:
     """Alert configuration."""
 
@@ -26,6 +34,7 @@ class AlertsConfig:
     budget_limit_usd: float | None = None  # Legacy: treated as monthly limit
     per_request_limit_usd: float | None = None
     budget: BudgetConfig = field(default_factory=BudgetConfig)
+    budgets: TeamBudgetsConfig = field(default_factory=TeamBudgetsConfig)
 
 
 @dataclass
@@ -96,12 +105,21 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         monthly_usd=_optional_float(budget_data.get("monthly_usd")),
     )
 
+    # Team budgets — top-level "budgets" key in YAML
+    budgets_data = data.get("budgets", {}) or {}
+    teams_raw = budgets_data.get("teams", {}) or {}
+    team_budgets = TeamBudgetsConfig(
+        global_usd=_optional_float(budgets_data.get("global")),
+        teams={str(k): float(v) for k, v in teams_raw.items()},
+    )
+
     alerts = AlertsConfig(
         slack_webhook=alerts_data.get("slack_webhook"),
         terminal=bool(alerts_data.get("terminal", True)),
         budget_limit_usd=_optional_float(alerts_data.get("budget_limit_usd")),
         per_request_limit_usd=_optional_float(alerts_data.get("per_request_limit_usd")),
         budget=budget,
+        budgets=team_budgets,
     )
     kwargs["alerts"] = alerts
 

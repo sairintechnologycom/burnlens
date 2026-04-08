@@ -4,13 +4,26 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from dataclasses import dataclass
+
 from burnlens.analysis.budget import BudgetAlert, BudgetTracker, DEFAULT_THRESHOLDS
 from burnlens.alerts.slack import SlackWebhookAlert
 from burnlens.alerts.terminal import TerminalAlert
+from burnlens.storage.database import get_spend_by_team_this_month
 from burnlens.storage.queries import get_usage_by_model
 
 if TYPE_CHECKING:
     from burnlens.config import BurnLensConfig
+
+
+@dataclass
+class TeamBudgetAlert:
+    """Alert for a team exceeding its budget threshold."""
+
+    team: str
+    spent: float
+    limit: float
+    severity: str  # "WARNING" or "CRITICAL"
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +94,34 @@ class AlertEngine:
         except Exception:
             return None
 
+    async def check_and_dispatch_team_budgets(self) -> list[TeamBudgetAlert]:
+        """Check per-team budgets and dispatch any alerts.
+
+        Safe to call with asyncio.create_task — all errors are caught.
+        """
+        try:
+            return await self._run_team_checks()
+        except Exception as exc:
+            logger.error("Team budget check error: %s", exc)
+            return []
+
+    async def _run_team_checks(self) -> list[TeamBudgetAlert]:
+        alerts = await check_team_budgets(self._config, self._db_path)
+        for alert in alerts:
+            logger.warning(
+                "Team budget %s: %s spent $%.4f / $%.2f",
+                alert.severity, alert.team, alert.spent, alert.limit,
+            )
+            if self._config.alerts.terminal:
+                from rich.console import Console
+                _console = Console(stderr=True)
+                color = "red" if alert.severity == "CRITICAL" else "yellow"
+                _console.print(
+                    f"[{color}][{alert.severity}][/{color}] Team '{alert.team}': "
+                    f"${alert.spent:.4f} / ${alert.limit:.2f}"
+                )
+        return alerts
+
     async def _dispatch(self, alert: BudgetAlert, top_model: str | None) -> None:
         """Send alert to all configured channels."""
         logger.warning(
@@ -97,3 +138,32 @@ class AlertEngine:
 
         if self._slack:
             await self._slack.send(alert, top_model)
+
+
+async def check_team_budgets(
+    config: "BurnLensConfig",
+    db_path: str,
+) -> list[TeamBudgetAlert]:
+    """Check per-team spend against configured limits.
+
+    Returns a list of alerts for teams that have crossed thresholds:
+    - WARNING at 80% of limit
+    - CRITICAL at 100% of limit
+    """
+    team_limits = config.alerts.budgets.teams
+    if not team_limits:
+        return []
+
+    spend_by_team = await get_spend_by_team_this_month(db_path)
+    alerts: list[TeamBudgetAlert] = []
+
+    for team, limit in team_limits.items():
+        if limit <= 0:
+            continue
+        spent = spend_by_team.get(team, 0.0)
+        if spent >= limit:
+            alerts.append(TeamBudgetAlert(team=team, spent=spent, limit=limit, severity="CRITICAL"))
+        elif spent >= limit * 0.8:
+            alerts.append(TeamBudgetAlert(team=team, spent=spent, limit=limit, severity="WARNING"))
+
+    return alerts

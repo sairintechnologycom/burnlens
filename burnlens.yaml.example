@@ -37,3 +37,12 @@ alerts:
 
   # Per-request cost guard (future: will reject requests over this limit).
   # per_request_limit_usd: 1.00
+
+# ── Per-team budget limits ────────────────────────────────────────────────────
+# Teams are identified by the X-BurnLens-Tag-Team header on each request.
+# budgets:
+#   global: 500.00
+#   teams:
+#     backend: 200.00
+#     research: 100.00
+#     infra: 50.00

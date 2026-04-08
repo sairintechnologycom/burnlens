@@ -307,6 +307,21 @@ tbody tr:last-child td { border-bottom: none; }
   font-weight: 600;
 }
 
+/* -------------------------------------------------------- Status badges */
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15em 0.5em;
+  border-radius: 3px;
+}
+.status-badge.status-ok { background: rgba(74,222,128,0.15); color: var(--green); }
+.status-badge.status-warning { background: rgba(250,204,21,0.15); color: var(--yellow); }
+.status-badge.status-critical { background: rgba(248,113,113,0.15); color: var(--red); }
+
 /* --------------------------------------------------------------- Misc */
 
 .loading-text {

@@ -86,6 +86,35 @@ async def get_requests_for_export(
         return [dict(row) for row in rows]
 
 
+async def get_spend_by_team_this_month(db_path: str) -> dict[str, float]:
+    """Return total spend per team tag for the current calendar month.
+
+    Teams are identified by the ``team`` key inside the JSON ``tags`` column.
+    Requests without a team tag are excluded.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT json_extract(tags, '$.team') AS team,
+                   SUM(cost_usd) AS total_cost
+            FROM requests
+            WHERE timestamp >= ?
+              AND json_extract(tags, '$.team') IS NOT NULL
+            GROUP BY json_extract(tags, '$.team')
+            """,
+            (month_start,),
+        )
+        rows = await cursor.fetchall()
+
+    return {row["team"]: float(row["total_cost"] or 0.0) for row in rows}
+
+
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id."""
     async with aiosqlite.connect(db_path) as db:

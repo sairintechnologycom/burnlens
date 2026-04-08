@@ -438,6 +438,86 @@ def export(
 
 
 @app.command()
+def budgets(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output"),
+) -> None:
+    """Show per-team budget status for the current month."""
+    import json as json_mod
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.database import get_spend_by_team_this_month
+
+        team_limits = cfg.alerts.budgets.teams
+        if not team_limits:
+            if json_output:
+                console.print("[]")
+            else:
+                console.print("[yellow]No team budgets configured.[/yellow]")
+                console.print("Add a [cyan]budgets.teams[/cyan] section to burnlens.yaml.")
+            return
+
+        spend = await get_spend_by_team_this_month(cfg.db_path)
+
+        rows = []
+        for team, limit in sorted(team_limits.items()):
+            spent = spend.get(team, 0.0)
+            pct = (spent / limit * 100) if limit > 0 else 0.0
+            if pct >= 100:
+                status = "CRITICAL"
+            elif pct >= 80:
+                status = "WARNING"
+            else:
+                status = "OK"
+            rows.append({
+                "team": team,
+                "spent": round(spent, 6),
+                "limit": limit,
+                "pct_used": round(pct, 1),
+                "status": status,
+            })
+
+        if json_output:
+            console.print(json_mod.dumps(rows, indent=2))
+            return
+
+        console.print()
+        table = Table(title="[bold]Team Budgets[/bold] — current month", expand=True)
+        table.add_column("Team", style="cyan")
+        table.add_column("Spent", justify="right", style="green")
+        table.add_column("Limit", justify="right")
+        table.add_column("% Used", justify="right")
+        table.add_column("Status", justify="center")
+
+        for r in rows:
+            pct_str = f"{r['pct_used']:.1f}%"
+            status = r["status"]
+            if status == "CRITICAL":
+                status_str = "[bold red]CRITICAL[/bold red]"
+                pct_str = f"[red]{pct_str}[/red]"
+            elif status == "WARNING":
+                status_str = "[yellow]WARNING[/yellow]"
+                pct_str = f"[yellow]{pct_str}[/yellow]"
+            else:
+                status_str = "[green]OK[/green]"
+
+            table.add_row(
+                r["team"],
+                f"${r['spent']:.4f}",
+                f"${r['limit']:.2f}",
+                pct_str,
+                status_str,
+            )
+
+        console.print(table)
+        console.print()
+
+    asyncio.run(_run())
+
+
+@app.command()
 def ui(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
