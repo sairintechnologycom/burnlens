@@ -107,7 +107,7 @@ async def live_server(db_path):
 
 async def proxy_stream(
     base_url: str,
-    path: str = "/openai/v1/chat/completions",
+    path: str = "/proxy/openai/v1/chat/completions",
     model: str = "gpt-4o-mini",
     tag_feature: str = "chat",
     tag_team: str = "backend",
@@ -187,7 +187,7 @@ class TestFullRoundTrip:
 
         async with httpx.AsyncClient(base_url=base_url) as client:
             async with client.stream(
-                "POST", "/openai/v1/chat/completions",
+                "POST", "/proxy/openai/v1/chat/completions",
                 headers={"authorization": "Bearer sk-test",
                          "content-type": "application/json"},
                 json={"model": "gpt-4o-mini", "stream": True,
