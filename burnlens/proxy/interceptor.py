@@ -296,6 +296,14 @@ async def _handle_streaming(
         headers=headers,
         content=body_bytes,
     )
+    # httpx adds connection: keep-alive automatically; strip it so the proxy
+    # never forwards hop-by-hop headers that belong to the client↔proxy leg.
+    req = httpx.Request(
+        req.method,
+        req.url,
+        headers={k: v for k, v in req.headers.items() if k.lower() not in _STRIP_REQUEST_HEADERS},
+        content=req.content,
+    )
     response = await client.send(req, stream=True)
     duration_ref: list[int] = [0]
 
