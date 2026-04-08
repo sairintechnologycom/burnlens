@@ -253,6 +253,59 @@ canvas {
   font-weight: 600;
 }
 
+/* -------------------------------------------------------- Recommendations */
+
+#recommendations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.rec-item {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid var(--border);
+}
+
+.rec-item.confidence-high { border-left-color: var(--green); }
+.rec-item.confidence-medium { border-left-color: var(--yellow); }
+.rec-item.confidence-low { border-left-color: var(--text-muted); }
+
+.rec-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.rec-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1em 0.45em;
+  border-radius: 3px;
+}
+
+.rec-badge.high { background: rgba(74,222,128,0.15); color: var(--green); }
+.rec-badge.medium { background: rgba(250,204,21,0.15); color: var(--yellow); }
+.rec-badge.low { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+.rec-saving {
+  font-size: 0.75rem;
+  color: var(--green);
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.rec-detail {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
 /* --------------------------------------------------------------- Table */
 
 .table-card {

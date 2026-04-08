@@ -19,6 +19,7 @@ from burnlens.storage.queries import (
 from burnlens.storage.database import get_spend_by_team_this_month, get_top_customers_by_cost
 from burnlens.analysis.waste import run_all_detectors
 from burnlens.analysis.budget import compute_budget_status
+from burnlens.analysis.recommender import analyse_model_fit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -292,6 +293,31 @@ async def customers(request: Request) -> list:
             "status": status,
         })
     return result
+
+
+# -------------------------------------------------------- /api/recommendations
+
+@router.get("/recommendations")
+async def recommendations(request: Request) -> list:
+    """Model switch recommendations based on usage patterns."""
+    db = _db_path(request)
+    recs = await analyse_model_fit(db, days=30)
+    return [
+        {
+            "current_model": r.current_model,
+            "suggested_model": r.suggested_model,
+            "feature_tag": r.feature_tag,
+            "request_count": r.request_count,
+            "avg_output_tokens": r.avg_output_tokens,
+            "current_cost": round(r.current_cost, 6),
+            "projected_cost": round(r.projected_cost, 6),
+            "projected_saving": round(r.projected_saving, 6),
+            "saving_pct": r.saving_pct,
+            "confidence": r.confidence,
+            "reason": r.reason,
+        }
+        for r in recs
+    ]
 
 
 # -------- legacy compat: /api/models still works (used by old app.js)

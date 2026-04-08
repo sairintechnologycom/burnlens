@@ -537,6 +537,121 @@ def customers(
 
 
 @app.command()
+def recommend(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(30, "--days", "-d", help="Number of days to analyze"),
+    apply: bool = typer.Option(False, "--apply", help="Print env/sed commands to make the switch"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output"),
+) -> None:
+    """Analyse usage patterns and suggest cheaper model alternatives."""
+    import json as json_mod
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.analysis.recommender import analyse_model_fit
+
+        recs = await analyse_model_fit(cfg.db_path, days=days)
+
+        if json_output:
+            console.print(json_mod.dumps(
+                [
+                    {
+                        "current_model": r.current_model,
+                        "suggested_model": r.suggested_model,
+                        "feature_tag": r.feature_tag,
+                        "request_count": r.request_count,
+                        "avg_output_tokens": r.avg_output_tokens,
+                        "current_cost": r.current_cost,
+                        "projected_cost": r.projected_cost,
+                        "projected_saving": r.projected_saving,
+                        "saving_pct": r.saving_pct,
+                        "confidence": r.confidence,
+                        "reason": r.reason,
+                    }
+                    for r in recs
+                ],
+                indent=2,
+            ))
+            return
+
+        console.print()
+        console.rule(
+            f"[bold]BurnLens Recommendations[/bold] — last {days} day(s)"
+        )
+        console.print()
+
+        if not recs:
+            console.print("[green]No recommendations — your model usage looks efficient![/green]")
+            console.print()
+            return
+
+        total_saving = 0.0
+        for rec in recs:
+            total_saving += rec.projected_saving
+
+            conf_color = {
+                "high": "green",
+                "medium": "yellow",
+                "low": "dim",
+            }.get(rec.confidence, "white")
+            conf_badge = f"[{conf_color}][{rec.confidence.upper()}][/{conf_color}]"
+
+            if rec.suggested_model == "prompt-caching":
+                title = f"Enable prompt caching for [cyan]{rec.feature_tag}[/cyan]"
+            else:
+                title = (
+                    f"Switch [cyan]{rec.feature_tag}[/cyan] from "
+                    f"[red]{rec.current_model}[/red] → [green]{rec.suggested_model}[/green]"
+                )
+
+            lines = [
+                f"  {conf_badge}  {rec.reason}",
+                f"\n  Projected saving: [bold yellow]${rec.projected_saving:.4f}[/bold yellow] ({rec.saving_pct:.1f}%)",
+                f"  Based on {rec.request_count} requests averaging {rec.avg_output_tokens:.0f} output tokens",
+            ]
+
+            console.print(
+                Panel(
+                    "\n".join(lines),
+                    title=f"[bold]{title}[/bold]",
+                    border_style=conf_color,
+                )
+            )
+
+        console.print(
+            Panel(
+                f"  Total projected savings: [bold yellow]${total_saving:.4f}[/bold yellow]",
+                title="Summary",
+                border_style="yellow",
+            )
+        )
+
+        if apply:
+            console.print()
+            console.print("[bold]To apply these recommendations:[/bold]")
+            console.print()
+            for rec in recs:
+                if rec.suggested_model == "prompt-caching":
+                    console.print(
+                        f"  # {rec.feature_tag}: enable prompt caching in your SDK config"
+                    )
+                else:
+                    console.print(
+                        f"  [cyan]# {rec.feature_tag}: {rec.current_model} → {rec.suggested_model}[/cyan]"
+                    )
+                    console.print(
+                        f"  sed -i '' 's/{rec.current_model}/{rec.suggested_model}/g' "
+                        f"<your-code-file>"
+                    )
+            console.print()
+
+        console.print()
+
+    asyncio.run(_run())
+
+
+@app.command()
 def ui(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
