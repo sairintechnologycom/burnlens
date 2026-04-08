@@ -1,0 +1,39 @@
+# BurnLens configuration example.
+# Copy to burnlens.yaml (or ~/.burnlens/config.yaml) and edit as needed.
+# All settings are optional — sensible defaults apply when omitted.
+
+# Proxy server
+port: 8420
+host: "127.0.0.1"
+
+# SQLite database path (default: ~/.burnlens/burnlens.db)
+# db_path: "/custom/path/burnlens.db"
+
+log_level: "info"   # debug | info | warning | error
+
+# ── Provider upstream URLs ────────────────────────────────────────────────────
+# Override only if you use a custom gateway or local mock.
+# openai_upstream:     "https://api.openai.com"
+# anthropic_upstream:  "https://api.anthropic.com"
+# google_upstream:     "https://generativelanguage.googleapis.com"
+
+# ── Alerts & budgets ──────────────────────────────────────────────────────────
+alerts:
+  # Print budget alerts to the terminal where `burnlens start` is running.
+  terminal: true
+
+  # Slack incoming webhook URL (omit or leave blank to disable Slack alerts).
+  # slack_webhook: "https://hooks.slack.com/services/T.../B.../xxx"
+
+  # Budget limits per period.  Set any or all — each is checked independently.
+  budget:
+    daily_usd: 5.00      # Alert when daily spend crosses 80 / 90 / 100 %
+    weekly_usd: 25.00    # Alert when weekly spend crosses thresholds
+    monthly_usd: 80.00   # Alert when monthly spend crosses thresholds
+
+  # Legacy single-budget shorthand (treated as a monthly limit if monthly_usd
+  # is not set above).
+  # budget_limit_usd: 80.00
+
+  # Per-request cost guard (future: will reject requests over this limit).
+  # per_request_limit_usd: 1.00

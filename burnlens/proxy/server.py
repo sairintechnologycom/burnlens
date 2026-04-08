@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from burnlens.alerts.engine import AlertEngine
 from burnlens.config import BurnLensConfig
 from burnlens.proxy.interceptor import handle_request
 from burnlens.proxy.providers import get_provider_for_path
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Module-level references set during startup
 _http_client: httpx.AsyncClient | None = None
 _config: BurnLensConfig | None = None
+_alert_engine: AlertEngine | None = None
 
 
 def get_app(config: BurnLensConfig) -> FastAPI:
@@ -27,7 +29,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        global _http_client, _config
+        global _http_client, _config, _alert_engine
         _config = config
         app.state.db_path = config.db_path
         app.state.config = config
@@ -35,6 +37,9 @@ def get_app(config: BurnLensConfig) -> FastAPI:
         # Init DB (creates tables if needed)
         await init_db(config.db_path)
         logger.info("Database ready at %s", config.db_path)
+
+        # Build alert engine (one instance per proxy run; holds dedup state)
+        _alert_engine = AlertEngine(config, config.db_path)
 
         # Shared HTTP client — reused across all requests
         _http_client = httpx.AsyncClient(
@@ -89,6 +94,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
                 body_bytes=body_bytes,
                 query_string=query_string,
                 db_path=_config.db_path,
+                alert_engine=_alert_engine,
             )
         except httpx.RequestError as exc:
             logger.error("Upstream request failed: %s", exc)
