@@ -7,7 +7,7 @@ from typing import AsyncIterator
 
 import httpx
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from burnlens.config import BurnLensConfig
@@ -29,6 +29,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         global _http_client, _config
         _config = config
+        app.state.db_path = config.db_path
 
         # Init DB (creates tables if needed)
         await init_db(config.db_path)
@@ -111,6 +112,10 @@ def get_app(config: BurnLensConfig) -> FastAPI:
         )
 
     # ---------------------------------------------------------------- dashboard
+
+    @app.get("/ui")
+    async def ui_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/ui/", status_code=301)
 
     try:
         from pathlib import Path as _Path
