@@ -414,6 +414,129 @@ def budgets(
 
 
 @app.command()
+def customers(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    customer: Optional[str] = typer.Option(None, "--customer", help="Show detail for one customer"),
+    over_budget: bool = typer.Option(False, "--over-budget", help="Only show customers who exceeded limit"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output"),
+) -> None:
+    """Show per-customer spend and budget status for the current month."""
+    import json as json_mod
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.database import (
+            get_customer_request_count,
+            get_spend_by_customer_this_month,
+            get_top_customers_by_cost,
+        )
+
+        cust_cfg = cfg.alerts.customer_budgets
+
+        if customer:
+            # Detail for one customer
+            spend_map = await get_spend_by_customer_this_month(cfg.db_path)
+            spent = spend_map.get(customer, 0.0)
+            req_count = await get_customer_request_count(cfg.db_path, customer)
+            limit = cust_cfg.customers.get(customer, cust_cfg.default)
+
+            if json_output:
+                console.print(json_mod.dumps({
+                    "customer": customer,
+                    "spent": round(spent, 6),
+                    "requests_30d": req_count,
+                    "limit": limit,
+                    "pct_used": round(spent / limit * 100, 1) if limit else None,
+                }))
+                return
+
+            console.print()
+            console.print(f"[bold cyan]{customer}[/bold cyan]")
+            console.print(f"  Spent this month: {_fmt_cost(spent)}")
+            console.print(f"  Requests (30d):   {req_count}")
+            if limit:
+                pct = spent / limit * 100
+                console.print(f"  Budget limit:     ${limit:.2f}")
+                console.print(f"  Budget used:      {pct:.1f}%")
+            else:
+                console.print("  Budget limit:     [dim]none[/dim]")
+            console.print()
+            return
+
+        # All customers
+        rows = await get_top_customers_by_cost(cfg.db_path)
+
+        if not rows:
+            if json_output:
+                console.print("[]")
+            else:
+                console.print("[yellow]No customer-tagged requests found.[/yellow]")
+                console.print("Tag requests with [cyan]X-BurnLens-Tag-Customer[/cyan] header.")
+            return
+
+        # Enrich with budget info
+        enriched = []
+        for r in rows:
+            name = r["customer"]
+            limit = cust_cfg.customers.get(name, cust_cfg.default)
+            pct = (r["total_cost"] / limit * 100) if limit and limit > 0 else None
+            if pct is not None and pct >= 100:
+                status = "EXCEEDED"
+            elif pct is not None and pct >= 80:
+                status = "WARNING"
+            elif pct is not None:
+                status = "OK"
+            else:
+                status = "NO_LIMIT"
+            enriched.append({**r, "limit": limit, "pct_used": pct, "status": status})
+
+        if over_budget:
+            enriched = [r for r in enriched if r["status"] == "EXCEEDED"]
+
+        if json_output:
+            console.print(json_mod.dumps(enriched, indent=2))
+            return
+
+        console.print()
+        table = Table(title="[bold]Customer Spend[/bold] — current month", expand=True)
+        table.add_column("Customer", style="cyan")
+        table.add_column("Requests", justify="right")
+        table.add_column("Total Cost", justify="right", style="green")
+        table.add_column("Budget", justify="right")
+        table.add_column("% Used", justify="right")
+        table.add_column("Status", justify="center")
+
+        for r in enriched:
+            pct_str = f"{r['pct_used']:.1f}%" if r["pct_used"] is not None else "—"
+            status = r["status"]
+            if status == "EXCEEDED":
+                status_str = "[bold red]EXCEEDED[/bold red]"
+                pct_str = f"[red]{pct_str}[/red]"
+            elif status == "WARNING":
+                status_str = "[yellow]WARNING[/yellow]"
+                pct_str = f"[yellow]{pct_str}[/yellow]"
+            elif status == "OK":
+                status_str = "[green]OK[/green]"
+            else:
+                status_str = "[dim]—[/dim]"
+
+            table.add_row(
+                r["customer"],
+                str(r["request_count"]),
+                f"${r['total_cost']:.4f}",
+                f"${r['limit']:.2f}" if r["limit"] else "—",
+                pct_str,
+                status_str,
+            )
+
+        console.print(table)
+        console.print()
+
+    asyncio.run(_run())
+
+
+@app.command()
 def ui(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:

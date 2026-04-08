@@ -115,6 +115,97 @@ async def get_spend_by_team_this_month(db_path: str) -> dict[str, float]:
     return {row["team"]: float(row["total_cost"] or 0.0) for row in rows}
 
 
+async def get_spend_by_customer_this_month(db_path: str) -> dict[str, float]:
+    """Return total spend per customer tag for the current calendar month.
+
+    Customers are identified by the ``customer`` key inside the JSON ``tags`` column.
+    Requests without a customer tag are excluded.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT json_extract(tags, '$.customer') AS customer,
+                   SUM(cost_usd) AS total_cost
+            FROM requests
+            WHERE timestamp >= ?
+              AND json_extract(tags, '$.customer') IS NOT NULL
+            GROUP BY json_extract(tags, '$.customer')
+            """,
+            (month_start,),
+        )
+        rows = await cursor.fetchall()
+
+    return {row["customer"]: float(row["total_cost"] or 0.0) for row in rows}
+
+
+async def get_customer_request_count(db_path: str, customer: str, days: int = 30) -> int:
+    """Return total request count for a customer over the last N days."""
+    from datetime import datetime, timedelta, timezone
+
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            SELECT COUNT(*) FROM requests
+            WHERE timestamp >= ?
+              AND json_extract(tags, '$.customer') = ?
+            """,
+            (since, customer),
+        )
+        row = await cursor.fetchone()
+
+    return int(row[0]) if row else 0
+
+
+async def get_top_customers_by_cost(db_path: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Return top customers by total cost for the current month.
+
+    Each dict has: customer, request_count, input_tokens, output_tokens, total_cost.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT json_extract(tags, '$.customer') AS customer,
+                   COUNT(*) AS request_count,
+                   SUM(input_tokens) AS input_tokens,
+                   SUM(output_tokens) AS output_tokens,
+                   SUM(cost_usd) AS total_cost
+            FROM requests
+            WHERE timestamp >= ?
+              AND json_extract(tags, '$.customer') IS NOT NULL
+            GROUP BY json_extract(tags, '$.customer')
+            ORDER BY total_cost DESC
+            LIMIT ?
+            """,
+            (month_start, limit),
+        )
+        rows = await cursor.fetchall()
+
+    return [
+        {
+            "customer": row["customer"],
+            "request_count": row["request_count"],
+            "input_tokens": row["input_tokens"] or 0,
+            "output_tokens": row["output_tokens"] or 0,
+            "total_cost": float(row["total_cost"] or 0.0),
+        }
+        for row in rows
+    ]
+
+
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id."""
     async with aiosqlite.connect(db_path) as db:

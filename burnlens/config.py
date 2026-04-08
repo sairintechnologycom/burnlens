@@ -37,6 +37,14 @@ class TeamBudgetsConfig:
 
 
 @dataclass
+class CustomerBudgetsConfig:
+    """Per-customer monthly budget limits."""
+
+    default: float | None = None
+    customers: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class AlertsConfig:
     """Alert configuration."""
 
@@ -46,6 +54,7 @@ class AlertsConfig:
     per_request_limit_usd: float | None = None
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     budgets: TeamBudgetsConfig = field(default_factory=TeamBudgetsConfig)
+    customer_budgets: CustomerBudgetsConfig = field(default_factory=CustomerBudgetsConfig)
 
 
 @dataclass
@@ -125,6 +134,20 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         teams={str(k): float(v) for k, v in teams_raw.items()},
     )
 
+    # Customer budgets — top-level "customer_budgets" key in YAML
+    cust_data = data.get("customer_budgets", {}) or {}
+    cust_customers: dict[str, float] = {}
+    cust_default: float | None = None
+    for k, v in cust_data.items():
+        if k == "default":
+            cust_default = float(v)
+        else:
+            cust_customers[str(k)] = float(v)
+    customer_budgets = CustomerBudgetsConfig(
+        default=cust_default,
+        customers=cust_customers,
+    )
+
     alerts = AlertsConfig(
         slack_webhook=alerts_data.get("slack_webhook"),
         terminal=bool(alerts_data.get("terminal", True)),
@@ -132,6 +155,7 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         per_request_limit_usd=_optional_float(alerts_data.get("per_request_limit_usd")),
         budget=budget,
         budgets=team_budgets,
+        customer_budgets=customer_budgets,
     )
     kwargs["alerts"] = alerts
 

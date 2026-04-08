@@ -319,6 +319,46 @@ async function fetchWaste() {
   }
 }
 
+// -------------------------------------------------------- Customers
+
+async function fetchCustomers() {
+  const rows = await apiFetch('/customers');
+  var section = $('customers-section');
+  var tbody = $('customers-body');
+
+  if (!rows.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  tbody.replaceChildren();
+
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var tr = document.createElement('tr');
+
+    if (r.status === 'EXCEEDED') tr.className = 'row-exceeded';
+
+    tr.appendChild(makeTd(r.customer));
+    tr.appendChild(makeTd(fmtNum(r.request_count)));
+    tr.appendChild(makeTd(fmtNum(r.input_tokens)));
+    tr.appendChild(makeTd(fmtNum(r.output_tokens)));
+    tr.appendChild(makeTd(fmtCost(r.total_cost), 'td-cost'));
+    tr.appendChild(makeTd(r.budget !== null ? fmtCost(r.budget) : '\u2014'));
+    tr.appendChild(makeTd(r.pct_used !== null ? r.pct_used.toFixed(1) + '%' : '\u2014'));
+
+    var statusTd = document.createElement('td');
+    var badge = document.createElement('span');
+    badge.className = 'status-badge status-' + r.status.toLowerCase();
+    badge.textContent = r.status;
+    statusTd.appendChild(badge);
+    tr.appendChild(statusTd);
+
+    tbody.appendChild(tr);
+  }
+}
+
 // -------------------------------------------------------- Team Budgets
 
 async function fetchTeamBudgets() {
@@ -413,6 +453,7 @@ async function refresh() {
     fetchModelChart(),
     fetchFeatureChart(),
     fetchWaste(),
+    fetchCustomers(),
     fetchTeamBudgets(),
     fetchRequests(),
   ]);
