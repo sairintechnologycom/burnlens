@@ -319,6 +319,41 @@ async function fetchWaste() {
   }
 }
 
+// -------------------------------------------------------- Team Budgets
+
+async function fetchTeamBudgets() {
+  const rows = await apiFetch('/team-budgets');
+  var section = $('team-budgets-section');
+  var tbody = $('team-budgets-body');
+
+  if (!rows.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  tbody.replaceChildren();
+
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var tr = document.createElement('tr');
+    tr.appendChild(makeTd(r.team));
+
+    tr.appendChild(makeTd(fmtCost(r.spent), 'td-cost'));
+    tr.appendChild(makeTd(fmtCost(r.limit)));
+    tr.appendChild(makeTd(r.pct_used.toFixed(1) + '%'));
+
+    var statusTd = document.createElement('td');
+    var badge = document.createElement('span');
+    badge.className = 'status-badge status-' + r.status.toLowerCase();
+    badge.textContent = r.status;
+    statusTd.appendChild(badge);
+    tr.appendChild(statusTd);
+
+    tbody.appendChild(tr);
+  }
+}
+
 // -------------------------------------------------------- Requests table
 
 async function fetchRequests() {
@@ -378,6 +413,7 @@ async function refresh() {
     fetchModelChart(),
     fetchFeatureChart(),
     fetchWaste(),
+    fetchTeamBudgets(),
     fetchRequests(),
   ]);
 }

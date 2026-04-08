@@ -16,6 +16,7 @@ from burnlens.storage.queries import (
     get_usage_by_model,
     get_usage_by_tag,
 )
+from burnlens.storage.database import get_spend_by_team_this_month
 from burnlens.analysis.waste import run_all_detectors
 from burnlens.analysis.budget import compute_budget_status
 
@@ -212,6 +213,41 @@ async def budget(request: Request) -> dict:
         "period_days": status.period_days,
         "elapsed_days": status.elapsed_days,
     }
+
+
+# -------------------------------------------------------- /api/team-budgets
+
+@router.get("/team-budgets")
+async def team_budgets(request: Request) -> list:
+    """Per-team budget status for the current month."""
+    db = _db_path(request)
+    config = getattr(request.app.state, "config", None)
+    team_limits: dict[str, float] = {}
+    if config and config.alerts and config.alerts.budgets:
+        team_limits = config.alerts.budgets.teams
+
+    if not team_limits:
+        return []
+
+    spend = await get_spend_by_team_this_month(db)
+    result = []
+    for team, limit in sorted(team_limits.items()):
+        spent = spend.get(team, 0.0)
+        pct = (spent / limit * 100) if limit > 0 else 0.0
+        if pct >= 100:
+            status = "CRITICAL"
+        elif pct >= 80:
+            status = "WARNING"
+        else:
+            status = "OK"
+        result.append({
+            "team": team,
+            "spent": round(spent, 6),
+            "limit": limit,
+            "pct_used": round(pct, 1),
+            "status": status,
+        })
+    return result
 
 
 # -------- legacy compat: /api/models still works (used by old app.js)
