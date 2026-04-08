@@ -1,0 +1,76 @@
+{
+  "provider": "openai",
+  "updated": "2025-01-01",
+  "models": {
+    "gpt-4o": {
+      "input_per_million": 2.50,
+      "output_per_million": 10.00,
+      "cache_read_per_million": 1.25
+    },
+    "gpt-4o-mini": {
+      "input_per_million": 0.15,
+      "output_per_million": 0.60,
+      "cache_read_per_million": 0.075
+    },
+    "gpt-4-turbo": {
+      "input_per_million": 10.00,
+      "output_per_million": 30.00
+    },
+    "gpt-4-turbo-preview": {
+      "input_per_million": 10.00,
+      "output_per_million": 30.00
+    },
+    "gpt-4": {
+      "input_per_million": 30.00,
+      "output_per_million": 60.00
+    },
+    "gpt-4-32k": {
+      "input_per_million": 60.00,
+      "output_per_million": 120.00
+    },
+    "gpt-3.5-turbo": {
+      "input_per_million": 0.50,
+      "output_per_million": 1.50
+    },
+    "gpt-3.5-turbo-instruct": {
+      "input_per_million": 1.50,
+      "output_per_million": 2.00
+    },
+    "o1": {
+      "input_per_million": 15.00,
+      "output_per_million": 60.00,
+      "cache_read_per_million": 7.50,
+      "reasoning_per_million": 60.00
+    },
+    "o1-preview": {
+      "input_per_million": 15.00,
+      "output_per_million": 60.00,
+      "cache_read_per_million": 7.50,
+      "reasoning_per_million": 60.00
+    },
+    "o1-mini": {
+      "input_per_million": 1.10,
+      "output_per_million": 4.40,
+      "cache_read_per_million": 0.55,
+      "reasoning_per_million": 4.40
+    },
+    "o3": {
+      "input_per_million": 10.00,
+      "output_per_million": 40.00,
+      "cache_read_per_million": 2.50,
+      "reasoning_per_million": 40.00
+    },
+    "o3-mini": {
+      "input_per_million": 1.10,
+      "output_per_million": 4.40,
+      "cache_read_per_million": 0.55,
+      "reasoning_per_million": 4.40
+    },
+    "o4-mini": {
+      "input_per_million": 1.10,
+      "output_per_million": 4.40,
+      "cache_read_per_million": 0.275,
+      "reasoning_per_million": 4.40
+    }
+  }
+}
