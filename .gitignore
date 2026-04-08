@@ -12,3 +12,5 @@ venv/
 .ruff_cache/
 .mypy_cache/
 .planning/
+.coverage
+htmlcov/
