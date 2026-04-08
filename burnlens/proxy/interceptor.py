@@ -19,6 +19,7 @@ from burnlens.cost.calculator import (
     extract_usage_openai,
 )
 from burnlens.proxy.providers import ProviderConfig, strip_proxy_prefix
+from burnlens.proxy.streaming import extract_usage_from_stream, should_buffer_chunk
 from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
 
@@ -294,8 +295,7 @@ async def _handle_streaming(
             async for chunk in response.aiter_bytes():
                 yield chunk
                 chunk_str = chunk.decode("utf-8", errors="ignore")
-                # Track chunks that contain usage data
-                if '"usage"' in chunk_str or "usageMetadata" in chunk_str:
+                if should_buffer_chunk(chunk_str):
                     usage_chunk_data.append(chunk_str)
         finally:
             duration_ref[0] = int((time.monotonic() - start_ms) * 1000)
@@ -335,32 +335,7 @@ async def _log_streaming_usage(
     request_path: str,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
-    usage = TokenUsage()
-    for chunk_str in usage_chunks:
-        # SSE lines look like: data: {...}
-        for line in chunk_str.splitlines():
-            line = line.strip()
-            if line.startswith("data:"):
-                payload = line[5:].strip()
-                if payload in ("", "[DONE]"):
-                    continue
-                try:
-                    data = json.loads(payload)
-                    chunk_usage = _extract_usage_for_provider(provider.name, data)
-                    # Accumulate — final chunk usually has totals
-                    if chunk_usage.input_tokens:
-                        usage = chunk_usage
-                except Exception:
-                    pass
-            elif line.startswith("{"):
-                # Google streams raw JSON
-                try:
-                    data = json.loads(line)
-                    chunk_usage = _extract_usage_for_provider(provider.name, data)
-                    if chunk_usage.input_tokens:
-                        usage = chunk_usage
-                except Exception:
-                    pass
+    usage = extract_usage_from_stream(provider.name, usage_chunks)
 
     cost = calculate_cost(provider.name, model, usage)
 
