@@ -52,6 +52,7 @@ dev = [
     "ruff>=0.3.0",
     "mypy>=1.8",
     "httpx[http2]>=0.27.0",
+    "respx>=0.21.0",
 ]
 
 [tool.ruff]
@@ -64,6 +65,9 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: live-server integration tests (require uvicorn + respx)",
+]
 
 [tool.mypy]
 python_version = "3.10"
