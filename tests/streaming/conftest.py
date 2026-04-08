@@ -128,6 +128,37 @@ def build_anthropic_stream(
     return b"".join(parts)
 
 
+def build_google_stream(
+    text: str = "Hi",
+    model: str = "gemini-2.0-flash",
+    input_tokens: int = 10,
+    output_tokens: int = 5,
+) -> bytes:
+    """Google SSE streaming format: data: {...} lines, usageMetadata in each chunk."""
+    parts = []
+    # Content chunk (no usageMetadata)
+    parts.append(
+        b"data: " + json.dumps({
+            "candidates": [{"content": {"parts": [{"text": text}], "role": "model"},
+                            "finishReason": "STOP"}],
+        }).encode() + b"\r\n\r\n"
+    )
+    # Final chunk carries cumulative usageMetadata
+    parts.append(
+        b"data: " + json.dumps({
+            "candidates": [{"content": {"parts": [{"text": ""}], "role": "model"},
+                            "finishReason": "STOP"}],
+            "usageMetadata": {
+                "promptTokenCount": input_tokens,
+                "candidatesTokenCount": output_tokens,
+                "totalTokenCount": input_tokens + output_tokens,
+            },
+            "modelVersion": model,
+        }).encode() + b"\r\n\r\n"
+    )
+    return b"".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Request factories — match handle_request() signature
 # ---------------------------------------------------------------------------
