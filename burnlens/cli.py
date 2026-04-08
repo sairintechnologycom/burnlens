@@ -180,155 +180,51 @@ def top(
 def report(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
     days: int = typer.Option(7, "--days", "-d", help="Number of days to include"),
+    email: Optional[str] = typer.Option(None, "--email", "-e", help="Send report to this email address"),
 ) -> None:
-    """Print a cost digest report."""
+    """Generate and print (or email) a cost summary report."""
     cfg = load_config(config)
 
     async def _run() -> None:
-        from burnlens.analysis.budget import compute_budget_status
-        from burnlens.storage.queries import (
-            get_daily_cost,
-            get_total_cost,
-            get_total_request_count,
-            get_usage_by_model,
-            get_usage_by_tag,
+        from burnlens.reports.weekly import (
+            generate_text_report,
+            generate_weekly_report,
+            send_report_email,
         )
 
-        since = _since_iso(days)
-
-        (
-            total_cost,
-            total_requests,
-            models,
-            by_feature,
-            by_team,
-            daily,
-        ) = await asyncio.gather(
-            get_total_cost(cfg.db_path, since=since),
-            get_total_request_count(cfg.db_path, since=since),
-            get_usage_by_model(cfg.db_path, since=since),
-            get_usage_by_tag(cfg.db_path, tag_key="feature", since=since),
-            get_usage_by_tag(cfg.db_path, tag_key="team", since=since),
-            get_daily_cost(cfg.db_path, days=days),
-        )
-
-        budget_status = compute_budget_status(
-            spent_usd=total_cost,
-            budget_usd=cfg.alerts.budget_limit_usd,
-            period_days=30,
-        )
+        report_data = await generate_weekly_report(cfg.db_path, days=days)
+        report_text = generate_text_report(report_data)
 
         console.print()
-        console.rule(f"[bold]BurnLens Report[/bold] — last {days} day(s)")
+        console.print(report_text)
         console.print()
 
-        # ── Summary panel ────────────────────────────────────────────────────
-        summary_lines = [
-            f"  Total spend:    [bold green]${total_cost:.4f}[/bold green]",
-            f"  Requests:       {total_requests:,}",
-            f"  Models used:    {len(models)}",
-            f"  Period:         last {days} day(s)",
-        ]
-        console.print(Panel("\n".join(summary_lines), title="Summary", border_style="green"))
+        if email:
+            ec = cfg.email
+            if not ec.smtp_host or not ec.smtp_user or not ec.smtp_password:
+                console.print("[bold red]Email not configured.[/bold red]")
+                console.print()
+                console.print("Add this to your burnlens.yaml:")
+                console.print()
+                console.print("  [cyan]email:[/cyan]")
+                console.print("  [cyan]  smtp_host: smtp.gmail.com[/cyan]")
+                console.print("  [cyan]  smtp_port: 587[/cyan]")
+                console.print("  [cyan]  smtp_user: you@gmail.com[/cyan]")
+                console.print("  [cyan]  smtp_password: your-app-password[/cyan]")
+                console.print("  [cyan]  from: BurnLens <you@gmail.com>[/cyan]")
+                raise typer.Exit(code=1)
 
-        # ── By model ─────────────────────────────────────────────────────────
-        if models:
-            model_table = Table(show_header=True, box=None, padding=(0, 2))
-            model_table.add_column("Model", style="cyan")
-            model_table.add_column("Provider", style="dim")
-            model_table.add_column("Requests", justify="right")
-            model_table.add_column("In Tokens", justify="right")
-            model_table.add_column("Out Tokens", justify="right")
-            model_table.add_column("Cost", justify="right", style="green")
-            model_table.add_column("% of Total", justify="right")
-
-            for m in models:
-                pct = (m.total_cost_usd / total_cost * 100) if total_cost else 0.0
-                model_table.add_row(
-                    m.model,
-                    m.provider,
-                    f"{m.request_count:,}",
-                    f"{m.total_input_tokens:,}",
-                    f"{m.total_output_tokens:,}",
-                    f"${m.total_cost_usd:.4f}",
-                    f"{pct:.1f}%",
-                )
-
-            console.print(Panel(model_table, title="By Model", border_style="blue"))
-
-        # ── By tag ───────────────────────────────────────────────────────────
-        def _tag_panel(data: list[dict[str, Any]], title: str, key: str) -> None:
-            if not data or (len(data) == 1 and data[0]["tag"] == "(untagged)"):
-                return
-            t = Table(show_header=True, box=None, padding=(0, 2))
-            t.add_column(key.capitalize(), style="magenta")
-            t.add_column("Requests", justify="right")
-            t.add_column("Cost", justify="right", style="green")
-            t.add_column("% of Total", justify="right")
-            for row in data:
-                pct = (row["total_cost_usd"] / total_cost * 100) if total_cost else 0.0
-                t.add_row(
-                    row["tag"],
-                    f"{row['request_count']:,}",
-                    f"${row['total_cost_usd']:.4f}",
-                    f"{pct:.1f}%",
-                )
-            console.print(Panel(t, title=title, border_style="magenta"))
-
-        _tag_panel(by_feature, "By Feature Tag", "feature")
-        _tag_panel(by_team, "By Team Tag", "team")
-
-        # ── Daily trend ──────────────────────────────────────────────────────
-        if daily:
-            trend_lines = []
-            max_cost = max((d["total_cost_usd"] or 0.0) for d in daily) or 1.0
-            bar_width = 30
-            for d in daily:
-                day_cost = d["total_cost_usd"] or 0.0
-                bar_len = int((day_cost / max_cost) * bar_width)
-                bar = "█" * bar_len
-                trend_lines.append(
-                    f"  {d['day']}  [green]{bar:<{bar_width}}[/green]  ${day_cost:.4f}"
-                )
-            console.print(
-                Panel("\n".join(trend_lines), title="Daily Spend", border_style="dim")
+            from_addr = ec.from_addr or ec.smtp_user
+            send_report_email(
+                report_text=report_text,
+                to_email=email,
+                smtp_host=ec.smtp_host,
+                smtp_port=ec.smtp_port,
+                smtp_user=ec.smtp_user,
+                smtp_password=ec.smtp_password,
+                from_addr=from_addr,
             )
-
-        # ── Budget status ────────────────────────────────────────────────────
-        if budget_status.has_budget:
-            pct = budget_status.pct_used or 0.0
-            bar_len = min(int(pct / 2), 50)
-            bar = "█" * bar_len
-            color = "red" if budget_status.is_over_budget else "yellow" if pct > 75 else "green"
-            budget_lines = [
-                f"  Limit:     ${budget_status.budget_usd:.2f}",
-                f"  Spent:     ${budget_status.spent_usd:.4f}  ({pct:.1f}%)",
-                f"  Forecast:  ${budget_status.forecast_usd:.4f}",
-                f"  [{color}]{bar}[/{color}]",
-            ]
-            if budget_status.is_over_budget:
-                budget_lines.append("  [bold red]OVER BUDGET[/bold red]")
-            elif budget_status.is_on_pace_to_exceed:
-                budget_lines.append("  [yellow]On pace to exceed budget[/yellow]")
-            else:
-                budget_lines.append(
-                    f"  Remaining: [green]${budget_status.remaining_usd:.4f}[/green]"
-                )
-            console.print(
-                Panel("\n".join(budget_lines), title="Budget Status", border_style=color)
-            )
-        else:
-            console.print(
-                Panel(
-                    f"  No budget configured.\n"
-                    f"  Forecast (30-day): [yellow]${budget_status.forecast_usd:.4f}[/yellow]\n"
-                    f"  Add [cyan]budget_limit_usd[/cyan] to burnlens.yaml to enable tracking.",
-                    title="Budget Status",
-                    border_style="dim",
-                )
-            )
-
-        console.print()
+            console.print(f"[green]Report sent to {email}[/green]")
 
     asyncio.run(_run())
 
