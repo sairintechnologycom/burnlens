@@ -25,6 +25,7 @@ from burnlens.cost.calculator import TokenUsage
 from .conftest import (
     build_openai_stream,
     build_anthropic_stream,
+    build_google_stream,
     sse_content_chunk,
     sse_usage_chunk,
     SSE_DONE,
@@ -611,6 +612,46 @@ class TestAnthropicStreaming:
         assert rows[0]["tag_feature"] == "summarize"
 
     @pytest.mark.asyncio
+    async def test_anthropic_stream_token_counts(self, db_path):
+        """Token counts must be non-zero — catches $0 cost regression."""
+        anthropic_body = build_anthropic_stream(
+            text="Hello from Claude",
+            model="claude-3-5-sonnet-20241022",
+            input_tokens=120,
+            output_tokens=18,
+        )
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=anthropic_body,
+                                  headers={"content-type": "text/event-stream"})
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.anthropic.com",
+        ) as client:
+            _, _, _, stream = await handle_request(
+                client=client,
+                provider=anthropic_provider(),
+                path="/proxy/anthropic/v1/messages",
+                method="POST",
+                headers=make_headers(provider="anthropic"),
+                body_bytes=json.dumps({
+                    "model": "claude-3-5-sonnet-20241022",
+                    "max_tokens": 100,
+                    "stream": True,
+                    "messages": [{"role": "user", "content": "Hello"}],
+                }).encode(),
+                query_string="",
+                db_path=db_path,
+            )
+            await drain_and_settle(stream)
+
+        rows = fetch_rows(db_path)
+        assert rows[0]["input_tokens"] == 120
+        assert rows[0]["output_tokens"] == 18
+        assert rows[0]["cost_usd"] > 0.0
+
+    @pytest.mark.asyncio
     async def test_anthropic_chunks_forwarded_unmodified(self, db_path):
         """Anthropic SSE events should pass through to client unchanged."""
         anthropic_body = build_anthropic_stream("Hello world")
@@ -645,7 +686,94 @@ class TestAnthropicStreaming:
 
 
 # ---------------------------------------------------------------------------
-# 9. Concurrent streams — no row collisions in SQLite
+# 9. Google streaming path — detected via URL, not body field
+# ---------------------------------------------------------------------------
+
+class TestGoogleStreaming:
+    @pytest.mark.asyncio
+    async def test_google_stream_routed_via_url(self, db_path):
+        """Google signals streaming via :streamGenerateContent URL, not body.
+
+        Before the fix, _is_streaming checked only body["stream"] and returned
+        False for Google streaming, sending the SSE response through the
+        non-streaming path where response.json() would fail → $0 tokens.
+        """
+        google_body = build_google_stream(
+            text="Hi",
+            model="gemini-2.0-flash",
+            input_tokens=25,
+            output_tokens=10,
+        )
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=google_body,
+                                  headers={"content-type": "text/event-stream"})
+
+        google_provider = get_provider_for_path("/proxy/google/v1beta/models/gemini-2.0-flash:streamGenerateContent")
+        assert google_provider is not None
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://generativelanguage.googleapis.com",
+        ) as client:
+            status, _, body, stream = await handle_request(
+                client=client,
+                provider=google_provider,
+                path="/proxy/google/v1beta/models/gemini-2.0-flash:streamGenerateContent",
+                method="POST",
+                headers={"content-type": "application/json"},
+                body_bytes=json.dumps({
+                    "contents": [{"parts": [{"text": "Hi"}]}],
+                }).encode(),
+                query_string="",
+                db_path=db_path,
+            )
+
+        # Must be routed as streaming (stream not None, body is None)
+        assert stream is not None, "Google streaming request must return a stream, not body"
+        assert body is None
+        await drain_and_settle(stream)
+
+        rows = fetch_rows(db_path)
+        assert len(rows) == 1
+        assert rows[0]["input_tokens"] == 25
+        assert rows[0]["output_tokens"] == 10
+        assert rows[0]["cost_usd"] > 0.0
+
+    @pytest.mark.asyncio
+    async def test_google_stream_token_counts_from_sse(self, db_path):
+        """usageMetadata extracted from SSE data: lines (not raw NDJSON)."""
+        google_body = build_google_stream(input_tokens=100, output_tokens=40)
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=google_body,
+                                  headers={"content-type": "text/event-stream"})
+
+        google_provider = get_provider_for_path("/proxy/google/v1beta/models/gemini-2.0-flash:streamGenerateContent")
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://generativelanguage.googleapis.com",
+        ) as client:
+            _, _, _, stream = await handle_request(
+                client=client,
+                provider=google_provider,
+                path="/proxy/google/v1beta/models/gemini-2.0-flash:streamGenerateContent",
+                method="POST",
+                headers={"content-type": "application/json"},
+                body_bytes=json.dumps({"contents": [{"parts": [{"text": "Hi"}]}]}).encode(),
+                query_string="",
+                db_path=db_path,
+            )
+            await drain_and_settle(stream)
+
+        rows = fetch_rows(db_path)
+        assert rows[0]["input_tokens"] == 100
+        assert rows[0]["output_tokens"] == 40
+
+
+# ---------------------------------------------------------------------------
+# 10. Concurrent streams — no row collisions in SQLite
 # ---------------------------------------------------------------------------
 
 class TestConcurrentStreams:

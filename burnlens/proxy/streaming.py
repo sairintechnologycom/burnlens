@@ -9,7 +9,7 @@ from burnlens.cost.calculator import TokenUsage
 # Used to filter which chunks are buffered during streaming.
 USAGE_CHUNK_INDICATORS: tuple[str, ...] = (
     '"usage"',        # OpenAI final chunk + Anthropic message_delta
-    "usageMetadata",  # Google
+    "usageMetadata",  # Google SSE data lines
     "message_start",  # Anthropic: input tokens live in message.usage
     "message_delta",  # Anthropic: output tokens live in .usage
 )
@@ -130,7 +130,7 @@ def _extract_anthropic_stream(chunks: list[str]) -> TokenUsage:
 
 
 def _extract_google_stream(chunks: list[str]) -> TokenUsage:
-    """Google streaming: raw JSON objects, one per line (not SSE).
+    """Google streaming: SSE format (data: {...}), one JSON object per event.
 
     usageMetadata appears in each chunk but later chunks have the
     cumulative totals, so the last one seen wins.
@@ -139,12 +139,20 @@ def _extract_google_stream(chunks: list[str]) -> TokenUsage:
     for chunk_str in chunks:
         for line in chunk_str.splitlines():
             line = line.strip()
-            if not line.startswith("{"):
+            # Google streaming uses SSE format like OpenAI: "data: {...}"
+            if line.startswith("data:"):
+                payload = line[5:].strip()
+            elif line.startswith("{"):
+                # Fallback: raw NDJSON (older API versions)
+                payload = line
+            else:
+                continue
+            if not payload or payload == "[DONE]":
                 continue
             try:
-                data = json.loads(line)
+                data = json.loads(payload)
                 meta = data.get("usageMetadata") or {}
-                if meta.get("promptTokenCount") or meta.get("candidatesTokenCount"):
+                if "promptTokenCount" in meta or "candidatesTokenCount" in meta:
                     usage = TokenUsage(
                         input_tokens=meta.get("promptTokenCount", 0),
                         output_tokens=meta.get("candidatesTokenCount", 0),

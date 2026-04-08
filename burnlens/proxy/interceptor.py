@@ -80,10 +80,13 @@ def _log_upstream_error_hint(status_code: int, body_bytes: bytes, provider: str)
 # Headers BurnLens adds that must NOT be forwarded upstream
 _BURNLENS_HEADER_PREFIX = "x-burnlens-"
 
-# Headers that should never be forwarded (hop-by-hop + host)
+# Headers that should never be forwarded (hop-by-hop + host).
+# accept-encoding is stripped so upstreams never compress streaming responses:
+# httpx in stream=True mode yields raw bytes without auto-decompression, so
+# a gzip SSE response would produce undecodable chunks and zero usage extraction.
 _STRIP_REQUEST_HEADERS = frozenset(
     ["host", "content-length", "transfer-encoding", "connection", "keep-alive", "te", "trailers",
-     "upgrade"]
+     "upgrade", "accept-encoding"]
 )
 
 # Extra headers to strip from responses: httpx auto-decompresses, so forwarding
@@ -167,8 +170,15 @@ def _hash_system_prompt(body_bytes: bytes) -> str | None:
     return None
 
 
-def _is_streaming(body_bytes: bytes) -> bool:
-    """Return True if the request body requests a streaming response."""
+def _is_streaming(body_bytes: bytes, upstream_path: str = "") -> bool:
+    """Return True if this request will produce a streaming response.
+
+    OpenAI/Anthropic signal streaming via ``"stream": true`` in the request body.
+    Google signals streaming via the URL endpoint (`:streamGenerateContent`), not
+    the body, so we check the upstream path as well.
+    """
+    if ":streamGenerateContent" in upstream_path:
+        return True
     try:
         return bool(json.loads(body_bytes).get("stream", False))
     except Exception:
@@ -220,7 +230,7 @@ async def handle_request(
 
     tags = _extract_tags(headers)
     clean_headers = _clean_request_headers(headers)
-    streaming = _is_streaming(body_bytes)
+    streaming = _is_streaming(body_bytes, upstream_path)
 
     model_from_path = _extract_model_from_path(upstream_path, provider.name)
     model = model_from_path or _extract_model(body_bytes, provider.name)
