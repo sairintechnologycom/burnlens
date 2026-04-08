@@ -319,6 +319,57 @@ async function fetchWaste() {
   }
 }
 
+// -------------------------------------------------------- Recommendations
+
+async function fetchRecommendations() {
+  const recs = await apiFetch('/recommendations');
+  var section = $('recommendations-section');
+  var panel = $('recommendations-panel');
+
+  if (!recs.length) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  panel.replaceChildren();
+
+  for (var i = 0; i < recs.length; i++) {
+    var r = recs[i];
+    var item = document.createElement('div');
+    item.className = 'rec-item confidence-' + r.confidence;
+
+    var titleRow = document.createElement('div');
+    titleRow.className = 'rec-title';
+
+    var titleText;
+    if (r.suggested_model === 'prompt-caching') {
+      titleText = 'Enable prompt caching for ' + r.feature_tag;
+    } else {
+      titleText = 'Switch ' + r.feature_tag + ' from ' + r.current_model + ' \u2192 ' + r.suggested_model;
+    }
+    titleRow.appendChild(document.createTextNode(titleText + ' '));
+
+    var badge = document.createElement('span');
+    badge.className = 'rec-badge ' + r.confidence;
+    badge.textContent = r.confidence.toUpperCase();
+    titleRow.appendChild(badge);
+
+    var saving = document.createElement('div');
+    saving.className = 'rec-saving';
+    saving.textContent = 'Projected saving: ' + fmtCost(r.projected_saving) + '/month (' + r.saving_pct.toFixed(1) + '%)';
+
+    var detail = document.createElement('div');
+    detail.className = 'rec-detail';
+    detail.textContent = 'Based on ' + fmtNum(r.request_count) + ' requests averaging ' + Math.round(r.avg_output_tokens) + ' output tokens';
+
+    item.appendChild(titleRow);
+    item.appendChild(saving);
+    item.appendChild(detail);
+    panel.appendChild(item);
+  }
+}
+
 // -------------------------------------------------------- Customers
 
 async function fetchCustomers() {
@@ -453,6 +504,7 @@ async function refresh() {
     fetchModelChart(),
     fetchFeatureChart(),
     fetchWaste(),
+    fetchRecommendations(),
     fetchCustomers(),
     fetchTeamBudgets(),
     fetchRequests(),
