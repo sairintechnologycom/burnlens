@@ -28,6 +28,55 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Known upstream error patterns → human-readable hints
+# ---------------------------------------------------------------------------
+
+_ERROR_HINTS: list[tuple[str, str]] = [
+    # Billing / credits
+    ("credit balance is too low", "Add credits at console.anthropic.com/settings/billing"),
+    ("your account is not active", "Activate your Anthropic account at console.anthropic.com"),
+    ("exceeded your current quota", "Quota exceeded — check your plan at platform.openai.com/account/limits"),
+    ("billing_not_enabled", "Enable billing for this Google Cloud project at console.cloud.google.com/billing"),
+    ("generate_content_free_tier_requests", "Free tier quota exhausted — enable billing at console.cloud.google.com/billing"),
+    # Auth
+    ("invalid x-api-key", "Invalid Anthropic API key — check ANTHROPIC_API_KEY"),
+    ("invalid api key", "Invalid API key — check your provider's key env var"),
+    ("api key not valid", "Invalid Google API key — check GOOGLE_AI_STUDIO_KEY"),
+    ("authentication_error", "Authentication failed — verify your API key is correct"),
+    # Rate limits
+    ("rate limit", "Rate limited — back off and retry, or upgrade your plan"),
+    ("too many requests", "Too many requests — reduce concurrency or upgrade your plan"),
+]
+
+
+def _log_upstream_error_hint(status_code: int, body_bytes: bytes, provider: str) -> None:
+    """Log a clear, actionable hint when the upstream returns an error."""
+    if status_code < 400:
+        return
+    try:
+        text = body_bytes.decode("utf-8", errors="ignore").lower()
+    except Exception:
+        return
+
+    for pattern, hint in _ERROR_HINTS:
+        if pattern.lower() in text:
+            logger.warning(
+                "BurnLens [%s] %d — %s", provider.upper(), status_code, hint
+            )
+            return
+
+    # Generic fallback for unrecognised errors
+    if status_code == 401:
+        logger.warning("BurnLens [%s] 401 — Unauthorized: check your API key", provider.upper())
+    elif status_code == 403:
+        logger.warning("BurnLens [%s] 403 — Forbidden: key may lack permissions", provider.upper())
+    elif status_code == 429:
+        logger.warning("BurnLens [%s] 429 — Rate limited: slow down or upgrade your plan", provider.upper())
+    elif status_code >= 500:
+        logger.warning("BurnLens [%s] %d — Provider error (upstream is down or degraded)", provider.upper(), status_code)
+
+
 # Headers BurnLens adds that must NOT be forwarded upstream
 _BURNLENS_HEADER_PREFIX = "x-burnlens-"
 
@@ -36,6 +85,10 @@ _STRIP_REQUEST_HEADERS = frozenset(
     ["host", "content-length", "transfer-encoding", "connection", "keep-alive", "te", "trailers",
      "upgrade"]
 )
+
+# Extra headers to strip from responses: httpx auto-decompresses, so forwarding
+# content-encoding would cause the client to try to decompress again.
+_STRIP_RESPONSE_HEADERS = _STRIP_REQUEST_HEADERS | frozenset(["content-encoding"])
 
 
 def _extract_tags(headers: dict[str, str]) -> dict[str, str]:
@@ -235,6 +288,7 @@ async def _handle_non_streaming(
     duration_ms = int((time.monotonic() - start_ms) * 1000)
 
     resp_body = response.content
+    _log_upstream_error_hint(response.status_code, resp_body, provider.name)
     usage = TokenUsage()
     try:
         resp_json = response.json()
@@ -264,11 +318,12 @@ async def _handle_non_streaming(
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
 
-    # Pass through response headers, stripping hop-by-hop
+    # Pass through response headers, stripping hop-by-hop and encoding headers
+    # (httpx auto-decompresses, so content-encoding must not be forwarded).
     resp_headers = {
         k: v
         for k, v in response.headers.items()
-        if k.lower() not in _STRIP_REQUEST_HEADERS
+        if k.lower() not in _STRIP_RESPONSE_HEADERS
     }
 
     return response.status_code, resp_headers, resp_body, None
@@ -305,6 +360,16 @@ async def _handle_streaming(
         content=req.content,
     )
     response = await client.send(req, stream=True)
+    if response.status_code >= 400:
+        err_body = await response.aread()
+        _log_upstream_error_hint(response.status_code, err_body, provider.name)
+        # Re-wrap as a plain response so the error body is forwarded correctly
+        resp_headers = {
+            k: v for k, v in response.headers.items()
+            if k.lower() not in _STRIP_RESPONSE_HEADERS
+        }
+        await response.aclose()
+        return response.status_code, resp_headers, err_body, None
     duration_ref: list[int] = [0]
 
     async def _stream_generator() -> AsyncIterator[bytes]:
@@ -336,7 +401,7 @@ async def _handle_streaming(
     resp_headers = {
         k: v
         for k, v in response.headers.items()
-        if k.lower() not in _STRIP_REQUEST_HEADERS
+        if k.lower() not in _STRIP_RESPONSE_HEADERS
     }
 
     return response.status_code, resp_headers, None, _stream_generator()
