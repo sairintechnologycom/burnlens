@@ -614,6 +614,13 @@ document.querySelectorAll('#customers-table th.sortable').forEach(function(th) {
   });
 });
 
+// -------------------------------------------------------- Export CSV
+
+$('export-btn').addEventListener('click', function() {
+  var period = currentPeriod();
+  window.location.href = API + '/export?period=' + period;
+});
+
 // Initial load + auto-refresh every 10s
 refresh();
 setInterval(refresh, 10000);
