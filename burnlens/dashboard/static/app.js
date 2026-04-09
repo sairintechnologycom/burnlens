@@ -323,16 +323,20 @@ async function fetchWaste() {
 
 async function fetchRecommendations() {
   const recs = await apiFetch('/recommendations');
-  var section = $('recommendations-section');
   var panel = $('recommendations-panel');
+  panel.replaceChildren();
 
   if (!recs.length) {
-    section.style.display = 'none';
+    var empty = document.createElement('div');
+    empty.className = 'empty-state-ok';
+    var check = document.createElement('span');
+    check.className = 'check';
+    check.textContent = '\u2705';
+    empty.appendChild(check);
+    empty.appendChild(document.createTextNode('Your model usage looks efficient'));
+    panel.appendChild(empty);
     return;
   }
-
-  section.style.display = '';
-  panel.replaceChildren();
 
   for (var i = 0; i < recs.length; i++) {
     var r = recs[i];
@@ -372,21 +376,41 @@ async function fetchRecommendations() {
 
 // -------------------------------------------------------- Customers
 
-async function fetchCustomers() {
-  const rows = await apiFetch('/customers');
-  var section = $('customers-section');
-  var tbody = $('customers-body');
+var _customersData = [];
+var _customerSort = { col: 'total_cost', asc: false };
 
-  if (!rows.length) {
-    section.style.display = 'none';
+function renderCustomersTable() {
+  var tbody = $('customers-body');
+  tbody.replaceChildren();
+
+  if (!_customersData.length) {
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.colSpan = 8;
+    td.className = 'empty-state-hint';
+    var hintText = document.createTextNode('Tag requests with ');
+    var code = document.createElement('code');
+    code.textContent = 'X-BurnLens-Tag-Customer';
+    td.appendChild(hintText);
+    td.appendChild(code);
+    td.appendChild(document.createTextNode(' header'));
+    tr.appendChild(td);
+    tbody.appendChild(tr);
     return;
   }
 
-  section.style.display = '';
-  tbody.replaceChildren();
+  var sorted = _customersData.slice().sort(function(a, b) {
+    var va = a[_customerSort.col], vb = b[_customerSort.col];
+    if (va === null || va === undefined) va = -Infinity;
+    if (vb === null || vb === undefined) vb = -Infinity;
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va < vb) return _customerSort.asc ? -1 : 1;
+    if (va > vb) return _customerSort.asc ? 1 : -1;
+    return 0;
+  });
 
-  for (var i = 0; i < rows.length; i++) {
-    var r = rows[i];
+  for (var i = 0; i < sorted.length; i++) {
+    var r = sorted[i];
     var tr = document.createElement('tr');
 
     if (r.status === 'EXCEEDED') tr.className = 'row-exceeded';
@@ -410,38 +434,78 @@ async function fetchCustomers() {
   }
 }
 
+function updateSortIndicators() {
+  var ths = document.querySelectorAll('#customers-table th.sortable');
+  for (var i = 0; i < ths.length; i++) {
+    ths[i].classList.remove('active-sort', 'asc', 'desc');
+    if (ths[i].getAttribute('data-col') === _customerSort.col) {
+      ths[i].classList.add('active-sort', _customerSort.asc ? 'asc' : 'desc');
+    }
+  }
+}
+
+async function fetchCustomers() {
+  _customersData = await apiFetch('/customers');
+  renderCustomersTable();
+}
+
 // -------------------------------------------------------- Team Budgets
 
 async function fetchTeamBudgets() {
   const rows = await apiFetch('/team-budgets');
-  var section = $('team-budgets-section');
-  var tbody = $('team-budgets-body');
+  var panel = $('team-budgets-panel');
+  panel.replaceChildren();
 
   if (!rows.length) {
-    section.style.display = 'none';
+    var hint = document.createElement('div');
+    hint.className = 'empty-state-hint';
+    var text = document.createTextNode('Add ');
+    var code = document.createElement('code');
+    code.textContent = 'budgets.teams';
+    hint.appendChild(text);
+    hint.appendChild(code);
+    hint.appendChild(document.createTextNode(' to burnlens.yaml'));
+    panel.appendChild(hint);
     return;
   }
 
-  section.style.display = '';
-  tbody.replaceChildren();
-
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
-    var tr = document.createElement('tr');
-    tr.appendChild(makeTd(r.team));
+    var row = document.createElement('div');
+    row.className = 'team-row';
 
-    tr.appendChild(makeTd(fmtCost(r.spent), 'td-cost'));
-    tr.appendChild(makeTd(fmtCost(r.limit)));
-    tr.appendChild(makeTd(r.pct_used.toFixed(1) + '%'));
+    var name = document.createElement('div');
+    name.className = 'team-name';
+    name.textContent = r.team;
 
-    var statusTd = document.createElement('td');
+    var barWrap = document.createElement('div');
+    barWrap.className = 'team-bar-wrap';
+    var bar = document.createElement('div');
+    var pct = Math.min(r.pct_used, 100);
+    bar.style.width = pct + '%';
+    var barClass = 'team-bar';
+    if (r.pct_used >= 100) barClass += ' critical';
+    else if (r.pct_used >= 80) barClass += ' warning';
+    else barClass += ' ok';
+    bar.className = barClass;
+    barWrap.appendChild(bar);
+
+    var spend = document.createElement('div');
+    spend.className = 'team-spend';
+    spend.textContent = fmtCost(r.spent) + ' / ' + fmtCost(r.limit);
+
+    var statusDiv = document.createElement('div');
+    statusDiv.className = 'team-status';
     var badge = document.createElement('span');
     badge.className = 'status-badge status-' + r.status.toLowerCase();
     badge.textContent = r.status;
-    statusTd.appendChild(badge);
-    tr.appendChild(statusTd);
+    statusDiv.appendChild(badge);
 
-    tbody.appendChild(tr);
+    row.appendChild(name);
+    row.appendChild(barWrap);
+    row.appendChild(spend);
+    row.appendChild(statusDiv);
+    panel.appendChild(row);
   }
 }
 
@@ -517,6 +581,34 @@ $('period-select').addEventListener('change', function() {
   if (modelChart) { modelChart.destroy(); modelChart = null; }
   if (featureChart) { featureChart.destroy(); featureChart = null; }
   refresh();
+});
+
+// -------------------------------------------------------- Tab switching
+
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    var pane = $('tab-' + btn.getAttribute('data-tab'));
+    if (pane) pane.classList.add('active');
+  });
+});
+
+// -------------------------------------------------------- Customer sort
+
+document.querySelectorAll('#customers-table th.sortable').forEach(function(th) {
+  th.addEventListener('click', function() {
+    var col = th.getAttribute('data-col');
+    if (_customerSort.col === col) {
+      _customerSort.asc = !_customerSort.asc;
+    } else {
+      _customerSort.col = col;
+      _customerSort.asc = (col === 'customer');  // alpha asc, numbers desc
+    }
+    updateSortIndicators();
+    renderCustomersTable();
+  });
 });
 
 // Initial load + auto-refresh every 10s
