@@ -44,7 +44,7 @@ def _row_to_csv_dict(row: dict[str, Any]) -> dict[str, Any]:
         "reasoning_tokens": row.get("reasoning_tokens", 0),
         "cache_read_tokens": row.get("cache_read_tokens", 0),
         "cache_write_tokens": row.get("cache_write_tokens", 0),
-        "cost_usd": row.get("cost_usd", 0.0),
+        "cost_usd": f"{row.get('cost_usd', 0.0):.8f}",
         "latency_ms": row.get("duration_ms", 0),
         "status_code": row.get("status_code", 200),
     }
