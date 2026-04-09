@@ -59,13 +59,16 @@ select:hover { border-color: var(--accent); }
 .export-btn {
   background: var(--surface2);
   border: 1px solid var(--border);
-  color: var(--text-dim);
+  color: var(--text);
   border-radius: 6px;
-  padding: 0.35rem 0.7rem;
+  padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
+  font-family: inherit;
   transition: border-color 0.15s, color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .export-btn:hover {
   border-color: var(--accent);
