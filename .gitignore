@@ -14,3 +14,5 @@ venv/
 .planning/
 .coverage
 htmlcov/
+.DS_Store
+*.csv
