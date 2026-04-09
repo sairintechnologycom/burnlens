@@ -1,5 +1,8 @@
 # BurnLens
 
+<p align="center">
+  <img src="docs/burnlens_logo_800.png" width="300" alt="BurnLens">
+</p>
 **See exactly what your LLM API calls cost, per feature, team, and customer.**
 
 [![PyPI](https://img.shields.io/pypi/v/burnlens)](https://pypi.org/project/burnlens/)
