@@ -107,6 +107,7 @@ def start(
     port: Optional[int] = typer.Option(None, "--port", "-p", help="Proxy port (default 8420)"),
     host: Optional[str] = typer.Option(None, "--host", help="Bind host (default 127.0.0.1)"),
     no_env: bool = typer.Option(False, "--no-env", help="Don't print env var exports"),
+    otel: bool = typer.Option(False, "--otel", help="Enable OpenTelemetry export for this session"),
 ) -> None:
     """Start the BurnLens proxy server."""
     cfg = load_config(config)
@@ -114,6 +115,8 @@ def start(
         cfg.port = port
     if host is not None:
         cfg.host = host
+    if otel:
+        cfg.telemetry.enabled = True
 
     from burnlens.proxy.server import get_app
 
@@ -135,6 +138,24 @@ def start(
         console.print(f"[dim]Database: [/dim] {cfg.db_path}")
         console.print()
 
+    # Initialise OpenTelemetry if enabled
+    if cfg.telemetry.enabled:
+        try:
+            from burnlens.telemetry.otel import init_tracer
+            init_tracer(
+                endpoint=cfg.telemetry.otel_endpoint,
+                service_name=cfg.telemetry.service_name,
+            )
+            console.print(
+                f"[bold blue]OTEL[/bold blue] exporting to {cfg.telemetry.otel_endpoint}"
+            )
+        except ImportError:
+            console.print(
+                "[bold red]OpenTelemetry not installed.[/bold red] "
+                "Run: [cyan]pip install burnlens\\[otel][/cyan]"
+            )
+            raise typer.Exit(code=1)
+
     uvicorn.run(
         fastapi_app,
         host=cfg.host,
@@ -142,6 +163,32 @@ def start(
         log_level=cfg.log_level.lower(),
         access_log=False,
     )
+
+
+@app.command("check-otel")
+def check_otel(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    endpoint: Optional[str] = typer.Option(None, "--endpoint", help="OTLP endpoint to test"),
+) -> None:
+    """Verify connectivity to the OpenTelemetry collector."""
+    cfg = load_config(config)
+    target = endpoint or cfg.telemetry.otel_endpoint
+
+    try:
+        from burnlens.telemetry.otel import check_otel_connection
+    except ImportError:
+        console.print(
+            "[bold red]OpenTelemetry not installed.[/bold red] "
+            "Run: [cyan]pip install burnlens\\[otel][/cyan]"
+        )
+        raise typer.Exit(code=1)
+
+    console.print(f"Checking OTEL collector at [cyan]{target}[/cyan] …")
+    if check_otel_connection(target):
+        console.print("[green]Connection OK[/green]")
+    else:
+        console.print("[red]Connection failed[/red] — is the collector running?")
+        raise typer.Exit(code=1)
 
 
 @app.command()

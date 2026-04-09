@@ -256,6 +256,13 @@ async def _log_record(db_path: str, record: RequestRecord) -> None:
     except Exception as exc:
         logger.error("Failed to log request: %s", exc)
 
+    # Emit OTEL span (no-op if telemetry is not initialised)
+    try:
+        from burnlens.telemetry.otel import emit_span
+        emit_span(record)
+    except Exception as exc:
+        logger.debug("OTEL emit failed: %s", exc)
+
 
 async def handle_request(
     client: httpx.AsyncClient,
