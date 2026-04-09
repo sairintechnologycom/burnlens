@@ -1,12 +1,15 @@
 """JSON API endpoints for the BurnLens dashboard."""
 from __future__ import annotations
 
+import csv
+import io
 import logging
 from datetime import datetime, timedelta, timezone
 from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import StreamingResponse
 
 from burnlens.storage.queries import (
     get_daily_cost,
@@ -321,6 +324,40 @@ async def recommendations(request: Request) -> list:
 
 
 # -------- legacy compat: /api/models still works (used by old app.js)
+
+@router.get("/export")
+async def export_csv(
+    request: Request,
+    period: str = Query(default="7d"),
+) -> StreamingResponse:
+    """Export request data as a CSV download."""
+    from burnlens.export import CSV_COLUMNS, _row_to_csv_dict
+    from burnlens.storage.database import get_requests_for_export
+
+    db = _db_path(request)
+    period = period.strip().lower()
+    days = 7
+    if period.endswith("d"):
+        try:
+            days = int(period[:-1])
+        except ValueError:
+            pass
+
+    rows = await get_requests_for_export(db, days=days)
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=CSV_COLUMNS)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(_row_to_csv_dict(row))
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=burnlens_export_{days}d.csv"},
+    )
+
 
 @router.get("/models")
 async def models_compat(request: Request) -> list:
