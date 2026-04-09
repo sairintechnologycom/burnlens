@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "burnlens"
-version = "0.1.2"
+version = "0.3.0"
 description = "See where your LLM money goes. Open-source proxy for AI API cost tracking, waste detection, and budget alerts."
 readme = "README.md"
 license = {text = "Apache-2.0"}
