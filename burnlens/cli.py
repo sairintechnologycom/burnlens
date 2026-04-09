@@ -699,6 +699,102 @@ def recommend(
 
 
 @app.command()
+def login(
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (bl_live_...)"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Authenticate with burnlens.app and enable cloud sync."""
+    import yaml as yaml_mod
+
+    # Determine config file location
+    if config is not None:
+        config_path = config
+    else:
+        config_path = Path.cwd() / "burnlens.yaml"
+        if not config_path.exists():
+            config_path = Path.home() / ".burnlens" / "config.yaml"
+
+    key = api_key or typer.prompt("Enter your BurnLens API key (bl_live_...)")
+    if not key.startswith("bl_"):
+        console.print("[red]Invalid API key format.[/red] Keys start with bl_live_ or bl_test_.")
+        raise typer.Exit(code=1)
+
+    # Load existing config or start fresh
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    if config_path.exists():
+        with open(config_path) as f:
+            data = yaml_mod.safe_load(f) or {}
+    else:
+        data = {}
+
+    # Set cloud section
+    cloud = data.get("cloud", {}) or {}
+    cloud["enabled"] = True
+    cloud["api_key"] = key
+    cloud.setdefault("endpoint", "https://api.burnlens.app/v1/ingest")
+    cloud.setdefault("sync_interval_seconds", 60)
+    cloud.setdefault("anonymise_prompts", True)
+    data["cloud"] = cloud
+
+    with open(config_path, "w") as f:
+        yaml_mod.dump(data, f, default_flow_style=False, sort_keys=False)
+
+    console.print()
+    console.print("[green]Cloud sync enabled![/green]")
+    console.print(f"Config written to [cyan]{config_path}[/cyan]")
+    console.print()
+    console.print("[dim]Prompt content never leaves your machine — only anonymised cost data is synced.[/dim]")
+    console.print()
+
+
+@app.command("sync")
+def sync_cmd(
+    now: bool = typer.Option(False, "--now", help="Push all un-synced records immediately"),
+    status: bool = typer.Option(False, "--status", help="Show sync status"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Manually trigger cloud sync or check sync status."""
+    cfg = load_config(config)
+
+    if not cfg.cloud.enabled or not cfg.cloud.api_key:
+        console.print("[yellow]Cloud sync is not enabled.[/yellow]")
+        console.print("Run [cyan]burnlens login[/cyan] to set up cloud sync.")
+        raise typer.Exit(code=1)
+
+    async def _run() -> None:
+        from burnlens.cloud.sync import CloudSync, get_unsynced_count, migrate_add_synced_at
+
+        await migrate_add_synced_at(cfg.db_path)
+
+        if status:
+            unsynced = await get_unsynced_count(cfg.db_path)
+            console.print()
+            console.print(f"[bold]Cloud Sync Status[/bold]")
+            console.print(f"  Endpoint:  [cyan]{cfg.cloud.endpoint}[/cyan]")
+            console.print(f"  Interval:  {cfg.cloud.sync_interval_seconds}s")
+            console.print(f"  Un-synced: [yellow]{unsynced}[/yellow] record(s)")
+            console.print()
+            return
+
+        if now:
+            cloud = CloudSync(cfg.cloud)
+            try:
+                console.print("Syncing to [cyan]burnlens.app[/cyan]...")
+                count = await cloud.sync_now(cfg.db_path)
+                if count > 0:
+                    console.print(f"[green]Pushed {count} record(s).[/green]")
+                else:
+                    console.print("[dim]No un-synced records to push.[/dim]")
+            finally:
+                await cloud.close()
+            return
+
+        console.print("Use [cyan]--now[/cyan] or [cyan]--status[/cyan].")
+
+    asyncio.run(_run())
+
+
+@app.command()
 def ui(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
