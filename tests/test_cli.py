@@ -23,12 +23,19 @@ def test_top_no_db(tmp_path):
     db = str(tmp_path / "test.db")
     asyncio.run(init_db(db))
 
-    # Patch config to use tmp db
-    from unittest.mock import patch
+    # Patch config to use tmp db, and mock Live to avoid the infinite loop
+    from unittest.mock import patch, MagicMock
 
     from burnlens.config import BurnLensConfig
 
     cfg = BurnLensConfig(db_path=db)
-    with patch("burnlens.cli.load_config", return_value=cfg):
+
+    mock_live = MagicMock()
+    mock_live.__enter__ = MagicMock(return_value=mock_live)
+    mock_live.__exit__ = MagicMock(return_value=False)
+
+    with patch("burnlens.cli.load_config", return_value=cfg), \
+         patch("burnlens.cli.Live", return_value=mock_live), \
+         patch("burnlens.cli.time.sleep", side_effect=KeyboardInterrupt):
         result = runner.invoke(app, ["top"])
     assert result.exit_code == 0
