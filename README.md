@@ -20,8 +20,8 @@ burnlens start
 ## Point your SDK at the proxy
 
 ```bash
-# OpenAI
-export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai
+# OpenAI — note the /v1 suffix
+export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai/v1
 
 # Anthropic
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8420/proxy/anthropic
