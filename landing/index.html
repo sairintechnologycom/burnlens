@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BurnLens — LLM API Cost Tracker</title>
+<meta name="description" content="Open-source LLM cost proxy. Track AI API spend per feature, team, and customer. pip install burnlens.">
+<meta property="og:title" content="BurnLens — LLM API Cost Tracker">
+<meta property="og:description" content="See exactly what your AI API calls cost. Per feature. Per team. Per customer.">
+<meta property="og:url" content="https://burnlens.app">
+<link rel="icon" type="image/png" href="burnlens_icon_512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080c10;
+    --bg2: #0d1117;
+    --bg3: #161b22;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --cyan: #00e5c8;
+    --cyan-dim: rgba(0,229,200,0.15);
+    --cyan-dimmer: rgba(0,229,200,0.06);
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
+    --amber: #f0a928;
+    --red: #f85149;
+    --green: #3fb950;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,200,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,200,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow blob */
+  body::after {
+    content: '';
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 500px;
+    background: radial-gradient(ellipse, rgba(0,229,200,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  section, nav, footer { position: relative; z-index: 1; }
+
+  /* NAV */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 2rem;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(8,12,16,0.85);
+  }
+
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .nav-logo .flame { font-size: 1.2rem; }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .nav-links a {
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 400;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+
+  .btn-primary {
+    background: var(--cyan);
+    color: #000;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.5rem 1.1rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: opacity 0.2s, transform 0.1s;
+    border: none;
+    cursor: pointer;
+    display: inline-block;
+  }
+
+  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+
+  .btn-outline {
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.5rem 1.1rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: border-color 0.2s, background 0.2s;
+    display: inline-block;
+  }
+
+  .btn-outline:hover { border-color: var(--cyan); background: var(--cyan-dimmer); }
+
+  /* HERO */
+  .hero {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 6rem 2rem 4rem;
+    text-align: center;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--cyan-dimmer);
+    border: 1px solid rgba(0,229,200,0.2);
+    border-radius: 100px;
+    padding: 0.3rem 0.9rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--cyan);
+    margin-bottom: 2rem;
+    letter-spacing: 0.04em;
+  }
+
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    background: var(--cyan);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin-bottom: 1.25rem;
+  }
+
+  h1 span { color: var(--cyan); }
+
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--text2);
+    font-weight: 300;
+    max-width: 560px;
+    margin: 0 auto 2.5rem;
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  /* INSTALL BLOCK */
+  .install-block {
+    max-width: 600px;
+    margin: 3rem auto 0;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .install-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .install-bar-dots { display: flex; gap: 6px; }
+  .install-bar-dots span {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--border2);
+  }
+
+  .install-bar-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--text3);
+  }
+
+  .install-copy-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .install-copy-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  .install-code {
+    padding: 1.25rem 1.25rem;
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    line-height: 2;
+  }
+
+  .install-code .comment { color: var(--text3); }
+  .install-code .cmd { color: var(--cyan); }
+  .install-code .arg { color: var(--amber); }
+  .install-code .url { color: var(--green); }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3rem;
+    padding: 2.5rem 2rem;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-top: 4rem;
+    flex-wrap: wrap;
+  }
+
+  .stat { text-align: center; }
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--cyan);
+    display: block;
+  }
+  .stat-label {
+    font-size: 0.78rem;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+
+  .stat-divider {
+    width: 1px;
+    height: 40px;
+    background: var(--border);
+  }
+
+  /* HOW IT WORKS */
+  .section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 5rem 2rem;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--cyan);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 1rem;
+    line-height: 1.2;
+  }
+
+  .section-sub {
+    color: var(--text2);
+    font-size: 0.95rem;
+    max-width: 500px;
+    margin-bottom: 3rem;
+    font-weight: 300;
+  }
+
+  /* STEPS */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .step {
+    background: var(--bg2);
+    padding: 2rem;
+    position: relative;
+  }
+
+  .step-num {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+    margin-bottom: 1rem;
+  }
+
+  .step-icon {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    display: block;
+  }
+
+  .step h3 {
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .step p {
+    font-size: 0.85rem;
+    color: var(--text2);
+    line-height: 1.65;
+    font-weight: 300;
+  }
+
+  .step code {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--cyan);
+    background: var(--cyan-dimmer);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* FEATURES */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 3rem;
+  }
+
+  .feature-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: border-color 0.2s;
+  }
+
+  .feature-card:hover { border-color: rgba(0,229,200,0.25); }
+
+  .feature-icon {
+    width: 36px; height: 36px;
+    background: var(--cyan-dimmer);
+    border: 1px solid rgba(0,229,200,0.15);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .feature-card h3 {
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.4rem;
+  }
+
+  .feature-card p {
+    font-size: 0.82rem;
+    color: var(--text2);
+    line-height: 1.6;
+    font-weight: 300;
+  }
+
+  /* PROVIDERS */
+  .providers {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+  }
+
+  .provider-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 100px;
+    padding: 0.4rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text2);
+  }
+
+  .provider-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+
+  /* CODE EXAMPLE */
+  .code-example {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 2rem;
+  }
+
+  .code-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .code-tab {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text3);
+    padding: 0.6rem 1.2rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+
+  .code-tab.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+  }
+
+  .code-tab:hover:not(.active) { color: var(--text2); }
+
+  .code-body {
+    padding: 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    line-height: 1.9;
+    display: none;
+  }
+
+  .code-body.active { display: block; }
+  .c { color: var(--text3); }
+  .k { color: var(--cyan); }
+  .s { color: var(--amber); }
+  .v { color: var(--green); }
+  .n { color: var(--text); }
+
+  /* PRICING / OPEN SOURCE */
+  .oss-block {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 3rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .oss-block::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 400px;
+    height: 300px;
+    background: radial-gradient(ellipse, rgba(0,229,200,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .oss-block h2 { margin-bottom: 0.75rem; }
+
+  .oss-block p {
+    color: var(--text2);
+    font-size: 0.95rem;
+    max-width: 480px;
+    margin: 0 auto 2rem;
+    font-weight: 300;
+  }
+
+  .oss-features {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-bottom: 2.5rem;
+  }
+
+  .oss-feat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text2);
+    font-family: var(--mono);
+  }
+
+  .oss-feat::before {
+    content: '\2713';
+    color: var(--cyan);
+    font-size: 0.8rem;
+  }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .footer-logo {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .footer-links a {
+    font-size: 0.8rem;
+    color: var(--text3);
+    text-decoration: none;
+    transition: color 0.2s;
+    font-family: var(--mono);
+  }
+
+  .footer-links a:hover { color: var(--text2); }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .hero > * {
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .hero-badge { animation-delay: 0.05s; }
+  h1 { animation-delay: 0.1s; }
+  .hero-sub { animation-delay: 0.15s; }
+  .hero-actions { animation-delay: 0.2s; }
+  .install-block { animation-delay: 0.25s; }
+
+  /* RESPONSIVE */
+  @media (max-width: 640px) {
+    nav { padding: 1rem; }
+    .nav-links { gap: 1rem; }
+    .stats-bar { gap: 1.5rem; }
+    .stat-divider { display: none; }
+    .oss-block { padding: 2rem 1.25rem; }
+    .oss-features { gap: 1rem; flex-direction: column; align-items: flex-start; padding-left: 2rem; }
+    footer { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">
+    <img src="burnlens_icon_512.png" width="28" height="28" alt="BurnLens" style="border-radius:4px;">
+    BurnLens
+  </a>
+  <div class="nav-links">
+    <a href="#how-it-works">How it works</a>
+    <a href="#features">Features</a>
+    <a href="https://github.com/sairintechnologycom/burnlens" target="_blank">GitHub</a>
+    <a href="https://pypi.org/project/burnlens/" target="_blank" class="btn-outline">PyPI</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    Open source &middot; MIT License &middot; v0.1.1
+  </div>
+
+  <h1>Stop guessing what your<br><span>LLM API calls cost</span></h1>
+
+  <p class="hero-sub">
+    BurnLens is a local proxy that tracks every AI API call &mdash; per feature, team, and customer. One install. Zero config. Nothing leaves your machine.
+  </p>
+
+  <div class="hero-actions">
+    <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" class="btn-primary">View on GitHub</a>
+    <a href="#how-it-works" class="btn-outline">See how it works</a>
+  </div>
+
+  <img src="burnlens_logo_wide.png" style="width:100%;max-width:700px;border-radius:8px;border:1px solid rgba(0,229,200,0.1);margin-bottom:2rem;" alt="BurnLens Dashboard">
+
+  <div class="install-block">
+    <div class="install-bar">
+      <div class="install-bar-dots">
+        <span></span><span></span><span></span>
+      </div>
+      <span class="install-bar-label">terminal</span>
+      <button class="install-copy-btn" onclick="copyInstall(this)">copy</button>
+    </div>
+    <div class="install-code" id="install-text">
+      <div><span class="comment"># install</span></div>
+      <div><span class="cmd">pip install</span> <span class="arg">burnlens</span></div>
+      <div>&nbsp;</div>
+      <div><span class="comment"># start the proxy + dashboard</span></div>
+      <div><span class="cmd">burnlens start</span></div>
+      <div>&nbsp;</div>
+      <div><span class="comment"># dashboard at</span> <span class="url">http://127.0.0.1:8420/ui</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-num">3</span>
+    <span class="stat-label">providers supported</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-num">0</span>
+    <span class="stat-label">data leaves your machine</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-num">1</span>
+    <span class="stat-label">command to start</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-num">MIT</span>
+    <span class="stat-label">open source license</span>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how-it-works">
+  <div class="section-label">// how it works</div>
+  <h2>Three steps to full visibility</h2>
+  <p class="section-sub">No SDK changes. No code rewrites. Just point your existing API calls through the proxy.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01 &mdash;</div>
+      <span class="step-icon">&#x26A1;</span>
+      <h3>Install &amp; start</h3>
+      <p>
+        <code>pip install burnlens</code> then <code>burnlens start</code>.
+        Proxy runs on port 8420. Takes 30 seconds.
+      </p>
+    </div>
+    <div class="step">
+      <div class="step-num">02 &mdash;</div>
+      <span class="step-icon">&#x1F500;</span>
+      <h3>Route your traffic</h3>
+      <p>
+        Set <code>OPENAI_BASE_URL</code> to the proxy. Add
+        <code>X-BurnLens-Tag-Feature</code> headers to your requests. Done.
+      </p>
+    </div>
+    <div class="step">
+      <div class="step-num">03 &mdash;</div>
+      <span class="step-icon">&#x1F4CA;</span>
+      <h3>See everything</h3>
+      <p>
+        Open the dashboard. Cost by model, feature, team, customer.
+        Waste alerts. Per-call token counts and latency.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section" id="features" style="padding-top: 0;">
+  <div class="section-label">// features</div>
+  <h2>Everything you need to<br>control LLM spend</h2>
+  <p class="section-sub">Built for engineers and teams who are serious about understanding their AI costs.</p>
+
+  <div class="features">
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4B0;</div>
+      <h3>Cost per feature</h3>
+      <p>Tag requests with <code style="font-family:monospace;font-size:0.78rem;color:var(--cyan);background:var(--cyan-dimmer);padding:1px 5px;border-radius:3px;">X-BurnLens-Tag-Feature</code> and see exactly which part of your product is spending what.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F465;</div>
+      <h3>Team &amp; customer budgets</h3>
+      <p>Set monthly spend limits per team and per customer. Get warnings at 80%. Automatic 429 when a customer exceeds their cap.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F6A8;</div>
+      <h3>Waste alerts</h3>
+      <p>Detect duplicate requests, context bloat, model overkill, and uncached system prompts. Dollar estimates included.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F916;</div>
+      <h3>Model recommendations</h3>
+      <p>BurnLens analyses your usage patterns and recommends cheaper models where the data supports it. Projected savings shown.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F4E4;</div>
+      <h3>Export &amp; reports</h3>
+      <p><code style="font-family:monospace;font-size:0.78rem;color:var(--cyan);background:var(--cyan-dimmer);padding:1px 5px;border-radius:3px;">burnlens export</code> to CSV. <code style="font-family:monospace;font-size:0.78rem;color:var(--cyan);background:var(--cyan-dimmer);padding:1px 5px;border-radius:3px;">burnlens report</code> for weekly summaries. Email delivery supported.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x1F512;</div>
+      <h3>100% local</h3>
+      <p>Everything stored in a local SQLite file. No accounts. No SaaS. No prompt content ever leaves your machine.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PROVIDERS -->
+<section class="section" style="padding-top: 0;">
+  <div class="section-label">// providers</div>
+  <h2>Works with your stack</h2>
+  <p class="section-sub">Supports all major providers out of the box. More coming.</p>
+
+  <div class="providers">
+    <div class="provider-pill"><span class="provider-dot"></span>OpenAI &mdash; GPT-4o, GPT-4o-mini, o1, o3</div>
+    <div class="provider-pill"><span class="provider-dot"></span>Anthropic &mdash; Claude 3.5, Claude Haiku</div>
+    <div class="provider-pill"><span class="provider-dot"></span>Google &mdash; Gemini 1.5, Gemini 2.0</div>
+  </div>
+
+  <!-- Code example -->
+  <div class="code-example">
+    <div class="code-tabs">
+      <button class="code-tab active" onclick="showTab('python')">Python / OpenAI</button>
+      <button class="code-tab" onclick="showTab('anthropic')">Anthropic</button>
+      <button class="code-tab" onclick="showTab('google')">Google</button>
+    </div>
+
+    <div class="code-body active" id="tab-python">
+      <span class="c"># Set env var once &mdash; all OpenAI calls go through BurnLens</span><br>
+      <span class="k">export</span> <span class="v">OPENAI_BASE_URL</span>=<span class="s">http://127.0.0.1:8420/proxy/openai</span><br>
+      <br>
+      <span class="c"># Tag your requests</span><br>
+      <span class="n">response</span> = <span class="n">client</span>.<span class="k">chat</span>.<span class="k">completions</span>.<span class="k">create</span>(<br>
+      &nbsp;&nbsp;<span class="n">model</span>=<span class="s">"gpt-4o-mini"</span>,<br>
+      &nbsp;&nbsp;<span class="n">messages</span>=[...],<br>
+      &nbsp;&nbsp;<span class="n">extra_headers</span>={<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="s">"X-BurnLens-Tag-Feature"</span>: <span class="s">"chat"</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="s">"X-BurnLens-Tag-Team"</span>: <span class="s">"backend"</span>,<br>
+      &nbsp;&nbsp;}<br>
+      )
+    </div>
+
+    <div class="code-body" id="tab-anthropic">
+      <span class="c"># Set env var once</span><br>
+      <span class="k">export</span> <span class="v">ANTHROPIC_BASE_URL</span>=<span class="s">http://127.0.0.1:8420/proxy/anthropic</span><br>
+      <br>
+      <span class="c"># Tag your requests</span><br>
+      <span class="n">response</span> = <span class="n">client</span>.<span class="k">messages</span>.<span class="k">create</span>(<br>
+      &nbsp;&nbsp;<span class="n">model</span>=<span class="s">"claude-haiku-4-5-20251001"</span>,<br>
+      &nbsp;&nbsp;<span class="n">max_tokens</span>=<span class="v">1024</span>,<br>
+      &nbsp;&nbsp;<span class="n">messages</span>=[...],<br>
+      &nbsp;&nbsp;<span class="n">extra_headers</span>={<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="s">"X-BurnLens-Tag-Feature"</span>: <span class="s">"summarize"</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="s">"X-BurnLens-Tag-Customer"</span>: <span class="s">"acme-corp"</span>,<br>
+      &nbsp;&nbsp;}<br>
+      )
+    </div>
+
+    <div class="code-body" id="tab-google">
+      <span class="c"># Use the BurnLens patch helper for Google SDK</span><br>
+      <span class="k">import</span> <span class="n">burnlens.patch</span><br>
+      <span class="n">burnlens</span>.<span class="n">patch</span>.<span class="k">patch_google</span>()<br>
+      <br>
+      <span class="k">import</span> <span class="n">google.generativeai</span> <span class="k">as</span> <span class="n">genai</span><br>
+      <span class="n">model</span> = <span class="n">genai</span>.<span class="k">GenerativeModel</span>(<span class="s">"gemini-2.0-flash"</span>)<br>
+      <span class="n">response</span> = <span class="n">model</span>.<span class="k">generate_content</span>(<span class="s">"Hello"</span>)
+    </div>
+  </div>
+</section>
+
+<!-- OSS BLOCK -->
+<section class="section" style="padding-top: 0;">
+  <div class="oss-block">
+    <div class="section-label" style="margin-bottom:1rem;">// open source</div>
+    <h2>Free forever.<br>Your data stays yours.</h2>
+    <p>BurnLens is MIT licensed and always will be. No accounts, no usage limits, no data collection. Run it locally and own everything.</p>
+
+    <div class="oss-features">
+      <div class="oss-feat">MIT License</div>
+      <div class="oss-feat">Local SQLite storage</div>
+      <div class="oss-feat">No accounts required</div>
+      <div class="oss-feat">No prompt data collected</div>
+      <div class="oss-feat">Full source on GitHub</div>
+    </div>
+
+    <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+      <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" class="btn-primary">Star on GitHub</a>
+      <a href="https://pypi.org/project/burnlens/" target="_blank" class="btn-outline">View on PyPI</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">
+    <img src="burnlens_icon_512.png" width="20" height="20" alt="BurnLens" style="border-radius:3px;"> BurnLens &mdash; LLM API cost tracker
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/sairintechnologycom/burnlens" target="_blank">GitHub</a>
+    <a href="https://pypi.org/project/burnlens/" target="_blank">PyPI</a>
+    <a href="https://github.com/sairintechnologycom/burnlens/issues" target="_blank">Issues</a>
+    <a href="https://github.com/sairintechnologycom/burnlens/blob/main/LICENSE" target="_blank">MIT License</a>
+  </div>
+</footer>
+
+<script>
+function copyInstall(btn) {
+  var text = 'pip install burnlens\nburnlens start';
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'copied!';
+    btn.style.color = 'var(--cyan)';
+    btn.style.borderColor = 'var(--cyan)';
+    setTimeout(function() {
+      btn.textContent = 'copy';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2000);
+  });
+}
+
+function showTab(id) {
+  document.querySelectorAll('.code-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.code-body').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
