@@ -25,7 +25,15 @@
   </div>
 </header>
 
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="customers">Customers</button>
+</nav>
+
 <main>
+
+<!-- ========== Dashboard tab ========== -->
+<div class="tab-pane active" id="tab-dashboard">
 
   <!-- KPI cards -->
   <section class="kpi-grid">
@@ -88,62 +96,24 @@
     </div>
   </section>
 
+  <!-- Team Budgets (card with progress bars) -->
+  <section class="chart-card" id="team-budgets-section">
+    <div class="chart-header">
+      <h2>Team Budgets</h2>
+      <span class="chart-note">monthly spend caps from <code>budgets.teams</code></span>
+    </div>
+    <div id="team-budgets-panel">
+      <div class="loading-text">Loading…</div>
+    </div>
+  </section>
+
   <!-- Recommendations -->
-  <section class="table-card" id="recommendations-section" style="display:none">
+  <section class="table-card" id="recommendations-section">
     <div class="chart-header">
       <h2>Recommendations</h2>
       <span class="chart-note">model switch suggestions based on usage patterns</span>
     </div>
     <div id="recommendations-panel"></div>
-  </section>
-
-  <!-- Customer Budgets -->
-  <section class="table-card" id="customers-section" style="display:none">
-    <div class="chart-header">
-      <h2>Customers</h2>
-      <span class="chart-note">per-customer spend caps from <code>customer_budgets</code></span>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th>Requests</th>
-            <th>Tokens In</th>
-            <th>Tokens Out</th>
-            <th>Total Cost</th>
-            <th>Budget</th>
-            <th>% Used</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="customers-body">
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- Team Budgets -->
-  <section class="table-card" id="team-budgets-section" style="display:none">
-    <div class="chart-header">
-      <h2>Team Budgets</h2>
-      <span class="chart-note">monthly spend caps from <code>budgets.teams</code></span>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Team</th>
-            <th>Spent</th>
-            <th>Limit</th>
-            <th>% Used</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="team-budgets-body">
-        </tbody>
-      </table>
-    </div>
   </section>
 
   <!-- Recent requests table -->
@@ -172,6 +142,36 @@
       </table>
     </div>
   </section>
+
+</div><!-- end tab-dashboard -->
+
+<!-- ========== Customers tab ========== -->
+<div class="tab-pane" id="tab-customers">
+  <section class="table-card" id="customers-section">
+    <div class="chart-header">
+      <h2>Customers</h2>
+      <span class="chart-note">per-customer spend caps from <code>customer_budgets</code></span>
+    </div>
+    <div class="table-scroll">
+      <table id="customers-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="customer">Customer</th>
+            <th class="sortable" data-col="request_count">Requests</th>
+            <th class="sortable" data-col="input_tokens">Tokens In</th>
+            <th class="sortable" data-col="output_tokens">Tokens Out</th>
+            <th class="sortable active-sort desc" data-col="total_cost">Total Cost</th>
+            <th class="sortable" data-col="budget">Budget</th>
+            <th class="sortable" data-col="pct_used">% Used</th>
+            <th class="sortable" data-col="status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="customers-body">
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div><!-- end tab-customers -->
 
 </main>
 

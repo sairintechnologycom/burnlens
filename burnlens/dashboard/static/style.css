@@ -67,6 +67,38 @@ select:hover { border-color: var(--accent); }
   50% { opacity: 0.3; }
 }
 
+/* ------------------------------------------------------------------ tabs */
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1.5rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.65rem 1.1rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-pane { display: none; flex-direction: column; gap: 1.25rem; }
+.tab-pane.active { display: flex; }
+
 /* ------------------------------------------------------------------ main */
 
 main {
@@ -378,6 +410,108 @@ tbody tr:last-child td { border-bottom: none; }
 .status-badge.status-no_limit { background: rgba(100,116,139,0.15); color: var(--text-muted); }
 
 .row-exceeded { background: rgba(248,113,113,0.08); }
+
+/* ------------------------------------------------- Team Budget progress */
+
+#team-budgets-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+}
+
+.team-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.team-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 80px;
+}
+.team-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.team-bar.ok { background: var(--green); }
+.team-bar.warning { background: var(--yellow); }
+.team-bar.critical { background: var(--red); }
+
+.team-spend {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  min-width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-status {
+  min-width: 70px;
+  text-align: right;
+}
+
+/* -------------------------------------------------- Sortable columns */
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 1.2rem;
+}
+th.sortable:hover { color: var(--text); }
+th.sortable::after {
+  content: '\2195';
+  position: absolute;
+  right: 0.3rem;
+  opacity: 0.3;
+  font-size: 0.65rem;
+}
+th.sortable.active-sort::after { opacity: 1; color: var(--accent); }
+th.sortable.active-sort.asc::after { content: '\2191'; }
+th.sortable.active-sort.desc::after { content: '\2193'; }
+
+/* -------------------------------------------- Empty state with check */
+
+.empty-state-ok {
+  text-align: center;
+  padding: 2rem;
+  color: var(--green);
+  font-size: 0.85rem;
+}
+.empty-state-ok .check {
+  font-size: 1.8rem;
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.empty-state-hint {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.empty-state-hint code {
+  background: var(--surface2);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+  font-size: 0.75rem;
+}
 
 /* --------------------------------------------------------------- Misc */
 
