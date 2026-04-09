@@ -50,7 +50,10 @@ function fmtMs(ms) {
 
 function fmtTime(isoStr) {
   if (!isoStr) return '\u2014';
-  const d = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+  // Handle ISO strings with timezone offset (+00:00), Z suffix, or naive (no tz info)
+  const hasTz = /Z$|[+-]\d{2}:\d{2}$/.test(isoStr);
+  const d = new Date(hasTz ? isoStr : isoStr + 'Z');
+  if (isNaN(d.getTime())) return '\u2014';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
