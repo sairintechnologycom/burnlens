@@ -201,14 +201,12 @@ async function fetchModelChart() {
         },
       },
       scales: {
-        x: {
-          grid: { color: '#1a1e2a' },
-          ticks: { callback: horizontal ? function(v) { return fmtCost(v); } : undefined },
-        },
-        y: {
-          grid: { color: '#1a1e2a' },
-          ticks: { callback: horizontal ? undefined : function(v) { return fmtCost(v); } },
-        },
+        x: horizontal
+          ? { grid: { color: '#1a1e2a' }, ticks: { callback: function(v) { return fmtCost(v); } } }
+          : { grid: { color: '#1a1e2a' }, ticks: { color: '#94a3b8' } },
+        y: horizontal
+          ? { grid: { color: '#1a1e2a' }, ticks: { color: '#94a3b8' } }
+          : { grid: { color: '#1a1e2a' }, ticks: { callback: function(v) { return fmtCost(v); } } },
       },
     },
   });
