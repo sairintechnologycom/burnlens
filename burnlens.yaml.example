@@ -54,6 +54,14 @@ alerts:
 #   beta-user: 10.00
 #   default: 5.00           # applied to any unrecognised customer
 
+# ── OpenTelemetry export ──────────────────────────────────────────────────────
+# Pipe cost spans to Datadog, Grafana, Honeycomb, etc. via OTEL.
+# Requires: pip install burnlens[otel]
+# telemetry:
+#   enabled: false
+#   otel_endpoint: "http://localhost:4317"
+#   service_name: burnlens
+
 # ── Per-team budget limits ────────────────────────────────────────────────────
 # Teams are identified by the X-BurnLens-Tag-Team header on each request.
 # budgets:

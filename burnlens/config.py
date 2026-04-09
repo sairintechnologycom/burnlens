@@ -45,6 +45,15 @@ class CustomerBudgetsConfig:
 
 
 @dataclass
+class TelemetryConfig:
+    """OpenTelemetry export configuration."""
+
+    enabled: bool = False
+    otel_endpoint: str = "http://localhost:4317"
+    service_name: str = "burnlens"
+
+
+@dataclass
 class AlertsConfig:
     """Alert configuration."""
 
@@ -73,6 +82,7 @@ class BurnLensConfig:
 
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -170,6 +180,16 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             from_addr=email_data.get("from"),
         )
         kwargs["email"] = email
+
+    # Telemetry config
+    telem_data = data.get("telemetry", {}) or {}
+    if telem_data:
+        telemetry = TelemetryConfig(
+            enabled=bool(telem_data.get("enabled", False)),
+            otel_endpoint=str(telem_data.get("otel_endpoint", "http://localhost:4317")),
+            service_name=str(telem_data.get("service_name", "burnlens")),
+        )
+        kwargs["telemetry"] = telemetry
 
     return BurnLensConfig(**kwargs)
 
