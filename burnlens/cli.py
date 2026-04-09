@@ -798,6 +798,55 @@ def sync_cmd(
 
 
 @app.command()
+def doctor(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output"),
+) -> None:
+    """Run system health checks on proxy, database, and providers."""
+    from burnlens.doctor import results_to_json, run_all_checks
+
+    cfg = load_config(config)
+    results = run_all_checks(host=cfg.host, port=cfg.port, db_path=cfg.db_path)
+
+    if json_output:
+        console.print(results_to_json(results))
+    else:
+        _STATUS_STYLE = {
+            "pass": "[green]PASS[/green]",
+            "warn": "[yellow]WARN[/yellow]",
+            "fail": "[red]FAIL[/red]",
+            "skip": "[dim]SKIP[/dim]",
+        }
+
+        console.print()
+        console.print("[bold]BurnLens Doctor[/bold]")
+        console.print("─" * 40)
+        console.print()
+
+        for r in results:
+            badge = _STATUS_STYLE.get(r.status, r.status)
+            console.print(f"  {badge}  {r.message}")
+            if r.fix:
+                prefix = "Add:" if r.label == "Google" else "Fix:"
+                console.print(f"        {prefix} [cyan]{r.fix}[/cyan]")
+
+        console.print()
+        counts = {"pass": 0, "warn": 0, "fail": 0, "skip": 0}
+        for r in results:
+            counts[r.status] = counts.get(r.status, 0) + 1
+        total = len(results)
+        console.print(
+            f"  {total} checks — {counts['pass']} passed, "
+            f"{counts['warn']} warning(s), {counts['fail']} failed"
+        )
+        console.print()
+
+    has_fail = any(r.status == "fail" for r in results)
+    if has_fail:
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def ui(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
