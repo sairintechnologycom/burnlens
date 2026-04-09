@@ -58,7 +58,8 @@ class TestProviderRouting:
         exports = build_env_exports("127.0.0.1", 8420)
         assert exports["OPENAI_BASE_URL"] == "http://127.0.0.1:8420/proxy/openai"
         assert exports["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8420/proxy/anthropic"
-        assert exports["GOOGLE_AI_BASE_URL"] == "http://127.0.0.1:8420/proxy/google"
+        # Google SDK doesn't support a base URL env var — handled by burnlens.patch
+        assert "GOOGLE_AI_BASE_URL" not in exports
 
     def test_env_exports_custom_port(self):
         exports = build_env_exports("0.0.0.0", 9999)

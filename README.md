@@ -34,10 +34,32 @@ burnlens start
 # Set the env vars it prints (or add to your .env)
 export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8420/proxy/anthropic
-export GOOGLE_AI_BASE_URL=http://127.0.0.1:8420/proxy/google
 ```
 
-Your existing code works unchanged. Add optional tags via headers for per-feature/team/customer tracking:
+### Google SDK Setup
+
+The Google `generativeai` SDK does not support a base URL env var. Use the patch helper instead:
+
+```python
+import burnlens.patch
+burnlens.patch.patch_google()   # call once, before any Google API usage
+
+import google.generativeai as genai
+r = genai.GenerativeModel("gemini-2.0-flash").generate_content("Hello!")
+```
+
+Or configure manually:
+
+```python
+import google.generativeai as genai
+genai.configure(
+    api_key=os.environ["GOOGLE_API_KEY"],
+    client_options={"api_endpoint": "http://127.0.0.1:8420/proxy/google"},
+    transport="rest",
+)
+```
+
+Your existing code works unchanged for OpenAI and Anthropic. Add optional tags via headers for per-feature/team/customer tracking:
 
 ```python
 import openai
@@ -104,7 +126,7 @@ alerts:
 |----------|---------|--------|
 | **OpenAI** | `OPENAI_BASE_URL` | gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, o1, o3, o3-mini, o4-mini |
 | **Anthropic** | `ANTHROPIC_BASE_URL` | claude-opus-4-5, claude-sonnet-4-5, claude-3.5-sonnet, claude-3.5-haiku, claude-haiku-4-5, claude-3-opus |
-| **Google** | `GOOGLE_AI_BASE_URL` | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash |
+| **Google** | `burnlens.patch.patch_google()` | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash |
 
 All models with pricing in the provider's pricing file are supported. Unknown models are logged with cost = $0.00 and a warning.
 
