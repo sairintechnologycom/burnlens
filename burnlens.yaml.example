@@ -62,6 +62,17 @@ alerts:
 #   otel_endpoint: "http://localhost:4317"
 #   service_name: burnlens
 
+# ── Cloud sync (burnlens.app) ─────────────────────────────────────────────────
+# Push anonymised cost data to the hosted BurnLens backend.
+# Prompt content NEVER leaves your machine — only hashes, token counts, and costs.
+# Run `burnlens login` to configure interactively, or set values here.
+# cloud:
+#   enabled: false
+#   api_key: bl_live_xxxxxxxxxxxx
+#   endpoint: "https://api.burnlens.app/v1/ingest"
+#   sync_interval_seconds: 60
+#   anonymise_prompts: true   # never send prompt content, only hashes
+
 # ── Per-team budget limits ────────────────────────────────────────────────────
 # Teams are identified by the X-BurnLens-Tag-Team header on each request.
 # budgets:

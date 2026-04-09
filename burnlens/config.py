@@ -45,6 +45,17 @@ class CustomerBudgetsConfig:
 
 
 @dataclass
+class CloudConfig:
+    """Cloud sync configuration for burnlens.app SaaS backend."""
+
+    enabled: bool = False
+    api_key: str | None = None
+    endpoint: str = "https://api.burnlens.app/v1/ingest"
+    sync_interval_seconds: int = 60
+    anonymise_prompts: bool = True
+
+
+@dataclass
 class TelemetryConfig:
     """OpenTelemetry export configuration."""
 
@@ -83,6 +94,7 @@ class BurnLensConfig:
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
+    cloud: CloudConfig = field(default_factory=CloudConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -190,6 +202,18 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             service_name=str(telem_data.get("service_name", "burnlens")),
         )
         kwargs["telemetry"] = telemetry
+
+    # Cloud sync config
+    cloud_data = data.get("cloud", {}) or {}
+    if cloud_data:
+        cloud = CloudConfig(
+            enabled=bool(cloud_data.get("enabled", False)),
+            api_key=cloud_data.get("api_key"),
+            endpoint=str(cloud_data.get("endpoint", "https://api.burnlens.app/v1/ingest")),
+            sync_interval_seconds=int(cloud_data.get("sync_interval_seconds", 60)),
+            anonymise_prompts=bool(cloud_data.get("anonymise_prompts", True)),
+        )
+        kwargs["cloud"] = cloud
 
     return BurnLensConfig(**kwargs)
 

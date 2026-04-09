@@ -1,6 +1,7 @@
 """FastAPI application: proxy routes + dashboard serving."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 _http_client: httpx.AsyncClient | None = None
 _config: BurnLensConfig | None = None
 _alert_engine: AlertEngine | None = None
+_cloud_sync_task: asyncio.Task | None = None  # type: ignore[type-arg]
 
 
 def get_app(config: BurnLensConfig) -> FastAPI:
@@ -47,8 +49,34 @@ def get_app(config: BurnLensConfig) -> FastAPI:
             follow_redirects=True,
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
         )
+        # Start cloud sync background task if enabled
+        global _cloud_sync_task
+        if config.cloud.enabled and config.cloud.api_key:
+            try:
+                from burnlens.cloud.sync import CloudSync
+
+                cloud = CloudSync(config.cloud)
+                app.state.cloud_sync = cloud
+                _cloud_sync_task = asyncio.create_task(
+                    cloud.start_sync_loop(config.db_path)
+                )
+                logger.info("Cloud sync enabled — pushing to %s", config.cloud.endpoint)
+            except Exception:
+                logger.warning("Could not start cloud sync", exc_info=True)
+
         logger.info("BurnLens proxy ready on http://%s:%d", config.host, config.port)
         yield
+
+        # Shut down cloud sync
+        if _cloud_sync_task is not None:
+            _cloud_sync_task.cancel()
+            try:
+                await _cloud_sync_task
+            except asyncio.CancelledError:
+                pass
+            if hasattr(app.state, "cloud_sync"):
+                await app.state.cloud_sync.close()
+            _cloud_sync_task = None
 
         await _http_client.aclose()
         _http_client = None

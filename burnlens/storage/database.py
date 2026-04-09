@@ -53,6 +53,10 @@ async def init_db(db_path: str) -> None:
         await db.execute(_CREATE_MODEL_INDEX)
         await db.commit()
 
+    # Run cloud sync migration (safe to call on every startup)
+    from burnlens.cloud.sync import migrate_add_synced_at
+    await migrate_add_synced_at(db_path)
+
     logger.debug("Database initialized at %s", db_path)
 
 
