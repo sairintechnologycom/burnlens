@@ -1,3 +1,3 @@
 """BurnLens — See where your LLM money goes."""
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"

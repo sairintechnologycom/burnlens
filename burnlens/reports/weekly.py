@@ -8,7 +8,20 @@ from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from typing import Any
 
+import re
+
 import aiosqlite
+
+# Strip trailing date suffixes like -20251001 or -20250219 from model IDs
+_DATE_SUFFIX_RE = re.compile(r"-\d{8}$")
+
+
+def normalize_model_name(name: str) -> str:
+    """Strip date suffixes from API model IDs for display.
+
+    e.g. 'claude-haiku-4-5-20251001' → 'claude-haiku-4-5'
+    """
+    return _DATE_SUFFIX_RE.sub("", name) if name else name
 
 
 @dataclass
@@ -65,7 +78,10 @@ async def generate_weekly_report(db_path: str, days: int = 7) -> WeeklyReport:
             (since,),
         )
         rows = await cur.fetchall()
-        cost_by_model = {r["model"]: float(r["cost"]) for r in rows}
+        cost_by_model: dict[str, float] = {}
+        for r in rows:
+            name = normalize_model_name(r["model"] or "unknown")
+            cost_by_model[name] = cost_by_model.get(name, 0.0) + float(r["cost"])
 
         # Cost by team and feature (from JSON tags)
         cur = await db.execute(
