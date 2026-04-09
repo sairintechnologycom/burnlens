@@ -114,7 +114,7 @@ burnlens/
 |----------|-------------|---------|------------|
 | OpenAI | https://api.openai.com | OPENAI_BASE_URL | /proxy/openai |
 | Anthropic | https://api.anthropic.com | ANTHROPIC_BASE_URL | /proxy/anthropic |
-| Google | https://generativelanguage.googleapis.com | GOOGLE_AI_BASE_URL | /proxy/google |
+| Google | https://generativelanguage.googleapis.com | `burnlens.patch.patch_google()` | /proxy/google |
 
 ## Request Flow (Critical Path)
 

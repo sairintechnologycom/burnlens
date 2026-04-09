@@ -132,6 +132,9 @@ def start(
         for var, url in env_exports.items():
             console.print(f"  [cyan]export {var}={url}[/cyan]")
         console.print()
+        console.print("[dim]For Google, add this before your API calls:[/dim]")
+        console.print("  [cyan]import burnlens.patch; burnlens.patch.patch_google()[/cyan]")
+        console.print()
         console.print(
             f"[dim]Dashboard:[/dim] [underline]http://{cfg.host}:{cfg.port}/ui[/underline]"
         )

@@ -32,7 +32,7 @@ DEFAULT_PROVIDERS: list[ProviderConfig] = [
         name="google",
         proxy_prefix="/proxy/google",
         upstream_base="https://generativelanguage.googleapis.com",
-        env_var="GOOGLE_AI_BASE_URL",
+        env_var="",  # Google SDK doesn't support a base URL env var; use burnlens.patch
     ),
 ]
 
@@ -54,6 +54,13 @@ def strip_proxy_prefix(path: str, provider: ProviderConfig) -> str:
 
 
 def build_env_exports(host: str, port: int) -> dict[str, str]:
-    """Return a dict of env var → proxy URL for all providers."""
+    """Return a dict of env var → proxy URL for providers that use env vars.
+
+    Google is excluded — it requires ``burnlens.patch.patch_google()`` instead.
+    """
     base = f"http://{host}:{port}"
-    return {p.env_var: f"{base}{p.proxy_prefix}" for p in DEFAULT_PROVIDERS}
+    return {
+        p.env_var: f"{base}{p.proxy_prefix}"
+        for p in DEFAULT_PROVIDERS
+        if p.env_var  # skip providers without env var support
+    }
