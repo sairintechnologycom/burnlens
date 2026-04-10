@@ -312,11 +312,15 @@ async def get_discovery_events(
     db_path: str,
     asset_id: int | None = None,
     event_type: str | None = None,
+    date_since: str | None = None,
+    date_until: str | None = None,
     limit: int = 50,
 ) -> list[DiscoveryEvent]:
     """Return a list of DiscoveryEvent records, ordered by detected_at DESC.
 
     Filters are applied only when the corresponding argument is not None.
+    date_since filters on detected_at >= ? (ISO date string, e.g. '2026-01-01').
+    date_until filters on detected_at <= ? (ISO date string, e.g. '2026-12-31').
     """
     where_clauses: list[str] = []
     params: list[Any] = []
@@ -327,6 +331,12 @@ async def get_discovery_events(
     if event_type is not None:
         where_clauses.append("event_type = ?")
         params.append(event_type)
+    if date_since is not None:
+        where_clauses.append("detected_at >= ?")
+        params.append(date_since)
+    if date_until is not None:
+        where_clauses.append("detected_at <= ?")
+        params.append(date_until)
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     params.append(limit)

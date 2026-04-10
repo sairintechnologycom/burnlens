@@ -8,7 +8,7 @@ from typing import Any
 
 import aiosqlite
 
-from burnlens.storage.models import AiAsset, DiscoveryEvent, RequestRecord
+from burnlens.storage.models import AiAsset, DiscoveryEvent, ProviderSignature, RequestRecord
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +395,32 @@ async def insert_discovery_event(db_path: str, event: DiscoveryEvent) -> int:
         )
         await db.commit()
         row_id = cursor.lastrowid  # type: ignore[assignment]
+        return row_id
+
+
+async def insert_provider_signature(db_path: str, sig: ProviderSignature) -> int:
+    """Insert a ProviderSignature record and return its new row id.
+
+    header_signature is serialized to JSON. Uses INSERT OR IGNORE semantics
+    to avoid duplicating seeded providers; callers that need strict uniqueness
+    should check the returned id (0 means the row already existed).
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            INSERT OR IGNORE INTO provider_signatures
+                (provider, endpoint_pattern, header_signature, model_field_path)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                sig.provider,
+                sig.endpoint_pattern,
+                json.dumps(sig.header_signature),
+                sig.model_field_path,
+            ),
+        )
+        await db.commit()
+        row_id: int = cursor.lastrowid  # type: ignore[assignment]
         return row_id
 
 
