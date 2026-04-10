@@ -629,3 +629,182 @@ async def test_existing_requests_table_unaffected(tmp_db: str):
     )
     row_id = await insert_request(tmp_db, record)
     assert row_id > 0
+
+
+# --- Phase 1: Insert Helpers ---
+
+from burnlens.storage.models import AiAsset, DiscoveryEvent  # noqa: E402
+from burnlens.storage.database import (  # noqa: E402
+    insert_asset,
+    insert_discovery_event,
+    update_asset_status,
+)
+
+
+def _asset(
+    provider: str = "openai",
+    model_name: str = "gpt-4o",
+    endpoint_url: str = "https://api.openai.com/v1/chat/completions",
+    api_key_hash: str | None = None,
+    owner_team: str | None = None,
+    project: str | None = None,
+    status: str = "shadow",
+    risk_tier: str = "unclassified",
+    tags: dict | None = None,
+) -> AiAsset:
+    return AiAsset(
+        provider=provider,
+        model_name=model_name,
+        endpoint_url=endpoint_url,
+        api_key_hash=api_key_hash,
+        owner_team=owner_team,
+        project=project,
+        status=status,
+        risk_tier=risk_tier,
+        tags=tags or {},
+    )
+
+
+async def test_insert_asset_returns_positive_id(initialized_db: str):
+    """insert_asset should return an integer row id > 0."""
+    row_id = await insert_asset(initialized_db, _asset())
+    assert isinstance(row_id, int)
+    assert row_id > 0
+
+
+async def test_insert_asset_persists_all_fields(initialized_db: str):
+    """insert_asset should persist all fields including nullable ones."""
+    asset = _asset(
+        provider="anthropic",
+        model_name="claude-3-5-sonnet-20241022",
+        endpoint_url="https://api.anthropic.com/v1/messages",
+        api_key_hash="abc123",
+        owner_team="ML Platform",
+        project="chatbot-v2",
+        status="approved",
+        risk_tier="high",
+        tags={"env": "prod"},
+    )
+    row_id = await insert_asset(initialized_db, asset)
+
+    async with aiosqlite.connect(initialized_db) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM ai_assets WHERE id = ?", (row_id,))
+        row = await cursor.fetchone()
+
+    assert row is not None
+    assert row["provider"] == "anthropic"
+    assert row["model_name"] == "claude-3-5-sonnet-20241022"
+    assert row["endpoint_url"] == "https://api.anthropic.com/v1/messages"
+    assert row["api_key_hash"] == "abc123"
+    assert row["owner_team"] == "ML Platform"
+    assert row["project"] == "chatbot-v2"
+    assert row["status"] == "approved"
+    assert row["risk_tier"] == "high"
+
+
+async def test_insert_asset_tags_roundtrip(initialized_db: str):
+    """insert_asset with tags={'env':'prod'} should roundtrip correctly as JSON."""
+    import json
+    asset = _asset(tags={"env": "prod", "team": "ml"})
+    row_id = await insert_asset(initialized_db, asset)
+
+    async with aiosqlite.connect(initialized_db) as db:
+        cursor = await db.execute("SELECT tags FROM ai_assets WHERE id = ?", (row_id,))
+        row = await cursor.fetchone()
+
+    assert row is not None
+    tags = json.loads(row[0])
+    assert tags == {"env": "prod", "team": "ml"}
+
+
+async def test_insert_discovery_event_returns_positive_id(initialized_db: str):
+    """insert_discovery_event should return an integer row id > 0."""
+    event = DiscoveryEvent(event_type="new_asset_detected")
+    row_id = await insert_discovery_event(initialized_db, event)
+    assert isinstance(row_id, int)
+    assert row_id > 0
+
+
+async def test_insert_discovery_event_with_null_asset_id(initialized_db: str):
+    """insert_discovery_event with asset_id=None should succeed (org-level event)."""
+    event = DiscoveryEvent(event_type="new_asset_detected", asset_id=None)
+    row_id = await insert_discovery_event(initialized_db, event)
+    assert row_id > 0
+
+    async with aiosqlite.connect(initialized_db) as db:
+        cursor = await db.execute("SELECT asset_id FROM discovery_events WHERE id = ?", (row_id,))
+        row = await cursor.fetchone()
+    assert row[0] is None
+
+
+async def test_insert_discovery_event_with_asset_id(initialized_db: str):
+    """insert_discovery_event with asset_id pointing to an existing asset should succeed."""
+    asset_id = await insert_asset(initialized_db, _asset())
+    event = DiscoveryEvent(event_type="model_changed", asset_id=asset_id)
+    row_id = await insert_discovery_event(initialized_db, event)
+    assert row_id > 0
+
+    async with aiosqlite.connect(initialized_db) as db:
+        cursor = await db.execute("SELECT asset_id FROM discovery_events WHERE id = ?", (row_id,))
+        row = await cursor.fetchone()
+    assert row[0] == asset_id
+
+
+async def test_insert_discovery_event_persists_details_as_json(initialized_db: str):
+    """insert_discovery_event should serialize details as JSON."""
+    import json
+    details = {"old_status": "shadow", "new_status": "approved", "change": "status_update"}
+    event = DiscoveryEvent(event_type="model_changed", details=details)
+    row_id = await insert_discovery_event(initialized_db, event)
+
+    async with aiosqlite.connect(initialized_db) as db:
+        cursor = await db.execute("SELECT details FROM discovery_events WHERE id = ?", (row_id,))
+        row = await cursor.fetchone()
+
+    stored = json.loads(row[0])
+    assert stored == details
+
+
+async def test_update_asset_status_changes_status(initialized_db: str):
+    """update_asset_status should update the status column and updated_at."""
+    asset_id = await insert_asset(initialized_db, _asset(status="shadow"))
+    await update_asset_status(initialized_db, asset_id, "approved")
+
+    async with aiosqlite.connect(initialized_db) as db:
+        cursor = await db.execute("SELECT status FROM ai_assets WHERE id = ?", (asset_id,))
+        row = await cursor.fetchone()
+    assert row[0] == "approved"
+
+
+async def test_update_asset_status_returns_none(initialized_db: str):
+    """update_asset_status should return None."""
+    asset_id = await insert_asset(initialized_db, _asset())
+    result = await update_asset_status(initialized_db, asset_id, "approved")
+    assert result is None
+
+
+async def test_update_asset_status_auto_logs_discovery_event(initialized_db: str):
+    """update_asset_status should auto-insert a discovery_event with old/new status."""
+    import json
+    asset_id = await insert_asset(initialized_db, _asset(status="shadow"))
+    await update_asset_status(initialized_db, asset_id, "approved")
+
+    async with aiosqlite.connect(initialized_db) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM discovery_events WHERE asset_id = ?", (asset_id,)
+        )
+        rows = await cursor.fetchall()
+
+    assert len(rows) == 1
+    details = json.loads(rows[0]["details"])
+    assert details["old_status"] == "shadow"
+    assert details["new_status"] == "approved"
+    assert "change" in details
+
+
+async def test_update_asset_status_nonexistent_raises(initialized_db: str):
+    """update_asset_status for a non-existent asset_id should raise ValueError."""
+    with pytest.raises(ValueError, match="9999"):
+        await update_asset_status(initialized_db, 9999, "approved")
