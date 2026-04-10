@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
 from burnlens.storage.database import init_db, insert_asset, insert_discovery_event
 from burnlens.storage.models import AiAsset, DiscoveryEvent
@@ -351,3 +352,274 @@ class TestProviderAPI:
         }
         resp = await self.client.post("/api/v1/providers/signatures", json=payload)
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# TestAssetAPI — asset management router (burnlens/api/assets.py)
+# ---------------------------------------------------------------------------
+
+
+async def _insert_test_assets(db_path: str) -> list[int]:
+    """Insert 4 test assets with varied provider/status/risk_tier. Return their IDs."""
+    now = datetime.utcnow()
+
+    assets = [
+        AiAsset(
+            provider="openai",
+            model_name="gpt-4o",
+            endpoint_url="https://api.openai.com/v1/chat/completions",
+            status="shadow",
+            risk_tier="high",
+            owner_team="ML",
+            first_seen_at=datetime(2026, 3, 1),
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+        ),
+        AiAsset(
+            provider="anthropic",
+            model_name="claude-3-5-sonnet",
+            endpoint_url="https://api.anthropic.com/v1/messages",
+            status="approved",
+            risk_tier="low",
+            owner_team="Platform",
+            first_seen_at=datetime(2026, 3, 15),
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+        ),
+        AiAsset(
+            provider="openai",
+            model_name="gpt-3.5-turbo",
+            endpoint_url="https://api.openai.com/v1/chat/completions",
+            status="shadow",
+            risk_tier="medium",
+            owner_team="Data",
+            first_seen_at=datetime(2026, 1, 1),
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+        ),
+        AiAsset(
+            provider="google",
+            model_name="gemini-pro",
+            endpoint_url="https://generativelanguage.googleapis.com/v1beta/models",
+            status="active",
+            risk_tier="unclassified",
+            first_seen_at=datetime(2026, 4, 8),
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+        ),
+    ]
+
+    ids: list[int] = []
+    for a in assets:
+        row_id = await insert_asset(db_path, a)
+        ids.append(row_id)
+    return ids
+
+
+class TestAssetAPI:
+    """Integration tests for all 5 asset management endpoints (burnlens/api/assets.py)."""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def setup(self, tmp_path):
+        """Create a fresh DB and mount the asset router on a test FastAPI app."""
+        from fastapi import FastAPI
+        from burnlens.api.assets import router as assets_router
+
+        self.db_path = str(tmp_path / "test_assets.db")
+        await init_db(self.db_path)
+
+        app = FastAPI()
+        app.state.db_path = self.db_path
+        app.include_router(assets_router, prefix="/api/v1/assets")
+
+        self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+        yield
+        await self.client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_list_assets_returns_paginated_response(self):
+        """Test 1: GET /api/v1/assets returns 200 with AssetListResponse shape."""
+        await _insert_test_assets(self.db_path)
+
+        resp = await self.client.get("/api/v1/assets")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert "limit" in data
+        assert "offset" in data
+        assert data["total"] == 4
+        assert len(data["items"]) == 4
+        assert data["limit"] == 50
+        assert data["offset"] == 0
+
+    @pytest.mark.asyncio
+    async def test_list_assets_filter_by_provider(self):
+        """Test 2: GET /api/v1/assets?provider=openai filters correctly."""
+        await _insert_test_assets(self.db_path)
+
+        resp = await self.client.get("/api/v1/assets?provider=openai")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 2
+        assert all(item["provider"] == "openai" for item in data["items"])
+
+    @pytest.mark.asyncio
+    async def test_list_assets_combined_filters(self):
+        """Test 3: GET /api/v1/assets?status=shadow&risk_tier=high combines filters."""
+        await _insert_test_assets(self.db_path)
+
+        resp = await self.client.get("/api/v1/assets?status=shadow&risk_tier=high")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["provider"] == "openai"
+        assert data["items"][0]["model_name"] == "gpt-4o"
+
+    @pytest.mark.asyncio
+    async def test_list_assets_filter_by_date_since(self):
+        """Test 4: GET /api/v1/assets?date_since=2026-04-01 filters by first_seen_at."""
+        await _insert_test_assets(self.db_path)
+
+        resp = await self.client.get("/api/v1/assets?date_since=2026-04-01")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Only 'gemini-pro' has first_seen_at >= 2026-04-01
+        assert data["total"] == 1
+        assert data["items"][0]["model_name"] == "gemini-pro"
+
+    @pytest.mark.asyncio
+    async def test_get_asset_detail_returns_200(self):
+        """Test 5: GET /api/v1/assets/{id} returns 200 with asset + events list."""
+        ids = await _insert_test_assets(self.db_path)
+        asset_id = ids[0]
+
+        resp = await self.client.get(f"/api/v1/assets/{asset_id}")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "asset" in data
+        assert "events" in data
+        assert data["asset"]["id"] == asset_id
+        assert data["asset"]["provider"] == "openai"
+        assert isinstance(data["events"], list)
+
+    @pytest.mark.asyncio
+    async def test_get_asset_detail_404_for_nonexistent(self):
+        """Test 6: GET /api/v1/assets/{id} returns 404 for nonexistent id."""
+        resp = await self.client.get("/api/v1/assets/99999")
+
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_patch_asset_updates_owner_team(self):
+        """Test 7: PATCH /api/v1/assets/{id} with owner_team returns updated asset."""
+        ids = await _insert_test_assets(self.db_path)
+        asset_id = ids[0]
+
+        resp = await self.client.patch(
+            f"/api/v1/assets/{asset_id}",
+            json={"owner_team": "ML-Platform"},
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["owner_team"] == "ML-Platform"
+        assert data["id"] == asset_id
+
+    @pytest.mark.asyncio
+    async def test_patch_asset_status_creates_discovery_event(self):
+        """Test 8: PATCH /api/v1/assets/{id} with status change also creates discovery_event."""
+        ids = await _insert_test_assets(self.db_path)
+        asset_id = ids[0]
+
+        # First verify current status
+        detail_resp = await self.client.get(f"/api/v1/assets/{asset_id}")
+        assert detail_resp.json()["asset"]["status"] == "shadow"
+
+        # Patch the status
+        patch_resp = await self.client.patch(
+            f"/api/v1/assets/{asset_id}",
+            json={"status": "approved"},
+        )
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["status"] == "approved"
+
+        # Verify event was created
+        detail_after = await self.client.get(f"/api/v1/assets/{asset_id}")
+        events = detail_after.json()["events"]
+        assert len(events) >= 1
+        assert any(e["event_type"] == "model_changed" for e in events)
+
+    @pytest.mark.asyncio
+    async def test_patch_asset_404_for_nonexistent(self):
+        """Test 9: PATCH /api/v1/assets/999 returns 404."""
+        resp = await self.client.patch(
+            "/api/v1/assets/999",
+            json={"owner_team": "ML"},
+        )
+
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_approve_asset_returns_200_with_event(self):
+        """Test 10: POST /api/v1/assets/{id}/approve returns 200 with asset and event_id."""
+        ids = await _insert_test_assets(self.db_path)
+        # ids[0] is shadow status
+        asset_id = ids[0]
+
+        resp = await self.client.post(f"/api/v1/assets/{asset_id}/approve")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "asset" in data
+        assert "event_id" in data
+        assert data["asset"]["status"] == "approved"
+        assert isinstance(data["event_id"], int)
+
+    @pytest.mark.asyncio
+    async def test_approve_already_approved_returns_409(self):
+        """Test 11: POST /api/v1/assets/{id}/approve on already-approved returns 409."""
+        ids = await _insert_test_assets(self.db_path)
+        # ids[1] is already approved
+        asset_id = ids[1]
+
+        resp = await self.client.post(f"/api/v1/assets/{asset_id}/approve")
+
+        assert resp.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_get_summary_returns_correct_counts(self):
+        """Test 12: GET /api/v1/assets/summary returns AssetSummaryResponse shape with correct counts."""
+        await _insert_test_assets(self.db_path)
+
+        resp = await self.client.get("/api/v1/assets/summary")
+
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # Verify shape
+        assert "total" in data
+        assert "by_provider" in data
+        assert "by_status" in data
+        assert "by_risk_tier" in data
+        assert "new_this_week" in data
+
+        # Verify counts
+        assert data["total"] == 4
+        assert data["by_provider"]["openai"] == 2
+        assert data["by_provider"]["anthropic"] == 1
+        assert data["by_provider"]["google"] == 1
+        assert data["by_status"]["shadow"] == 2
+        assert data["by_status"]["approved"] == 1
+        assert data["by_status"]["active"] == 1
+        assert data["by_risk_tier"]["high"] == 1
+        assert data["by_risk_tier"]["low"] == 1
