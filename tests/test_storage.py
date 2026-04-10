@@ -394,3 +394,232 @@ async def test_requests_for_analysis_since(initialized_db: str):
     rows = await get_requests_for_analysis(initialized_db, since=yesterday)
     assert len(rows) == 1
     assert abs(rows[0]["cost_usd"] - 0.01) < 1e-9
+
+
+# --- Phase 1: Data Foundation ---
+
+import aiosqlite  # noqa: E402 — placed here to group with phase 1 tests
+
+
+async def test_init_creates_ai_assets_table(tmp_db: str):
+    """init_db should create the ai_assets table with all required columns."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_assets'"
+        )
+        row = await cursor.fetchone()
+    assert row is not None, "ai_assets table should be created by init_db"
+
+
+async def test_ai_assets_has_all_columns(tmp_db: str):
+    """ai_assets table should have all required columns."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute("PRAGMA table_info(ai_assets)")
+        rows = await cursor.fetchall()
+    col_names = {row[1] for row in rows}
+    expected = {
+        "id", "provider", "model_name", "endpoint_url", "api_key_hash",
+        "owner_team", "project", "status", "risk_tier",
+        "first_seen_at", "last_active_at", "monthly_spend_usd", "monthly_requests",
+        "tags", "created_at", "updated_at",
+    }
+    assert expected <= col_names, f"Missing columns: {expected - col_names}"
+
+
+async def test_ai_assets_status_check_constraint(tmp_db: str):
+    """ai_assets.status CHECK constraint should reject invalid values."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        with pytest.raises(aiosqlite.IntegrityError):
+            await db.execute(
+                "INSERT INTO ai_assets (provider, model_name, endpoint_url, status, risk_tier, first_seen_at, last_active_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ("openai", "gpt-4o", "https://api.openai.com", "bogus", "low", "2026-01-01", "2026-01-01", "2026-01-01", "2026-01-01"),
+            )
+            await db.commit()
+
+
+async def test_ai_assets_risk_tier_check_constraint(tmp_db: str):
+    """ai_assets.risk_tier CHECK constraint should reject invalid values."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        with pytest.raises(aiosqlite.IntegrityError):
+            await db.execute(
+                "INSERT INTO ai_assets (provider, model_name, endpoint_url, status, risk_tier, first_seen_at, last_active_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ("openai", "gpt-4o", "https://api.openai.com", "shadow", "critical", "2026-01-01", "2026-01-01", "2026-01-01", "2026-01-01"),
+            )
+            await db.commit()
+
+
+async def test_init_creates_provider_signatures_table(tmp_db: str):
+    """init_db should create the provider_signatures table."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='provider_signatures'"
+        )
+        row = await cursor.fetchone()
+    assert row is not None, "provider_signatures table should be created by init_db"
+
+
+async def test_provider_signatures_seeded_with_7_rows(tmp_db: str):
+    """init_db should seed exactly 7 provider signatures."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM provider_signatures")
+        row = await cursor.fetchone()
+    assert row[0] == 7, f"Expected 7 provider signatures, got {row[0]}"
+
+
+async def test_provider_signatures_providers(tmp_db: str):
+    """All 7 expected providers should be present in provider_signatures."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute("SELECT provider FROM provider_signatures ORDER BY provider")
+        rows = await cursor.fetchall()
+    providers = {row[0] for row in rows}
+    expected = {"openai", "anthropic", "google", "azure_openai", "bedrock", "cohere", "mistral"}
+    assert providers == expected, f"Missing: {expected - providers}, Extra: {providers - expected}"
+
+
+async def test_provider_signatures_non_empty_fields(tmp_db: str):
+    """Each seeded provider should have non-empty endpoint_pattern and header_signature."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT provider, endpoint_pattern, header_signature FROM provider_signatures"
+        )
+        rows = await cursor.fetchall()
+    for row in rows:
+        assert row["endpoint_pattern"], f"{row['provider']} missing endpoint_pattern"
+        assert row["header_signature"], f"{row['provider']} missing header_signature"
+
+
+async def test_init_creates_discovery_events_table(tmp_db: str):
+    """init_db should create the discovery_events table."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='discovery_events'"
+        )
+        row = await cursor.fetchone()
+    assert row is not None, "discovery_events table should be created by init_db"
+
+
+async def test_discovery_events_event_type_check_constraint(tmp_db: str):
+    """discovery_events.event_type CHECK constraint should reject invalid values."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        with pytest.raises(aiosqlite.IntegrityError):
+            await db.execute(
+                "INSERT INTO discovery_events (event_type, detected_at) VALUES (?, ?)",
+                ("bogus_event", "2026-01-01T00:00:00"),
+            )
+            await db.commit()
+
+
+async def test_discovery_events_update_trigger(tmp_db: str):
+    """discovery_events UPDATE trigger should prevent updates (append-only)."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        await db.execute(
+            "INSERT INTO discovery_events (event_type, detected_at) VALUES (?, ?)",
+            ("new_asset_detected", "2026-01-01T00:00:00"),
+        )
+        await db.commit()
+        with pytest.raises(aiosqlite.OperationalError):
+            await db.execute(
+                "UPDATE discovery_events SET event_type = 'asset_inactive' WHERE id = 1"
+            )
+            await db.commit()
+
+
+async def test_discovery_events_delete_trigger(tmp_db: str):
+    """discovery_events DELETE trigger should prevent deletes (append-only)."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        await db.execute(
+            "INSERT INTO discovery_events (event_type, detected_at) VALUES (?, ?)",
+            ("new_asset_detected", "2026-01-01T00:00:00"),
+        )
+        await db.commit()
+        with pytest.raises(aiosqlite.OperationalError):
+            await db.execute("DELETE FROM discovery_events WHERE id = 1")
+            await db.commit()
+
+
+async def test_discovery_events_allows_insert(tmp_db: str):
+    """discovery_events should allow INSERT operations."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        await db.execute(
+            "INSERT INTO discovery_events (event_type, detected_at) VALUES (?, ?)",
+            ("new_asset_detected", "2026-01-01T00:00:00"),
+        )
+        await db.commit()
+        cursor = await db.execute("SELECT COUNT(*) FROM discovery_events")
+        row = await cursor.fetchone()
+    assert row[0] == 1
+
+
+async def test_discovery_events_nullable_asset_id(tmp_db: str):
+    """discovery_events.asset_id should be nullable (org-level events)."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        await db.execute(
+            "INSERT INTO discovery_events (event_type, asset_id, detected_at) VALUES (?, ?, ?)",
+            ("new_asset_detected", None, "2026-01-01T00:00:00"),
+        )
+        await db.commit()
+        cursor = await db.execute("SELECT asset_id FROM discovery_events WHERE id = 1")
+        row = await cursor.fetchone()
+    assert row[0] is None
+
+
+async def test_indexes_created(tmp_db: str):
+    """All required indexes should be created by init_db."""
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        )
+        rows = await cursor.fetchall()
+    index_names = {r[0] for r in rows}
+    expected_indexes = {
+        "idx_ai_assets_provider",
+        "idx_ai_assets_status",
+        "idx_ai_assets_owner_team",
+        "idx_ai_assets_last_active",
+        "idx_discovery_events_asset_detected",
+        "idx_provider_signatures_provider",
+    }
+    missing = expected_indexes - index_names
+    assert not missing, f"Missing indexes: {missing}"
+
+
+async def test_init_db_is_idempotent(tmp_db: str):
+    """Calling init_db twice should not error or duplicate seed data."""
+    await init_db(tmp_db)
+    await init_db(tmp_db)
+    async with aiosqlite.connect(tmp_db) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM provider_signatures")
+        row = await cursor.fetchone()
+    assert row[0] == 7, f"Expected 7 after double init, got {row[0]}"
+
+
+async def test_existing_requests_table_unaffected(tmp_db: str):
+    """Extending init_db should not break the existing requests table."""
+    await init_db(tmp_db)
+    from burnlens.storage.database import insert_request
+    record = RequestRecord(
+        provider="openai",
+        model="gpt-4o",
+        request_path="/v1/chat/completions",
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=0.01,
+    )
+    row_id = await insert_request(tmp_db, record)
+    assert row_id > 0
