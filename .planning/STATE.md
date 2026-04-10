@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-detection-engine/02-03-PLAN.md
-last_updated: "2026-04-10T13:17:59.799Z"
+stopped_at: Completed 03-asset-management-api/03-01-PLAN.md
+last_updated: "2026-04-10T16:34:07.991Z"
 last_activity: 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
   percent: 100
 ---
 
@@ -47,6 +47,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | 02-detection-engine | 02 | 8 min | 1 | 3 |
 | 02-detection-engine | 04 | 3 min | 1 | 3 |
 | Phase 02-detection-engine P03 | 4 | 2 tasks | 5 files |
+| Phase 03-asset-management-api P01 | 8 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,10 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [02-04] response.status_code is safe to read (header-level); response.aread/read/stream never called to preserve streaming
 - [02-04] wrap() mutates client in place and returns same object — enables chaining without requiring user to reassign
 - [02-04] Model extracted from URL path only (best-effort) — token counts are out of scope for SDK path (DETC-08 proxy handles tokens)
+- [03-01] date_since filter uses first_seen_at >= ISO string comparison — consistent with existing datetime-as-TEXT pattern
+- [03-01] get_asset_summary runs 5 small queries in one connection — readable, avoids multi-join complexity
+- [03-01] update_asset_fields dynamic SET clause (same pattern as get_assets WHERE) — avoids updating unchanged fields
+- [03-01] asset_to_response/event_to_response/signature_to_response raise ValueError on id=None — guards against converting unsaved objects
 
 ### Architecture Notes
 
@@ -104,5 +109,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 02-detection-engine/02-03-PLAN.md
+**Stopped at:** Completed 03-asset-management-api/03-01-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.

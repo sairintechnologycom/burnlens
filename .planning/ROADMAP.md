@@ -63,7 +63,7 @@ Plans:
   3. `POST /api/v1/assets/{id}/approve` changes asset status from shadow to approved and writes a discovery_event record
   4. `GET /api/v1/assets/summary` returns total assets, counts by provider, counts by status, counts by risk tier, and new-this-week count
   5. `POST /api/v1/providers/signatures` stores a custom provider signature and it is subsequently used by the detection engine for matching
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 03-01-PLAN.md -- Extend queries with filters, summary aggregation, Pydantic schemas
@@ -115,6 +115,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
-| 3. Asset Management API | 0/3 | Not started | - |
+| 3. Asset Management API | 1/3 | In Progress|  |
 | 4. Alert System | 0/TBD | Not started | - |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |
