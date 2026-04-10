@@ -3,9 +3,15 @@
 > See exactly what your LLM API calls cost — per feature, team, and customer.  
 > Zero code changes. Everything local.
 
+**Works with streaming. Sub-20ms overhead. Nothing leaves your machine.**
+
 [![PyPI](https://img.shields.io/pypi/v/burnlens)](https://pypi.org/project/burnlens)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
+
+<p align="center">
+  <img src="docs/burnlens.gif" alt="BurnLens dashboard demo" width="800">
+</p>
 
 ---
 
@@ -56,14 +62,11 @@ BurnLens fixes this at the proxy layer — no instrumentation, no SDK wrapping, 
 
 ## What you get
 
-<p align="center">
-  <img src="docs/burnlens.gif" alt="BurnLens dashboard demo" width="800">
-</p>
-
 - **Cost timeline** — daily spend trend across all providers
 - **Attribution** — cost by model, feature, team, customer
 - **Waste alerts** — context bloat, duplicate requests, model overkill
 - **Per-request detail** — tokens, cost, and latency for every call
+- **Streaming support** — SSE passthrough with zero buffering, token counting from final chunk
 
 ---
 
@@ -86,6 +89,37 @@ burnlens report        # weekly cost summary
 burnlens recommend     # cheaper model suggestions
 burnlens budgets       # team spend vs limits
 ```
+
+---
+
+## How BurnLens compares
+
+| | BurnLens | Helicone | LangSmith | Portkey |
+|---|---|---|---|---|
+| **Setup** | `pip install`, set env var | Cloud signup + API key | Cloud signup + SDK wrapper | Cloud signup + gateway |
+| **Data privacy** | 100% local, SQLite on your machine | Cloud-hosted | Cloud-hosted | Cloud-hosted |
+| **Cost** | Free, open source | Free tier, then paid | Free tier, then paid | Free tier, then paid |
+| **Streaming** | Full SSE passthrough, zero buffering | Yes | Yes | Yes |
+| **Code changes** | None — proxy via `BASE_URL` | SDK integration | SDK wrapper required | Gateway config |
+
+---
+
+## FAQ
+
+**Does it support streaming?**
+Yes. SSE chunks are forwarded immediately with zero buffering. Token counting happens from the final chunk or usage header.
+
+**What's the performance overhead?**
+Sub-20ms. Logging and cost calculation happen asynchronously after the response is forwarded.
+
+**Where's my data?**
+SQLite on your machine (`~/.burnlens/burnlens.db`). Nothing leaves localhost. No cloud account needed.
+
+**What providers are supported?**
+OpenAI, Anthropic, and Google. Set `BASE_URL` env vars and your existing SDK code works unchanged.
+
+**Can I run it in Docker?**
+Not yet — coming soon. For now it runs directly via `pip install burnlens`.
 
 ---
 
