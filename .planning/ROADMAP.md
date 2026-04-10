@@ -12,7 +12,7 @@ This roadmap extends BurnLens's existing cost tracking into an automated Shadow 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Data Foundation** - Database tables, migrations, and seed data for the discovery system
+- [x] **Phase 1: Data Foundation** - Database tables, migrations, and seed data for the discovery system (completed 2026-04-10)
 - [ ] **Phase 2: Detection Engine** - Billing API parsers, provider signature matching, and shadow AI classifier
 - [ ] **Phase 3: Asset Management API** - REST endpoints for listing, filtering, updating, and approving AI assets
 - [ ] **Phase 4: Alert System** - Slack and email alerts for shadow detection, model changes, and spend spikes
@@ -29,11 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. provider_signatures table is pre-populated with signatures for OpenAI, Anthropic, Google, Azure OpenAI, AWS Bedrock, Cohere, and Mistral
   3. discovery_events table enforces append-only behavior (no update/delete) and records event_type, asset_id, details, and detected_at
   4. All tables have the correct foreign key relationships and the migration runs cleanly with no errors on an existing BurnLens installation
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md -- Schema, models, tables, indexes, triggers, and provider seed data
-- [ ] 01-02-PLAN.md -- Insert and query helper functions with tests
+- [x] 01-01-PLAN.md -- Schema, models, tables, indexes, triggers, and provider seed data
+- [x] 01-02-PLAN.md -- Insert and query helper functions with tests
 
 ### Phase 2: Detection Engine
 **Goal**: BurnLens automatically detects AI assets by parsing billing APIs and proxy traffic, classifies shadow usage, and schedules recurring detection runs
@@ -45,7 +45,13 @@ Plans:
   3. An asset using an unregistered API key or an unrecognized provider is classified as status=shadow and a discovery_event of type new_asset_detected is written
   4. Detection runs automatically on an hourly schedule without manual invocation
   5. `burnlens.wrap(client)` intercepts SDK calls and logs model, tokens, latency, and status code to ai_assets without storing any request or response payloads
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md -- Billing API parsers for OpenAI, Anthropic, Google (config + pagination + TDD)
+- [ ] 02-02-PLAN.md -- Provider signature matcher + shadow classifier (fnmatch + upsert logic + TDD)
+- [ ] 02-03-PLAN.md -- APScheduler wiring + proxy interceptor asset upsert extension
+- [ ] 02-04-PLAN.md -- SDK wrapper burnlens.wrap(client) with httpx transport interception
 
 ### Phase 3: Asset Management API
 **Goal**: All REST endpoints for the asset registry are functional and tested, enabling the dashboard and external tools to read and manage AI assets
@@ -92,8 +98,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 1/2 | In Progress|  |
-| 2. Detection Engine | 0/TBD | Not started | - |
+| 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
+| 2. Detection Engine | 0/4 | Planning complete | - |
 | 3. Asset Management API | 0/TBD | Not started | - |
 | 4. Alert System | 0/TBD | Not started | - |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |

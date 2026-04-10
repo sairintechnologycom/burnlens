@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-last_updated: "2026-04-10T12:19:17.685Z"
-last_activity: 2026-04-10 — Phase 1 context gathered
+status: executing
+stopped_at: Completed 01-data-foundation/01-02-PLAN.md
+last_updated: "2026-04-10T12:25:28.035Z"
+last_activity: 2026-04-10 — Completed 01-data-foundation/01-01-PLAN.md
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 50
 ---
 
@@ -19,11 +20,11 @@ progress:
 
 **Milestone:** v1.0 Shadow AI Discovery & Inventory
 **Phase:** 1 — Data Foundation
-**Plan:** 01-01 complete (ai_assets + provider_signatures + discovery_events schema)
-**Status:** Executing — 01-01 complete, ready for next plan
-**Last activity:** 2026-04-10 — Completed 01-data-foundation/01-01-PLAN.md
+**Plan:** 01-02 complete (insert + query helpers for ai_assets, discovery_events, provider_signatures)
+**Status:** Phase 1 complete — all 2 plans executed
+**Last activity:** 2026-04-10 — Completed 01-data-foundation/01-02-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Project Reference
 
@@ -36,11 +37,12 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 - Phases complete: 0/5
 - Requirements mapped: 25/25
-- Plans executed: 1 (01-01)
+- Plans executed: 2 (01-01, 01-02)
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 01-data-foundation | 01 | 3 min | 2 | 3 |
+| 01-data-foundation | 02 | 4 min | 2 | 3 |
 
 ## Accumulated Context
 
@@ -53,6 +55,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [01-01] SQLite RAISE(ABORT) triggers raise IntegrityError via aiosqlite (not OperationalError)
 - [01-01] Plain TEXT for owner_team and project (no FK) — simple strings per CONTEXT.md design
 - [01-01] INSERT OR IGNORE + UNIQUE constraint for idempotent provider seed data
+- [01-02] update_asset_status uses event_type='model_changed' for status transitions — most appropriate existing CHECK constraint value
+- [01-02] Private _row_to_asset/_row_to_event helpers centralize deserialization — keeps query functions readable and DRY
+- [01-02] Dynamic WHERE clause accumulation (not string concatenation) for get_assets/get_discovery_events filters
 
 ### Architecture Notes
 
@@ -81,5 +86,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 01-data-foundation/01-01-PLAN.md
+**Stopped at:** Completed 01-data-foundation/01-02-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.
