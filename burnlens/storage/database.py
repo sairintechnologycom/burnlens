@@ -8,7 +8,7 @@ from typing import Any
 
 import aiosqlite
 
-from burnlens.storage.models import RequestRecord
+from burnlens.storage.models import AiAsset, DiscoveryEvent, RequestRecord
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +334,118 @@ async def get_top_customers_by_cost(db_path: str, limit: int = 20) -> list[dict[
         }
         for row in rows
     ]
+
+
+async def insert_asset(db_path: str, asset: AiAsset) -> int:
+    """Insert an AiAsset record and return its new row id.
+
+    Tags are serialized to JSON. All datetime fields are stored as ISO format strings.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            INSERT INTO ai_assets (
+                provider, model_name, endpoint_url, api_key_hash,
+                owner_team, project, status, risk_tier,
+                first_seen_at, last_active_at,
+                monthly_spend_usd, monthly_requests,
+                tags, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                asset.provider,
+                asset.model_name,
+                asset.endpoint_url,
+                asset.api_key_hash,
+                asset.owner_team,
+                asset.project,
+                asset.status,
+                asset.risk_tier,
+                asset.first_seen_at.isoformat(),
+                asset.last_active_at.isoformat(),
+                asset.monthly_spend_usd,
+                asset.monthly_requests,
+                json.dumps(asset.tags),
+                asset.created_at.isoformat(),
+                asset.updated_at.isoformat(),
+            ),
+        )
+        await db.commit()
+        row_id: int = cursor.lastrowid  # type: ignore[assignment]
+        return row_id
+
+
+async def insert_discovery_event(db_path: str, event: DiscoveryEvent) -> int:
+    """Insert a DiscoveryEvent record and return its new row id.
+
+    Details are serialized to JSON. asset_id may be None for org-level events.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            INSERT INTO discovery_events (event_type, asset_id, details, detected_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                event.event_type,
+                event.asset_id,
+                json.dumps(event.details),
+                event.detected_at.isoformat(),
+            ),
+        )
+        await db.commit()
+        row_id = cursor.lastrowid  # type: ignore[assignment]
+        return row_id
+
+
+async def update_asset_status(db_path: str, asset_id: int, new_status: str) -> None:
+    """Update the status of an ai_asset and auto-log a discovery_event.
+
+    Both the UPDATE and the discovery_event INSERT happen in the same connection
+    and are committed atomically.
+
+    Raises:
+        ValueError: If no asset with asset_id exists.
+    """
+    from datetime import datetime
+
+    async with aiosqlite.connect(db_path) as db:
+        # Read current status first
+        cursor = await db.execute(
+            "SELECT status FROM ai_assets WHERE id = ?", (asset_id,)
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Asset {asset_id} not found")
+
+        old_status = row[0]
+        now = datetime.utcnow().isoformat()
+
+        # Update status and updated_at
+        await db.execute(
+            "UPDATE ai_assets SET status = ?, updated_at = ? WHERE id = ?",
+            (new_status, now, asset_id),
+        )
+
+        # Auto-log discovery event for the status change
+        await db.execute(
+            """
+            INSERT INTO discovery_events (event_type, asset_id, details, detected_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "model_changed",
+                asset_id,
+                json.dumps({
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "change": "status_update",
+                }),
+                now,
+            ),
+        )
+
+        await db.commit()
 
 
 async def insert_request(db_path: str, record: RequestRecord) -> int:
