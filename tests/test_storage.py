@@ -521,7 +521,10 @@ async def test_discovery_events_event_type_check_constraint(tmp_db: str):
 
 
 async def test_discovery_events_update_trigger(tmp_db: str):
-    """discovery_events UPDATE trigger should prevent updates (append-only)."""
+    """discovery_events UPDATE trigger should prevent updates (append-only).
+
+    SQLite RAISE(ABORT, ...) raises IntegrityError via aiosqlite.
+    """
     await init_db(tmp_db)
     async with aiosqlite.connect(tmp_db) as db:
         await db.execute(
@@ -529,7 +532,7 @@ async def test_discovery_events_update_trigger(tmp_db: str):
             ("new_asset_detected", "2026-01-01T00:00:00"),
         )
         await db.commit()
-        with pytest.raises(aiosqlite.OperationalError):
+        with pytest.raises(aiosqlite.IntegrityError):
             await db.execute(
                 "UPDATE discovery_events SET event_type = 'asset_inactive' WHERE id = 1"
             )
@@ -537,7 +540,10 @@ async def test_discovery_events_update_trigger(tmp_db: str):
 
 
 async def test_discovery_events_delete_trigger(tmp_db: str):
-    """discovery_events DELETE trigger should prevent deletes (append-only)."""
+    """discovery_events DELETE trigger should prevent deletes (append-only).
+
+    SQLite RAISE(ABORT, ...) raises IntegrityError via aiosqlite.
+    """
     await init_db(tmp_db)
     async with aiosqlite.connect(tmp_db) as db:
         await db.execute(
@@ -545,7 +551,7 @@ async def test_discovery_events_delete_trigger(tmp_db: str):
             ("new_asset_detected", "2026-01-01T00:00:00"),
         )
         await db.commit()
-        with pytest.raises(aiosqlite.OperationalError):
+        with pytest.raises(aiosqlite.IntegrityError):
             await db.execute("DELETE FROM discovery_events WHERE id = 1")
             await db.commit()
 

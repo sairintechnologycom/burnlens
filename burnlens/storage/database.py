@@ -39,6 +39,102 @@ _CREATE_MODEL_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_requests_model ON requests(model);
 """
 
+# ---------------------------------------------------------------------------
+# Phase 1: Data Foundation — AI Asset Discovery tables
+# ---------------------------------------------------------------------------
+
+_CREATE_AI_ASSETS_TABLE = """
+CREATE TABLE IF NOT EXISTS ai_assets (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider            TEXT    NOT NULL,
+    model_name          TEXT    NOT NULL,
+    endpoint_url        TEXT    NOT NULL,
+    api_key_hash        TEXT,
+    owner_team          TEXT,
+    project             TEXT,
+    status              TEXT    NOT NULL DEFAULT 'shadow'
+                            CHECK(status IN ('active','inactive','shadow','approved','deprecated')),
+    risk_tier           TEXT    NOT NULL DEFAULT 'unclassified'
+                            CHECK(risk_tier IN ('unclassified','low','medium','high')),
+    first_seen_at       TEXT    NOT NULL,
+    last_active_at      TEXT    NOT NULL,
+    monthly_spend_usd   REAL    NOT NULL DEFAULT 0.0,
+    monthly_requests    INTEGER NOT NULL DEFAULT 0,
+    tags                TEXT    NOT NULL DEFAULT '{}',
+    created_at          TEXT    NOT NULL,
+    updated_at          TEXT    NOT NULL
+);
+"""
+
+_CREATE_PROVIDER_SIGNATURES_TABLE = """
+CREATE TABLE IF NOT EXISTS provider_signatures (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider            TEXT    NOT NULL UNIQUE,
+    endpoint_pattern    TEXT    NOT NULL,
+    header_signature    TEXT    NOT NULL DEFAULT '{}',
+    model_field_path    TEXT    NOT NULL DEFAULT 'body.model'
+);
+"""
+
+_CREATE_DISCOVERY_EVENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS discovery_events (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type          TEXT    NOT NULL
+                            CHECK(event_type IN ('new_asset_detected','model_changed','provider_changed','key_rotated','asset_inactive')),
+    asset_id            INTEGER REFERENCES ai_assets(id),
+    details             TEXT    NOT NULL DEFAULT '{}',
+    detected_at         TEXT    NOT NULL
+);
+"""
+
+# Append-only triggers for discovery_events
+_TRIGGER_NO_UPDATE = """
+CREATE TRIGGER IF NOT EXISTS prevent_discovery_events_update
+BEFORE UPDATE ON discovery_events
+BEGIN
+    SELECT RAISE(ABORT, 'discovery_events is append-only: updates not allowed');
+END;
+"""
+
+_TRIGGER_NO_DELETE = """
+CREATE TRIGGER IF NOT EXISTS prevent_discovery_events_delete
+BEFORE DELETE ON discovery_events
+BEGIN
+    SELECT RAISE(ABORT, 'discovery_events is append-only: deletes not allowed');
+END;
+"""
+
+# Indexes for Phase 2+ query patterns
+_CREATE_AI_ASSETS_PROVIDER_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_ai_assets_provider ON ai_assets(provider);
+"""
+_CREATE_AI_ASSETS_STATUS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_ai_assets_status ON ai_assets(status);
+"""
+_CREATE_AI_ASSETS_OWNER_TEAM_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_ai_assets_owner_team ON ai_assets(owner_team);
+"""
+_CREATE_AI_ASSETS_LAST_ACTIVE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_ai_assets_last_active ON ai_assets(last_active_at);
+"""
+_CREATE_DISCOVERY_EVENTS_ASSET_DETECTED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_discovery_events_asset_detected ON discovery_events(asset_id, detected_at);
+"""
+_CREATE_PROVIDER_SIGNATURES_PROVIDER_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_provider_signatures_provider ON provider_signatures(provider);
+"""
+
+# Seed data for 7 providers — INSERT OR IGNORE is idempotent due to UNIQUE on provider
+_SEED_PROVIDER_SIGNATURES = [
+    ("openai", "api.openai.com/*", '{"keys":["authorization","openai-organization"]}', "body.model"),
+    ("anthropic", "api.anthropic.com/*", '{"keys":["x-api-key","anthropic-version"]}', "body.model"),
+    ("google", "generativelanguage.googleapis.com/*", '{"keys":["x-goog-api-key"]}', "body.model"),
+    ("azure_openai", "*.openai.azure.com/*", '{"keys":["api-key"]}', "body.model"),
+    ("bedrock", "bedrock-runtime.*.amazonaws.com/*", '{"keys":["authorization","x-amz-date"]}', "body.modelId"),
+    ("cohere", "api.cohere.com/*", '{"keys":["authorization"]}', "body.model"),
+    ("mistral", "api.mistral.ai/*", '{"keys":["authorization"]}', "body.model"),
+]
+
 
 async def init_db(db_path: str) -> None:
     """Create database directory, set WAL mode, and create tables."""
@@ -48,9 +144,39 @@ async def init_db(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA synchronous=NORMAL")
+
+        # Existing requests table
         await db.execute(_CREATE_REQUESTS_TABLE)
         await db.execute(_CREATE_INDEX)
         await db.execute(_CREATE_MODEL_INDEX)
+
+        # Phase 1: Data Foundation tables
+        await db.execute(_CREATE_AI_ASSETS_TABLE)
+        await db.execute(_CREATE_PROVIDER_SIGNATURES_TABLE)
+        await db.execute(_CREATE_DISCOVERY_EVENTS_TABLE)
+
+        # Append-only triggers
+        await db.execute(_TRIGGER_NO_UPDATE)
+        await db.execute(_TRIGGER_NO_DELETE)
+
+        # Indexes
+        await db.execute(_CREATE_AI_ASSETS_PROVIDER_INDEX)
+        await db.execute(_CREATE_AI_ASSETS_STATUS_INDEX)
+        await db.execute(_CREATE_AI_ASSETS_OWNER_TEAM_INDEX)
+        await db.execute(_CREATE_AI_ASSETS_LAST_ACTIVE_INDEX)
+        await db.execute(_CREATE_DISCOVERY_EVENTS_ASSET_DETECTED_INDEX)
+        await db.execute(_CREATE_PROVIDER_SIGNATURES_PROVIDER_INDEX)
+
+        # Seed provider signatures (idempotent via INSERT OR IGNORE + UNIQUE constraint)
+        await db.executemany(
+            """
+            INSERT OR IGNORE INTO provider_signatures
+                (provider, endpoint_pattern, header_signature, model_field_path)
+            VALUES (?, ?, ?, ?)
+            """,
+            _SEED_PROVIDER_SIGNATURES,
+        )
+
         await db.commit()
 
     # Run cloud sync migration (safe to call on every startup)
