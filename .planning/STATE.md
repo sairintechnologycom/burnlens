@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-data-foundation/01-02-PLAN.md
-last_updated: "2026-04-10T12:25:28.035Z"
-last_activity: 2026-04-10 — Completed 01-data-foundation/01-01-PLAN.md
+status: planning
+stopped_at: Completed 02-detection-engine/02-02-PLAN.md
+last_updated: "2026-04-10T13:05:23.285Z"
+last_activity: 2026-04-10 — Completed 01-data-foundation/01-02-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 50
+  total_plans: 6
+  completed_plans: 3
+  percent: 100
 ---
 
 # State
@@ -19,10 +19,10 @@ progress:
 ## Current Position
 
 **Milestone:** v1.0 Shadow AI Discovery & Inventory
-**Phase:** 1 — Data Foundation
-**Plan:** 01-02 complete (insert + query helpers for ai_assets, discovery_events, provider_signatures)
-**Status:** Phase 1 complete — all 2 plans executed
-**Last activity:** 2026-04-10 — Completed 01-data-foundation/01-02-PLAN.md
+**Phase:** 2 — Detection Engine
+**Plan:** 02-02 complete (provider signature matcher and shadow classifier)
+**Status:** In progress
+**Last activity:** 2026-04-10 — Completed 02-detection-engine/02-02-PLAN.md
 
 Progress: [██████████] 100%
 
@@ -43,6 +43,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 |-------|------|----------|-------|-------|
 | 01-data-foundation | 01 | 3 min | 2 | 3 |
 | 01-data-foundation | 02 | 4 min | 2 | 3 |
+| 02-detection-engine | 02 | 8 min | 1 | 3 |
 
 ## Accumulated Context
 
@@ -58,6 +59,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [01-02] update_asset_status uses event_type='model_changed' for status transitions — most appropriate existing CHECK constraint value
 - [01-02] Private _row_to_asset/_row_to_event helpers centralize deserialization — keeps query functions readable and DRY
 - [01-02] Dynamic WHERE clause accumulation (not string concatenation) for get_assets/get_discovery_events filters
+- [02-02] fnmatch.fnmatch chosen for provider URL glob matching — lightweight, zero extra deps, handles wildcards like *.openai.azure.com/*
+- [02-02] Scheme stripping uses split('://', 1)[-1] — handles both http and https and plain host paths uniformly
+- [02-02] Approved assets update last_active_at only — no status change, enforced in upsert_asset_from_detection, immutable by detection engine
 
 ### Architecture Notes
 
@@ -86,5 +90,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 01-data-foundation/01-02-PLAN.md
+**Stopped at:** Completed 02-detection-engine/02-02-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.
