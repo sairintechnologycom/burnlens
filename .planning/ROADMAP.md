@@ -13,7 +13,7 @@ This roadmap extends BurnLens's existing cost tracking into an automated Shadow 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Data Foundation** - Database tables, migrations, and seed data for the discovery system (completed 2026-04-10)
-- [ ] **Phase 2: Detection Engine** - Billing API parsers, provider signature matching, and shadow AI classifier
+- [x] **Phase 2: Detection Engine** - Billing API parsers, provider signature matching, and shadow AI classifier (completed 2026-04-10)
 - [ ] **Phase 3: Asset Management API** - REST endpoints for listing, filtering, updating, and approving AI assets
 - [ ] **Phase 4: Alert System** - Slack and email alerts for shadow detection, model changes, and spend spikes
 - [ ] **Phase 5: Discovery Dashboard** - Single-pane discovery UI with asset table, shadow panel, and timeline
@@ -45,7 +45,7 @@ Plans:
   3. An asset using an unregistered API key or an unrecognized provider is classified as status=shadow and a discovery_event of type new_asset_detected is written
   4. Detection runs automatically on an hourly schedule without manual invocation
   5. `burnlens.wrap(client)` intercepts SDK calls and logs model, tokens, latency, and status code to ai_assets without storing any request or response payloads
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [ ] 02-01-PLAN.md -- Billing API parsers for OpenAI, Anthropic, Google (config + pagination + TDD)
@@ -99,7 +99,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
-| 2. Detection Engine | 3/4 | In Progress|  |
+| 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
 | 3. Asset Management API | 0/TBD | Not started | - |
 | 4. Alert System | 0/TBD | Not started | - |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |

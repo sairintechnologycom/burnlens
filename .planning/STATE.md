@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-detection-engine/02-04-PLAN.md
-last_updated: "2026-04-10T13:11:43.864Z"
-last_activity: 2026-04-10 — Completed 02-detection-engine/02-02-PLAN.md
+stopped_at: Completed 02-detection-engine/02-03-PLAN.md
+last_updated: "2026-04-10T13:13:14.991Z"
+last_activity: 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 100
 ---
 
@@ -46,6 +46,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | 02-detection-engine | 01 | 8 min | 1 | 4 |
 | 02-detection-engine | 02 | 8 min | 1 | 3 |
 | 02-detection-engine | 04 | 3 min | 1 | 3 |
+| Phase 02-detection-engine P03 | 4 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [02-02] fnmatch.fnmatch chosen for provider URL glob matching — lightweight, zero extra deps, handles wildcards like *.openai.azure.com/*
 - [02-02] Scheme stripping uses split('://', 1)[-1] — handles both http and https and plain host paths uniformly
 - [02-02] Approved assets update last_active_at only — no status change, enforced in upsert_asset_from_detection, immutable by detection engine
+- [02-03] First detection run deferred 1 hour — avoids running on startup before proxy has traffic
+- [02-03] Proxy asset upsert fires in asyncio.create_task after response forwarded — zero latency added to proxy path
+- [02-03] original_headers passed to _handle_non_streaming and _handle_streaming — needed to extract raw auth token for hashing before headers are cleaned
 - [02-04] asyncio.create_task (fire-and-forget) used for logging — response returned immediately, never delayed by DB write
 - [02-04] response.status_code is safe to read (header-level); response.aread/read/stream never called to preserve streaming
 - [02-04] wrap() mutates client in place and returns same object — enables chaining without requiring user to reassign
@@ -100,5 +104,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 02-detection-engine/02-04-PLAN.md
+**Stopped at:** Completed 02-detection-engine/02-03-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.
