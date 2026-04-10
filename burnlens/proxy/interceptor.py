@@ -264,6 +264,53 @@ async def _log_record(db_path: str, record: RequestRecord) -> None:
         logger.debug("OTEL emit failed: %s", exc)
 
 
+def _extract_api_key_hash(headers: dict[str, str]) -> str | None:
+    """Return SHA-256 hash of the API key from Authorization or x-api-key header.
+
+    Extracts the token from "Bearer <token>" or uses the raw value of x-api-key.
+    Returns None if no auth header is present.
+
+    Args:
+        headers: Request headers (keys may be mixed-case).
+    """
+    lower_headers = {k.lower(): v for k, v in headers.items()}
+
+    auth = lower_headers.get("authorization")
+    if auth:
+        token = auth.removeprefix("Bearer ").removeprefix("bearer ").strip()
+        if token:
+            return hashlib.sha256(token.encode()).hexdigest()
+
+    api_key = lower_headers.get("x-api-key")
+    if api_key and api_key.strip():
+        return hashlib.sha256(api_key.strip().encode()).hexdigest()
+
+    return None
+
+
+async def _upsert_asset(
+    db_path: str,
+    provider_name: str,
+    model: str,
+    endpoint_url: str,
+    api_key_hash: str | None,
+) -> None:
+    """Call upsert_asset_from_detection, logging warnings on failure (fail open).
+
+    Args:
+        db_path: Path to the BurnLens SQLite database.
+        provider_name: Provider identifier (e.g. "openai").
+        model: Model name extracted from the request.
+        endpoint_url: Upstream API base URL used for this request.
+        api_key_hash: SHA-256 hash of the API key, or None.
+    """
+    try:
+        from burnlens.detection.classifier import upsert_asset_from_detection
+        await upsert_asset_from_detection(db_path, provider_name, model, endpoint_url, api_key_hash)
+    except Exception as exc:
+        logger.warning("Asset upsert failed (non-fatal): %s", exc)
+
+
 async def handle_request(
     client: httpx.AsyncClient,
     provider: ProviderConfig,
@@ -330,6 +377,7 @@ async def handle_request(
             start_ms=start_ms,
             request_path=path,
             alert_engine=alert_engine,
+            original_headers=headers,
         )
     else:
         return await _handle_non_streaming(
@@ -346,6 +394,7 @@ async def handle_request(
             start_ms=start_ms,
             request_path=path,
             alert_engine=alert_engine,
+            original_headers=headers,
         )
 
 
@@ -363,6 +412,7 @@ async def _handle_non_streaming(
     start_ms: float,
     request_path: str,
     alert_engine: "AlertEngine | None" = None,
+    original_headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, str], bytes, None]:
     """Forward a non-streaming request and log asynchronously."""
     response = await client.request(
@@ -401,6 +451,14 @@ async def _handle_non_streaming(
         system_prompt_hash=system_hash,
     )
     asyncio.create_task(_log_record(db_path, record))
+
+    # Async non-blocking asset upsert (runs in same event loop, does not add latency)
+    api_key_hash = _extract_api_key_hash(original_headers or headers)
+    endpoint_url = provider.upstream_base
+    asyncio.create_task(
+        _upsert_asset(db_path, provider.name, model, endpoint_url, api_key_hash)
+    )
+
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
 
@@ -429,6 +487,7 @@ async def _handle_streaming(
     start_ms: float,
     request_path: str,
     alert_engine: "AlertEngine | None" = None,
+    original_headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, str], None, AsyncIterator[bytes]]:
     """Forward a streaming request; log usage after stream ends."""
     req = client.build_request(
@@ -458,6 +517,9 @@ async def _handle_streaming(
         return response.status_code, resp_headers, err_body, None
     duration_ref: list[int] = [0]
 
+    api_key_hash = _extract_api_key_hash(original_headers or headers)
+    endpoint_url = provider.upstream_base
+
     async def _stream_generator() -> AsyncIterator[bytes]:
         usage_chunk_data: list[str] = []
         try:
@@ -482,6 +544,10 @@ async def _handle_streaming(
                     request_path=request_path,
                     alert_engine=alert_engine,
                 )
+            )
+            # Async non-blocking asset upsert after stream completes
+            asyncio.create_task(
+                _upsert_asset(db_path, provider.name, model, endpoint_url, api_key_hash)
             )
 
     resp_headers = {

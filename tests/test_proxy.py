@@ -17,7 +17,7 @@ from burnlens.proxy.providers import (
     get_provider_for_path,
     strip_proxy_prefix,
 )
-from burnlens.storage.queries import get_recent_requests, get_usage_by_model
+from burnlens.storage.queries import get_assets, get_recent_requests, get_usage_by_model
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +469,63 @@ class TestHandleRequest:
         await _flush_tasks()
         assert status == 401
 
+    async def test_proxy_upserts_asset(self, initialized_db: str):
+        """Proxy interceptor creates an ai_assets row for each forwarded request."""
+        transport = MockAsyncTransport(_openai_response(input_tokens=100, output_tokens=50))
+        client = httpx.AsyncClient(transport=transport)
+        provider = get_provider_for_path("/proxy/openai/v1/chat/completions")
+
+        body = json.dumps({"model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}]}).encode()
+        await handle_request(
+            client=client,
+            provider=provider,
+            path="/proxy/openai/v1/chat/completions",
+            method="POST",
+            headers={
+                "content-type": "application/json",
+                "authorization": "Bearer sk-test-key",
+            },
+            body_bytes=body,
+            query_string="",
+            db_path=initialized_db,
+            alert_engine=None,
+        )
+        await _flush_tasks()
+
+        assets = await get_assets(initialized_db, provider="openai")
+        assert len(assets) == 1
+        asset = assets[0]
+        assert asset.provider == "openai"
+        assert asset.model_name == "gpt-4o"
+        assert asset.endpoint_url == "https://api.openai.com"
+        # API key should be hashed, not raw
+        assert asset.api_key_hash is not None
+        assert "sk-test-key" not in asset.api_key_hash
+
+    async def test_proxy_upserts_asset_no_duplicate(self, initialized_db: str):
+        """Two requests with the same model do not create duplicate asset rows."""
+        transport = MockAsyncTransport(_openai_response())
+        client = httpx.AsyncClient(transport=transport)
+        provider = get_provider_for_path("/proxy/openai/v1/chat/completions")
+        body = json.dumps({"model": "gpt-4o", "messages": []}).encode()
+
+        for _ in range(2):
+            await handle_request(
+                client=client,
+                provider=provider,
+                path="/proxy/openai/v1/chat/completions",
+                method="POST",
+                headers={"content-type": "application/json"},
+                body_bytes=body,
+                query_string="",
+                db_path=initialized_db,
+                alert_engine=None,
+            )
+            await _flush_tasks()
+
+        assets = await get_assets(initialized_db, provider="openai")
+        assert len(assets) == 1  # No duplicate
+
 
 # ---------------------------------------------------------------------------
 # Interceptor helper unit tests (increases interceptor.py coverage)
@@ -556,6 +613,33 @@ class TestInterceptorHelpers:
         u = _extract_usage_for_provider("unknown_provider", {"usage": {"tokens": 10}})
         assert u.input_tokens == 0
         assert u.output_tokens == 0
+
+    def test_extract_api_key_hash_bearer(self):
+        """Authorization Bearer token is SHA-256 hashed."""
+        import hashlib
+        from burnlens.proxy.interceptor import _extract_api_key_hash
+
+        headers = {"authorization": "Bearer sk-secret-key"}
+        result = _extract_api_key_hash(headers)
+        expected = hashlib.sha256(b"sk-secret-key").hexdigest()
+        assert result == expected
+
+    def test_extract_api_key_hash_x_api_key(self):
+        """x-api-key header is SHA-256 hashed."""
+        import hashlib
+        from burnlens.proxy.interceptor import _extract_api_key_hash
+
+        headers = {"x-api-key": "sk-ant-secret"}
+        result = _extract_api_key_hash(headers)
+        expected = hashlib.sha256(b"sk-ant-secret").hexdigest()
+        assert result == expected
+
+    def test_extract_api_key_hash_no_auth_returns_none(self):
+        """Returns None when no auth header is present."""
+        from burnlens.proxy.interceptor import _extract_api_key_hash
+
+        result = _extract_api_key_hash({"content-type": "application/json"})
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
