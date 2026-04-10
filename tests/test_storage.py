@@ -808,3 +808,196 @@ async def test_update_asset_status_nonexistent_raises(initialized_db: str):
     """update_asset_status for a non-existent asset_id should raise ValueError."""
     with pytest.raises(ValueError, match="9999"):
         await update_asset_status(initialized_db, 9999, "approved")
+
+
+# --- Phase 1: Query Helpers ---
+
+from burnlens.storage.models import ProviderSignature  # noqa: E402
+from burnlens.storage.queries import (  # noqa: E402
+    get_asset_by_id,
+    get_assets,
+    get_discovery_events,
+    get_provider_signatures,
+)
+
+
+async def test_get_asset_by_id_returns_asset_with_all_fields(initialized_db: str):
+    """get_asset_by_id should return an AiAsset with all fields populated."""
+    asset = _asset(
+        provider="anthropic",
+        model_name="claude-3-5-sonnet-20241022",
+        endpoint_url="https://api.anthropic.com/v1/messages",
+        owner_team="ML Platform",
+        tags={"env": "prod"},
+    )
+    asset_id = await insert_asset(initialized_db, asset)
+    result = await get_asset_by_id(initialized_db, asset_id)
+
+    assert result is not None
+    assert isinstance(result, AiAsset)
+    assert result.id == asset_id
+    assert result.provider == "anthropic"
+    assert result.model_name == "claude-3-5-sonnet-20241022"
+    assert result.endpoint_url == "https://api.anthropic.com/v1/messages"
+    assert result.owner_team == "ML Platform"
+    assert result.tags == {"env": "prod"}
+
+
+async def test_get_asset_by_id_returns_none_for_nonexistent(initialized_db: str):
+    """get_asset_by_id should return None for a non-existent id."""
+    result = await get_asset_by_id(initialized_db, 9999)
+    assert result is None
+
+
+async def test_get_assets_returns_list_ordered_by_last_active_desc(initialized_db: str):
+    """get_assets should return list of AiAsset ordered by last_active_at DESC."""
+    from datetime import timedelta
+
+    now = datetime.utcnow()
+    # Insert assets with explicit last_active_at via modifying the dataclass
+    for i in range(3):
+        a = _asset(model_name=f"model-{i}")
+        a.last_active_at = now + timedelta(seconds=i)
+        await insert_asset(initialized_db, a)
+
+    results = await get_assets(initialized_db)
+    assert len(results) == 3
+    # Most recent last_active_at should be first
+    assert results[0].model_name == "model-2"
+    assert results[1].model_name == "model-1"
+    assert results[2].model_name == "model-0"
+
+
+async def test_get_assets_filter_by_provider(initialized_db: str):
+    """get_assets with provider filter should return only matching assets."""
+    await insert_asset(initialized_db, _asset(provider="openai"))
+    await insert_asset(initialized_db, _asset(provider="anthropic"))
+    await insert_asset(initialized_db, _asset(provider="openai"))
+
+    results = await get_assets(initialized_db, provider="openai")
+    assert len(results) == 2
+    assert all(a.provider == "openai" for a in results)
+
+
+async def test_get_assets_filter_by_status(initialized_db: str):
+    """get_assets with status filter should return only matching assets."""
+    await insert_asset(initialized_db, _asset(status="shadow"))
+    await insert_asset(initialized_db, _asset(status="approved"))
+    await insert_asset(initialized_db, _asset(status="shadow"))
+
+    results = await get_assets(initialized_db, status="shadow")
+    assert len(results) == 2
+    assert all(a.status == "shadow" for a in results)
+
+
+async def test_get_assets_filter_by_owner_team(initialized_db: str):
+    """get_assets with owner_team filter should return only matching assets."""
+    await insert_asset(initialized_db, _asset(owner_team="ML Platform"))
+    await insert_asset(initialized_db, _asset(owner_team="Data Science"))
+    await insert_asset(initialized_db, _asset(owner_team="ML Platform"))
+
+    results = await get_assets(initialized_db, owner_team="ML Platform")
+    assert len(results) == 2
+    assert all(a.owner_team == "ML Platform" for a in results)
+
+
+async def test_get_assets_pagination(initialized_db: str):
+    """get_assets with limit/offset should paginate correctly."""
+    for i in range(5):
+        await insert_asset(initialized_db, _asset(model_name=f"model-{i}"))
+
+    page1 = await get_assets(initialized_db, limit=2, offset=0)
+    page2 = await get_assets(initialized_db, limit=2, offset=2)
+    page3 = await get_assets(initialized_db, limit=2, offset=4)
+
+    assert len(page1) == 2
+    assert len(page2) == 2
+    assert len(page3) == 1
+    # Ensure pages don't overlap
+    ids_page1 = {a.id for a in page1}
+    ids_page2 = {a.id for a in page2}
+    assert ids_page1.isdisjoint(ids_page2)
+
+
+async def test_get_assets_empty_table(initialized_db: str):
+    """get_assets on empty table should return empty list."""
+    results = await get_assets(initialized_db)
+    assert results == []
+
+
+async def test_get_discovery_events_ordered_by_detected_at_desc(initialized_db: str):
+    """get_discovery_events should return events ordered by detected_at DESC."""
+    from datetime import timedelta
+
+    now = datetime.utcnow()
+    for i in range(3):
+        event = DiscoveryEvent(event_type="new_asset_detected")
+        event.detected_at = now + timedelta(seconds=i)
+        await insert_discovery_event(initialized_db, event)
+
+    results = await get_discovery_events(initialized_db)
+    assert len(results) == 3
+    # Most recent should be first
+    assert results[0].detected_at > results[1].detected_at
+    assert results[1].detected_at > results[2].detected_at
+
+
+async def test_get_discovery_events_filter_by_asset_id(initialized_db: str):
+    """get_discovery_events with asset_id filter should return only events for that asset."""
+    asset_id_1 = await insert_asset(initialized_db, _asset())
+    asset_id_2 = await insert_asset(initialized_db, _asset())
+
+    await insert_discovery_event(initialized_db, DiscoveryEvent(event_type="new_asset_detected", asset_id=asset_id_1))
+    await insert_discovery_event(initialized_db, DiscoveryEvent(event_type="model_changed", asset_id=asset_id_2))
+    await insert_discovery_event(initialized_db, DiscoveryEvent(event_type="asset_inactive", asset_id=asset_id_1))
+
+    results = await get_discovery_events(initialized_db, asset_id=asset_id_1)
+    assert len(results) == 2
+    assert all(e.asset_id == asset_id_1 for e in results)
+
+
+async def test_get_discovery_events_filter_by_event_type(initialized_db: str):
+    """get_discovery_events with event_type filter should return only matching events."""
+    await insert_discovery_event(initialized_db, DiscoveryEvent(event_type="new_asset_detected"))
+    await insert_discovery_event(initialized_db, DiscoveryEvent(event_type="model_changed"))
+    await insert_discovery_event(initialized_db, DiscoveryEvent(event_type="new_asset_detected"))
+
+    results = await get_discovery_events(initialized_db, event_type="new_asset_detected")
+    assert len(results) == 2
+    assert all(e.event_type == "new_asset_detected" for e in results)
+
+
+async def test_get_provider_signatures_returns_all_7(initialized_db: str):
+    """get_provider_signatures should return all 7 seeded signatures as ProviderSignature objects."""
+    results = await get_provider_signatures(initialized_db)
+    assert len(results) == 7
+    assert all(isinstance(s, ProviderSignature) for s in results)
+
+
+async def test_get_provider_signatures_with_provider_filter(initialized_db: str):
+    """get_provider_signatures with provider filter should return single matching signature."""
+    results = await get_provider_signatures(initialized_db, provider="openai")
+    assert len(results) == 1
+    assert isinstance(results[0], ProviderSignature)
+    assert results[0].provider == "openai"
+    assert isinstance(results[0].header_signature, dict)
+
+
+async def test_get_asset_by_id_tags_deserialized_to_dict(initialized_db: str):
+    """get_asset_by_id should deserialize tags JSON to a Python dict."""
+    asset = _asset(tags={"team": "ml", "env": "staging"})
+    asset_id = await insert_asset(initialized_db, asset)
+    result = await get_asset_by_id(initialized_db, asset_id)
+
+    assert result is not None
+    assert isinstance(result.tags, dict)
+    assert result.tags == {"team": "ml", "env": "staging"}
+
+
+async def test_get_provider_signatures_header_signature_deserialized(initialized_db: str):
+    """get_provider_signatures should deserialize header_signature JSON to a Python dict."""
+    results = await get_provider_signatures(initialized_db, provider="anthropic")
+    assert len(results) == 1
+    sig = results[0]
+    assert isinstance(sig.header_signature, dict)
+    assert "keys" in sig.header_signature
