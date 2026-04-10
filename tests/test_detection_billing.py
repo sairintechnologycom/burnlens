@@ -1,13 +1,16 @@
-"""Tests for billing API parsers (OpenAI, Anthropic, Google)."""
+"""Tests for billing API parsers (OpenAI, Anthropic, Google) and scheduler."""
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 import pytest_asyncio
 import respx
+
+from apscheduler.triggers.interval import IntervalTrigger
 
 from burnlens.config import BurnLensConfig
 from burnlens.storage.database import init_db
@@ -468,3 +471,88 @@ async def test_run_all_parsers_api_key_hashed(db, config_with_keys):
     assets = await get_assets(db, provider="openai")
     assert assets[0].api_key_hash == expected_hash
     assert raw_key_id not in (assets[0].api_key_hash or "")
+
+
+# ---------------------------------------------------------------------------
+# Scheduler tests
+# ---------------------------------------------------------------------------
+
+
+def test_scheduler_registers_job():
+    """register_detection_jobs creates a detection_hourly job with 1-hour interval
+    and a deferred first_run_time (approximately 1 hour from now)."""
+    from burnlens.detection.scheduler import register_detection_jobs, reset_scheduler
+
+    reset_scheduler()
+
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    scheduler = AsyncIOScheduler()
+    cfg = BurnLensConfig()
+    cfg.db_path = "/tmp/test.db"
+
+    before = datetime.now(timezone.utc)
+    register_detection_jobs(scheduler, cfg.db_path, cfg)
+    after = datetime.now(timezone.utc)
+
+    job = scheduler.get_job("detection_hourly")
+    assert job is not None, "detection_hourly job not found"
+
+    # Trigger must be an interval trigger
+    assert isinstance(job.trigger, IntervalTrigger)
+
+    # First run must be approximately 1 hour from now (not immediate)
+    from datetime import timedelta
+
+    assert job.next_run_time is not None
+    # next_run_time should be between now+55min and now+65min
+    lower = before + timedelta(minutes=55)
+    upper = after + timedelta(minutes=65)
+    assert lower <= job.next_run_time <= upper, (
+        f"next_run_time {job.next_run_time} is not within expected range "
+        f"[{lower}, {upper}]"
+    )
+
+    reset_scheduler()
+
+
+@pytest.mark.asyncio
+async def test_run_detection_calls_parsers():
+    """run_detection calls run_all_parsers and classify_new_assets with correct args."""
+    from burnlens.detection.scheduler import run_detection
+
+    cfg = BurnLensConfig()
+    cfg.db_path = "/tmp/test_run_detection.db"
+
+    with (
+        patch(
+            "burnlens.detection.scheduler.run_all_parsers",
+            new_callable=AsyncMock,
+        ) as mock_parsers,
+        patch(
+            "burnlens.detection.scheduler.classify_new_assets",
+            new_callable=AsyncMock,
+            return_value=0,
+        ) as mock_classify,
+    ):
+        await run_detection(db_path=cfg.db_path, config=cfg)
+
+    mock_parsers.assert_awaited_once_with(cfg.db_path, cfg)
+    mock_classify.assert_awaited_once_with(cfg.db_path)
+
+
+@pytest.mark.asyncio
+async def test_run_detection_swallows_errors():
+    """run_detection does not raise even when run_all_parsers raises an exception."""
+    from burnlens.detection.scheduler import run_detection
+
+    cfg = BurnLensConfig()
+    cfg.db_path = "/tmp/test_run_detection_error.db"
+
+    with patch(
+        "burnlens.detection.scheduler.run_all_parsers",
+        new_callable=AsyncMock,
+        side_effect=Exception("Simulated billing API failure"),
+    ):
+        # Must not raise — fail open per design
+        await run_detection(db_path=cfg.db_path, config=cfg)

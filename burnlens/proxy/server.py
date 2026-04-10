@@ -24,6 +24,7 @@ _http_client: httpx.AsyncClient | None = None
 _config: BurnLensConfig | None = None
 _alert_engine: AlertEngine | None = None
 _cloud_sync_task: asyncio.Task | None = None  # type: ignore[type-arg]
+_scheduler = None  # APScheduler instance (type declared at assignment)
 
 
 def get_app(config: BurnLensConfig) -> FastAPI:
@@ -31,7 +32,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        global _http_client, _config, _alert_engine
+        global _http_client, _config, _alert_engine, _scheduler
         _config = config
         app.state.db_path = config.db_path
         app.state.config = config
@@ -64,8 +65,20 @@ def get_app(config: BurnLensConfig) -> FastAPI:
             except Exception:
                 logger.warning("Could not start cloud sync", exc_info=True)
 
+        # Start detection scheduler (hourly, first run deferred)
+        from burnlens.detection.scheduler import get_scheduler, register_detection_jobs
+
+        _scheduler = get_scheduler()
+        register_detection_jobs(_scheduler, config.db_path, config)
+        _scheduler.start()
+        logger.info("Detection scheduler started (hourly)")
+
         logger.info("BurnLens proxy ready on http://%s:%d", config.host, config.port)
         yield
+
+        # Shut down detection scheduler
+        _scheduler.shutdown(wait=False)
+        logger.info("Detection scheduler stopped")
 
         # Shut down cloud sync
         if _cloud_sync_task is not None:
