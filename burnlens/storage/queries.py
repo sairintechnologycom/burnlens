@@ -76,6 +76,8 @@ async def get_assets(
     provider: str | None = None,
     status: str | None = None,
     owner_team: str | None = None,
+    risk_tier: str | None = None,
+    date_since: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[AiAsset]:
@@ -83,6 +85,7 @@ async def get_assets(
 
     Filters are applied only when the corresponding argument is not None.
     Supports pagination via limit and offset parameters.
+    date_since filters on first_seen_at >= ? (ISO date string, e.g. '2026-01-01').
     """
     where_clauses: list[str] = []
     params: list[Any] = []
@@ -96,6 +99,12 @@ async def get_assets(
     if owner_team is not None:
         where_clauses.append("owner_team = ?")
         params.append(owner_team)
+    if risk_tier is not None:
+        where_clauses.append("risk_tier = ?")
+        params.append(risk_tier)
+    if date_since is not None:
+        where_clauses.append("first_seen_at >= ?")
+        params.append(date_since)
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     params.extend([limit, offset])
@@ -114,6 +123,189 @@ async def get_assets(
         rows = await cursor.fetchall()
 
     return [_row_to_asset(row) for row in rows]
+
+
+async def get_assets_count(
+    db_path: str,
+    provider: str | None = None,
+    status: str | None = None,
+    owner_team: str | None = None,
+    risk_tier: str | None = None,
+    date_since: str | None = None,
+) -> int:
+    """Return the total count of AiAsset records matching the given filters.
+
+    Accepts the same filter parameters as get_assets() (minus limit/offset).
+    Used to power pagination total_count in API responses.
+    """
+    where_clauses: list[str] = []
+    params: list[Any] = []
+
+    if provider is not None:
+        where_clauses.append("provider = ?")
+        params.append(provider)
+    if status is not None:
+        where_clauses.append("status = ?")
+        params.append(status)
+    if owner_team is not None:
+        where_clauses.append("owner_team = ?")
+        params.append(owner_team)
+    if risk_tier is not None:
+        where_clauses.append("risk_tier = ?")
+        params.append(risk_tier)
+    if date_since is not None:
+        where_clauses.append("first_seen_at >= ?")
+        params.append(date_since)
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM ai_assets {where_sql}",
+            params,
+        )
+        row = await cursor.fetchone()
+
+    return int(row[0]) if row else 0
+
+
+async def get_asset_summary(db_path: str) -> dict[str, Any]:
+    """Return aggregated counts of AI assets.
+
+    Returns a dict with:
+    - total: total asset count
+    - by_provider: dict mapping provider -> count
+    - by_status: dict mapping status -> count
+    - by_risk_tier: dict mapping risk_tier -> count
+    - new_this_week: count of assets with first_seen_at in the last 7 days
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Total count
+        cursor = await db.execute("SELECT COUNT(*) FROM ai_assets")
+        row = await cursor.fetchone()
+        total = int(row[0]) if row else 0
+
+        # By provider
+        cursor = await db.execute(
+            "SELECT provider, COUNT(*) AS cnt FROM ai_assets GROUP BY provider"
+        )
+        by_provider = {r["provider"]: r["cnt"] for r in await cursor.fetchall()}
+
+        # By status
+        cursor = await db.execute(
+            "SELECT status, COUNT(*) AS cnt FROM ai_assets GROUP BY status"
+        )
+        by_status = {r["status"]: r["cnt"] for r in await cursor.fetchall()}
+
+        # By risk_tier
+        cursor = await db.execute(
+            "SELECT risk_tier, COUNT(*) AS cnt FROM ai_assets GROUP BY risk_tier"
+        )
+        by_risk_tier = {r["risk_tier"]: r["cnt"] for r in await cursor.fetchall()}
+
+        # New this week
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM ai_assets WHERE first_seen_at >= date('now', '-7 days')"
+        )
+        row = await cursor.fetchone()
+        new_this_week = int(row[0]) if row else 0
+
+    return {
+        "total": total,
+        "by_provider": by_provider,
+        "by_status": by_status,
+        "by_risk_tier": by_risk_tier,
+        "new_this_week": new_this_week,
+    }
+
+
+async def update_asset_fields(
+    db_path: str,
+    asset_id: int,
+    owner_team: str | None = None,
+    risk_tier: str | None = None,
+    tags: dict[str, Any] | None = None,
+    status: str | None = None,
+) -> "AiAsset":
+    """Update specified fields of an AiAsset atomically.
+
+    Only non-None arguments are included in the UPDATE statement.
+    updated_at is always set to now. If status changes, a discovery_event is inserted
+    in the same transaction.
+
+    Returns the updated AiAsset after commit.
+
+    Raises:
+        ValueError: If no asset with asset_id exists.
+    """
+    set_clauses: list[str] = []
+    params: list[Any] = []
+
+    now = datetime.utcnow().isoformat()
+
+    if owner_team is not None:
+        set_clauses.append("owner_team = ?")
+        params.append(owner_team)
+    if risk_tier is not None:
+        set_clauses.append("risk_tier = ?")
+        params.append(risk_tier)
+    if tags is not None:
+        set_clauses.append("tags = ?")
+        params.append(json.dumps(tags))
+    if status is not None:
+        set_clauses.append("status = ?")
+        params.append(status)
+
+    # Always update updated_at
+    set_clauses.append("updated_at = ?")
+    params.append(now)
+    params.append(asset_id)
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Verify asset exists and read current status (for event logging)
+        cursor = await db.execute(
+            "SELECT status FROM ai_assets WHERE id = ?", (asset_id,)
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Asset {asset_id} not found")
+
+        old_status = row["status"]
+
+        # Apply the SET clauses
+        set_sql = ", ".join(set_clauses)
+        await db.execute(
+            f"UPDATE ai_assets SET {set_sql} WHERE id = ?",
+            params,
+        )
+
+        # Log status change event if status was modified
+        if status is not None and status != old_status:
+            await db.execute(
+                """
+                INSERT INTO discovery_events (event_type, asset_id, details, detected_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "model_changed",
+                    asset_id,
+                    json.dumps({
+                        "old_status": old_status,
+                        "new_status": status,
+                        "change": "status_update",
+                    }),
+                    now,
+                ),
+            )
+
+        await db.commit()
+
+    # Return the refreshed asset
+    return await get_asset_by_id(db_path, asset_id)  # type: ignore[return-value]
 
 
 async def get_discovery_events(
