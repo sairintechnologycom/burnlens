@@ -184,4 +184,17 @@ def get_app(config: BurnLensConfig) -> FastAPI:
     except Exception as exc:
         logger.warning("Could not load dashboard API routes: %s", exc)
 
+    # --------------------------------------------------------- asset management API v1
+
+    try:
+        from burnlens.api.assets import router as assets_router
+        from burnlens.api.discovery import router as discovery_router
+        from burnlens.api.providers import router as providers_router
+
+        app.include_router(assets_router, prefix="/api/v1/assets")
+        app.include_router(discovery_router, prefix="/api/v1")
+        app.include_router(providers_router, prefix="/api/v1")
+    except Exception as exc:
+        logger.warning("Could not load API v1 routes: %s", exc)
+
     return app
