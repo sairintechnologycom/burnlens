@@ -63,7 +63,12 @@ Plans:
   3. `POST /api/v1/assets/{id}/approve` changes asset status from shadow to approved and writes a discovery_event record
   4. `GET /api/v1/assets/summary` returns total assets, counts by provider, counts by status, counts by risk tier, and new-this-week count
   5. `POST /api/v1/providers/signatures` stores a custom provider signature and it is subsequently used by the detection engine for matching
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md -- Extend queries with filters, summary aggregation, Pydantic schemas
+- [ ] 03-02-PLAN.md -- Asset CRUD router (list, detail, update, approve, summary)
+- [ ] 03-03-PLAN.md -- Discovery events + provider signatures routers + server mount
 
 ### Phase 4: Alert System
 **Goal**: Configured Slack and email destinations receive timely alerts when shadow assets appear, new providers are detected, and spend spikes occur
@@ -75,7 +80,12 @@ Plans:
   3. Each morning a single email digest is delivered listing all model version changes detected in the previous 24 hours
   4. Each week an email digest is delivered listing all assets that have been inactive for more than 30 days
   5. When a single asset's spend in a rolling period exceeds 200% of its 30-day average, a Slack message and email alert fire within 1 hour
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md -- Extend queries with filters, summary aggregation, Pydantic schemas
+- [ ] 03-02-PLAN.md -- Asset CRUD router (list, detail, update, approve, summary)
+- [ ] 03-03-PLAN.md -- Discovery events + provider signatures routers + server mount
 
 ### Phase 5: Discovery Dashboard
 **Goal**: Users have a single-pane web view of their entire AI footprint with search, filter, shadow review, and saved views
@@ -89,7 +99,12 @@ Plans:
   5. The discovery event timeline shows new assets, model changes, and alerts in chronological order
   6. Global search returns matching assets when querying by model name, provider, team, endpoint URL, or tag
   7. A user can save a filter combination as a named view and reload it to restore the same filters
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md -- Extend queries with filters, summary aggregation, Pydantic schemas
+- [ ] 03-02-PLAN.md -- Asset CRUD router (list, detail, update, approve, summary)
+- [ ] 03-03-PLAN.md -- Discovery events + provider signatures routers + server mount
 
 ## Progress
 
@@ -100,6 +115,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
-| 3. Asset Management API | 0/TBD | Not started | - |
+| 3. Asset Management API | 0/3 | Not started | - |
 | 4. Alert System | 0/TBD | Not started | - |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |
