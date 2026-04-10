@@ -150,3 +150,204 @@ class TestQueryExtensions:
         total_all = await get_assets_count(self.db_path)
         assert total_high == 2
         assert total_all == 3
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Plan 03: Discovery events and provider signatures API routers
+# ---------------------------------------------------------------------------
+
+
+def _make_event(
+    event_type: str = "new_asset_detected",
+    asset_id: int | None = None,
+    details: dict | None = None,
+    detected_at: datetime | None = None,
+) -> DiscoveryEvent:
+    """Helper to create a test DiscoveryEvent with sensible defaults."""
+    return DiscoveryEvent(
+        event_type=event_type,
+        asset_id=asset_id,
+        details=details or {},
+        detected_at=detected_at or datetime.utcnow(),
+    )
+
+
+@pytest.fixture
+def discovery_app(tmp_path):
+    """Create a FastAPI test app with discovery and provider routers mounted."""
+    from fastapi import FastAPI
+    from burnlens.api.discovery import router as discovery_router
+    from burnlens.api.providers import router as providers_router
+
+    app = FastAPI()
+    db_path = str(tmp_path / "test_discovery.db")
+    app.state.db_path = db_path
+    app.include_router(discovery_router, prefix="/api/v1")
+    app.include_router(providers_router, prefix="/api/v1")
+    return app, db_path
+
+
+class TestDiscoveryAPI:
+    """Integration tests for GET /api/v1/discovery/events."""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def setup(self, tmp_path):
+        """Seed a fresh DB and build app for each test."""
+        import httpx
+        from fastapi import FastAPI
+        from httpx import AsyncClient, ASGITransport
+        from burnlens.api.discovery import router as discovery_router
+        from burnlens.api.providers import router as providers_router
+
+        self.db_path = str(tmp_path / "test.db")
+        await init_db(self.db_path)
+
+        app = FastAPI()
+        app.state.db_path = self.db_path
+        app.include_router(discovery_router, prefix="/api/v1")
+        app.include_router(providers_router, prefix="/api/v1")
+        self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+        yield
+        await self.client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_get_events_returns_200_with_items_and_total(self):
+        """Test 1: GET /api/v1/discovery/events returns 200 with items list and total."""
+        asset_id = await insert_asset(self.db_path, _make_asset())
+        await insert_discovery_event(self.db_path, _make_event(asset_id=asset_id))
+
+        resp = await self.client.get("/api/v1/discovery/events")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert len(data["items"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_get_events_filter_by_event_type(self):
+        """Test 2: GET /api/v1/discovery/events?event_type=new_asset_detected filters by type."""
+        asset_id = await insert_asset(self.db_path, _make_asset())
+        await insert_discovery_event(self.db_path, _make_event(event_type="new_asset_detected", asset_id=asset_id))
+        await insert_discovery_event(self.db_path, _make_event(event_type="asset_inactive", asset_id=asset_id))
+
+        resp = await self.client.get("/api/v1/discovery/events?event_type=new_asset_detected")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert all(item["event_type"] == "new_asset_detected" for item in data["items"])
+
+    @pytest.mark.asyncio
+    async def test_get_events_filter_by_asset_id(self):
+        """Test 3: GET /api/v1/discovery/events?asset_id=1 filters by asset."""
+        asset_id1 = await insert_asset(self.db_path, _make_asset(model_name="gpt-4o"))
+        asset_id2 = await insert_asset(self.db_path, _make_asset(model_name="claude-3"))
+        await insert_discovery_event(self.db_path, _make_event(asset_id=asset_id1))
+        await insert_discovery_event(self.db_path, _make_event(asset_id=asset_id2))
+
+        resp = await self.client.get(f"/api/v1/discovery/events?asset_id={asset_id1}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert all(item["asset_id"] == asset_id1 for item in data["items"])
+        assert len(data["items"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_events_filter_by_date_range(self):
+        """Test 4: GET /api/v1/discovery/events?since=2026-01-01&until=2026-12-31 filters by date range."""
+        asset_id = await insert_asset(self.db_path, _make_asset())
+        old = datetime(2025, 6, 15)
+        recent = datetime(2026, 3, 10)
+        future = datetime(2027, 1, 5)
+
+        await insert_discovery_event(self.db_path, _make_event(asset_id=asset_id, detected_at=old))
+        await insert_discovery_event(self.db_path, _make_event(asset_id=asset_id, detected_at=recent))
+        await insert_discovery_event(self.db_path, _make_event(asset_id=asset_id, detected_at=future))
+
+        resp = await self.client.get("/api/v1/discovery/events?since=2026-01-01&until=2026-12-31")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["items"]) == 1
+        assert "2026" in data["items"][0]["detected_at"]
+
+
+class TestProviderAPI:
+    """Integration tests for GET/POST /api/v1/providers/signatures."""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def setup(self, tmp_path):
+        """Seed a fresh DB and build app for each test."""
+        from fastapi import FastAPI
+        from httpx import AsyncClient, ASGITransport
+        from burnlens.api.discovery import router as discovery_router
+        from burnlens.api.providers import router as providers_router
+
+        self.db_path = str(tmp_path / "test.db")
+        await init_db(self.db_path)
+
+        app = FastAPI()
+        app.state.db_path = self.db_path
+        app.include_router(discovery_router, prefix="/api/v1")
+        app.include_router(providers_router, prefix="/api/v1")
+        self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+        yield
+        await self.client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_get_signatures_returns_200_list(self):
+        """Test 5: GET /api/v1/providers/signatures returns 200 with list of all signatures."""
+        resp = await self.client.get("/api/v1/providers/signatures")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Seed data has 7 providers
+        assert len(data) >= 7
+        assert all("provider" in s for s in data)
+
+    @pytest.mark.asyncio
+    async def test_get_signatures_filter_by_provider(self):
+        """Test 6: GET /api/v1/providers/signatures?provider=openai filters by provider."""
+        resp = await self.client.get("/api/v1/providers/signatures?provider=openai")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["provider"] == "openai"
+
+    @pytest.mark.asyncio
+    async def test_post_signature_creates_and_returns_201(self):
+        """Test 7: POST /api/v1/providers/signatures with valid body returns 201 with created signature."""
+        payload = {
+            "provider": "custom_llm",
+            "endpoint_pattern": "api.custom-llm.com/*",
+            "header_signature": {"keys": ["authorization"]},
+            "model_field_path": "body.model",
+        }
+        resp = await self.client.post("/api/v1/providers/signatures", json=payload)
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["provider"] == "custom_llm"
+        assert data["endpoint_pattern"] == "api.custom-llm.com/*"
+        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_post_signature_visible_in_subsequent_get(self):
+        """Test 8: POST /api/v1/providers/signatures and subsequent GET includes the new signature."""
+        payload = {
+            "provider": "my_custom_provider",
+            "endpoint_pattern": "api.myco.io/*",
+            "header_signature": {},
+            "model_field_path": "body.model",
+        }
+        post_resp = await self.client.post("/api/v1/providers/signatures", json=payload)
+        assert post_resp.status_code == 201
+
+        get_resp = await self.client.get("/api/v1/providers/signatures?provider=my_custom_provider")
+        assert get_resp.status_code == 200
+        data = get_resp.json()
+        assert len(data) == 1
+        assert data[0]["provider"] == "my_custom_provider"
+
+    @pytest.mark.asyncio
+    async def test_post_signature_missing_provider_returns_422(self):
+        """Test 9: POST /api/v1/providers/signatures with missing provider field returns 422."""
+        payload = {
+            "endpoint_pattern": "api.example.com/*",
+        }
+        resp = await self.client.post("/api/v1/providers/signatures", json=payload)
+        assert resp.status_code == 422
