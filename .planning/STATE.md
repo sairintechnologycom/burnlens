@@ -86,6 +86,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [03-02] GET /summary defined before GET /{asset_id} — FastAPI path matching is order-sensitive; "summary" must not be treated as integer ID
 - [03-02] response_model=dict for GET /{asset_id} detail endpoint — mixed asset+events compound response avoids dedicated DetailResponse schema
 - [03-02] Approve endpoint inserts explicit discovery_event after update_asset_status (which auto-logs one) — double event for explicit approval audit trail
+- [03-03] assets router mounted at /api/v1/assets (prefix=/api/v1/assets) because assets.py uses prefix='' — matches TestAssetAPI fixture
+- [03-03] date_since/date_until added to get_discovery_events using same dynamic WHERE clause pattern as get_assets
+- [03-03] insert_provider_signature uses INSERT OR IGNORE — idempotent for seeded providers, returns lastrowid==0 if duplicate
 
 ### Architecture Notes
 
