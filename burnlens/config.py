@@ -91,6 +91,10 @@ class BurnLensConfig:
     anthropic_upstream: str = "https://api.anthropic.com"
     google_upstream: str = "https://generativelanguage.googleapis.com"
 
+    # Admin API keys for billing detection (never logged or stored raw)
+    openai_admin_key: str | None = None
+    anthropic_admin_key: str | None = None
+
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
@@ -105,6 +109,8 @@ _FIELD_TYPES: dict[str, type] = {
     "openai_upstream": str,
     "anthropic_upstream": str,
     "google_upstream": str,
+    "openai_admin_key": str,
+    "anthropic_admin_key": str,
 }
 
 
@@ -112,7 +118,10 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
     """Load config from YAML file, falling back to defaults for missing keys.
 
     Searches current directory and ~/.burnlens/ when no path given.
+    Admin keys can also be supplied via OPENAI_ADMIN_KEY and ANTHROPIC_ADMIN_KEY env vars.
     """
+    import os
+
     if config_path is None:
         candidates = [
             Path.cwd() / "burnlens.yaml",
@@ -214,6 +223,12 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             anonymise_prompts=bool(cloud_data.get("anonymise_prompts", True)),
         )
         kwargs["cloud"] = cloud
+
+    # Admin key env var overrides (higher priority than YAML)
+    if openai_admin := os.environ.get("OPENAI_ADMIN_KEY"):
+        kwargs["openai_admin_key"] = openai_admin
+    if anthropic_admin := os.environ.get("ANTHROPIC_ADMIN_KEY"):
+        kwargs["anthropic_admin_key"] = anthropic_admin
 
     return BurnLensConfig(**kwargs)
 
