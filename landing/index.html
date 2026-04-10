@@ -647,6 +647,8 @@
   <div class="nav-links">
     <a href="#how-it-works">How it works</a>
     <a href="#features">Features</a>
+    <a href="#compare">Compare</a>
+    <a href="#faq">FAQ</a>
     <a href="https://github.com/sairintechnologycom/burnlens" target="_blank">GitHub</a>
     <a href="https://pypi.org/project/burnlens/" target="_blank" class="btn-outline">PyPI</a>
   </div>
@@ -656,7 +658,7 @@
 <section class="hero">
   <div class="hero-badge">
     <span class="dot"></span>
-    Open source &middot; MIT License &middot; v0.1.1
+    Open source &middot; MIT License &middot; v0.3.1
   </div>
 
   <h1>Stop guessing what your<br><span>LLM API calls cost</span></h1>
@@ -665,12 +667,16 @@
     BurnLens is a local proxy that tracks every AI API call &mdash; per feature, team, and customer. One install. Zero config. Nothing leaves your machine.
   </p>
 
+  <p style="font-family:var(--mono);font-size:0.82rem;color:var(--text2);margin-bottom:2rem;letter-spacing:0.02em;">
+    Works with streaming &middot; Sub-20ms overhead &middot; Nothing leaves your machine
+  </p>
+
   <div class="hero-actions">
     <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" class="btn-primary">View on GitHub</a>
     <a href="#how-it-works" class="btn-outline">See how it works</a>
   </div>
 
-  <img src="burnlens_logo_wide.png" style="width:100%;max-width:700px;border-radius:8px;border:1px solid rgba(0,229,200,0.1);margin-bottom:2rem;" alt="BurnLens Dashboard">
+  <img src="burnlens.gif" style="width:100%;max-width:800px;border-radius:8px;border:1px solid rgba(0,229,200,0.1);margin-bottom:2rem;margin-top:1rem;" alt="BurnLens Dashboard Demo">
 
   <div class="install-block">
     <div class="install-bar">
@@ -789,6 +795,11 @@
       <h3>100% local</h3>
       <p>Everything stored in a local SQLite file. No accounts. No SaaS. No prompt content ever leaves your machine.</p>
     </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#x26A1;</div>
+      <h3>Streaming support</h3>
+      <p>Full SSE passthrough with zero buffering. Chunks forwarded immediately. Token counting from the final chunk or usage header.</p>
+    </div>
   </div>
 </section>
 
@@ -814,7 +825,7 @@
 
     <div class="code-body active" id="tab-python">
       <span class="c"># Set env var once &mdash; all OpenAI calls go through BurnLens</span><br>
-      <span class="k">export</span> <span class="v">OPENAI_BASE_URL</span>=<span class="s">http://127.0.0.1:8420/proxy/openai</span><br>
+      <span class="k">export</span> <span class="v">OPENAI_BASE_URL</span>=<span class="s">http://127.0.0.1:8420/proxy/openai/v1</span><br>
       <br>
       <span class="c"># Tag your requests</span><br>
       <span class="n">response</span> = <span class="n">client</span>.<span class="k">chat</span>.<span class="k">completions</span>.<span class="k">create</span>(<br>
@@ -833,7 +844,7 @@
       <br>
       <span class="c"># Tag your requests</span><br>
       <span class="n">response</span> = <span class="n">client</span>.<span class="k">messages</span>.<span class="k">create</span>(<br>
-      &nbsp;&nbsp;<span class="n">model</span>=<span class="s">"claude-haiku-4-5-20251001"</span>,<br>
+      &nbsp;&nbsp;<span class="n">model</span>=<span class="s">"claude-haiku-4-5"</span>,<br>
       &nbsp;&nbsp;<span class="n">max_tokens</span>=<span class="v">1024</span>,<br>
       &nbsp;&nbsp;<span class="n">messages</span>=[...],<br>
       &nbsp;&nbsp;<span class="n">extra_headers</span>={<br>
@@ -851,6 +862,93 @@
       <span class="k">import</span> <span class="n">google.generativeai</span> <span class="k">as</span> <span class="n">genai</span><br>
       <span class="n">model</span> = <span class="n">genai</span>.<span class="k">GenerativeModel</span>(<span class="s">"gemini-2.0-flash"</span>)<br>
       <span class="n">response</span> = <span class="n">model</span>.<span class="k">generate_content</span>(<span class="s">"Hello"</span>)
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON TABLE -->
+<section class="section" id="compare" style="padding-top: 0;">
+  <div class="section-label">// how burnlens compares</div>
+  <h2>Privacy-first cost tracking</h2>
+  <p class="section-sub">No cloud signup. No SDK wrappers. Your data never leaves your machine.</p>
+
+  <div style="overflow-x:auto;margin-top:2rem;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;font-family:var(--mono);">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border2);">
+          <th style="text-align:left;padding:0.75rem 1rem;color:var(--text3);font-weight:500;"></th>
+          <th style="text-align:left;padding:0.75rem 1rem;color:var(--cyan);font-weight:600;">BurnLens</th>
+          <th style="text-align:left;padding:0.75rem 1rem;color:var(--text3);font-weight:500;">Helicone</th>
+          <th style="text-align:left;padding:0.75rem 1rem;color:var(--text3);font-weight:500;">LangSmith</th>
+          <th style="text-align:left;padding:0.75rem 1rem;color:var(--text3);font-weight:500;">Portkey</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.75rem 1rem;color:var(--text2);">Setup</td>
+          <td style="padding:0.75rem 1rem;color:var(--cyan);">pip install, set env var</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Cloud signup + API key</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Cloud signup + SDK wrapper</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Cloud signup + gateway</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.75rem 1rem;color:var(--text2);">Data privacy</td>
+          <td style="padding:0.75rem 1rem;color:var(--cyan);">100% local, SQLite</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Cloud-hosted</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Cloud-hosted</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Cloud-hosted</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.75rem 1rem;color:var(--text2);">Cost</td>
+          <td style="padding:0.75rem 1rem;color:var(--cyan);">Free, open source</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Free tier, then paid</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Free tier, then paid</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Free tier, then paid</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:0.75rem 1rem;color:var(--text2);">Streaming</td>
+          <td style="padding:0.75rem 1rem;color:var(--cyan);">Full SSE, zero buffering</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Yes</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Yes</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Yes</td>
+        </tr>
+        <tr>
+          <td style="padding:0.75rem 1rem;color:var(--text2);">Code changes</td>
+          <td style="padding:0.75rem 1rem;color:var(--cyan);">None &mdash; proxy via BASE_URL</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">SDK integration</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">SDK wrapper required</td>
+          <td style="padding:0.75rem 1rem;color:var(--text3);">Gateway config</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" id="faq" style="padding-top: 0;">
+  <div class="section-label">// faq</div>
+  <h2>Common questions</h2>
+
+  <div style="margin-top:2rem;display:grid;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+    <div style="background:var(--bg2);padding:1.5rem 2rem;">
+      <h3 style="font-family:var(--mono);font-size:0.88rem;color:var(--text);margin-bottom:0.5rem;">Does it support streaming?</h3>
+      <p style="font-size:0.82rem;color:var(--text2);line-height:1.65;">Yes. SSE chunks are forwarded immediately with zero buffering. Token counting happens from the final chunk or usage header.</p>
+    </div>
+    <div style="background:var(--bg2);padding:1.5rem 2rem;">
+      <h3 style="font-family:var(--mono);font-size:0.88rem;color:var(--text);margin-bottom:0.5rem;">What's the performance overhead?</h3>
+      <p style="font-size:0.82rem;color:var(--text2);line-height:1.65;">Sub-20ms. Logging and cost calculation happen asynchronously after the response is forwarded.</p>
+    </div>
+    <div style="background:var(--bg2);padding:1.5rem 2rem;">
+      <h3 style="font-family:var(--mono);font-size:0.88rem;color:var(--text);margin-bottom:0.5rem;">Where's my data?</h3>
+      <p style="font-size:0.82rem;color:var(--text2);line-height:1.65;">SQLite on your machine (<code style="font-family:var(--mono);font-size:0.78rem;color:var(--cyan);background:var(--cyan-dimmer);padding:1px 5px;border-radius:3px;">~/.burnlens/burnlens.db</code>). Nothing leaves localhost. No cloud account needed.</p>
+    </div>
+    <div style="background:var(--bg2);padding:1.5rem 2rem;">
+      <h3 style="font-family:var(--mono);font-size:0.88rem;color:var(--text);margin-bottom:0.5rem;">What providers are supported?</h3>
+      <p style="font-size:0.82rem;color:var(--text2);line-height:1.65;">OpenAI, Anthropic, and Google. Set BASE_URL env vars and your existing SDK code works unchanged.</p>
+    </div>
+    <div style="background:var(--bg2);padding:1.5rem 2rem;">
+      <h3 style="font-family:var(--mono);font-size:0.88rem;color:var(--text);margin-bottom:0.5rem;">Can I run it in Docker?</h3>
+      <p style="font-size:0.82rem;color:var(--text2);line-height:1.65;">Not yet &mdash; coming soon. For now it runs directly via <code style="font-family:var(--mono);font-size:0.78rem;color:var(--cyan);background:var(--cyan-dimmer);padding:1px 5px;border-radius:3px;">pip install burnlens</code>.</p>
     </div>
   </div>
 </section>
