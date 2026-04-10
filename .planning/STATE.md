@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 03-asset-management-api/03-01-PLAN.md
-last_updated: "2026-04-10T16:34:07.991Z"
+stopped_at: Completed 03-asset-management-api/03-03-PLAN.md
+last_updated: "2026-04-10T16:39:34.068Z"
 last_activity: 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 9
   percent: 100
 ---
 
@@ -48,6 +48,8 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | 02-detection-engine | 04 | 3 min | 1 | 3 |
 | Phase 02-detection-engine P03 | 4 | 2 tasks | 5 files |
 | Phase 03-asset-management-api P01 | 8 min | 2 tasks | 4 files |
+| Phase 03-asset-management-api P02 | 2 | 1 tasks | 2 files |
+| Phase 03-asset-management-api P03 | 3 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -81,6 +83,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [03-01] get_asset_summary runs 5 small queries in one connection — readable, avoids multi-join complexity
 - [03-01] update_asset_fields dynamic SET clause (same pattern as get_assets WHERE) — avoids updating unchanged fields
 - [03-01] asset_to_response/event_to_response/signature_to_response raise ValueError on id=None — guards against converting unsaved objects
+- [03-02] GET /summary defined before GET /{asset_id} — FastAPI path matching is order-sensitive; "summary" must not be treated as integer ID
+- [03-02] response_model=dict for GET /{asset_id} detail endpoint — mixed asset+events compound response avoids dedicated DetailResponse schema
+- [03-02] Approve endpoint inserts explicit discovery_event after update_asset_status (which auto-logs one) — double event for explicit approval audit trail
 
 ### Architecture Notes
 
@@ -109,5 +114,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 03-asset-management-api/03-01-PLAN.md
+**Stopped at:** Completed 03-asset-management-api/03-03-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.

@@ -28,14 +28,14 @@ Requirements for Shadow AI Discovery & Inventory. Each maps to roadmap phases.
 ### API
 
 - [x] **API-01**: User can list all AI assets with filters (provider, status, team, risk_tier) and pagination
-- [ ] **API-02**: User can get single asset detail with usage history
-- [ ] **API-03**: User can update asset (assign team, set risk_tier, update tags, change status)
+- [x] **API-02**: User can get single asset detail with usage history
+- [x] **API-03**: User can update asset (assign team, set risk_tier, update tags, change status)
 - [x] **API-04**: User can get dashboard summary (total assets, by provider, by status, by risk, new this week)
 - [x] **API-05**: User can list shadow/unregistered AI endpoints filtered by date range
-- [ ] **API-06**: User can approve a shadow asset (change status from shadow to approved)
-- [ ] **API-07**: User can list and query discovery events by type, asset, date range
-- [ ] **API-08**: User can list known provider signatures
-- [ ] **API-09**: User can add custom provider signatures for self-hosted/private models
+- [x] **API-06**: User can approve a shadow asset (change status from shadow to approved)
+- [x] **API-07**: User can list and query discovery events by type, asset, date range
+- [x] **API-08**: User can list known provider signatures
+- [x] **API-09**: User can add custom provider signatures for self-hosted/private models
 
 ### Dashboard
 
@@ -102,14 +102,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DETC-07 | Phase 2 | Complete |
 | DETC-08 | Phase 2 | Complete |
 | API-01 | Phase 3 | Complete |
-| API-02 | Phase 3 | Pending |
-| API-03 | Phase 3 | Pending |
+| API-02 | Phase 3 | Complete |
+| API-03 | Phase 3 | Complete |
 | API-04 | Phase 3 | Complete |
 | API-05 | Phase 3 | Complete |
-| API-06 | Phase 3 | Pending |
-| API-07 | Phase 3 | Pending |
-| API-08 | Phase 3 | Pending |
-| API-09 | Phase 3 | Pending |
+| API-06 | Phase 3 | Complete |
+| API-07 | Phase 3 | Complete |
+| API-08 | Phase 3 | Complete |
+| API-09 | Phase 3 | Complete |
 | ALRT-01 | Phase 4 | Pending |
 | ALRT-02 | Phase 4 | Pending |
 | ALRT-03 | Phase 4 | Pending |
