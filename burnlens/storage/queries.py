@@ -2,11 +2,188 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 import aiosqlite
 
-from burnlens.storage.models import AggregatedUsage
+from burnlens.storage.models import AggregatedUsage, AiAsset, DiscoveryEvent, ProviderSignature
+
+
+# ---------------------------------------------------------------------------
+# Private deserialization helpers
+# ---------------------------------------------------------------------------
+
+
+def _row_to_asset(row: aiosqlite.Row) -> AiAsset:
+    """Deserialize a DB row into an AiAsset dataclass."""
+    return AiAsset(
+        id=row["id"],
+        provider=row["provider"],
+        model_name=row["model_name"],
+        endpoint_url=row["endpoint_url"],
+        api_key_hash=row["api_key_hash"],
+        owner_team=row["owner_team"],
+        project=row["project"],
+        status=row["status"],
+        risk_tier=row["risk_tier"],
+        first_seen_at=datetime.fromisoformat(row["first_seen_at"]),
+        last_active_at=datetime.fromisoformat(row["last_active_at"]),
+        monthly_spend_usd=float(row["monthly_spend_usd"] or 0.0),
+        monthly_requests=int(row["monthly_requests"] or 0),
+        tags=json.loads(row["tags"] or "{}"),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+def _row_to_event(row: aiosqlite.Row) -> DiscoveryEvent:
+    """Deserialize a DB row into a DiscoveryEvent dataclass."""
+    return DiscoveryEvent(
+        id=row["id"],
+        event_type=row["event_type"],
+        asset_id=row["asset_id"],
+        details=json.loads(row["details"] or "{}"),
+        detected_at=datetime.fromisoformat(row["detected_at"]),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Query helpers for AI Asset Discovery tables
+# ---------------------------------------------------------------------------
+
+
+async def get_asset_by_id(db_path: str, asset_id: int) -> AiAsset | None:
+    """Return an AiAsset by its primary key, or None if not found.
+
+    Tags are deserialized from JSON to a Python dict.
+    Datetime fields are parsed from ISO format strings.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM ai_assets WHERE id = ?", (asset_id,)
+        )
+        row = await cursor.fetchone()
+
+    if row is None:
+        return None
+    return _row_to_asset(row)
+
+
+async def get_assets(
+    db_path: str,
+    provider: str | None = None,
+    status: str | None = None,
+    owner_team: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[AiAsset]:
+    """Return a list of AiAsset records, ordered by last_active_at DESC.
+
+    Filters are applied only when the corresponding argument is not None.
+    Supports pagination via limit and offset parameters.
+    """
+    where_clauses: list[str] = []
+    params: list[Any] = []
+
+    if provider is not None:
+        where_clauses.append("provider = ?")
+        params.append(provider)
+    if status is not None:
+        where_clauses.append("status = ?")
+        params.append(status)
+    if owner_team is not None:
+        where_clauses.append("owner_team = ?")
+        params.append(owner_team)
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    params.extend([limit, offset])
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""
+            SELECT * FROM ai_assets
+            {where_sql}
+            ORDER BY last_active_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        )
+        rows = await cursor.fetchall()
+
+    return [_row_to_asset(row) for row in rows]
+
+
+async def get_discovery_events(
+    db_path: str,
+    asset_id: int | None = None,
+    event_type: str | None = None,
+    limit: int = 50,
+) -> list[DiscoveryEvent]:
+    """Return a list of DiscoveryEvent records, ordered by detected_at DESC.
+
+    Filters are applied only when the corresponding argument is not None.
+    """
+    where_clauses: list[str] = []
+    params: list[Any] = []
+
+    if asset_id is not None:
+        where_clauses.append("asset_id = ?")
+        params.append(asset_id)
+    if event_type is not None:
+        where_clauses.append("event_type = ?")
+        params.append(event_type)
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    params.append(limit)
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""
+            SELECT * FROM discovery_events
+            {where_sql}
+            ORDER BY detected_at DESC
+            LIMIT ?
+            """,
+            params,
+        )
+        rows = await cursor.fetchall()
+
+    return [_row_to_event(row) for row in rows]
+
+
+async def get_provider_signatures(
+    db_path: str,
+    provider: str | None = None,
+) -> list[ProviderSignature]:
+    """Return a list of ProviderSignature records.
+
+    Optionally filter by provider name. header_signature is deserialized from JSON.
+    """
+    where_sql = "WHERE provider = ?" if provider is not None else ""
+    params: tuple[Any, ...] = (provider,) if provider is not None else ()
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"SELECT * FROM provider_signatures {where_sql}",
+            params,
+        )
+        rows = await cursor.fetchall()
+
+    return [
+        ProviderSignature(
+            id=row["id"],
+            provider=row["provider"],
+            endpoint_pattern=row["endpoint_pattern"],
+            header_signature=json.loads(row["header_signature"] or "{}"),
+            model_field_path=row["model_field_path"],
+        )
+        for row in rows
+    ]
 
 
 async def get_usage_by_model(
