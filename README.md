@@ -56,7 +56,9 @@ BurnLens fixes this at the proxy layer — no instrumentation, no SDK wrapping, 
 
 ## What you get
 
-![Dashboard screenshot](docs/dashboard.png)
+<p align="center">
+  <img src="docs/burnlens.gif" alt="BurnLens dashboard demo" width="800">
+</p>
 
 - **Cost timeline** — daily spend trend across all providers
 - **Attribution** — cost by model, feature, team, customer
