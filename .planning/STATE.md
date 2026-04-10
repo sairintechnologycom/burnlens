@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-detection-engine/02-01-PLAN.md
-last_updated: "2026-04-10T13:06:16.316Z"
+stopped_at: Completed 02-detection-engine/02-04-PLAN.md
+last_updated: "2026-04-10T13:11:43.864Z"
 last_activity: 2026-04-10 — Completed 02-detection-engine/02-02-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 100
 ---
 
@@ -20,9 +20,9 @@ progress:
 
 **Milestone:** v1.0 Shadow AI Discovery & Inventory
 **Phase:** 2 — Detection Engine
-**Plan:** 02-02 complete (provider signature matcher and shadow classifier)
+**Plan:** 02-04 complete (SDK transport interceptor with BurnLensTransport and wrap())
 **Status:** In progress
-**Last activity:** 2026-04-10 — Completed 02-detection-engine/02-02-PLAN.md
+**Last activity:** 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 
 Progress: [██████████] 100%
 
@@ -45,6 +45,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | 01-data-foundation | 02 | 4 min | 2 | 3 |
 | 02-detection-engine | 01 | 8 min | 1 | 4 |
 | 02-detection-engine | 02 | 8 min | 1 | 3 |
+| 02-detection-engine | 04 | 3 min | 1 | 3 |
 
 ## Accumulated Context
 
@@ -67,6 +68,10 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [02-02] fnmatch.fnmatch chosen for provider URL glob matching — lightweight, zero extra deps, handles wildcards like *.openai.azure.com/*
 - [02-02] Scheme stripping uses split('://', 1)[-1] — handles both http and https and plain host paths uniformly
 - [02-02] Approved assets update last_active_at only — no status change, enforced in upsert_asset_from_detection, immutable by detection engine
+- [02-04] asyncio.create_task (fire-and-forget) used for logging — response returned immediately, never delayed by DB write
+- [02-04] response.status_code is safe to read (header-level); response.aread/read/stream never called to preserve streaming
+- [02-04] wrap() mutates client in place and returns same object — enables chaining without requiring user to reassign
+- [02-04] Model extracted from URL path only (best-effort) — token counts are out of scope for SDK path (DETC-08 proxy handles tokens)
 
 ### Architecture Notes
 
@@ -95,5 +100,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 02-detection-engine/02-01-PLAN.md
+**Stopped at:** Completed 02-detection-engine/02-04-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.

@@ -16,13 +16,13 @@ Requirements for Shadow AI Discovery & Inventory. Each maps to roadmap phases.
 
 ### Detection
 
-- [ ] **DETC-01**: System parses OpenAI billing API to detect models, usage volumes, and API key identifiers
-- [ ] **DETC-02**: System parses Anthropic billing API to detect models, usage volumes, and API key identifiers
-- [ ] **DETC-03**: System parses Google AI billing API to detect models, usage volumes, and API key identifiers
-- [ ] **DETC-04**: System matches endpoint URLs and headers against provider_signatures to auto-identify providers
-- [ ] **DETC-05**: System classifies endpoint as shadow if API key, model, provider, or team is unregistered/unapproved
+- [x] **DETC-01**: System parses OpenAI billing API to detect models, usage volumes, and API key identifiers
+- [x] **DETC-02**: System parses Anthropic billing API to detect models, usage volumes, and API key identifiers
+- [x] **DETC-03**: System parses Google AI billing API to detect models, usage volumes, and API key identifiers
+- [x] **DETC-04**: System matches endpoint URLs and headers against provider_signatures to auto-identify providers
+- [x] **DETC-05**: System classifies endpoint as shadow if API key, model, provider, or team is unregistered/unapproved
 - [ ] **DETC-06**: System runs detection on a scheduled basis (hourly via APScheduler)
-- [ ] **DETC-07**: SDK wrapper (`burnlens.wrap(client)`) intercepts calls and logs metadata without modifying payloads
+- [x] **DETC-07**: SDK wrapper (`burnlens.wrap(client)`) intercepts calls and logs metadata without modifying payloads
 - [ ] **DETC-08**: Proxy mode forwards AI SDK traffic and logs metadata only (model, tokens, latency, status code)
 
 ### API
@@ -93,13 +93,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-02 | Phase 1 | Complete |
 | DATA-03 | Phase 1 | Complete |
 | DATA-04 | Phase 1 | Complete |
-| DETC-01 | Phase 2 | Pending |
-| DETC-02 | Phase 2 | Pending |
-| DETC-03 | Phase 2 | Pending |
-| DETC-04 | Phase 2 | Pending |
-| DETC-05 | Phase 2 | Pending |
+| DETC-01 | Phase 2 | Complete |
+| DETC-02 | Phase 2 | Complete |
+| DETC-03 | Phase 2 | Complete |
+| DETC-04 | Phase 2 | Complete |
+| DETC-05 | Phase 2 | Complete |
 | DETC-06 | Phase 2 | Pending |
-| DETC-07 | Phase 2 | Pending |
+| DETC-07 | Phase 2 | Complete |
 | DETC-08 | Phase 2 | Pending |
 | API-01 | Phase 3 | Pending |
 | API-02 | Phase 3 | Pending |
