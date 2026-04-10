@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Completed 02-detection-engine/02-02-PLAN.md
-last_updated: "2026-04-10T13:05:23.285Z"
-last_activity: 2026-04-10 — Completed 01-data-foundation/01-02-PLAN.md
+status: executing
+stopped_at: Completed 02-detection-engine/02-01-PLAN.md
+last_updated: "2026-04-10T13:06:16.316Z"
+last_activity: 2026-04-10 — Completed 02-detection-engine/02-02-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 100
 ---
 
@@ -43,6 +43,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 |-------|------|----------|-------|-------|
 | 01-data-foundation | 01 | 3 min | 2 | 3 |
 | 01-data-foundation | 02 | 4 min | 2 | 3 |
+| 02-detection-engine | 01 | 8 min | 1 | 4 |
 | 02-detection-engine | 02 | 8 min | 1 | 3 |
 
 ## Accumulated Context
@@ -59,6 +60,10 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [01-02] update_asset_status uses event_type='model_changed' for status transitions — most appropriate existing CHECK constraint value
 - [01-02] Private _row_to_asset/_row_to_event helpers centralize deserialization — keeps query functions readable and DRY
 - [01-02] Dynamic WHERE clause accumulation (not string concatenation) for get_assets/get_discovery_events filters
+- [02-01] Google detection uses proxy traffic only — no billing admin API with per-model breakdown
+- [02-01] api_key_id hashed via sha256 before storage — raw keys never persisted
+- [02-01] Fail-open: HTTPStatusError caught per-provider, logged, skipped — proxy never crashes
+- [02-01] Asset dedup key is provider + model_name + endpoint_url (not api_key_hash which may be absent)
 - [02-02] fnmatch.fnmatch chosen for provider URL glob matching — lightweight, zero extra deps, handles wildcards like *.openai.azure.com/*
 - [02-02] Scheme stripping uses split('://', 1)[-1] — handles both http and https and plain host paths uniformly
 - [02-02] Approved assets update last_active_at only — no status change, enforced in upsert_asset_from_detection, immutable by detection engine
@@ -90,5 +95,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 02-detection-engine/02-02-PLAN.md
+**Stopped at:** Completed 02-detection-engine/02-01-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.

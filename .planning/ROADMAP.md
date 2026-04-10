@@ -45,7 +45,7 @@ Plans:
   3. An asset using an unregistered API key or an unrecognized provider is classified as status=shadow and a discovery_event of type new_asset_detected is written
   4. Detection runs automatically on an hourly schedule without manual invocation
   5. `burnlens.wrap(client)` intercepts SDK calls and logs model, tokens, latency, and status code to ai_assets without storing any request or response payloads
-**Plans:** 4 plans
+**Plans:** 2/4 plans executed
 
 Plans:
 - [ ] 02-01-PLAN.md -- Billing API parsers for OpenAI, Anthropic, Google (config + pagination + TDD)
@@ -99,7 +99,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
-| 2. Detection Engine | 0/4 | Planning complete | - |
+| 2. Detection Engine | 2/4 | In Progress|  |
 | 3. Asset Management API | 0/TBD | Not started | - |
 | 4. Alert System | 0/TBD | Not started | - |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |
