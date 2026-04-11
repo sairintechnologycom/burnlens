@@ -83,9 +83,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Extend queries with filters, summary aggregation, Pydantic schemas
-- [ ] 03-02-PLAN.md -- Asset CRUD router (list, detail, update, approve, summary)
-- [ ] 03-03-PLAN.md -- Discovery events + provider signatures routers + server mount
+- [ ] 04-01-PLAN.md -- Alert types, email sender, discovery queries, and config extension
+- [ ] 04-02-PLAN.md -- DiscoveryAlertEngine with Slack payloads, deduplication, and dispatch
+- [ ] 04-03-PLAN.md -- Digest emails (daily model changes, weekly inactive) + scheduler wiring
 
 ### Phase 5: Discovery Dashboard
 **Goal**: Users have a single-pane web view of their entire AI footprint with search, filter, shadow review, and saved views
@@ -116,5 +116,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
 | 3. Asset Management API | 3/3 | Complete   | 2026-04-10 |
-| 4. Alert System | 0/TBD | Not started | - |
+| 4. Alert System | 0/3 | Not started | - |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |
