@@ -827,6 +827,240 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 });
 
+// -------------------------------------------------------- saved views (localStorage)
+
+var SAVED_VIEWS_KEY = 'burnlens_saved_views';
+
+/**
+ * Get all saved views from localStorage.
+ * Returns an array of { name, filters } objects.
+ */
+function getSavedViews() {
+  try {
+    var raw = localStorage.getItem(SAVED_VIEWS_KEY);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Persist the given views array to localStorage.
+ */
+function persistSavedViews(views) {
+  try {
+    localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
+  } catch (e) {
+    console.error('Failed to persist saved views:', e);
+  }
+}
+
+/**
+ * Read current values from all filter UI elements.
+ * Returns a filters object matching the saved-view schema.
+ */
+function getCurrentFilters() {
+  return {
+    provider: ($('filter-provider') || {}).value || '',
+    status: ($('filter-status') || {}).value || '',
+    risk_tier: ($('filter-risk') || {}).value || '',
+    owner_team: ($('filter-team') || {}).value || '',
+    date_since: ($('filter-date-since') || {}).value || '',
+    search: ($('global-search') || {}).value || '',
+  };
+}
+
+/**
+ * Rebuild the #saved-views-select options from localStorage.
+ */
+function renderSavedViewsDropdown() {
+  var sel = $('saved-views-select');
+  if (!sel) return;
+  // Keep currently selected value if any
+  var current = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  var views = getSavedViews();
+  views.forEach(function(view) {
+    var opt = document.createElement('option');
+    opt.value = view.name;
+    opt.textContent = view.name;
+    sel.appendChild(opt);
+  });
+  // Restore selection if still present
+  if (current) sel.value = current;
+}
+
+/**
+ * Save the current filter state under the given name.
+ * Overwrites an existing view with the same name.
+ */
+function saveView(name) {
+  var errorEl = $('save-view-error');
+  if (!name) {
+    if (errorEl) errorEl.textContent = 'Enter a view name.';
+    return;
+  }
+  if (errorEl) errorEl.textContent = '';
+
+  var views = getSavedViews();
+  var filters = getCurrentFilters();
+  var existingIdx = views.findIndex(function(v) { return v.name === name; });
+  if (existingIdx >= 0) {
+    views[existingIdx].filters = filters;
+  } else {
+    views.push({ name: name, filters: filters });
+  }
+  persistSavedViews(views);
+  renderSavedViewsDropdown();
+
+  // Select the just-saved view in the dropdown
+  var sel = $('saved-views-select');
+  if (sel) sel.value = name;
+
+  // Show delete button since a view is now selected
+  var deleteBtn = $('delete-view-btn');
+  if (deleteBtn) deleteBtn.style.display = '';
+
+  // Hide the save form and clear input
+  var form = $('save-view-form');
+  if (form) form.style.display = 'none';
+  var input = $('view-name-input');
+  if (input) input.value = '';
+}
+
+/**
+ * Restore a saved view by name — set all filters and refetch.
+ */
+function loadView(name) {
+  var views = getSavedViews();
+  var view = views.find(function(v) { return v.name === name; });
+  if (!view) return;
+
+  var f = view.filters || {};
+
+  var provSel = $('filter-provider');
+  var statSel = $('filter-status');
+  var riskSel = $('filter-risk');
+  var teamSel = $('filter-team');
+  var dateSince = $('filter-date-since');
+  var searchInput = $('global-search');
+
+  if (provSel) provSel.value = f.provider || '';
+  if (statSel) statSel.value = f.status || '';
+  if (riskSel) riskSel.value = f.risk_tier || '';
+  if (teamSel) teamSel.value = f.owner_team || '';
+  if (dateSince) dateSince.value = f.date_since || '';
+  if (searchInput) searchInput.value = f.search || '';
+
+  // Sync module-level filter state
+  _filterProvider = f.provider || '';
+  _filterStatus = f.status || '';
+  _filterRisk = f.risk_tier || '';
+  _filterTeam = f.owner_team || '';
+  _filterDateSince = f.date_since || '';
+  _filterSearch = f.search || '';
+  _assetOffset = 0;
+
+  fetchAssets();
+}
+
+/**
+ * Delete a saved view by name, reset UI to defaults.
+ */
+function deleteView(name) {
+  if (!name) return;
+  var views = getSavedViews().filter(function(v) { return v.name !== name; });
+  persistSavedViews(views);
+  renderSavedViewsDropdown();
+
+  // Hide delete button, reset dropdown to default
+  var sel = $('saved-views-select');
+  if (sel) sel.value = '';
+  var deleteBtn = $('delete-view-btn');
+  if (deleteBtn) deleteBtn.style.display = 'none';
+
+  // Reset all filters
+  _filterProvider = ''; _filterStatus = ''; _filterRisk = '';
+  _filterTeam = ''; _filterDateSince = ''; _filterSearch = '';
+  _assetOffset = 0;
+
+  var provSel = $('filter-provider');
+  var statSel = $('filter-status');
+  var riskSel = $('filter-risk');
+  var teamSel = $('filter-team');
+  var dateSince = $('filter-date-since');
+  var searchInput = $('global-search');
+
+  if (provSel) provSel.value = '';
+  if (statSel) statSel.value = '';
+  if (riskSel) riskSel.value = '';
+  if (teamSel) teamSel.value = '';
+  if (dateSince) dateSince.value = '';
+  if (searchInput) searchInput.value = '';
+
+  fetchAssets();
+}
+
+// Wire saved views event listeners once DOM is ready
+(function wireViewEvents() {
+  var saveBtn = $('save-view-btn');
+  var confirmSaveBtn = $('confirm-save-view');
+  var cancelSaveBtn = $('cancel-save-view');
+  var savedViewsSel = $('saved-views-select');
+  var deleteBtn = $('delete-view-btn');
+  var form = $('save-view-form');
+  var nameInput = $('view-name-input');
+
+  if (saveBtn && form && nameInput) {
+    saveBtn.addEventListener('click', function() {
+      form.style.display = '';
+      nameInput.focus();
+    });
+  }
+
+  if (confirmSaveBtn && nameInput) {
+    confirmSaveBtn.addEventListener('click', function() {
+      saveView(nameInput.value.trim());
+    });
+    // Allow pressing Enter in the name input to save
+    nameInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') saveView(nameInput.value.trim());
+      if (e.key === 'Escape' && form) form.style.display = 'none';
+    });
+  }
+
+  if (cancelSaveBtn && form) {
+    cancelSaveBtn.addEventListener('click', function() {
+      form.style.display = 'none';
+      var errorEl = $('save-view-error');
+      if (errorEl) errorEl.textContent = '';
+    });
+  }
+
+  if (savedViewsSel && deleteBtn) {
+    savedViewsSel.addEventListener('change', function() {
+      var val = savedViewsSel.value;
+      if (val) {
+        deleteBtn.style.display = '';
+        loadView(val);
+      } else {
+        deleteBtn.style.display = 'none';
+      }
+    });
+  }
+
+  if (deleteBtn && savedViewsSel) {
+    deleteBtn.addEventListener('click', function() {
+      deleteView(savedViewsSel.value);
+    });
+  }
+
+  // Populate from localStorage on load
+  renderSavedViewsDropdown();
+}());
+
 // -------------------------------------------------------- initial load + refresh
 
 async function refresh() {

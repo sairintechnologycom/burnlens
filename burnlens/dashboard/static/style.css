@@ -883,6 +883,119 @@ th.sortable.active-sort.desc::after { content: '\2193'; }
   margin-right: 0.5rem;
 }
 
+/* ------------------------------------------------- Saved views */
+
+.save-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+}
+
+#saved-views-select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+  min-width: 160px;
+  font-family: inherit;
+}
+#saved-views-select:hover { border-color: var(--accent); }
+
+.btn-save-view {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.btn-save-view:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-cancel-view {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-cancel-view:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.btn-delete-view {
+  background: rgba(248,113,113,0.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+  border-radius: 6px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-delete-view:hover { background: rgba(248,113,113,0.22); }
+
+.save-view-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.65rem;
+  animation: slideDown 0.15s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#view-name-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+  min-width: 180px;
+  flex: 1;
+}
+#view-name-input:focus { border-color: var(--accent); }
+#view-name-input::placeholder { color: var(--text-muted); }
+
+.save-view-error {
+  font-size: 0.72rem;
+  color: var(--red);
+  flex-shrink: 0;
+}
+
 /* ------------------------------------------------- Timeline */
 
 .timeline-panel {

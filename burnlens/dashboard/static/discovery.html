@@ -90,6 +90,23 @@
       <input type="search" id="global-search" placeholder="Search by model, provider, team, URL, or tag..." autocomplete="off" />
     </div>
 
+    <!-- Saved Views bar -->
+    <div class="save-view-bar" id="save-view-bar">
+      <select id="saved-views-select" title="Load a saved filter view">
+        <option value="">-- Saved Views --</option>
+      </select>
+      <button id="delete-view-btn" class="btn-delete-view" style="display:none;" title="Delete this saved view">Delete</button>
+      <button id="save-view-btn" class="btn-save-view" title="Save current filters as a named view">Save View</button>
+    </div>
+
+    <!-- Save View inline form (initially hidden) -->
+    <div class="save-view-form" id="save-view-form" style="display:none;">
+      <input type="text" id="view-name-input" placeholder="View name..." maxlength="60" autocomplete="off" />
+      <button id="confirm-save-view" class="btn-save-view">Save</button>
+      <button id="cancel-save-view" class="btn-cancel-view">Cancel</button>
+      <span class="save-view-error" id="save-view-error"></span>
+    </div>
+
     <!-- Filter bar -->
     <div class="asset-filters" id="asset-filters">
       <select id="filter-provider" title="Filter by provider">
