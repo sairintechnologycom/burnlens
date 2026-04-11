@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Mono, Syne } from "next/font/google";
+import { DM_Mono, Inter_Tight } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/lib/contexts/ToastContext";
 import "./globals.css";
@@ -10,8 +10,8 @@ const dmMono = DM_Mono({
   variable: "--font-mono",
 });
 
-const syne = Syne({
-  weight: ["400", "600", "700", "800"],
+const interTight = Inter_Tight({
+  weight: ["400", "500", "600", "700", "800"],
   subsets: ["latin"],
   variable: "--font-sans",
 });
@@ -28,7 +28,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="theme-dark">
-      <body className={`${dmMono.variable} ${syne.variable}`}>
+      <body className={`${dmMono.variable} ${interTight.variable}`}>
         <ThemeProvider>
           <ToastProvider>
             {children}
