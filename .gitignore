@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 .env
+.env.local
 .venv/
 venv/
 *.db

@@ -20,6 +20,31 @@ logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 500
 
+# Privacy allowlist — ONLY these fields are sent to the cloud.
+# Everything else (prompt text, response bodies, raw headers) stays local.
+SYNC_ALLOWED_FIELDS = {
+    "timestamp",
+    "provider",
+    "model",
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "cost_usd",
+    "duration_ms",
+    "status_code",
+    "system_prompt_hash",
+    "tag_feature",
+    "tag_team",
+    "tag_customer",
+}
+
+
+def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Strip a record down to only the privacy-allowed fields."""
+    return {k: v for k, v in record.items() if k in SYNC_ALLOWED_FIELDS}
+
 
 class CloudSync:
     """Background sync client that pushes cost records to the hosted backend."""
@@ -30,6 +55,7 @@ class CloudSync:
         self._running = False
         self.last_sync_at: datetime | None = None
         self.last_sync_count: int = 0
+        self._backoff_until: float = 0
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -47,26 +73,68 @@ class CloudSync:
             self._client = None
 
     async def push_batch(self, records: list[dict[str, Any]]) -> bool:
-        """POST a batch of anonymised records to the cloud endpoint.
+        """POST a batch of sanitized records to the cloud ingest endpoint.
 
         Returns True on HTTP 200, False on any error.
         Never raises — sync failure must not affect proxy.
         """
         try:
+            # Honour rate-limit backoff
+            import time
+
+            if time.monotonic() < self._backoff_until:
+                logger.debug("Cloud sync: still in backoff period, skipping")
+                return False
+
             client = await self._get_client()
-            payload = {
-                "api_key": self.config.api_key,
-                "records": records,
-            }
+            sanitized = [_sanitize_record(r) for r in records]
+            endpoint = self.config.endpoint.rstrip("/")
+            # Support both old-style full URL and new base URL
+            if endpoint.endswith("/v1/ingest"):
+                url = endpoint
+            else:
+                url = f"{endpoint}/api/v1/ingest"
+
             resp = await client.post(
-                self.config.endpoint,
-                json=payload,
-                headers={"Content-Type": "application/json"},
+                url,
+                json={"records": sanitized},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": self.config.api_key or "",
+                },
             )
+
             if resp.status_code == 200:
                 return True
+
+            if resp.status_code == 401:
+                logger.error(
+                    "Cloud sync: Invalid API key — check cloud.api_key in burnlens.yaml. "
+                    "Will not retry until key is fixed."
+                )
+                # Stop retrying — bad key won't fix itself
+                self._running = False
+                return False
+
+            if resp.status_code == 429:
+                retry_after = int(resp.headers.get("Retry-After", "60"))
+                self._backoff_until = time.monotonic() + retry_after
+                logger.warning(
+                    "Cloud sync: rate limited, backing off %ds", retry_after
+                )
+                return False
+
+            if resp.status_code >= 500:
+                logger.warning(
+                    "Cloud sync: server error HTTP %d — will retry next cycle",
+                    resp.status_code,
+                )
+                return False
+
             logger.warning(
-                "Cloud sync got HTTP %d: %s", resp.status_code, resp.text[:200]
+                "Cloud sync got HTTP %d: %s",
+                resp.status_code,
+                resp.text[:200],
             )
             return False
         except Exception:
@@ -191,6 +259,7 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
     """Convert a DB row to the cloud API payload format.
 
     Privacy: only hashes and metadata are sent — never raw prompt content.
+    The result is then run through _sanitize_record() in push_batch().
     """
     tags = row.get("tags") or "{}"
     if isinstance(tags, str):
@@ -200,15 +269,19 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
             tags = {}
 
     return {
-        "ts": row.get("timestamp"),
+        "timestamp": row.get("timestamp"),
         "provider": row.get("provider"),
         "model": row.get("model"),
         "input_tokens": row.get("input_tokens", 0),
         "output_tokens": row.get("output_tokens", 0),
+        "reasoning_tokens": row.get("reasoning_tokens", 0),
+        "cache_read_tokens": row.get("cache_read_tokens", 0),
+        "cache_write_tokens": row.get("cache_write_tokens", 0),
         "cost_usd": row.get("cost_usd", 0.0),
-        "latency_ms": row.get("duration_ms", 0),
+        "duration_ms": row.get("duration_ms", 0),
+        "status_code": row.get("status_code"),
+        "system_prompt_hash": row.get("system_prompt_hash"),
         "tag_feature": tags.get("feature"),
         "tag_team": tags.get("team"),
         "tag_customer": tags.get("customer"),
-        "system_prompt_hash": row.get("system_prompt_hash"),
     }
