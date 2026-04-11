@@ -546,6 +546,161 @@ async def get_daily_cost(
     return [dict(row) for row in rows]
 
 
+async def get_new_shadow_events_since(
+    db_path: str,
+    since_iso: str,
+) -> list[DiscoveryEvent]:
+    """Return new_asset_detected DiscoveryEvents detected at or after since_iso.
+
+    Args:
+        db_path:  Path to the SQLite database.
+        since_iso: ISO datetime string (e.g. '2026-04-01T00:00:00'). Only events
+                   detected at or after this timestamp are returned.
+
+    Returns:
+        List of DiscoveryEvent with event_type='new_asset_detected', ordered by
+        detected_at DESC.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT * FROM discovery_events
+            WHERE event_type = 'new_asset_detected' AND detected_at >= ?
+            ORDER BY detected_at DESC
+            """,
+            (since_iso,),
+        )
+        rows = await cursor.fetchall()
+    return [_row_to_event(row) for row in rows]
+
+
+async def get_new_provider_events_since(
+    db_path: str,
+    since_iso: str,
+) -> list[DiscoveryEvent]:
+    """Return provider_changed DiscoveryEvents detected at or after since_iso.
+
+    Args:
+        db_path:   Path to the SQLite database.
+        since_iso: ISO datetime string. Only events detected at or after this
+                   timestamp are returned.
+
+    Returns:
+        List of DiscoveryEvent with event_type='provider_changed', ordered by
+        detected_at DESC.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT * FROM discovery_events
+            WHERE event_type = 'provider_changed' AND detected_at >= ?
+            ORDER BY detected_at DESC
+            """,
+            (since_iso,),
+        )
+        rows = await cursor.fetchall()
+    return [_row_to_event(row) for row in rows]
+
+
+async def get_model_change_events_since(
+    db_path: str,
+    since_iso: str,
+) -> list[DiscoveryEvent]:
+    """Return model_changed DiscoveryEvents detected at or after since_iso.
+
+    Args:
+        db_path:   Path to the SQLite database.
+        since_iso: ISO datetime string. Only events detected at or after this
+                   timestamp are returned.
+
+    Returns:
+        List of DiscoveryEvent with event_type='model_changed', ordered by
+        detected_at DESC.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT * FROM discovery_events
+            WHERE event_type = 'model_changed' AND detected_at >= ?
+            ORDER BY detected_at DESC
+            """,
+            (since_iso,),
+        )
+        rows = await cursor.fetchall()
+    return [_row_to_event(row) for row in rows]
+
+
+async def get_inactive_assets(
+    db_path: str,
+    inactive_days: int = 30,
+) -> list[AiAsset]:
+    """Return AI assets that have not been active for at least inactive_days.
+
+    Excludes assets with status 'deprecated' or 'inactive' (already known to be
+    dormant — they do not need new alerts).
+
+    Args:
+        db_path:       Path to the SQLite database.
+        inactive_days: Number of days of inactivity required. Defaults to 30.
+
+    Returns:
+        List of AiAsset ordered by last_active_at ASC (oldest first).
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""
+            SELECT * FROM ai_assets
+            WHERE last_active_at < date('now', '-{inactive_days} days')
+              AND status NOT IN ('deprecated', 'inactive')
+            ORDER BY last_active_at ASC
+            """,
+        )
+        rows = await cursor.fetchall()
+    return [_row_to_asset(row) for row in rows]
+
+
+async def get_asset_spend_history(
+    db_path: str,
+    asset_id: int,
+    days: int = 30,
+) -> float:
+    """Return the total spend (USD) for an asset's model+provider over the last N days.
+
+    Fetches the asset's model_name and provider, then sums cost_usd from the
+    requests table where model and provider match within the given period.
+
+    Args:
+        db_path:  Path to the SQLite database.
+        asset_id: Primary key of the AiAsset to look up.
+        days:     Number of days to include in the spend window. Defaults to 30.
+
+    Returns:
+        Total spend in USD as a float. Returns 0.0 if the asset is not found or
+        has no matching requests within the period.
+    """
+    asset = await get_asset_by_id(db_path, asset_id)
+    if asset is None:
+        return 0.0
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            f"""
+            SELECT COALESCE(SUM(cost_usd), 0.0)
+            FROM requests
+            WHERE model = ? AND provider = ?
+              AND timestamp >= date('now', '-{days} days')
+            """,
+            (asset.model_name, asset.provider),
+        )
+        row = await cursor.fetchone()
+
+    return float(row[0]) if row else 0.0
+
+
 async def get_requests_for_analysis(
     db_path: str,
     since: str | None = None,
