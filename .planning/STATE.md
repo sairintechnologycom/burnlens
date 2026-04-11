@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 05-discovery-dashboard/05-01-PLAN.md
-last_updated: "2026-04-11T02:30:38.758Z"
+stopped_at: Completed 05-discovery-dashboard/05-02-PLAN.md
+last_updated: "2026-04-11T02:37:32.400Z"
 last_activity: 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 100
 ---
 
@@ -54,6 +54,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | Phase 04-alert-system P02 | 3 min | 2 tasks | 3 files |
 | Phase 04-alert-system P03 | 3 min | 2 tasks | 4 files |
 | Phase 05-discovery-dashboard P01 | 5 | 2 tasks | 5 files |
+| Phase 05-discovery-dashboard P02 | 4 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,10 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [05-01] Client-side sort after API fetch for asset table — /api/v1/assets has no sort_by param; sort applied to current page data after fetch
 - [05-01] Monthly spend KPI shows page total from visible assets — avoids high-limit secondary fetch, noted in sub-text
 - [05-01] Unassigned KPI proxied via by_risk_tier.unclassified — true null-team count not in summary endpoint
+- [05-02] search_query uses OR LIKE across 5 columns (model_name, provider, owner_team, endpoint_url, tags) — JSON text tags column supports LIKE matching on serialized values
+- [05-02] Event delegation on shadow panel click handler — avoids attaching listeners to dynamically rendered shadow cards
+- [05-02] 300ms debounce on global-search input — prevents excessive API calls while typing
+- [05-02] Fade-out CSS transition (300ms) for approve action — visual feedback before DOM removal
 
 ### Architecture Notes
 
@@ -128,5 +133,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 05-discovery-dashboard/05-01-PLAN.md
+**Stopped at:** Completed 05-discovery-dashboard/05-02-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.
