@@ -85,6 +85,11 @@
       <span class="chart-note" id="asset-count-note"></span>
     </div>
 
+    <!-- Global search bar -->
+    <div class="global-search-wrap">
+      <input type="search" id="global-search" placeholder="Search by model, provider, team, URL, or tag..." autocomplete="off" />
+    </div>
+
     <!-- Filter bar -->
     <div class="asset-filters" id="asset-filters">
       <select id="filter-provider" title="Filter by provider">
@@ -128,6 +133,29 @@
       <button id="btn-prev" class="pagination-btn" disabled>Previous</button>
       <span class="pagination-info" id="pagination-info">—</span>
       <button id="btn-next" class="pagination-btn" disabled>Next</button>
+    </div>
+  </section>
+
+  <!-- Shadow AI Alert Panel -->
+  <section class="table-card" id="shadow-panel-section">
+    <div class="chart-header">
+      <h2>Shadow AI Alerts</h2>
+      <span class="chart-note">
+        <span id="shadow-panel-count" class="shadow-count-badge">0</span> assets need review
+      </span>
+    </div>
+    <div class="shadow-panel" id="shadow-panel">
+      <div class="loading-text">Loading…</div>
+    </div>
+  </section>
+
+  <!-- Discovery Event Timeline -->
+  <section class="table-card" id="timeline-section">
+    <div class="chart-header">
+      <h2>Discovery Timeline</h2>
+    </div>
+    <div class="timeline-panel" id="timeline-panel">
+      <div class="loading-text">Loading…</div>
     </div>
   </section>
 

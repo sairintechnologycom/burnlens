@@ -29,6 +29,9 @@ let _filterStatus = '';
 let _filterRisk = '';
 let _filterTeam = '';
 let _filterDateSince = '';
+let _filterSearch = '';
+
+let _searchDebounceTimer = null;
 
 // -------------------------------------------------------- helpers
 
@@ -58,6 +61,21 @@ function fmtDate(isoStr) {
   const d = new Date(hasTz ? isoStr : isoStr + 'Z');
   if (isNaN(d.getTime())) return '\u2014';
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function fmtRelativeTime(isoStr) {
+  if (!isoStr) return '\u2014';
+  const hasTz = /Z$|[+-]\d{2}:\d{2}$/.test(isoStr);
+  const d = new Date(hasTz ? isoStr : isoStr + 'Z');
+  if (isNaN(d.getTime())) return '\u2014';
+  const diffMs = Date.now() - d.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return diffMin + ' minute' + (diffMin === 1 ? '' : 's') + ' ago';
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return diffHr + ' hour' + (diffHr === 1 ? '' : 's') + ' ago';
+  return fmtDate(isoStr);
 }
 
 function makeColors(n) {
@@ -269,6 +287,7 @@ async function fetchAssets() {
   if (_filterRisk) params.set('risk_tier', _filterRisk);
   if (_filterTeam) params.set('owner_team', _filterTeam);
   if (_filterDateSince) params.set('date_since', _filterDateSince);
+  if (_filterSearch) params.set('search', _filterSearch);
   params.set('limit', String(_assetLimit));
   params.set('offset', String(_assetOffset));
 
@@ -439,6 +458,306 @@ function updatePagination() {
   if (btnNext) btnNext.disabled = (_assetOffset + _assetLimit) >= _assetTotal;
 }
 
+// -------------------------------------------------------- shadow panel
+
+async function fetchShadowAssets() {
+  var panel = $('shadow-panel');
+  if (!panel) return;
+
+  var data;
+  try {
+    data = await apiFetch('/assets?status=shadow&limit=100');
+  } catch (err) {
+    console.error('fetchShadowAssets failed:', err);
+    panel.replaceChildren(makeEmptyStateDiv('Error loading shadow assets.'));
+    return;
+  }
+
+  var items = data.items || [];
+  var countBadge = $('shadow-panel-count');
+  if (countBadge) countBadge.textContent = String(items.length);
+
+  if (!items.length) {
+    panel.innerHTML = '<div class="shadow-empty"><span class="shadow-empty-icon">&#10003;</span> No shadow AI detected</div>';
+    return;
+  }
+
+  panel.replaceChildren();
+  items.forEach(function(asset) {
+    var card = document.createElement('div');
+    card.className = 'shadow-card';
+    card.setAttribute('data-asset-id', String(asset.id));
+
+    var modelEl = document.createElement('div');
+    modelEl.className = 'model-name';
+    modelEl.textContent = asset.model_name || '\u2014';
+
+    var metaEl = document.createElement('div');
+    metaEl.className = 'shadow-meta';
+
+    var providerSpan = document.createElement('span');
+    providerSpan.className = 'shadow-provider';
+    providerSpan.textContent = asset.provider || '';
+
+    var riskBadge = document.createElement('span');
+    riskBadge.className = 'risk-badge risk-' + (asset.risk_tier || 'unknown');
+    riskBadge.textContent = asset.risk_tier || 'unknown';
+
+    var endpointSpan = document.createElement('div');
+    endpointSpan.className = 'shadow-endpoint';
+    endpointSpan.textContent = asset.endpoint_url || '';
+
+    var seenSpan = document.createElement('div');
+    seenSpan.className = 'shadow-seen';
+    seenSpan.textContent = 'First seen: ' + fmtDate(asset.first_seen_at);
+
+    metaEl.appendChild(providerSpan);
+    metaEl.appendChild(riskBadge);
+
+    var actionsEl = document.createElement('div');
+    actionsEl.className = 'shadow-actions';
+
+    var approveBtn = document.createElement('button');
+    approveBtn.className = 'btn-approve';
+    approveBtn.setAttribute('data-asset-id', String(asset.id));
+    approveBtn.textContent = 'Approve';
+
+    var assignBtn = document.createElement('button');
+    assignBtn.className = 'btn-assign';
+    assignBtn.setAttribute('data-asset-id', String(asset.id));
+    assignBtn.textContent = 'Assign Team';
+
+    var msgEl = document.createElement('div');
+    msgEl.className = 'shadow-msg';
+
+    actionsEl.appendChild(approveBtn);
+    actionsEl.appendChild(assignBtn);
+    actionsEl.appendChild(msgEl);
+
+    card.appendChild(modelEl);
+    card.appendChild(metaEl);
+    card.appendChild(endpointSpan);
+    card.appendChild(seenSpan);
+    card.appendChild(actionsEl);
+
+    panel.appendChild(card);
+  });
+}
+
+async function handleApprove(assetId) {
+  var card = document.querySelector('.shadow-card[data-asset-id="' + assetId + '"]');
+  var msgEl = card ? card.querySelector('.shadow-msg') : null;
+
+  try {
+    var resp = await fetch(API_V1 + '/assets/' + assetId + '/approve', { method: 'POST' });
+    if (resp.status === 409) {
+      if (msgEl) msgEl.textContent = 'Already approved';
+      return;
+    }
+    if (!resp.ok) {
+      if (msgEl) msgEl.textContent = 'Error: ' + resp.status;
+      return;
+    }
+    // Success: fade out and remove the card
+    if (card) {
+      card.classList.add('fade-out');
+      setTimeout(function() {
+        if (card.parentNode) card.parentNode.removeChild(card);
+        // Update count badge
+        var panel = $('shadow-panel');
+        var remaining = panel ? panel.querySelectorAll('.shadow-card').length : 0;
+        var countBadge = $('shadow-panel-count');
+        if (countBadge) countBadge.textContent = String(remaining);
+        if (remaining === 0) {
+          panel.innerHTML = '<div class="shadow-empty"><span class="shadow-empty-icon">&#10003;</span> No shadow AI detected</div>';
+        }
+      }, 300);
+    }
+    // Refresh summary and asset table
+    fetchAssetSummary();
+    fetchAssets();
+  } catch (err) {
+    if (msgEl) msgEl.textContent = 'Request failed';
+  }
+}
+
+function handleAssignTeam(assetId) {
+  var card = document.querySelector('.shadow-card[data-asset-id="' + assetId + '"]');
+  if (!card) return;
+
+  var actionsEl = card.querySelector('.shadow-actions');
+  var assignBtn = card.querySelector('.btn-assign');
+  var msgEl = card.querySelector('.shadow-msg');
+
+  // Replace button with inline input
+  var inputEl = document.createElement('input');
+  inputEl.type = 'text';
+  inputEl.className = 'inline-input';
+  inputEl.placeholder = 'Team name';
+
+  var saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-save-team';
+  saveBtn.textContent = 'Save';
+
+  assignBtn.replaceWith(inputEl);
+
+  var existingSave = actionsEl.querySelector('.btn-save-team');
+  if (!existingSave) actionsEl.insertBefore(saveBtn, msgEl);
+
+  saveBtn.addEventListener('click', async function() {
+    var teamName = inputEl.value.trim();
+    if (!teamName) {
+      if (msgEl) msgEl.textContent = 'Enter a team name';
+      return;
+    }
+
+    try {
+      var resp = await fetch(API_V1 + '/assets/' + assetId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_team: teamName }),
+      });
+
+      if (!resp.ok) {
+        if (msgEl) msgEl.textContent = 'Error: ' + resp.status;
+        return;
+      }
+
+      // Update card to show team
+      inputEl.replaceWith(assignBtn);
+      saveBtn.remove();
+      if (msgEl) {
+        msgEl.textContent = 'Team: ' + teamName;
+        msgEl.className = 'shadow-msg shadow-msg-ok';
+      }
+    } catch (err) {
+      if (msgEl) msgEl.textContent = 'Request failed';
+    }
+  });
+}
+
+// Shadow panel event delegation
+var shadowPanelEl = $('shadow-panel');
+if (shadowPanelEl) {
+  shadowPanelEl.addEventListener('click', function(e) {
+    var target = e.target;
+    if (target.classList.contains('btn-approve')) {
+      handleApprove(target.getAttribute('data-asset-id'));
+    } else if (target.classList.contains('btn-assign')) {
+      handleAssignTeam(target.getAttribute('data-asset-id'));
+    }
+  });
+}
+
+// -------------------------------------------------------- discovery timeline
+
+var EVENT_TYPE_CONFIG = {
+  new_asset_detected: { color: '#38bdf8', icon: '\u25cf', label: 'New Asset Detected' },
+  model_changed:      { color: '#fb923c', icon: '\u21c4', label: 'Model Changed' },
+  provider_changed:   { color: '#a78bfa', icon: '\u21c4', label: 'Provider Changed' },
+  asset_inactive:     { color: '#64748b', icon: '\u25cb', label: 'Asset Inactive' },
+  key_rotated:        { color: '#f87171', icon: '\u27f3', label: 'Key Rotated' },
+};
+
+function getEventConfig(eventType) {
+  return EVENT_TYPE_CONFIG[eventType] || { color: '#94a3b8', icon: '\u25cf', label: eventType };
+}
+
+function buildDetailsText(details) {
+  if (!details) return '';
+  var parts = [];
+  if (details.model_name) parts.push('Model: ' + details.model_name);
+  if (details.provider) parts.push('Provider: ' + details.provider);
+  if (details.old_status && details.new_status) {
+    parts.push(details.old_status + ' \u2192 ' + details.new_status);
+  } else if (details.change) {
+    parts.push(details.change);
+  }
+  if (!parts.length) {
+    // Generic: show first 2 key-value pairs
+    var keys = Object.keys(details).slice(0, 2);
+    keys.forEach(function(k) { parts.push(k + ': ' + details[k]); });
+  }
+  return parts.join(' \u00b7 ');
+}
+
+async function fetchTimeline() {
+  var panel = $('timeline-panel');
+  if (!panel) return;
+
+  var data;
+  try {
+    data = await apiFetch('/discovery/events?limit=30');
+  } catch (err) {
+    console.error('fetchTimeline failed:', err);
+    panel.replaceChildren(makeEmptyStateDiv('Error loading timeline.'));
+    return;
+  }
+
+  var items = (data.items || []);
+
+  if (!items.length) {
+    panel.replaceChildren(makeEmptyStateDiv('No discovery events yet.'));
+    return;
+  }
+
+  panel.replaceChildren();
+  items.forEach(function(event) {
+    var cfg = getEventConfig(event.event_type);
+
+    var eventEl = document.createElement('div');
+    eventEl.className = 'timeline-event';
+
+    var iconEl = document.createElement('div');
+    iconEl.className = 'event-icon';
+    iconEl.style.color = cfg.color;
+    iconEl.textContent = cfg.icon;
+
+    var bodyEl = document.createElement('div');
+    bodyEl.className = 'event-body';
+
+    var typeEl = document.createElement('div');
+    typeEl.className = 'event-type-label';
+    typeEl.style.color = cfg.color;
+    typeEl.textContent = cfg.label;
+
+    var detailsEl = document.createElement('div');
+    detailsEl.className = 'event-details';
+    detailsEl.textContent = buildDetailsText(event.details);
+
+    var timeEl = document.createElement('div');
+    timeEl.className = 'event-time';
+    timeEl.textContent = fmtRelativeTime(event.detected_at);
+
+    bodyEl.appendChild(typeEl);
+    if (detailsEl.textContent) bodyEl.appendChild(detailsEl);
+    bodyEl.appendChild(timeEl);
+
+    eventEl.appendChild(iconEl);
+    eventEl.appendChild(bodyEl);
+    panel.appendChild(eventEl);
+  });
+}
+
+// -------------------------------------------------------- global search
+
+function handleSearch() {
+  var input = $('global-search');
+  if (!input) return;
+
+  input.addEventListener('input', function() {
+    clearTimeout(_searchDebounceTimer);
+    _searchDebounceTimer = setTimeout(function() {
+      _filterSearch = input.value.trim();
+      _assetOffset = 0;
+      fetchAssets();
+    }, 300);
+  });
+}
+
+// Initialize search listener
+handleSearch();
+
 // -------------------------------------------------------- sort click handlers
 
 document.querySelectorAll('#asset-table th.sortable').forEach(function(th) {
@@ -513,6 +832,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 async function refresh() {
   await fetchAssetSummary();
   await fetchAssets();
+  await fetchShadowAssets();
+  await fetchTimeline();
 }
 
 refresh();
