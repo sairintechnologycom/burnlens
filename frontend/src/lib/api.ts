@@ -25,9 +25,13 @@ export async function apiFetch(endpoint: string, key: string, options: RequestIn
   const url = `${BASE_URL}${endpoint}`;
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
-    "X-API-Key": key,
     "Content-Type": "application/json",
   };
+
+  // Only send API key header for cloud mode (non-local keys)
+  if (key && key !== "local") {
+    headers["X-API-Key"] = key;
+  }
 
   const resp = await fetch(url, { ...options, headers });
 
