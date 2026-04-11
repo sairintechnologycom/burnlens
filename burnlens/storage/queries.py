@@ -78,6 +78,7 @@ async def get_assets(
     owner_team: str | None = None,
     risk_tier: str | None = None,
     date_since: str | None = None,
+    search_query: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[AiAsset]:
@@ -86,6 +87,8 @@ async def get_assets(
     Filters are applied only when the corresponding argument is not None.
     Supports pagination via limit and offset parameters.
     date_since filters on first_seen_at >= ? (ISO date string, e.g. '2026-01-01').
+    search_query performs an OR LIKE search across model_name, provider, owner_team,
+    endpoint_url, and tags (stored as JSON text).
     """
     where_clauses: list[str] = []
     params: list[Any] = []
@@ -105,6 +108,12 @@ async def get_assets(
     if date_since is not None:
         where_clauses.append("first_seen_at >= ?")
         params.append(date_since)
+    if search_query is not None:
+        search_pattern = f"%{search_query}%"
+        where_clauses.append(
+            "(model_name LIKE ? OR provider LIKE ? OR owner_team LIKE ? OR endpoint_url LIKE ? OR tags LIKE ?)"
+        )
+        params.extend([search_pattern] * 5)
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     params.extend([limit, offset])
@@ -132,11 +141,14 @@ async def get_assets_count(
     owner_team: str | None = None,
     risk_tier: str | None = None,
     date_since: str | None = None,
+    search_query: str | None = None,
 ) -> int:
     """Return the total count of AiAsset records matching the given filters.
 
     Accepts the same filter parameters as get_assets() (minus limit/offset).
     Used to power pagination total_count in API responses.
+    search_query performs an OR LIKE search across model_name, provider, owner_team,
+    endpoint_url, and tags (stored as JSON text).
     """
     where_clauses: list[str] = []
     params: list[Any] = []
@@ -156,6 +168,12 @@ async def get_assets_count(
     if date_since is not None:
         where_clauses.append("first_seen_at >= ?")
         params.append(date_since)
+    if search_query is not None:
+        search_pattern = f"%{search_query}%"
+        where_clauses.append(
+            "(model_name LIKE ? OR provider LIKE ? OR owner_team LIKE ? OR endpoint_url LIKE ? OR tags LIKE ?)"
+        )
+        params.extend([search_pattern] * 5)
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 

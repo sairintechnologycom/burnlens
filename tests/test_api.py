@@ -623,3 +623,173 @@ class TestAssetAPI:
         assert data["by_status"]["active"] == 1
         assert data["by_risk_tier"]["high"] == 1
         assert data["by_risk_tier"]["low"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 Plan 02: TestAssetSearch — search_query parameter on get_assets and API
+# ---------------------------------------------------------------------------
+
+
+async def _insert_search_test_assets(db_path: str) -> list[int]:
+    """Insert assets with varied model names, providers, teams, endpoints, and tags."""
+    now = datetime.utcnow()
+
+    assets = [
+        AiAsset(
+            provider="openai",
+            model_name="gpt-4o",
+            endpoint_url="https://api.openai.com/v1/chat/completions",
+            status="approved",
+            risk_tier="high",
+            owner_team="ml-team",
+            first_seen_at=now,
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+            tags={"env": "prod"},
+        ),
+        AiAsset(
+            provider="anthropic",
+            model_name="claude-3-5-sonnet",
+            endpoint_url="https://api.anthropic.com/v1/messages",
+            status="approved",
+            risk_tier="low",
+            owner_team="platform-team",
+            first_seen_at=now,
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+            tags={"env": "staging"},
+        ),
+        AiAsset(
+            provider="google",
+            model_name="gemini-pro",
+            endpoint_url="https://generativelanguage.googleapis.com/v1beta/models",
+            status="shadow",
+            risk_tier="unclassified",
+            owner_team=None,
+            first_seen_at=now,
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+            tags={"env": "dev"},
+        ),
+        AiAsset(
+            provider="openai",
+            model_name="gpt-3.5-turbo",
+            endpoint_url="https://api.openai.com/v1/completions",
+            status="shadow",
+            risk_tier="medium",
+            owner_team="data-team",
+            first_seen_at=now,
+            last_active_at=now,
+            created_at=now,
+            updated_at=now,
+            tags={"env": "prod"},
+        ),
+    ]
+
+    ids: list[int] = []
+    for a in assets:
+        row_id = await insert_asset(db_path, a)
+        ids.append(row_id)
+    return ids
+
+
+class TestAssetSearch:
+    """Tests for search_query parameter on get_assets, get_assets_count, and GET /api/v1/assets?search=."""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def setup(self, tmp_path):
+        """Create a fresh DB and mount the asset router on a test FastAPI app."""
+        from fastapi import FastAPI
+        from burnlens.api.assets import router as assets_router
+
+        self.db_path = str(tmp_path / "test_search.db")
+        await init_db(self.db_path)
+        await _insert_search_test_assets(self.db_path)
+
+        app = FastAPI()
+        app.state.db_path = self.db_path
+        app.include_router(assets_router, prefix="/api/v1/assets")
+
+        self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+        yield
+        await self.client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_search_by_model_name(self):
+        """Test 1: get_assets(search_query='gpt') returns assets where model_name LIKE '%gpt%'."""
+        from burnlens.storage.queries import get_assets
+
+        results = await get_assets(self.db_path, search_query="gpt")
+        assert len(results) == 2, f"Expected 2 gpt assets, got {len(results)}"
+        for r in results:
+            assert "gpt" in r.model_name.lower()
+
+    @pytest.mark.asyncio
+    async def test_search_by_provider(self):
+        """Test 2: get_assets(search_query='openai') returns assets where provider LIKE '%openai%'."""
+        from burnlens.storage.queries import get_assets
+
+        results = await get_assets(self.db_path, search_query="openai")
+        assert len(results) == 2, f"Expected 2 openai assets, got {len(results)}"
+        for r in results:
+            assert "openai" in r.provider.lower() or "openai" in r.endpoint_url.lower()
+
+    @pytest.mark.asyncio
+    async def test_search_by_owner_team(self):
+        """Test 3: get_assets(search_query='ml-team') returns assets where owner_team LIKE '%ml-team%'."""
+        from burnlens.storage.queries import get_assets
+
+        results = await get_assets(self.db_path, search_query="ml-team")
+        assert len(results) == 1
+        assert results[0].owner_team == "ml-team"
+
+    @pytest.mark.asyncio
+    async def test_search_by_endpoint_url(self):
+        """Test 4: get_assets(search_query='api.openai.com') returns assets where endpoint_url LIKE '%api.openai.com%'."""
+        from burnlens.storage.queries import get_assets
+
+        results = await get_assets(self.db_path, search_query="api.openai.com")
+        assert len(results) == 2, f"Expected 2 openai endpoint assets, got {len(results)}"
+        for r in results:
+            assert "api.openai.com" in r.endpoint_url
+
+    @pytest.mark.asyncio
+    async def test_search_by_tag_value(self):
+        """Test 5: get_assets(search_query='env:prod') returns assets where tags LIKE '%env:prod%' (JSON serialized)."""
+        from burnlens.storage.queries import get_assets
+
+        # Tags are stored as JSON: {"env": "prod"} → search for 'prod' to find them
+        results = await get_assets(self.db_path, search_query="prod")
+        assert len(results) == 2, f"Expected 2 assets with env:prod tag, got {len(results)}"
+
+    @pytest.mark.asyncio
+    async def test_get_assets_count_with_search(self):
+        """Test 6: get_assets_count(search_query='gpt') returns correct count matching search."""
+        from burnlens.storage.queries import get_assets_count
+
+        count = await get_assets_count(self.db_path, search_query="gpt")
+        assert count == 2
+
+    @pytest.mark.asyncio
+    async def test_api_search_param(self):
+        """Test 7: GET /api/v1/assets?search=gpt returns filtered results."""
+        resp = await self.client.get("/api/v1/assets?search=gpt")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 2
+        assert len(data["items"]) == 2
+        for item in data["items"]:
+            assert "gpt" in item["model_name"].lower()
+
+    @pytest.mark.asyncio
+    async def test_search_combines_with_provider_filter(self):
+        """Test 8: search combines with other filters: get_assets(provider='openai', search_query='gpt-4') narrows correctly."""
+        from burnlens.storage.queries import get_assets
+
+        results = await get_assets(self.db_path, provider="openai", search_query="gpt-4")
+        assert len(results) == 1
+        assert results[0].model_name == "gpt-4o"
+        assert results[0].provider == "openai"

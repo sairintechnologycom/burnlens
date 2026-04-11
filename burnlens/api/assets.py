@@ -65,6 +65,7 @@ async def list_assets(
     owner_team: str | None = None,
     risk_tier: str | None = None,
     date_since: str | None = None,
+    search: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> AssetListResponse:
@@ -72,7 +73,8 @@ async def list_assets(
 
     Filters are applied only when the corresponding query parameter is provided.
     Supports pagination via limit and offset. date_since is an ISO date string
-    (e.g. '2026-01-01') that filters on first_seen_at.
+    (e.g. '2026-01-01') that filters on first_seen_at. search performs an OR
+    LIKE search across model_name, provider, owner_team, endpoint_url, and tags.
     """
     db_path: str = request.app.state.db_path
 
@@ -83,6 +85,7 @@ async def list_assets(
         owner_team=owner_team,
         risk_tier=risk_tier,
         date_since=date_since,
+        search_query=search,
         limit=limit,
         offset=offset,
     )
@@ -93,6 +96,7 @@ async def list_assets(
         owner_team=owner_team,
         risk_tier=risk_tier,
         date_since=date_since,
+        search_query=search,
     )
 
     return AssetListResponse(
