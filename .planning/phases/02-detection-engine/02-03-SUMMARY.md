@@ -29,6 +29,7 @@ metrics:
   tasks_completed: 2
   files_created: 1
   files_modified: 4
+requirements-completed: [DETC-06, DETC-08]
 ---
 
 # Phase 02 Plan 03: Scheduler Wiring and Proxy Asset Upsert Summary

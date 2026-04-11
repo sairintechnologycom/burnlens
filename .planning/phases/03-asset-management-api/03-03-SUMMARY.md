@@ -30,6 +30,7 @@ metrics:
   completed: "2026-04-10"
   tasks_completed: 2
   files_changed: 6
+requirements-completed: [API-07, API-08, API-09]
 ---
 
 # Phase 03 Plan 03: Discovery Events and Provider Signatures Routers Summary

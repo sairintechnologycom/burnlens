@@ -30,6 +30,7 @@ metrics:
   completed: "2026-04-11"
   tasks: 2
   files: 5
+requirements-completed: [DASH-04, DASH-05, DASH-07]
 ---
 
 # Phase 5 Plan 02: Shadow Panel, Timeline, and Global Search Summary

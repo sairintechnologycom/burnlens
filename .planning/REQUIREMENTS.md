@@ -125,8 +125,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-08 | Phase 5 | Complete |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 33 total
+- Mapped to phases: 33
 - Unmapped: 0
 
 ---

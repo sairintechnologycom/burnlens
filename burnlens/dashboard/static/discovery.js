@@ -569,7 +569,15 @@ async function handleApprove(assetId) {
         var countBadge = $('shadow-panel-count');
         if (countBadge) countBadge.textContent = String(remaining);
         if (remaining === 0) {
-          panel.innerHTML = '<div class="shadow-empty"><span class="shadow-empty-icon">&#10003;</span> No shadow AI detected</div>';
+          while (panel.firstChild) panel.removeChild(panel.firstChild);
+          var emptyDiv = document.createElement('div');
+          emptyDiv.className = 'shadow-empty';
+          var iconSpan = document.createElement('span');
+          iconSpan.className = 'shadow-empty-icon';
+          iconSpan.textContent = '\u2713';
+          emptyDiv.appendChild(iconSpan);
+          emptyDiv.appendChild(document.createTextNode(' No shadow AI detected'));
+          panel.appendChild(emptyDiv);
         }
       }, 300);
     }
