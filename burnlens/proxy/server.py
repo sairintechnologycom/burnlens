@@ -66,12 +66,21 @@ def get_app(config: BurnLensConfig) -> FastAPI:
                 logger.warning("Could not start cloud sync", exc_info=True)
 
         # Start detection scheduler (hourly, first run deferred)
-        from burnlens.detection.scheduler import get_scheduler, register_detection_jobs
+        from burnlens.alerts.discovery import DiscoveryAlertEngine
+        from burnlens.detection.scheduler import (
+            get_scheduler,
+            register_alert_jobs,
+            register_detection_jobs,
+        )
+
+        _discovery_alert_engine = DiscoveryAlertEngine(config, config.db_path)
 
         _scheduler = get_scheduler()
         register_detection_jobs(_scheduler, config.db_path, config)
+        register_alert_jobs(_scheduler, config.db_path, config, _discovery_alert_engine)
         _scheduler.start()
         logger.info("Detection scheduler started (hourly)")
+        logger.info("Alert jobs registered (hourly discovery, daily digest, weekly digest)")
 
         logger.info("BurnLens proxy ready on http://%s:%d", config.host, config.port)
         yield

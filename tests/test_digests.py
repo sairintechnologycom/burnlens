@@ -9,6 +9,9 @@ import pytest
 import pytest_asyncio
 
 from burnlens.alerts.digests import send_daily_digest, send_weekly_digest
+from burnlens.alerts.discovery import DiscoveryAlertEngine
+from burnlens.config import BurnLensConfig
+from burnlens.detection.scheduler import get_scheduler, register_alert_jobs, reset_scheduler
 
 
 # ---------------------------------------------------------------------------
@@ -229,3 +232,27 @@ async def test_weekly_digest_sends_email_with_inactive_assets(tmp_path):
     html = call_kwargs.kwargs.get("body_html") or call_kwargs.args[2]
     assert "<table" in html.lower()
     assert "claude-3-sonnet" in html
+
+
+# ---------------------------------------------------------------------------
+# register_alert_jobs integration test
+# ---------------------------------------------------------------------------
+
+
+def test_register_alert_jobs_adds_three_jobs():
+    """register_alert_jobs registers exactly 3 jobs with the expected IDs."""
+    reset_scheduler()
+    scheduler = get_scheduler()
+    config = BurnLensConfig()
+    engine = DiscoveryAlertEngine(config, ":memory:")
+
+    register_alert_jobs(scheduler, ":memory:", config, engine)
+
+    job_ids = {job.id for job in scheduler.get_jobs()}
+    assert "discovery_alerts_hourly" in job_ids
+    assert "daily_digest" in job_ids
+    assert "weekly_digest" in job_ids
+    assert len(job_ids) == 3  # only alert jobs registered (no detection_hourly)
+
+    # Cleanup
+    reset_scheduler()
