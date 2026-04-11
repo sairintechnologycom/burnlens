@@ -16,16 +16,21 @@ export class PaymentRequiredError extends Error {
   }
 }
 
-export async function apiFetch(endpoint: string, apiKey: string, options: RequestInit = {}) {
+export function apiKey(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("burnlens_api_key");
+}
+
+export async function apiFetch(endpoint: string, key: string, options: RequestInit = {}) {
   const url = `${BASE_URL}${endpoint}`;
-  const headers = {
-    ...options.headers,
-    "X-API-Key": apiKey,
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+    "X-API-Key": key,
     "Content-Type": "application/json",
   };
 
   const resp = await fetch(url, { ...options, headers });
-  
+
   if (resp.status === 401) {
     throw new AuthError();
   }
@@ -41,4 +46,3 @@ export async function apiFetch(endpoint: string, apiKey: string, options: Reques
 
   return resp.json();
 }
-
