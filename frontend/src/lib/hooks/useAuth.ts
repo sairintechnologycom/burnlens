@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export interface AuthSession {
@@ -10,7 +10,7 @@ export interface AuthSession {
   isLocal: boolean;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
 
 function isLocalBackend(): boolean {
   try {
@@ -61,7 +61,7 @@ export function useAuth() {
     setLoading(false);
   }, [router]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("burnlens_api_key");
     localStorage.removeItem("burnlens_org_id");
     localStorage.removeItem("burnlens_org_name");
@@ -72,7 +72,7 @@ export function useAuth() {
     } else {
       router.push("/setup");
     }
-  };
+  }, [router]);
 
   return { session, loading, logout };
 }

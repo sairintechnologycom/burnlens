@@ -105,6 +105,16 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
     app = FastAPI(title="BurnLens", version="0.1.0", lifespan=lifespan)
 
+    # ------------------------------------------------------------------ CORS
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # ------------------------------------------------------------------ health
 
     @app.get("/health")
@@ -197,6 +207,16 @@ def get_app(config: BurnLensConfig) -> FastAPI:
         app.include_router(dashboard_router, prefix="/api")
     except Exception as exc:
         logger.warning("Could not load dashboard API routes: %s", exc)
+
+    # ----------------------------------------- cloud-compatible API (for Next.js frontend)
+
+    try:
+        from burnlens.dashboard.cloud_compat import usage_router, requests_router
+
+        app.include_router(usage_router, prefix="/api/v1/usage")
+        app.include_router(requests_router, prefix="/api/v1")
+    except Exception as exc:
+        logger.warning("Could not load cloud-compat API routes: %s", exc)
 
     # --------------------------------------------------------- asset management API v1
 
