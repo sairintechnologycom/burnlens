@@ -50,11 +50,11 @@ Requirements for Shadow AI Discovery & Inventory. Each maps to roadmap phases.
 
 ### Alerts
 
-- [ ] **ALRT-01**: System sends Slack + email alert within 1 hour when new shadow AI endpoint detected
-- [ ] **ALRT-02**: System sends Slack + email alert when new provider first seen
-- [ ] **ALRT-03**: System sends daily email digest for model version changes
-- [ ] **ALRT-04**: System sends weekly email digest for assets inactive >30 days
-- [ ] **ALRT-05**: System sends Slack + email alert when single asset spend >200% of 30-day average
+- [x] **ALRT-01**: System sends Slack + email alert within 1 hour when new shadow AI endpoint detected
+- [x] **ALRT-02**: System sends Slack + email alert when new provider first seen
+- [x] **ALRT-03**: System sends daily email digest for model version changes
+- [x] **ALRT-04**: System sends weekly email digest for assets inactive >30 days
+- [x] **ALRT-05**: System sends Slack + email alert when single asset spend >200% of 30-day average
 
 ## v2 Requirements
 
@@ -110,11 +110,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-07 | Phase 3 | Complete |
 | API-08 | Phase 3 | Complete |
 | API-09 | Phase 3 | Complete |
-| ALRT-01 | Phase 4 | Pending |
-| ALRT-02 | Phase 4 | Pending |
-| ALRT-03 | Phase 4 | Pending |
-| ALRT-04 | Phase 4 | Pending |
-| ALRT-05 | Phase 4 | Pending |
+| ALRT-01 | Phase 4 | Complete |
+| ALRT-02 | Phase 4 | Complete |
+| ALRT-03 | Phase 4 | Complete |
+| ALRT-04 | Phase 4 | Complete |
+| ALRT-05 | Phase 4 | Complete |
 | DASH-01 | Phase 5 | Pending |
 | DASH-02 | Phase 5 | Pending |
 | DASH-03 | Phase 5 | Pending |
