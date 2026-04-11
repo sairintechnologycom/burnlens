@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Detection Engine** - Billing API parsers, provider signature matching, and shadow AI classifier (completed 2026-04-10)
 - [x] **Phase 3: Asset Management API** - REST endpoints for listing, filtering, updating, and approving AI assets (completed 2026-04-10)
 - [x] **Phase 4: Alert System** - Slack and email alerts for shadow detection, model changes, and spend spikes (completed 2026-04-11)
-- [ ] **Phase 5: Discovery Dashboard** - Single-pane discovery UI with asset table, shadow panel, and timeline
+- [x] **Phase 5: Discovery Dashboard** - Single-pane discovery UI with asset table, shadow panel, and timeline (completed 2026-04-11)
 
 ## Phase Details
 
@@ -99,7 +99,7 @@ Plans:
   5. The discovery event timeline shows new assets, model changes, and alerts in chronological order
   6. Global search returns matching assets when querying by model name, provider, team, endpoint URL, or tag
   7. A user can save a filter combination as a named view and reload it to restore the same filters
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] 05-01-PLAN.md -- Discovery page with summary cards, provider donut chart, sortable/filterable asset table
@@ -117,4 +117,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
 | 3. Asset Management API | 3/3 | Complete   | 2026-04-10 |
 | 4. Alert System | 3/3 | Complete   | 2026-04-11 |
-| 5. Discovery Dashboard | 1/3 | In Progress|  |
+| 5. Discovery Dashboard | 3/3 | Complete   | 2026-04-11 |

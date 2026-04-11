@@ -39,14 +39,14 @@ Requirements for Shadow AI Discovery & Inventory. Each maps to roadmap phases.
 
 ### Dashboard
 
-- [ ] **DASH-01**: User sees summary cards (total assets, active this month, shadow detected, unassigned, monthly spend)
-- [ ] **DASH-02**: User sees provider breakdown donut chart (asset count and spend by provider)
-- [ ] **DASH-03**: User sees sortable, filterable asset table (model, provider, team, status, risk, spend, dates)
-- [ ] **DASH-04**: User sees shadow AI alert panel with approve/assign actions inline
-- [ ] **DASH-05**: User sees discovery event timeline showing new assets, model changes, alerts
-- [ ] **DASH-06**: User sees "new this week" section for recently detected assets
-- [ ] **DASH-07**: User can search globally by model name, provider, team, endpoint URL, or tag
-- [ ] **DASH-08**: User can save filter combinations as named views
+- [x] **DASH-01**: User sees summary cards (total assets, active this month, shadow detected, unassigned, monthly spend)
+- [x] **DASH-02**: User sees provider breakdown donut chart (asset count and spend by provider)
+- [x] **DASH-03**: User sees sortable, filterable asset table (model, provider, team, status, risk, spend, dates)
+- [x] **DASH-04**: User sees shadow AI alert panel with approve/assign actions inline
+- [x] **DASH-05**: User sees discovery event timeline showing new assets, model changes, alerts
+- [x] **DASH-06**: User sees "new this week" section for recently detected assets
+- [x] **DASH-07**: User can search globally by model name, provider, team, endpoint URL, or tag
+- [x] **DASH-08**: User can save filter combinations as named views
 
 ### Alerts
 
@@ -115,14 +115,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALRT-03 | Phase 4 | Complete |
 | ALRT-04 | Phase 4 | Complete |
 | ALRT-05 | Phase 4 | Complete |
-| DASH-01 | Phase 5 | Pending |
-| DASH-02 | Phase 5 | Pending |
-| DASH-03 | Phase 5 | Pending |
-| DASH-04 | Phase 5 | Pending |
-| DASH-05 | Phase 5 | Pending |
-| DASH-06 | Phase 5 | Pending |
-| DASH-07 | Phase 5 | Pending |
-| DASH-08 | Phase 5 | Pending |
+| DASH-01 | Phase 5 | Complete |
+| DASH-02 | Phase 5 | Complete |
+| DASH-03 | Phase 5 | Complete |
+| DASH-04 | Phase 5 | Complete |
+| DASH-05 | Phase 5 | Complete |
+| DASH-06 | Phase 5 | Complete |
+| DASH-07 | Phase 5 | Complete |
+| DASH-08 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 25 total
