@@ -99,7 +99,7 @@ Plans:
   5. The discovery event timeline shows new assets, model changes, and alerts in chronological order
   6. Global search returns matching assets when querying by model name, provider, team, endpoint URL, or tag
   7. A user can save a filter combination as a named view and reload it to restore the same filters
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 05-01-PLAN.md -- Discovery page with summary cards, provider donut chart, sortable/filterable asset table
@@ -117,4 +117,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
 | 3. Asset Management API | 3/3 | Complete   | 2026-04-10 |
 | 4. Alert System | 3/3 | Complete   | 2026-04-11 |
-| 5. Discovery Dashboard | 0/3 | Not started | - |
+| 5. Discovery Dashboard | 1/3 | In Progress|  |
