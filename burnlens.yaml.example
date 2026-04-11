@@ -17,6 +17,14 @@ log_level: "info"   # debug | info | warning | error
 # anthropic_upstream:  "https://api.anthropic.com"
 # google_upstream:     "https://generativelanguage.googleapis.com"
 
+# ── Discovery (Shadow AI Detection) ──────────────────────────────────────
+# Admin API keys for billing-based AI asset detection.
+# These are queried hourly to discover usage across your org, including
+# traffic that doesn't flow through the proxy.
+# Can also be set via OPENAI_ADMIN_KEY / ANTHROPIC_ADMIN_KEY env vars.
+# openai_admin_key: "sk-admin-..."
+# anthropic_admin_key: "sk-ant-admin-..."
+
 # ── Alerts & budgets ──────────────────────────────────────────────────────────
 alerts:
   # Print budget alerts to the terminal where `burnlens start` is running.
@@ -30,6 +38,12 @@ alerts:
     daily_usd: 5.00      # Alert when daily spend crosses 80 / 90 / 100 %
     weekly_usd: 25.00    # Alert when weekly spend crosses thresholds
     monthly_usd: 80.00   # Alert when monthly spend crosses thresholds
+
+  # Email recipients for discovery alerts (shadow AI detected, spend spikes, etc.)
+  # Requires email config below.
+  # alert_recipients:
+  #   - "security@yourcompany.com"
+  #   - "platform-lead@yourcompany.com"
 
   # Legacy single-budget shorthand (treated as a monthly limit if monthly_usd
   # is not set above).

@@ -108,6 +108,53 @@ async def list_assets(
 
 
 # ---------------------------------------------------------------------------
+# GET /shadow — list shadow/unregistered AI endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/shadow", response_model=AssetListResponse)
+async def list_shadow_assets(
+    request: Request,
+    date_since: str | None = None,
+    date_until: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> AssetListResponse:
+    """List shadow/unregistered AI endpoints requiring review.
+
+    Convenience endpoint equivalent to GET /assets?status=shadow with
+    additional date_until filter. Supports filtering by detection date range.
+    """
+    db_path: str = request.app.state.db_path
+
+    assets = await get_assets(
+        db_path,
+        status="shadow",
+        date_since=date_since,
+        limit=limit,
+        offset=offset,
+    )
+    total = await get_assets_count(
+        db_path,
+        status="shadow",
+        date_since=date_since,
+    )
+
+    # Apply date_until filter in-memory (first_seen_at <= date_until)
+    if date_until is not None:
+        assets = [a for a in assets if a.first_seen_at.isoformat() <= date_until]
+        # Recount after filtering
+        total = min(total, len(assets))
+
+    return AssetListResponse(
+        items=[asset_to_response(a) for a in assets],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+# ---------------------------------------------------------------------------
 # GET /{asset_id} — single asset detail with recent discovery events
 # ---------------------------------------------------------------------------
 
