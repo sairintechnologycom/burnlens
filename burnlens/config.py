@@ -75,6 +75,7 @@ class AlertsConfig:
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     budgets: TeamBudgetsConfig = field(default_factory=TeamBudgetsConfig)
     customer_budgets: CustomerBudgetsConfig = field(default_factory=CustomerBudgetsConfig)
+    alert_recipients: list[str] = field(default_factory=list)  # Email addresses for discovery alerts
 
 
 @dataclass
@@ -179,6 +180,10 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         customers=cust_customers,
     )
 
+    # Parse alert_recipients as a list of strings; default to empty list
+    raw_recipients = alerts_data.get("alert_recipients", [])
+    alert_recipients: list[str] = [str(r) for r in raw_recipients] if raw_recipients else []
+
     alerts = AlertsConfig(
         slack_webhook=alerts_data.get("slack_webhook"),
         terminal=bool(alerts_data.get("terminal", True)),
@@ -187,6 +192,7 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         budget=budget,
         budgets=team_budgets,
         customer_budgets=customer_budgets,
+        alert_recipients=alert_recipients,
     )
     kwargs["alerts"] = alerts
 
