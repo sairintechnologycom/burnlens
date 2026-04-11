@@ -140,6 +140,27 @@ async def usage_by_model(
     ]
 
 
+# --------------------------------------------------------------- /api/v1/usage/by-feature
+
+@usage_router.get("/by-feature")
+async def usage_by_feature(
+    request: Request,
+    days: int = Query(default=30, ge=1, le=365),
+) -> list[dict]:
+    """Cloud-compatible feature breakdown."""
+    db = _db_path(request)
+    since = _since_iso(days)
+    rows = await get_usage_by_tag(db, tag_key="feature", since=since)
+    return [
+        {
+            "feature": r["tag"],
+            "total_cost": round(r["total_cost_usd"], 6),
+            "api_calls": r["request_count"],
+        }
+        for r in rows
+    ]
+
+
 # ---------------------------------------------------------------- /api/v1/usage/by-team
 
 @usage_router.get("/by-team")
