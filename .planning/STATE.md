@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 03-asset-management-api/03-03-PLAN.md
-last_updated: "2026-04-10T16:43:26.667Z"
+stopped_at: Completed 04-alert-system/04-01-PLAN.md
+last_updated: "2026-04-11T00:50:08.087Z"
 last_activity: 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 12
+  completed_plans: 10
   percent: 100
 ---
 
@@ -50,6 +50,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | Phase 03-asset-management-api P01 | 8 min | 2 tasks | 4 files |
 | Phase 03-asset-management-api P02 | 2 | 1 tasks | 2 files |
 | Phase 03-asset-management-api P03 | 3 min | 2 tasks | 6 files |
+| Phase 04-alert-system P01 | 3 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [03-03] assets router mounted at /api/v1/assets (prefix=/api/v1/assets) because assets.py uses prefix='' — matches TestAssetAPI fixture
 - [03-03] date_since/date_until added to get_discovery_events using same dynamic WHERE clause pattern as get_assets
 - [03-03] insert_provider_signature uses INSERT OR IGNORE — idempotent for seeded providers, returns lastrowid==0 if duplicate
+- [04-01] smtplib chosen over aiosmtplib to keep zero new pip dependencies (stdlib only)
+- [04-01] asyncio.to_thread wraps blocking smtplib calls for non-blocking event loop
+- [04-01] get_inactive_assets excludes deprecated/inactive status to avoid re-alerting known dormant assets
 
 ### Architecture Notes
 
@@ -117,5 +121,5 @@ None at this time.
 ## Session Continuity
 
 **To resume:** Read .planning/ROADMAP.md to see phase structure, then check this STATE.md for current position.
-**Stopped at:** Completed 03-asset-management-api/03-03-PLAN.md
+**Stopped at:** Completed 04-alert-system/04-01-PLAN.md
 **Next action:** Execute next plan in Phase 1 (Data Foundation) or plan remaining phases.
