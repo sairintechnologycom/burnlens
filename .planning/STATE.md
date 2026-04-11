@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: planning
 stopped_at: Completed 05-discovery-dashboard/05-03-PLAN.md
-last_updated: "2026-04-11T02:41:28.638Z"
+last_updated: "2026-04-11T03:43:23.339Z"
 last_activity: 2026-04-10 — Completed 02-detection-engine/02-04-PLAN.md
 progress:
   total_phases: 5
@@ -55,7 +55,7 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 | Phase 04-alert-system P03 | 3 min | 2 tasks | 4 files |
 | Phase 05-discovery-dashboard P01 | 5 | 2 tasks | 5 files |
 | Phase 05-discovery-dashboard P02 | 4 | 2 tasks | 5 files |
-| Phase 05-discovery-dashboard P03 | 1 | 1 tasks | 3 files |
+| Phase 05-discovery-dashboard P03 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -106,6 +106,9 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 - [05-02] Event delegation on shadow panel click handler — avoids attaching listeners to dynamically rendered shadow cards
 - [05-02] 300ms debounce on global-search input — prevents excessive API calls while typing
 - [05-02] Fade-out CSS transition (300ms) for approve action — visual feedback before DOM removal
+- [05-03] localStorage key burnlens_saved_views stores JSON array of {name, filters} objects — zero-backend persistence
+- [05-03] renderSavedViewsDropdown() always rebuilds from localStorage — single source of truth for saved views dropdown
+- [05-03] loadView() syncs both DOM elements and module-level filter state variables — keeps fetchAssets() consistent
 
 ### Architecture Notes
 
