@@ -80,7 +80,7 @@ Plans:
   3. Each morning a single email digest is delivered listing all model version changes detected in the previous 24 hours
   4. Each week an email digest is delivered listing all assets that have been inactive for more than 30 days
   5. When a single asset's spend in a rolling period exceeds 200% of its 30-day average, a Slack message and email alert fire within 1 hour
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [ ] 04-01-PLAN.md -- Alert types, email sender, discovery queries, and config extension
@@ -116,5 +116,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Data Foundation | 2/2 | Complete   | 2026-04-10 |
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
 | 3. Asset Management API | 3/3 | Complete   | 2026-04-10 |
-| 4. Alert System | 1/3 | In Progress|  |
+| 4. Alert System | 2/3 | In Progress|  |
 | 5. Discovery Dashboard | 0/TBD | Not started | - |
