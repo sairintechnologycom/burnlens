@@ -177,9 +177,14 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
     try:
         from pathlib import Path as _Path
+        from fastapi.responses import FileResponse
 
         _static_dir = _Path(__file__).parent.parent / "dashboard" / "static"
         if _static_dir.exists():
+            @app.get("/ui/discovery")
+            async def discovery_ui() -> FileResponse:
+                return FileResponse(_static_dir / "discovery.html")
+
             app.mount("/ui", StaticFiles(directory=str(_static_dir), html=True), name="ui")
     except Exception as exc:
         logger.warning("Could not mount dashboard static files: %s", exc)

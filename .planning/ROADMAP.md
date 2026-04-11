@@ -102,9 +102,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Extend queries with filters, summary aggregation, Pydantic schemas
-- [ ] 03-02-PLAN.md -- Asset CRUD router (list, detail, update, approve, summary)
-- [ ] 03-03-PLAN.md -- Discovery events + provider signatures routers + server mount
+- [ ] 05-01-PLAN.md -- Discovery page with summary cards, provider donut chart, sortable/filterable asset table
+- [ ] 05-02-PLAN.md -- Shadow alert panel, discovery timeline, global search with server-side query
+- [ ] 05-03-PLAN.md -- Saved filter views with localStorage persistence + visual verification
 
 ## Progress
 
@@ -117,4 +117,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Detection Engine | 4/4 | Complete   | 2026-04-10 |
 | 3. Asset Management API | 3/3 | Complete   | 2026-04-10 |
 | 4. Alert System | 3/3 | Complete   | 2026-04-11 |
-| 5. Discovery Dashboard | 0/TBD | Not started | - |
+| 5. Discovery Dashboard | 0/3 | Not started | - |
