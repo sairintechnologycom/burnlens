@@ -16,3 +16,6 @@ venv/
 htmlcov/
 .DS_Store
 *.csv
+graphify-out/.graphify_*
+graphify-out/cache/
+graphify-out/converted/
