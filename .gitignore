@@ -20,3 +20,5 @@ htmlcov/
 graphify-out/.graphify_*
 graphify-out/cache/
 graphify-out/converted/
+burnlens.yaml
+burnlens.yml

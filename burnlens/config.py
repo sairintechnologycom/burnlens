@@ -119,9 +119,21 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
     """Load config from YAML file, falling back to defaults for missing keys.
 
     Searches current directory and ~/.burnlens/ when no path given.
+    Environment variable overrides (highest priority):
+    - PORT: proxy port
+    - BURNLENS_DB_PATH: SQLite database path
+    - BURNLENS_CONFIG_PATH: YAML config file path
+    - ALLOWED_ORIGINS: CORS allowed origins (comma-separated)
+    - LOG_LEVEL: logging verbosity
     Admin keys can also be supplied via OPENAI_ADMIN_KEY and ANTHROPIC_ADMIN_KEY env vars.
     """
     import os
+
+    # BURNLENS_CONFIG_PATH env var overrides the config_path argument
+    if config_path is None:
+        env_config = os.environ.get("BURNLENS_CONFIG_PATH")
+        if env_config and Path(env_config).exists():
+            config_path = Path(env_config)
 
     if config_path is None:
         candidates = [
@@ -135,11 +147,14 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
                 break
 
     if config_path is None:
-        return BurnLensConfig()
+        cfg = BurnLensConfig()
+        # Apply env var overrides even when no YAML file exists
+        return _apply_env_overrides(cfg)
 
     config_path = Path(config_path)
     if not config_path.exists():
-        return BurnLensConfig()
+        cfg = BurnLensConfig()
+        return _apply_env_overrides(cfg)
 
     with open(config_path) as f:
         data: dict[str, Any] = yaml.safe_load(f) or {}
@@ -230,13 +245,30 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         )
         kwargs["cloud"] = cloud
 
-    # Admin key env var overrides (higher priority than YAML)
-    if openai_admin := os.environ.get("OPENAI_ADMIN_KEY"):
-        kwargs["openai_admin_key"] = openai_admin
-    if anthropic_admin := os.environ.get("ANTHROPIC_ADMIN_KEY"):
-        kwargs["anthropic_admin_key"] = anthropic_admin
+    return _apply_env_overrides(BurnLensConfig(**kwargs))
 
-    return BurnLensConfig(**kwargs)
+
+def _apply_env_overrides(cfg: BurnLensConfig) -> BurnLensConfig:
+    """Apply environment variable overrides (highest priority)."""
+    import os
+
+    if port_str := os.environ.get("PORT"):
+        try:
+            cfg.port = int(port_str)
+        except ValueError:
+            pass
+    if db_path := os.environ.get("BURNLENS_DB_PATH"):
+        cfg.db_path = db_path
+    if log_level := os.environ.get("LOG_LEVEL"):
+        cfg.log_level = log_level
+
+    # Admin key env var overrides
+    if openai_admin := os.environ.get("OPENAI_ADMIN_KEY"):
+        cfg.openai_admin_key = openai_admin
+    if anthropic_admin := os.environ.get("ANTHROPIC_ADMIN_KEY"):
+        cfg.anthropic_admin_key = anthropic_admin
+
+    return cfg
 
 
 def _optional_float(value: Any) -> float | None:

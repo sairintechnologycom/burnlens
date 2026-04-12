@@ -6,6 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+import aiosqlite
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -106,11 +107,16 @@ def get_app(config: BurnLensConfig) -> FastAPI:
     app = FastAPI(title="BurnLens", version="0.1.0", lifespan=lifespan)
 
     # ------------------------------------------------------------------ CORS
+    import os
     from fastapi.middleware.cors import CORSMiddleware
+
+    _default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    _env_origins = os.environ.get("ALLOWED_ORIGINS", "")
+    _origins = [o.strip() for o in _env_origins.split(",") if o.strip()] if _env_origins else _default_origins
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -119,7 +125,18 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict:
-        return {"status": "ok"}
+        from burnlens import __version__
+
+        db_status = "disconnected"
+        try:
+            async with aiosqlite.connect(app.state.db_path) as db:
+                await db.execute("SELECT 1")
+                db_status = "connected"
+        except Exception:
+            pass
+
+        status = "ok" if db_status == "connected" else "degraded"
+        return {"status": status, "version": __version__, "db": db_status}
 
     # ------------------------------------------------------------------ proxy
 
