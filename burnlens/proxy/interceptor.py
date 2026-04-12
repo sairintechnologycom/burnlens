@@ -19,7 +19,7 @@ from burnlens.cost.calculator import (
     extract_usage_openai,
 )
 from burnlens.proxy.providers import ProviderConfig, strip_proxy_prefix
-from burnlens.proxy.streaming import extract_usage_from_stream, should_buffer_chunk
+from burnlens.proxy.streaming import extract_usage_from_stream, split_sse_events
 from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
 
@@ -521,19 +521,21 @@ async def _handle_streaming(
     endpoint_url = provider.upstream_base
 
     async def _stream_generator() -> AsyncIterator[bytes]:
-        usage_chunk_data: list[str] = []
+        raw_buffer = ""
         try:
             async for chunk in response.aiter_bytes():
                 yield chunk
-                chunk_str = chunk.decode("utf-8", errors="ignore")
-                if should_buffer_chunk(chunk_str):
-                    usage_chunk_data.append(chunk_str)
+                raw_buffer += chunk.decode("utf-8", errors="ignore")
         finally:
             duration_ref[0] = int((time.monotonic() - start_ms) * 1000)
             await response.aclose()
+            # Split the accumulated buffer into complete SSE events,
+            # keeping only those that contain usage data.  This handles
+            # TCP chunk fragmentation that previously lost tokens.
+            usage_events = split_sse_events(raw_buffer)
             asyncio.create_task(
                 _log_streaming_usage(
-                    usage_chunks=usage_chunk_data,
+                    usage_chunks=usage_events,
                     provider=provider,
                     model=model,
                     tags=tags,

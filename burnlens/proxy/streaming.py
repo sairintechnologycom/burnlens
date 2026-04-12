@@ -5,14 +5,17 @@ import json
 
 from burnlens.cost.calculator import TokenUsage
 
-# Strings that indicate a chunk may contain usage data.
-# Used to filter which chunks are buffered during streaming.
-USAGE_CHUNK_INDICATORS: tuple[str, ...] = (
+# Strings that indicate a *complete* SSE event may contain usage data.
+# Applied to whole events (after reassembly), not raw TCP chunks.
+USAGE_EVENT_INDICATORS: tuple[str, ...] = (
     '"usage"',        # OpenAI final chunk + Anthropic message_delta
     "usageMetadata",  # Google SSE data lines
     "message_start",  # Anthropic: input tokens live in message.usage
     "message_delta",  # Anthropic: output tokens live in .usage
 )
+
+# Keep old name as alias for backwards compat (tests, external callers)
+USAGE_CHUNK_INDICATORS = USAGE_EVENT_INDICATORS
 
 
 def should_buffer_chunk(chunk_str: str) -> bool:
@@ -20,8 +23,29 @@ def should_buffer_chunk(chunk_str: str) -> bool:
 
     Avoids storing every SSE chunk in memory — only the subset that
     contains token counts.
+
+    .. note::
+       This checks raw TCP chunks and may miss usage data split across
+       chunk boundaries.  Prefer :func:`split_sse_events` for robust
+       extraction.
     """
-    return any(indicator in chunk_str for indicator in USAGE_CHUNK_INDICATORS)
+    return any(indicator in chunk_str for indicator in USAGE_EVENT_INDICATORS)
+
+
+def split_sse_events(raw_buffer: str) -> list[str]:
+    """Split a raw SSE buffer into complete events.
+
+    SSE events are delimited by ``\\n\\n``.  Returns only events that
+    contain usage-related data (per USAGE_EVENT_INDICATORS).
+    """
+    events: list[str] = []
+    for event in raw_buffer.split("\n\n"):
+        event = event.strip()
+        if not event:
+            continue
+        if any(indicator in event for indicator in USAGE_EVENT_INDICATORS):
+            events.append(event + "\n\n")
+    return events
 
 
 def extract_usage_from_stream(provider_name: str, usage_chunks: list[str]) -> TokenUsage:
@@ -29,7 +53,7 @@ def extract_usage_from_stream(provider_name: str, usage_chunks: list[str]) -> To
 
     Args:
         provider_name: "openai", "anthropic", or "google"
-        usage_chunks: raw chunk bytes decoded to str that passed should_buffer_chunk
+        usage_chunks: complete SSE event strings (reassembled from raw chunks)
 
     Returns:
         TokenUsage with whatever counts could be extracted (zeros if none found)
