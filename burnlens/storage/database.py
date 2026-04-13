@@ -445,7 +445,8 @@ async def update_asset_status(db_path: str, asset_id: int, new_status: str) -> N
             raise ValueError(f"Asset {asset_id} not found")
 
         old_status = row[0]
-        now = datetime.utcnow().isoformat()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
 
         # Update status and updated_at
         await db.execute(

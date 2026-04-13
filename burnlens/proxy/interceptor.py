@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import httpx
@@ -438,7 +438,7 @@ async def _handle_non_streaming(
         provider=provider.name,
         model=model,
         request_path=request_path,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         reasoning_tokens=usage.reasoning_tokens,
@@ -582,7 +582,7 @@ async def _log_streaming_usage(
         provider=provider.name,
         model=model,
         request_path=request_path,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         reasoning_tokens=usage.reasoning_tokens,

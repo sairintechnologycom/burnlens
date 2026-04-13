@@ -106,8 +106,45 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
     app = FastAPI(title="BurnLens", version="0.1.0", lifespan=lifespan)
 
-    # ------------------------------------------------------------------ CORS
+    # --------------------------------------------------------- dashboard auth
     import os
+    import secrets
+
+    if config.dashboard_user and config.dashboard_pass:
+        import base64
+
+        _auth_user = config.dashboard_user
+        _auth_pass = config.dashboard_pass
+
+        @app.middleware("http")
+        async def dashboard_basic_auth(request: Request, call_next):  # type: ignore[no-untyped-def]
+            """Require basic auth for /ui and /api routes (not /proxy or /health)."""
+            path = request.url.path
+            if path.startswith("/proxy") or path == "/health":
+                return await call_next(request)
+
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Basic "):
+                try:
+                    decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                    user, password = decoded.split(":", 1)
+                    if (
+                        secrets.compare_digest(user, _auth_user)
+                        and secrets.compare_digest(password, _auth_pass)
+                    ):
+                        return await call_next(request)
+                except Exception:
+                    pass
+
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="BurnLens Dashboard"'},
+                content="Unauthorized",
+            )
+
+        logger.info("Dashboard basic auth enabled")
+
+    # ------------------------------------------------------------------ CORS
     from fastapi.middleware.cors import CORSMiddleware
 
     _default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -158,8 +195,11 @@ def get_app(config: BurnLensConfig) -> FastAPI:
         headers = dict(request.headers)
         query_string = str(request.url.query)
 
-        assert _http_client is not None, "HTTP client not initialized"
-        assert _config is not None, "Config not initialized"
+        if _http_client is None or _config is None:
+            return Response(
+                content="Proxy not initialized — server is starting up",
+                status_code=503,
+            )
 
         try:
             status, resp_headers, body, stream = await handle_request(

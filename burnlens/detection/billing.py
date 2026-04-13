@@ -281,9 +281,8 @@ async def run_all_parsers(db_path: str, config: BurnLensConfig) -> None:
         else:
             # Existing asset — update last_active_at
             import aiosqlite
-            from datetime import datetime
 
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             async with aiosqlite.connect(db_path) as db:
                 await db.execute(
                     "UPDATE ai_assets SET last_active_at = ?, updated_at = ? WHERE id = ?",

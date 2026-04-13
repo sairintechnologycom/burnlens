@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import aiosqlite
@@ -261,7 +261,7 @@ async def update_asset_fields(
     set_clauses: list[str] = []
     params: list[Any] = []
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     if owner_team is not None:
         set_clauses.append("owner_team = ?")

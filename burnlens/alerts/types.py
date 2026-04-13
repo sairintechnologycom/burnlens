@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from burnlens.storage.models import AiAsset, DiscoveryEvent
 
@@ -44,4 +44,4 @@ class DigestPayload:
 
     subject: str                             # Email subject line
     items: list[dict]                        # List of digest items (arbitrary dicts)
-    generated_at: datetime = field(default_factory=datetime.utcnow)  # Digest generation time
+    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))  # Digest generation time

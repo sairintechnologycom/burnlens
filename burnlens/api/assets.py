@@ -6,7 +6,7 @@ approving, and summarising AI assets discovered by BurnLens.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -249,7 +249,7 @@ async def approve_asset(request: Request, asset_id: int) -> AssetApproveResponse
             "old_status": "shadow",
             "new_status": "approved",
         },
-        detected_at=datetime.utcnow(),
+        detected_at=datetime.now(timezone.utc),
     )
     event_id = await insert_discovery_event(db_path, event)
 

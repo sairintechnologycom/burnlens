@@ -6,7 +6,7 @@
 **Works with streaming. Sub-20ms overhead. Nothing leaves your machine.**
 
 [![PyPI](https://img.shields.io/pypi/v/burnlens)](https://pypi.org/project/burnlens)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 
 <p align="center">
@@ -119,7 +119,7 @@ SQLite on your machine (`~/.burnlens/burnlens.db`). Nothing leaves localhost. No
 OpenAI, Anthropic, and Google. Set `BASE_URL` env vars and your existing SDK code works unchanged.
 
 **Can I run it in Docker?**
-Not yet — coming soon. For now it runs directly via `pip install burnlens`.
+Yes — a `Dockerfile` is included. Build with `docker build -t burnlens .` and run with `docker run -p 8420:8420 -v burnlens-data:/data burnlens`. Mount `/data` for persistent SQLite storage.
 
 ---
 

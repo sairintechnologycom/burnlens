@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import aiosqlite
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 async def _update_last_active(db_path: str, asset_id: int) -> None:
     """Update last_active_at (and updated_at) for an existing asset."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(db_path) as db:
         await db.execute(
             "UPDATE ai_assets SET last_active_at = ?, updated_at = ? WHERE id = ?",

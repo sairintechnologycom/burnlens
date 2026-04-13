@@ -96,6 +96,10 @@ class BurnLensConfig:
     openai_admin_key: str | None = None
     anthropic_admin_key: str | None = None
 
+    # Dashboard basic auth (recommended for public deployments)
+    dashboard_user: str | None = None
+    dashboard_pass: str | None = None
+
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
@@ -112,6 +116,8 @@ _FIELD_TYPES: dict[str, type] = {
     "google_upstream": str,
     "openai_admin_key": str,
     "anthropic_admin_key": str,
+    "dashboard_user": str,
+    "dashboard_pass": str,
 }
 
 
@@ -267,6 +273,12 @@ def _apply_env_overrides(cfg: BurnLensConfig) -> BurnLensConfig:
         cfg.openai_admin_key = openai_admin
     if anthropic_admin := os.environ.get("ANTHROPIC_ADMIN_KEY"):
         cfg.anthropic_admin_key = anthropic_admin
+
+    # Dashboard basic auth env var overrides
+    if dash_user := os.environ.get("DASHBOARD_USER"):
+        cfg.dashboard_user = dash_user
+    if dash_pass := os.environ.get("DASHBOARD_PASS"):
+        cfg.dashboard_pass = dash_pass
 
     return cfg
 
