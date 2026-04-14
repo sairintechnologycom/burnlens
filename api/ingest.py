@@ -1,6 +1,7 @@
 """POST /api/v1/ingest — bulk record ingestion from OSS proxy."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -8,7 +9,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 
 from . import config
+from .crypto import decrypt
 from .models import IngestRequest, IngestResponse
+from .telemetry.forwarder import get_forwarder
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,20 @@ async def ingest(body: IngestRequest):
         raise HTTPException(status_code=401, detail={"error": "invalid_api_key"})
 
     workspace_id, plan = result
+
+    # Fetch OTEL config (needed after insert)
+    otel_config = None
+    try:
+        from .database import pool as _pool
+        async with _pool.acquire() as conn:
+            otel_row = await conn.fetchrow(
+                "SELECT otel_endpoint, otel_api_key_encrypted, otel_enabled FROM workspaces WHERE id = $1",
+                workspace_id,
+            )
+        if otel_row and hasattr(otel_row, "get"):
+            otel_config = otel_row
+    except Exception:
+        logger.debug("Could not fetch OTEL config for workspace %s", workspace_id)
 
     # Free tier check
     if plan == "free":
@@ -118,6 +135,40 @@ async def ingest(body: IngestRequest):
                 rows,
             )
         logger.info("Ingested %d records for workspace %s", len(rows), workspace_id)
+
+        # Queue OTEL forward (fire-and-forget, never blocks ingest)
+        if (
+            otel_config
+            and otel_config.get("otel_enabled")
+            and otel_config.get("otel_endpoint")
+            and otel_config.get("otel_api_key_encrypted")
+        ):
+            try:
+                api_key = decrypt(otel_config["otel_api_key_encrypted"])
+                record_dicts = [r.model_dump() for r in body.records]
+                forwarder = get_forwarder()
+
+                async def _forward():
+                    ok, _ = await forwarder.forward_batch(
+                        record_dicts,
+                        otel_config["otel_endpoint"],
+                        api_key,
+                        workspace_id=workspace_id,
+                    )
+                    # Update last_push regardless of success
+                    try:
+                        async with _pool.acquire() as c:
+                            await c.execute(
+                                "UPDATE workspaces SET otel_last_push = NOW() WHERE id = $1",
+                                workspace_id,
+                            )
+                    except Exception:
+                        logger.warning("Failed to update otel_last_push")
+
+                asyncio.create_task(_forward())
+            except Exception as e:
+                logger.warning("Failed to queue OTEL forward: %s", e)
+
         return IngestResponse(accepted=len(rows), rejected=0)
 
     except Exception:

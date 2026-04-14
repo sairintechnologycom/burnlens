@@ -32,7 +32,11 @@ async def init_db() -> None:
                 api_key         TEXT NOT NULL UNIQUE,
                 stripe_customer_id TEXT,
                 created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                active          BOOLEAN NOT NULL DEFAULT true
+                active          BOOLEAN NOT NULL DEFAULT true,
+                otel_endpoint   TEXT,
+                otel_api_key_encrypted TEXT,
+                otel_enabled    BOOLEAN NOT NULL DEFAULT false,
+                otel_last_push  TIMESTAMPTZ
             )
         """)
 

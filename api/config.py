@@ -54,3 +54,6 @@ GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
 BASE_URL: str = os.getenv("BASE_URL", "https://burnlens.app")
+
+# Encryption (Fernet key for OTEL API keys)
+OTEL_ENCRYPTION_KEY: str = os.getenv("OTEL_ENCRYPTION_KEY", "")

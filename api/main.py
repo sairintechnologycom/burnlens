@@ -13,6 +13,7 @@ from .billing import router as billing_router
 from .ingest import router as ingest_router
 from .dashboard import router as dashboard_router
 from .team import router as team_router
+from .enterprise import router as enterprise_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ app.include_router(billing_router)
 app.include_router(ingest_router)
 app.include_router(dashboard_router)
 app.include_router(team_router)
+app.include_router(enterprise_router)
 
 
 @app.get("/health")

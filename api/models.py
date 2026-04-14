@@ -134,3 +134,24 @@ class ActivityEntry(BaseModel):
     detail: Optional[dict] = None
     created_at: datetime
     user_email: Optional[str] = None
+
+
+# --- Enterprise OTEL ---
+
+class OtelConfig(BaseModel):
+    endpoint: str
+    api_key: str
+    enabled: bool
+
+
+class OtelConfigResponse(BaseModel):
+    endpoint: str
+    api_key_masked: str
+    enabled: bool
+    last_push: Optional[datetime] = None
+
+
+class OtelTestResponse(BaseModel):
+    ok: bool
+    latency_ms: Optional[int] = None
+    error: Optional[str] = None
