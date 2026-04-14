@@ -35,6 +35,31 @@ class Settings(BaseSettings):
         "enterprise": 3650,
     }
 
+    # Seat limits per plan
+    seat_limits: dict = {
+        "free": 1,
+        "cloud": 3,
+        "teams": 10,
+        "enterprise": 999,
+    }
+
+    # SSO Configuration
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "https://api.burnlens.app/auth/google/callback")
+
+    github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
+    github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    github_redirect_uri: str = os.getenv("GITHUB_REDIRECT_URI", "https://api.burnlens.app/auth/github/callback")
+
+    # Email Configuration
+    sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
+    sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@burnlens.app")
+    burnlens_frontend_url: str = os.getenv("BURNLENS_FRONTEND_URL", "https://burnlens.app")
+
+    # Invitation expiry (hours)
+    invitation_expiry_hours: int = 48
+
     class Config:
         env_file = ".env"
         case_sensitive = False

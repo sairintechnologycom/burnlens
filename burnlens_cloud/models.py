@@ -93,6 +93,8 @@ class SignupResponse(BaseModel):
 class TokenPayload(BaseModel):
     """JWT token payload."""
     workspace_id: UUID
+    user_id: UUID
+    role: str  # 'owner' | 'admin' | 'viewer'
     plan: str
     iat: int
     exp: int
@@ -137,3 +139,60 @@ class CostTimeline(BaseModel):
 class BillingPortalResponse(BaseModel):
     """Stripe billing portal response."""
     url: str
+
+
+# Teams models
+class UserResponse(BaseModel):
+    """User response model."""
+    id: UUID
+    email: str
+    name: Optional[str] = None
+    last_login: Optional[datetime] = None
+
+
+class WorkspaceMemberResponse(BaseModel):
+    """Workspace member response model."""
+    id: UUID
+    email: str
+    name: Optional[str] = None
+    role: str  # 'owner' | 'admin' | 'viewer'
+    joined_at: datetime
+    last_login: Optional[datetime] = None
+    invited_by: Optional[UUID] = None
+
+
+class InvitationRequest(BaseModel):
+    """Request to invite someone to workspace."""
+    email: str
+    role: str = "viewer"  # 'viewer' | 'admin'
+
+
+class InvitationResponse(BaseModel):
+    """Response for created invitation."""
+    id: UUID
+    email: str
+    token: str
+    expires_at: datetime
+    created_at: datetime
+
+
+class MemberRoleUpdate(BaseModel):
+    """Request to update member role."""
+    role: str  # 'viewer' | 'admin' | 'owner'
+
+
+class ActivityLogEntry(BaseModel):
+    """Workspace activity log entry."""
+    id: int
+    action: str
+    detail: dict
+    created_at: datetime
+    user: Optional[UserResponse] = None
+
+
+class TeamActivityResponse(BaseModel):
+    """Response for activity log."""
+    entries: list[ActivityLogEntry]
+    total: int
+    limit: int
+    offset: int

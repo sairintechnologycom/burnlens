@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from dateutil import tz
 
 from .auth import verify_token, TokenPayload
@@ -18,6 +18,25 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
+
+# Role hierarchy for permission checking
+ROLE_HIERARCHY = {"viewer": 0, "admin": 1, "owner": 2}
+
+
+async def require_role(required_role: str, token: TokenPayload):
+    """
+    Check if user has required role.
+    Raises 403 HTTPException if insufficient permissions.
+    """
+    if ROLE_HIERARCHY.get(token.role, -1) < ROLE_HIERARCHY.get(required_role, 999):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "insufficient_role",
+                "required": required_role,
+                "current": token.role,
+            },
+        )
 
 
 def clamp_days_by_plan(requested_days: int, plan: str) -> int:
@@ -46,7 +65,9 @@ async def get_summary(
     token: TokenPayload = Depends(verify_token),
     period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
 ):
-    """Get cost summary for workspace."""
+    """Get cost summary for workspace (viewer+ can access)."""
+    await require_role("viewer", token)
+
     days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
@@ -81,7 +102,9 @@ async def get_costs_by_model(
     token: TokenPayload = Depends(verify_token),
     period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
 ):
-    """Get costs broken down by model."""
+    """Get costs broken down by model (viewer+ can access)."""
+    await require_role("viewer", token)
+
     days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
@@ -124,7 +147,9 @@ async def get_costs_by_tag(
     tag_type: str = Query("team", description="Tag type: team, feature, customer"),
     period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
 ):
-    """Get costs broken down by tag (team, feature, customer)."""
+    """Get costs broken down by tag (team, feature, customer) (viewer+ can access)."""
+    await require_role("viewer", token)
+
     days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
@@ -165,7 +190,9 @@ async def get_costs_timeline(
     period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
     granularity: str = Query("daily", description="Granularity: daily, hourly"),
 ):
-    """Get cost timeline."""
+    """Get cost timeline (viewer+ can access)."""
+    await require_role("viewer", token)
+
     days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
@@ -203,7 +230,9 @@ async def get_requests(
     limit: int = Query(50, ge=1, le=500, description="Max 500"),
     period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
 ):
-    """Get recent requests."""
+    """Get recent requests (viewer+ can access)."""
+    await require_role("viewer", token)
+
     days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 

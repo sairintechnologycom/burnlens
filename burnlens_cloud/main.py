@@ -9,6 +9,7 @@ from .auth import router as auth_router
 from .ingest import router as ingest_router
 from .dashboard_api import router as dashboard_router
 from .billing import router as billing_router
+from .team_api import router as team_router
 
 # Configure logging
 logging.basicConfig(level=settings.log_level)
@@ -64,6 +65,7 @@ def get_app() -> FastAPI:
     app.include_router(ingest_router)    # /v1/ingest
     app.include_router(dashboard_router) # /api/* (summary, costs/by-model, etc.)
     app.include_router(billing_router)   # /billing/portal, /billing/webhooks/stripe
+    app.include_router(team_router)      # /team/invite, /team/members, /team/activity
 
     return app
 

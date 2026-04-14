@@ -77,6 +77,100 @@ async def init_db():
             ON request_records USING GIN(workspace_id, (tags -> 'feature'))
         """)
 
+        # Teams support tables
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email TEXT UNIQUE NOT NULL,
+                name TEXT,
+                google_id TEXT UNIQUE,
+                github_id TEXT UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_login TIMESTAMPTZ
+            )
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id)
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_members (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role TEXT NOT NULL DEFAULT 'viewer',
+                invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                active BOOLEAN NOT NULL DEFAULT true
+            )
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_user
+            ON workspace_members(workspace_id, user_id)
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspace_members_user
+            ON workspace_members(user_id)
+        """)
+
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_members_unique
+            ON workspace_members(workspace_id, user_id) WHERE active = true
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS invitations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'viewer',
+                token TEXT UNIQUE NOT NULL,
+                invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                accepted_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token)
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invitations_workspace ON invitations(workspace_id)
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email)
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_activity (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                action TEXT NOT NULL,
+                detail JSONB NOT NULL DEFAULT '{}',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspace_activity_workspace_ts
+            ON workspace_activity(workspace_id, created_at DESC)
+        """)
+
         logger.info("Database tables created/verified")
 
 
