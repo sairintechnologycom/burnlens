@@ -73,6 +73,7 @@ tr:hover td{background:#161b22}
       <option value="30">Last 30 days</option>
       <option value="90">Last 90 days</option>
     </select>
+    <a href="/team" id="team-nav" style="display:none;color:#58a6ff;text-decoration:none;font-size:.85rem;font-weight:600">Team</a>
     <a href="/signup" class="upgrade" id="upgrade-btn">Upgrade</a>
     <button class="logout" id="logout-btn">Logout</button>
   </div>
@@ -244,6 +245,9 @@ function showDashboard(plan,name){
     strong.textContent='Free plan';
     txt.appendChild(strong);
     txt.appendChild(document.createTextNode(' \u2014 10,000 requests/month, 7-day history. Upgrade to Cloud ($29/mo) for unlimited requests + 90-day history.'));
+  }
+  if(plan==='teams'||plan==='enterprise'){
+    document.getElementById('team-nav').style.display='inline';
   }
   if(plan==='cloud'){
     var hdr=document.querySelector('.controls');

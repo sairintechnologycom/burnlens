@@ -30,11 +30,18 @@ def generate_api_key() -> str:
     return f"bl_live_{secrets.token_hex(32)}"
 
 
-def _encode_jwt(workspace_id: str, plan: str) -> str:
+def _encode_jwt(
+    workspace_id: str,
+    plan: str,
+    user_id: str | None = None,
+    role: str = "owner",
+) -> str:
     now = int(time.time())
     payload = {
         "workspace_id": workspace_id,
         "plan": plan,
+        "user_id": user_id,
+        "role": role,
         "iat": now,
         "exp": now + config.JWT_EXPIRATION_SECONDS,
     }
@@ -49,7 +56,7 @@ def _decode_jwt(token: str) -> dict | None:
 
 
 async def get_current_workspace(request: Request) -> dict:
-    """FastAPI dependency: extract workspace from Bearer JWT."""
+    """FastAPI dependency: extract workspace + user context from Bearer JWT."""
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
@@ -71,7 +78,22 @@ async def get_current_workspace(request: Request) -> dict:
         "id": str(row["id"]),
         "name": row["name"],
         "plan": row["plan"],
+        "user_id": payload.get("user_id"),
+        "role": payload.get("role", "owner"),
     }
+
+
+def require_role(*roles: str):
+    """Dependency factory: require the current user's role to be in the allowed list."""
+    async def _check(request: Request) -> dict:
+        ws = await get_current_workspace(request)
+        if ws["role"] not in roles:
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "insufficient_role", "required": roles[0]},
+            )
+        return ws
+    return _check
 
 
 # ---- routes -----------------------------------------------------------------

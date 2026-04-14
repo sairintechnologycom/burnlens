@@ -30,3 +30,20 @@ PLAN_HISTORY_DAYS: dict[str, int] = {
     "teams": 365,
     "enterprise": 3650,
 }
+
+# Seat limits per plan
+PLAN_SEAT_LIMITS: dict[str, int | None] = {
+    "free": 1,
+    "cloud": 3,
+    "teams": 10,
+    "enterprise": None,  # unlimited
+}
+
+# SMTP for invitation emails
+SMTP_HOST: str = os.getenv("SMTP_HOST", "")
+SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER: str = os.getenv("SMTP_USER", "")
+SMTP_PASS: str = os.getenv("SMTP_PASS", "")
+SMTP_FROM: str = os.getenv("SMTP_FROM", "noreply@burnlens.app")
+
+INVITATION_EXPIRY_HOURS: int = 48

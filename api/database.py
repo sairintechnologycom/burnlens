@@ -84,6 +84,60 @@ async def init_db() -> None:
             )
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                email       TEXT NOT NULL UNIQUE,
+                name        TEXT,
+                google_id   TEXT UNIQUE,
+                github_id   TEXT UNIQUE,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_login  TIMESTAMPTZ
+            )
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_members (
+                id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id  UUID NOT NULL REFERENCES workspaces(id),
+                user_id       UUID NOT NULL REFERENCES users(id),
+                role          TEXT NOT NULL DEFAULT 'viewer',
+                invited_by    UUID REFERENCES users(id),
+                joined_at     TIMESTAMPTZ,
+                active        BOOLEAN NOT NULL DEFAULT true,
+                UNIQUE(workspace_id, user_id)
+            )
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS invitations (
+                id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id  UUID NOT NULL REFERENCES workspaces(id),
+                email         TEXT NOT NULL,
+                role          TEXT NOT NULL DEFAULT 'viewer',
+                token         TEXT NOT NULL UNIQUE,
+                invited_by    UUID REFERENCES users(id),
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at    TIMESTAMPTZ NOT NULL,
+                accepted_at   TIMESTAMPTZ
+            )
+        """)
+
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_activity (
+                id            BIGSERIAL PRIMARY KEY,
+                workspace_id  UUID NOT NULL REFERENCES workspaces(id),
+                user_id       UUID REFERENCES users(id),
+                action        TEXT NOT NULL,
+                detail        JSONB,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_activity_workspace
+                ON workspace_activity(workspace_id, created_at DESC)
+        """)
+
     logger.info("Database tables created/verified")
 
 

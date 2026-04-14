@@ -77,3 +77,60 @@ class CheckoutResponse(BaseModel):
 
 class PortalResponse(BaseModel):
     portal_url: str
+
+
+# --- Team ---
+
+class InviteRequest(BaseModel):
+    email: str
+    role: Literal["viewer", "admin"] = "viewer"
+
+
+class InviteResponse(BaseModel):
+    invitation_id: UUID
+    expires_at: datetime
+
+
+class InvitationInfo(BaseModel):
+    workspace_name: str
+    role: str
+    inviter_email: Optional[str] = None
+    expires_at: datetime
+
+
+class AcceptRequest(BaseModel):
+    email: str
+    name: str
+
+
+class MemberOut(BaseModel):
+    user_id: UUID
+    email: str
+    name: Optional[str] = None
+    role: str
+    joined_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
+    active: bool
+
+
+class PendingInviteOut(BaseModel):
+    email: str
+    role: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class MembersResponse(BaseModel):
+    members: list[MemberOut]
+    pending: list[PendingInviteOut]
+
+
+class RoleUpdate(BaseModel):
+    role: Literal["viewer", "admin"]
+
+
+class ActivityEntry(BaseModel):
+    action: str
+    detail: Optional[dict] = None
+    created_at: datetime
+    user_email: Optional[str] = None
