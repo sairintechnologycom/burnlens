@@ -47,3 +47,10 @@ SMTP_PASS: str = os.getenv("SMTP_PASS", "")
 SMTP_FROM: str = os.getenv("SMTP_FROM", "noreply@burnlens.app")
 
 INVITATION_EXPIRY_HOURS: int = 48
+
+# OAuth SSO
+GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+BASE_URL: str = os.getenv("BASE_URL", "https://burnlens.app")

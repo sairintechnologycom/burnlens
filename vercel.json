@@ -5,6 +5,7 @@
   ],
   "routes": [
     {"src": "/api/(.*)", "dest": "api/main.py"},
+    {"src": "/auth/callback.html", "dest": "frontend/auth/callback.html"},
     {"src": "/auth/(.*)", "dest": "api/main.py"},
     {"src": "/billing/(.*)", "dest": "api/main.py"},
     {"src": "/team/(.*)", "dest": "api/main.py"},
