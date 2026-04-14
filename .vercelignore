@@ -1,0 +1,12 @@
+tests/
+migrations/
+.pytest_cache/
+.env
+.env.local
+*.db
+*.pyc
+__pycache__/
+.venv/
+venv/
+*.md
+!README.md

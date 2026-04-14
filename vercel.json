@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "experimentalServices": {
+    "api": {
+      "entrypoint": "burnlens_cloud/main.py",
+      "routePrefix": "/api"
+    }
+  }
+}
