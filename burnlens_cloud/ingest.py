@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException
@@ -6,7 +7,9 @@ from dateutil import tz
 from .auth import get_workspace_by_api_key
 from .config import settings
 from .database import execute_query, execute_bulk_insert
+from .encryption import get_encryption_manager
 from .models import IngestRequest, IngestResponse
+from .telemetry.forwarder import get_forwarder
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,13 @@ async def ingest(request: IngestRequest):
 
     workspace_id, plan = workspace_result
 
+    # Fetch full workspace details (including OTEL config)
+    workspace_details = await execute_query(
+        "SELECT otel_endpoint, otel_api_key_encrypted, otel_enabled FROM workspaces WHERE id = $1",
+        workspace_id,
+    )
+    otel_config = workspace_details[0] if workspace_details else None
+
     # Check free tier limit
     if plan == "free":
         if not await check_free_tier_limit(workspace_id):
@@ -121,6 +131,31 @@ async def ingest(request: IngestRequest):
         logger.info(
             f"Ingested {len(request.records)} records for workspace {workspace_id}"
         )
+
+        # Queue OTEL forward as background task (never block on this)
+        if otel_config and otel_config.get("otel_enabled"):
+            try:
+                forwarder = get_forwarder()
+                endpoint = otel_config.get("otel_endpoint")
+                encrypted_key = otel_config.get("otel_api_key_encrypted")
+
+                if endpoint and encrypted_key:
+                    # Decrypt API key
+                    encryption_manager = get_encryption_manager()
+                    api_key = encryption_manager.decrypt(encrypted_key)
+
+                    # Convert records to dicts for OTEL forwarding
+                    otel_records = []
+                    for record in request.records:
+                        otel_records.append(record.dict())
+
+                    # Forward as background task (fire and forget)
+                    asyncio.create_task(
+                        forwarder.forward_batch(otel_records, endpoint, api_key)
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to queue OTEL forward: {e}")
+                # Don't fail ingest on OTEL error
 
         return IngestResponse(accepted=len(request.records), rejected=0)
 

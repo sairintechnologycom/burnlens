@@ -1,0 +1,140 @@
+"""
+BurnLens Enterprise Self-Hosted Deployment
+
+For customers who prefer to run on their own infrastructure.
+
+Usage:
+  1. Copy this file to your server
+  2. Update environment variables below
+  3. docker-compose up -d
+
+Requirements:
+  - Docker 20.10+
+  - Docker Compose 1.29+
+  - 2GB RAM + 20GB storage minimum
+  - Access to PostgreSQL backup location (for first-time setup)
+"""
+
+version: '3.9'
+
+services:
+  # PostgreSQL Database (persistent)
+  postgres:
+    image: postgres:16-alpine
+    container_name: burnlens-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: burnlens
+      POSTGRES_USER: burnlens
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Error: DB_PASSWORD not set}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U burnlens -d burnlens"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - burnlens-net
+
+  # BurnLens Cloud API
+  api:
+    image: burnlens/burnlens-cloud:latest
+    container_name: burnlens-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: "postgresql+asyncpg://burnlens:${DB_PASSWORD}@postgres:5432/burnlens"
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:?Error: JWT_SECRET not set}
+
+      # Environment
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+
+      # OTEL Encryption (for customer integrations)
+      OTEL_ENCRYPTION_KEY: ${OTEL_ENCRYPTION_KEY:?Error: OTEL_ENCRYPTION_KEY not set}
+
+      # Email Configuration (optional)
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@burnlens.internal}
+
+      # Frontend URL
+      BURNLENS_FRONTEND_URL: https://${DOMAIN:?Error: DOMAIN not set}
+    ports:
+      - "8000:8000"
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - burnlens-net
+
+  # Nginx TLS Termination
+  nginx:
+    image: nginx:alpine
+    container_name: burnlens-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    environment:
+      DOMAIN: ${DOMAIN}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - burnlens-net
+
+volumes:
+  postgres_data:
+    driver: local
+  nginx_cache:
+    driver: local
+
+networks:
+  burnlens-net:
+    driver: bridge
+
+# ============================================================================
+# Backup Strategy
+# ============================================================================
+
+# Daily PostgreSQL backup (add to crontab):
+# 0 2 * * * docker exec burnlens-postgres pg_dump -U burnlens burnlens | gzip > /backups/burnlens-$(date +\%Y\%m\%d).sql.gz
+
+# To restore from backup:
+# docker exec -i burnlens-postgres psql -U burnlens burnlens < backup.sql

@@ -196,3 +196,86 @@ class TeamActivityResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# Enterprise OTEL features
+class OtelConfig(BaseModel):
+    """OpenTelemetry configuration for enterprise workspace."""
+    endpoint: str
+    api_key: str
+    enabled: bool
+
+
+class OtelConfigResponse(BaseModel):
+    """Response for OTEL configuration (with masked API key)."""
+    enabled: bool
+    endpoint: str
+    api_key_masked: str  # "Bearer ****...xxxx"
+
+
+class OtelTestResponse(BaseModel):
+    """Response for OTEL connectivity test."""
+    ok: bool
+    latency_ms: Optional[int] = None
+    error: Optional[str] = None
+
+
+# Enterprise status tracking
+class StatusCheckRecord(BaseModel):
+    """Individual status check record."""
+    endpoint: str
+    response_ms: int
+    status_code: int
+    ok: bool
+
+
+class ComponentStatus(BaseModel):
+    """Status of a service component."""
+    name: str
+    uptime_30d: float
+    status: str  # "operational" | "degraded" | "down"
+
+
+class StatusResponse(BaseModel):
+    """Response for /status endpoint."""
+    components: list[ComponentStatus]
+    incidents: list[dict]
+
+
+# Enterprise audit logging
+class AuditLogEntryExtended(BaseModel):
+    """Extended audit log entry with network info."""
+    id: int
+    user: Optional[str] = None
+    action: str
+    detail: dict
+    created_at: datetime
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    api_key_last4: Optional[str] = None
+
+
+class AuditLogResponse(BaseModel):
+    """Response for audit log query."""
+    entries: list[AuditLogEntryExtended]
+    total: int
+    limit: int
+    offset: int
+
+
+# Enterprise custom pricing
+class PricingEntry(BaseModel):
+    """Pricing entry for a model."""
+    input_per_1m: float
+    output_per_1m: float
+
+
+class CustomPricingRequest(BaseModel):
+    """Request to set custom pricing for workspace."""
+    # Format: {"gpt-4o": {"input_per_1m": 4.50, "output_per_1m": 13.50}}
+    pricing: dict[str, PricingEntry]
+
+
+class PricingResponse(BaseModel):
+    """Response for current pricing (default or custom)."""
+    pricing: dict[str, dict[str, float]]

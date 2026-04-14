@@ -31,7 +31,11 @@ async def init_db():
                 plan TEXT NOT NULL DEFAULT 'free',
                 api_key TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                active BOOLEAN NOT NULL DEFAULT true
+                active BOOLEAN NOT NULL DEFAULT true,
+                otel_endpoint TEXT,
+                otel_api_key_encrypted TEXT,
+                otel_enabled BOOLEAN NOT NULL DEFAULT false,
+                otel_last_push TIMESTAMPTZ
             )
         """)
 
@@ -162,13 +166,43 @@ async def init_db():
                 user_id UUID REFERENCES users(id) ON DELETE SET NULL,
                 action TEXT NOT NULL,
                 detail JSONB NOT NULL DEFAULT '{}',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ip_address TEXT,
+                user_agent TEXT,
+                api_key_last4 TEXT
             )
         """)
 
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_workspace_activity_workspace_ts
             ON workspace_activity(workspace_id, created_at DESC)
+        """)
+
+        # Enterprise SLA tracking table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS status_checks (
+                id BIGSERIAL PRIMARY KEY,
+                checked_at TIMESTAMPTZ NOT NULL,
+                endpoint TEXT NOT NULL,
+                response_ms INT NOT NULL,
+                status_code INT NOT NULL,
+                ok BOOLEAN NOT NULL
+            )
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_status_checks_checked_at
+            ON status_checks(checked_at DESC)
+        """)
+
+        # Enterprise workspace settings (custom pricing, etc.)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_settings (
+                workspace_id UUID PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+                custom_pricing JSONB,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
         """)
 
         logger.info("Database tables created/verified")

@@ -1,0 +1,49 @@
+Subject: BurnLens cost summary for {{workspace_name}} — {{month}}
+
+Hi {{owner_name}},
+
+Here's your LLM cost summary for {{month}}.
+
+**💰 This Month**
+
+Total Spend: ${{total_spend_usd}}
+Total Requests: {{total_requests}}
+Average Cost per Request: ${{avg_cost_per_request}}
+
+**🔝 Top Models**
+
+{{#each top_models}}
+  • {{this.model}} — ${{this.cost_usd}} ({{this.request_count}} requests)
+{{/each}}
+
+**👥 Top Teams**
+
+{{#each top_teams}}
+  • {{this.team}} — ${{this.cost_usd}} ({{this.request_count}} requests)
+{{/each}}
+
+**💚 Waste Identified & Saved**
+
+{{#if waste_items}}
+{{#each waste_items}}
+  • {{this.title}}: ${{this.savings_usd}} potential savings
+{{/each}}
+
+Total potential savings identified: ${{total_waste_savings}}
+{{else}}
+No waste detected this month — great job! ✨
+{{/if}}
+
+**📊 View Full Dashboard**
+
+{{workspace_url}}/dashboard?period=month&month={{month_iso}}
+
+**🛠️ Tips to Reduce Costs**
+
+1. Cache system prompts (70% cost reduction on retrieval)
+2. Use smaller models for simple tasks (GPT-3.5 vs GPT-4)
+3. Batch API calls to reduce request count
+
+Need help optimizing? Reply to this email.
+
+— The BurnLens Team

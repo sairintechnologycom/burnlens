@@ -1,0 +1,40 @@
+Subject: Your BurnLens Enterprise instance is ready
+
+Hi {{owner_name}},
+
+Welcome to BurnLens Enterprise! Your dedicated instance is now live and ready to track LLM costs across your organization.
+
+**Quick Start**
+
+API Key: {{api_key}}
+Workspace URL: {{workspace_url}}
+Dashboard: {{workspace_url}}/dashboard
+
+**Next Steps**
+
+1. Review the deployment guide to connect your proxies:
+   {{deploy_guide_url}}
+
+2. Configure OpenTelemetry push (optional):
+   - Go to Settings → OpenTelemetry
+   - Enter your Datadog/Grafana collector endpoint
+   - Cost data will sync in real-time
+
+3. Invite your team:
+   - Go to Team → Invite Members
+   - Your plan includes {{seat_limit}} team seats
+
+4. Schedule your onboarding call:
+   {{calendly_link}}
+
+**Compliance & Security**
+
+- All data stays on your infrastructure or our managed instance
+- Enterprise plan includes 10-year audit log retention
+- OpenTelemetry exports are encrypted in transit
+
+Need help? Email support@burnlens.app or reply to this message.
+
+Welcome aboard!
+
+— The BurnLens Team

@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     # Invitation expiry (hours)
     invitation_expiry_hours: int = 48
 
+    # Enterprise OTEL features
+    otel_encryption_key: str = os.getenv("OTEL_ENCRYPTION_KEY", "")
+
+    # Scheduler configuration
+    scheduler_enabled: bool = True
+    status_check_interval_seconds: int = 60
+    status_check_timeout_seconds: int = 5
+
     class Config:
         env_file = ".env"
         case_sensitive = False
