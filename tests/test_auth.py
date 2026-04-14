@@ -1,111 +1,95 @@
-import pytest
-from unittest.mock import patch, AsyncMock
+"""Tests for auth endpoints."""
+from __future__ import annotations
+
+import time
+from unittest.mock import AsyncMock
 from uuid import uuid4
-from datetime import datetime
+
+import pytest
 
 
 @pytest.mark.asyncio
-async def test_signup(client, mock_db):
-    """Test workspace signup."""
-    workspace_id = str(uuid4())
+async def test_signup_creates_workspace_and_api_key(client):
+    ac, mock_conn = client
+    mock_conn.fetchrow.side_effect = [
+        None,  # no existing workspace with this email
+        {"id": str(uuid4())},  # INSERT RETURNING id
+    ]
 
-    with patch("burnlens_cloud.auth.execute_insert") as mock_insert:
-        mock_insert.return_value = None
+    resp = await ac.post("/auth/signup", json={
+        "email": "new@example.com",
+        "workspace_name": "My Team",
+    })
 
-        response = await client.post(
-            "/auth/signup",
-            json={
-                "email": "test@example.com",
-                "workspace_name": "Test Workspace",
-            },
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "api_key" in data
+    assert resp.status_code == 200
+    data = resp.json()
     assert data["api_key"].startswith("bl_live_")
     assert "workspace_id" in data
-    assert data["message"] == "Workspace created successfully. Use the API key to login and start syncing data."
+    assert data["workspace_name"] == "My Team"
 
 
 @pytest.mark.asyncio
-async def test_login_success(client, mock_db):
-    """Test successful login."""
-    workspace_id = str(uuid4())
-    api_key = "bl_live_testkey123"
+async def test_signup_duplicate_email_409(client):
+    ac, mock_conn = client
+    mock_conn.fetchrow.return_value = {"id": str(uuid4())}  # email exists
 
-    with patch("burnlens_cloud.auth.execute_query") as mock_query:
-        mock_query.return_value = [
-            {
-                "id": workspace_id,
-                "name": "Test Workspace",
-                "owner_email": "test@example.com",
-                "plan": "free",
-                "api_key": api_key,
-                "created_at": datetime.utcnow(),
-                "active": True,
-            }
-        ]
+    resp = await ac.post("/auth/signup", json={
+        "email": "dup@example.com",
+        "workspace_name": "Dup",
+    })
 
-        response = await client.post(
-            "/auth/login",
-            json={"api_key": api_key},
-        )
+    assert resp.status_code == 409
+    assert "email_already_registered" in resp.text
 
-    assert response.status_code == 200
-    data = response.json()
+
+@pytest.mark.asyncio
+async def test_login_valid_key_returns_jwt(client):
+    ac, mock_conn = client
+    ws_id = str(uuid4())
+    mock_conn.fetchrow.return_value = {
+        "id": ws_id,
+        "name": "My Team",
+        "plan": "free",
+        "active": True,
+    }
+
+    resp = await ac.post("/auth/login", json={"api_key": "bl_live_abc123"})
+
+    assert resp.status_code == 200
+    data = resp.json()
     assert "token" in data
+    assert data["plan"] == "free"
+    assert data["workspace_name"] == "My Team"
     assert data["expires_in"] == 86400
-    assert data["workspace"]["name"] == "Test Workspace"
-    assert data["workspace"]["plan"] == "free"
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_api_key(client):
-    """Test login with invalid API key."""
-    with patch("burnlens_cloud.auth.execute_query") as mock_query:
-        mock_query.return_value = []
+async def test_login_invalid_key_401(client):
+    ac, mock_conn = client
+    mock_conn.fetchrow.return_value = None  # not found
 
-        response = await client.post(
-            "/auth/login",
-            json={"api_key": "invalid_key"},
-        )
+    resp = await ac.post("/auth/login", json={"api_key": "bl_live_bad"})
 
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid API key"
+    assert resp.status_code == 401
+    assert "invalid_api_key" in resp.text
 
 
 @pytest.mark.asyncio
-async def test_api_key_validation_format():
-    """Test API key format validation."""
-    from burnlens_cloud.auth import generate_api_key
+async def test_jwt_expired_returns_401(client):
+    from api.auth import _encode_jwt
+    from jose import jwt as jose_jwt
+    import api.config as cfg
 
-    key = generate_api_key()
-    assert key.startswith("bl_live_")
-    assert len(key) == len("bl_live_") + 32
+    # Create an already-expired token
+    payload = {
+        "workspace_id": str(uuid4()),
+        "plan": "free",
+        "iat": int(time.time()) - 100000,
+        "exp": int(time.time()) - 1,
+    }
+    expired_token = jose_jwt.encode(payload, cfg.JWT_SECRET, algorithm="HS256")
 
+    ac, _ = client
+    resp = await ac.get("/api/stats", headers={"Authorization": f"Bearer {expired_token}"})
 
-@pytest.mark.asyncio
-async def test_jwt_encode_decode():
-    """Test JWT token generation and validation."""
-    from burnlens_cloud.auth import encode_jwt, decode_jwt
-    from uuid import uuid4
-
-    workspace_id = str(uuid4())
-    plan = "cloud"
-
-    token = encode_jwt(workspace_id, plan)
-    payload = decode_jwt(token)
-
-    assert payload.workspace_id == workspace_id
-    assert payload.plan == plan
-    assert payload.exp > payload.iat
-
-
-@pytest.mark.asyncio
-async def test_jwt_invalid_token():
-    """Test JWT validation with invalid token."""
-    from burnlens_cloud.auth import decode_jwt
-
-    payload = decode_jwt("invalid.token.here")
-    assert payload is None
+    assert resp.status_code == 401

@@ -1,172 +1,135 @@
-import pytest
-from unittest.mock import patch, AsyncMock
+"""Tests for ingest endpoint."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
-from datetime import datetime
+
+import pytest
+
+
+def _record(**overrides):
+    base = {
+        "ts": "2026-04-14T10:00:00Z",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "reasoning_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000045,
+        "latency_ms": 320,
+        "tag_feature": "chat",
+        "tag_team": "backend",
+        "tag_customer": "acme",
+        "system_prompt_hash": "abc123",
+    }
+    base.update(overrides)
+    return base
 
 
 @pytest.mark.asyncio
-async def test_ingest_valid_batch(client):
-    """Test successful ingest of valid batch."""
-    workspace_id = str(uuid4())
-    api_key = "bl_live_test123"
+async def test_ingest_valid_batch_accepted(client):
+    ac, mock_conn = client
+    ws_id = str(uuid4())
 
-    with patch("burnlens_cloud.ingest.get_workspace_by_api_key") as mock_get_ws:
-        with patch("burnlens_cloud.ingest.check_free_tier_limit") as mock_check_limit:
-            with patch("burnlens_cloud.ingest.execute_bulk_insert") as mock_insert:
-                mock_get_ws.return_value = (workspace_id, "cloud")
-                mock_check_limit.return_value = True
-                mock_insert.return_value = None
+    with patch("api.ingest._lookup_workspace", new_callable=AsyncMock) as mock_lk:
+        mock_lk.return_value = (ws_id, "cloud")
+        mock_conn.executemany = AsyncMock()
 
-                response = await client.post(
-                    "/v1/ingest",
-                    json={
-                        "api_key": api_key,
-                        "records": [
-                            {
-                                "timestamp": "2024-01-15T10:30:00Z",
-                                "provider": "openai",
-                                "model": "gpt-4o",
-                                "input_tokens": 100,
-                                "output_tokens": 50,
-                                "reasoning_tokens": 0,
-                                "cache_read_tokens": 0,
-                                "cache_write_tokens": 0,
-                                "cost_usd": 0.015,
-                                "duration_ms": 1250,
-                                "status_code": 200,
-                                "tags": {"team": "backend"},
-                                "system_prompt_hash": "hash123",
-                            }
-                        ],
-                    },
-                )
+        resp = await ac.post("/api/v1/ingest", json={
+            "api_key": "bl_live_test",
+            "records": [_record(), _record(), _record()],
+        })
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["accepted"] == 1
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["accepted"] == 3
     assert data["rejected"] == 0
 
 
 @pytest.mark.asyncio
-async def test_ingest_invalid_api_key(client):
-    """Test ingest with invalid API key."""
-    with patch("burnlens_cloud.ingest.get_workspace_by_api_key") as mock_get_ws:
-        mock_get_ws.return_value = None
+async def test_ingest_invalid_api_key_401(client):
+    ac, mock_conn = client
 
-        response = await client.post(
-            "/v1/ingest",
-            json={
-                "api_key": "invalid_key",
-                "records": [],
-            },
-        )
+    with patch("api.ingest._lookup_workspace", new_callable=AsyncMock) as mock_lk:
+        mock_lk.return_value = None
 
-    assert response.status_code == 401
+        resp = await ac.post("/api/v1/ingest", json={
+            "api_key": "bad_key",
+            "records": [_record()],
+        })
 
-
-@pytest.mark.asyncio
-async def test_ingest_free_tier_limit(client):
-    """Test free tier monthly limit enforcement."""
-    workspace_id = str(uuid4())
-    api_key = "bl_live_test123"
-
-    with patch("burnlens_cloud.ingest.get_workspace_by_api_key") as mock_get_ws:
-        with patch("burnlens_cloud.ingest.check_free_tier_limit") as mock_check_limit:
-            mock_get_ws.return_value = (workspace_id, "free")
-            mock_check_limit.return_value = False  # Exceeded limit
-
-            response = await client.post(
-                "/v1/ingest",
-                json={
-                    "api_key": api_key,
-                    "records": [
-                        {
-                            "timestamp": "2024-01-15T10:30:00Z",
-                            "provider": "openai",
-                            "model": "gpt-4o",
-                            "input_tokens": 100,
-                            "output_tokens": 50,
-                            "reasoning_tokens": 0,
-                            "cache_read_tokens": 0,
-                            "cache_write_tokens": 0,
-                            "cost_usd": 0.015,
-                            "duration_ms": 1250,
-                            "status_code": 200,
-                            "tags": {},
-                            "system_prompt_hash": None,
-                        }
-                    ],
-                },
-            )
-
-    assert response.status_code == 429
-    data = response.json()
-    assert "free_tier_limit" in str(data)
+    assert resp.status_code == 401
+    assert "invalid_api_key" in resp.text
 
 
 @pytest.mark.asyncio
-async def test_ingest_bulk_performance():
-    """Test that bulk insert handles 500 records efficiently."""
-    from burnlens_cloud.ingest import IngestRequest
-    from burnlens_cloud.models import RequestRecordBase
+async def test_ingest_free_tier_limit_429(client):
+    ac, mock_conn = client
+    ws_id = str(uuid4())
 
-    # Create 500 records
-    records = [
-        RequestRecordBase(
-            timestamp=datetime.utcnow(),
-            provider="openai",
-            model="gpt-4o",
-            input_tokens=100,
-            output_tokens=50,
-            cost_usd=0.015,
-        )
-        for _ in range(500)
-    ]
+    with patch("api.ingest._lookup_workspace", new_callable=AsyncMock) as mock_lk:
+        mock_lk.return_value = (ws_id, "free")
 
-    request = IngestRequest(
-        api_key="bl_live_test",
-        records=records,
-    )
+        # Mock the pool for the free-tier count check
+        inner_conn = AsyncMock()
+        inner_conn.fetchval = AsyncMock(return_value=10001)
 
-    assert len(request.records) == 500
-    assert request.records[0].cost_usd == 0.015
+        mock_pool = MagicMock()
+        ctx = AsyncMock()
+        ctx.__aenter__ = AsyncMock(return_value=inner_conn)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_pool.acquire.return_value = ctx
+
+        import api.database as db_mod
+        original_pool = db_mod.pool
+        db_mod.pool = mock_pool
+        try:
+            resp = await ac.post("/api/v1/ingest", json={
+                "api_key": "bl_live_test",
+                "records": [_record()],
+            })
+        finally:
+            db_mod.pool = original_pool
+
+    assert resp.status_code == 429
+    assert "free_tier_limit" in resp.text
 
 
 @pytest.mark.asyncio
-async def test_ingest_db_error(client):
-    """Test handling of database errors during ingest."""
-    workspace_id = str(uuid4())
-    api_key = "bl_live_test123"
+async def test_ingest_empty_records_ok(client):
+    ac, mock_conn = client
 
-    with patch("burnlens_cloud.ingest.get_workspace_by_api_key") as mock_get_ws:
-        with patch("burnlens_cloud.ingest.check_free_tier_limit") as mock_check_limit:
-            with patch("burnlens_cloud.ingest.execute_bulk_insert") as mock_insert:
-                mock_get_ws.return_value = (workspace_id, "cloud")
-                mock_check_limit.return_value = True
-                mock_insert.side_effect = Exception("Database error")
+    with patch("api.ingest._lookup_workspace", new_callable=AsyncMock) as mock_lk:
+        mock_lk.return_value = (str(uuid4()), "cloud")
 
-                response = await client.post(
-                    "/v1/ingest",
-                    json={
-                        "api_key": api_key,
-                        "records": [
-                            {
-                                "timestamp": "2024-01-15T10:30:00Z",
-                                "provider": "openai",
-                                "model": "gpt-4o",
-                                "input_tokens": 100,
-                                "output_tokens": 50,
-                                "reasoning_tokens": 0,
-                                "cache_read_tokens": 0,
-                                "cache_write_tokens": 0,
-                                "cost_usd": 0.015,
-                                "duration_ms": 1250,
-                                "status_code": 200,
-                                "tags": {},
-                                "system_prompt_hash": None,
-                            }
-                        ],
-                    },
-                )
+        resp = await ac.post("/api/v1/ingest", json={
+            "api_key": "bl_live_test",
+            "records": [],
+        })
 
-    assert response.status_code == 500
+    assert resp.status_code == 200
+    assert resp.json() == {"accepted": 0, "rejected": 0}
+
+
+@pytest.mark.asyncio
+async def test_ingest_500_records_all_inserted(client):
+    ac, mock_conn = client
+    ws_id = str(uuid4())
+
+    with patch("api.ingest._lookup_workspace", new_callable=AsyncMock) as mock_lk:
+        mock_lk.return_value = (ws_id, "cloud")
+        mock_conn.executemany = AsyncMock()
+
+        records = [_record(cost_usd=0.0001 * i) for i in range(500)]
+        resp = await ac.post("/api/v1/ingest", json={
+            "api_key": "bl_live_test",
+            "records": records,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["accepted"] == 500
+    assert data["rejected"] == 0

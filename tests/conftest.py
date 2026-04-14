@@ -1,42 +1,56 @@
+"""Shared test fixtures for burnlens-cloud."""
+from __future__ import annotations
+
+import os
+import sys
+
+# Ensure api/ package is importable
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+os.environ["DATABASE_URL"] = "postgresql://localhost:5432/burnlens_test"
+os.environ["JWT_SECRET"] = "test-secret-key-for-unit-tests"
+os.environ["ENVIRONMENT"] = "test"
+
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
-import os
-
-# Set test database URL
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://localhost/burnlens_cloud_test"
-os.environ["JWT_SECRET"] = "test-secret-key"
-os.environ["STRIPE_API_KEY"] = "sk_test_mock"
-os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_mock"
-os.environ["ENVIRONMENT"] = "test"
+from unittest.mock import AsyncMock, patch, MagicMock
+from httpx import AsyncClient, ASGITransport
 
 
 @pytest_asyncio.fixture
 async def client():
-    """Create test client with mocked database."""
-    from burnlens_cloud.main import get_app
+    """Test client with mocked DB pool."""
+    # Create a mock pool that acts as an async context manager
+    mock_pool = MagicMock()
+    mock_conn = AsyncMock()
+    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
 
-    app = get_app()
+    with patch("api.database.init_db", new_callable=AsyncMock):
+        with patch("api.database.close_db", new_callable=AsyncMock):
+            from api.main import app
+            import api.database as db_mod
+            db_mod.pool = mock_pool
 
-    # Mock database initialization
-    with patch("burnlens_cloud.database.init_db") as mock_init:
-        with patch("burnlens_cloud.database.close_db") as mock_close:
-            mock_init.return_value = None
-            mock_close.return_value = None
-
-            async with AsyncClient(app=app, base_url="http://test") as ac:
-                yield ac
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                yield ac, mock_conn
 
 
 @pytest_asyncio.fixture
-async def mock_db():
-    """Mock database connection."""
-    with patch("burnlens_cloud.database.execute_query") as mock_query:
-        with patch("burnlens_cloud.database.execute_insert") as mock_insert:
-            with patch("burnlens_cloud.database.execute_bulk_insert") as mock_bulk:
-                yield {
-                    "execute_query": mock_query,
-                    "execute_insert": mock_insert,
-                    "execute_bulk_insert": mock_bulk,
-                }
+async def authed_client(client):
+    """Client tuple + a valid JWT token."""
+    from api.auth import _encode_jwt
+    ac, mock_conn = client
+    ws_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    token = _encode_jwt(ws_id, "cloud")
+
+    # Mock the workspace lookup used by get_current_workspace
+    mock_conn.fetchrow.return_value = {
+        "id": ws_id,
+        "name": "Test WS",
+        "plan": "cloud",
+        "active": True,
+    }
+
+    return ac, mock_conn, token, ws_id

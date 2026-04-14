@@ -1,9 +1,14 @@
 {
-  "version": 2,
-  "experimentalServices": {
-    "api": {
-      "entrypoint": "burnlens_cloud/main.py",
-      "routePrefix": "/api"
-    }
-  }
+  "builds": [
+    {"src": "api/main.py", "use": "@vercel/python"},
+    {"src": "frontend/**", "use": "@vercel/static"}
+  ],
+  "routes": [
+    {"src": "/api/(.*)", "dest": "api/main.py"},
+    {"src": "/auth/(.*)", "dest": "api/main.py"},
+    {"src": "/billing/(.*)", "dest": "api/main.py"},
+    {"src": "/dashboard", "dest": "frontend/dashboard.html"},
+    {"src": "/signup", "dest": "frontend/signup.html"},
+    {"src": "/(.*)", "dest": "frontend/index.html"}
+  ]
 }
