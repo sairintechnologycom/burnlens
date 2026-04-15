@@ -238,6 +238,121 @@ async def get_asset_summary(db_path: str) -> dict[str, Any]:
     )
 
 
+async def get_total_spend_all_assets(
+    db_path: str,
+    status: str | None = None,
+    provider: str | None = None,
+    risk_tier: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    """Return spend and count aggregated across ALL assets matching the filters.
+
+    Never applies LIMIT or OFFSET. Uses the same WHERE clause logic as get_assets()
+    for filter consistency.
+
+    Returns a dict with:
+    - total_assets: count of all matching assets
+    - active_assets: count with status='active'
+    - shadow_assets: count with status='shadow'
+    - unassigned_assets: count with owner_team IS NULL
+    - monthly_spend_usd_total: SUM of monthly_spend_usd across all matching assets
+    - new_this_week: count with first_seen_at in the last 7 days
+    """
+    where_clauses: list[str] = []
+    params: list[Any] = []
+
+    if provider is not None:
+        where_clauses.append("provider = ?")
+        params.append(provider)
+    if status is not None:
+        where_clauses.append("status = ?")
+        params.append(status)
+    if risk_tier is not None:
+        where_clauses.append("risk_tier = ?")
+        params.append(risk_tier)
+    if search is not None:
+        search_pattern = "%" + search + "%"
+        where_clauses.append(
+            "(model_name LIKE ? OR provider LIKE ? OR owner_team LIKE ? OR endpoint_url LIKE ? OR tags LIKE ?)"
+        )
+        params.extend([search_pattern] * 5)
+
+    where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+    async with aiosqlite.connect(db_path) as db:
+        # Total count and spend
+        cursor = await db.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total_assets,
+                COALESCE(SUM(monthly_spend_usd), 0.0) AS monthly_spend_usd_total
+            FROM ai_assets
+            {where_sql}
+            """,
+            params,
+        )
+        row = await cursor.fetchone()
+        total_assets = int(row[0]) if row else 0
+        monthly_spend_usd_total = float(row[1]) if row else 0.0
+
+        # Active count (same filters + status='active')
+        active_where = where_clauses + ["status = 'active'"] if status is None else where_clauses
+        active_params = list(params)
+        if status is None:
+            active_sql = "WHERE " + " AND ".join(active_where)
+        else:
+            active_sql = where_sql
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM ai_assets {active_sql}",
+            active_params,
+        )
+        row = await cursor.fetchone()
+        active_assets = int(row[0]) if row else 0
+
+        # Shadow count
+        shadow_where = where_clauses + ["status = 'shadow'"] if status is None else where_clauses
+        shadow_params = list(params)
+        if status is None:
+            shadow_sql = "WHERE " + " AND ".join(shadow_where)
+        else:
+            shadow_sql = where_sql
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM ai_assets {shadow_sql}",
+            shadow_params,
+        )
+        row = await cursor.fetchone()
+        shadow_assets = int(row[0]) if row else 0
+
+        # Unassigned count (owner_team IS NULL)
+        unassigned_clauses = list(where_clauses) + ["owner_team IS NULL"]
+        unassigned_sql = "WHERE " + " AND ".join(unassigned_clauses)
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM ai_assets {unassigned_sql}",
+            params,
+        )
+        row = await cursor.fetchone()
+        unassigned_assets = int(row[0]) if row else 0
+
+        # New this week
+        new_clauses = list(where_clauses) + ["first_seen_at >= date('now', '-7 days')"]
+        new_sql = "WHERE " + " AND ".join(new_clauses)
+        cursor = await db.execute(
+            f"SELECT COUNT(*) FROM ai_assets {new_sql}",
+            params,
+        )
+        row = await cursor.fetchone()
+        new_this_week = int(row[0]) if row else 0
+
+    return {
+        "total_assets": total_assets,
+        "active_assets": active_assets,
+        "shadow_assets": shadow_assets,
+        "unassigned_assets": unassigned_assets,
+        "monthly_spend_usd_total": monthly_spend_usd_total,
+        "new_this_week": new_this_week,
+    }
+
+
 async def update_asset_fields(
     db_path: str,
     asset_id: int,

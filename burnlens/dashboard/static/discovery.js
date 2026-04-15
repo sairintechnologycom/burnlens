@@ -25,13 +25,26 @@
     }
   }
 
+  let currentStatus = null;
+  let currentProvider = null;
+  let currentRiskTier = null;
+  let currentSearch = null;
+
+  function buildFilterParams() {
+    const params = new URLSearchParams();
+    if (currentStatus) params.set('status', currentStatus);
+    if (currentProvider) params.set('provider', currentProvider);
+    if (currentRiskTier) params.set('risk_tier', currentRiskTier);
+    if (currentSearch) params.set('search', currentSearch);
+    return params;
+  }
+
   function buildQueryString() {
-    const params = new URLSearchParams({
-      sort_by: currentSortBy,
-      sort_dir: currentSortDir,
-      limit: PAGE_SIZE,
-      offset: currentOffset,
-    });
+    const params = buildFilterParams();
+    params.set('sort_by', currentSortBy);
+    params.set('sort_dir', currentSortDir);
+    params.set('limit', PAGE_SIZE);
+    params.set('offset', currentOffset);
     return params.toString();
   }
 
@@ -41,6 +54,34 @@
     const data = await resp.json();
     renderTable(data.assets);
     renderPagination(data.total, data.offset, data.limit);
+  }
+
+  async function fetchSummary() {
+    const params = buildFilterParams();
+    const resp = await fetch('/api/v1/assets/summary?' + params.toString());
+    if (!resp.ok) return;
+    const data = await resp.json();
+    renderKpiCards(data);
+  }
+
+  function formatUsd(value) {
+    return '$' + Number(value).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function renderKpiCards(summary) {
+    var cards = [
+      { id: 'kpi-total-assets', value: summary.total_assets, label: 'Total Assets' },
+      { id: 'kpi-monthly-spend', value: formatUsd(summary.monthly_spend_usd_total), label: 'Monthly Spend' },
+      { id: 'kpi-shadow-assets', value: summary.shadow_assets, label: 'Shadow Assets' },
+      { id: 'kpi-new-this-week', value: summary.new_this_week, label: 'New This Week' },
+    ];
+    for (var i = 0; i < cards.length; i++) {
+      var el = document.getElementById(cards[i].id);
+      if (el) el.textContent = String(cards[i].value);
+    }
   }
 
   function sortIndicator(col) {
@@ -119,5 +160,8 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', fetchAssets);
+  document.addEventListener('DOMContentLoaded', function () {
+    fetchAssets();
+    fetchSummary();
+  });
 })();
