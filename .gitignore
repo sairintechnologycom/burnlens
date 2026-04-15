@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.coverage
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# Node / Frontend
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+playwright-report/
+test-results/
+
+# IDE
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
+
+# GSD / Planning
+.planning/
+graphify-out/
+
+# Data exports
+burnlens_export.csv
