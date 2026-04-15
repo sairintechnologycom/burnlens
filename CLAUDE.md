@@ -6,21 +6,67 @@ BurnLens is an open-source LLM FinOps tool — a transparent proxy + CLI + dashb
 
 **One-liner:** `pip install burnlens && burnlens start` — zero code changes, see every LLM API call's real cost.
 
-## Architecture
+## Architecture — Three Zones
 
 ```
-App → SDK → BurnLens Proxy (localhost:8420) → AI Provider (OpenAI/Anthropic/Google)
-                ↓
-          SQLite: log request, calculate cost, extract tags
-                ↓
-          Dashboard (localhost:8420/ui) + CLI (burnlens top/report/analyze)
+┌─────────────────────────────────────────────────────────────────┐
+│  USER'S MACHINE (free, always)         pip install burnlens     │
+│                                                                 │
+│  App → SDK → BurnLens Proxy (localhost:8420) → AI Provider      │
+│                  ↓                                              │
+│            SQLite: log request, calculate cost, extract tags    │
+│                  ↓                              ↓               │
+│  Dashboard (localhost:8420/ui)    cloud.sync → POST /v1/ingest  │
+│  CLI (burnlens top/report/analyze)    (every 60s, anonymised)   │
+└───────────────────────────────────────────┬─────────────────────┘
+                                            │ bl_live_xxx API key
+                                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  RAILWAY (paid backend)            api.burnlens.app             │
+│                                                                 │
+│  POST /v1/ingest — receives sync batches, validates API key     │
+│  Postgres — multi-tenant cost data keyed by api_key/org_id      │
+│  REST API — serves cloud dashboard data                         │
+│  Package: burnlens_cloud/ (this repo, never published to PyPI)  │
+└───────────────────────────────────────────┬─────────────────────┘
+                                            │
+                                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  VERCEL (frontend)                 burnlens.app                 │
+│                                                                 │
+│  Next.js app — landing page, login, cloud dashboard UI          │
+│  Auth (Auth.js or Clerk) — handles burnlens login flow          │
+│  Stripe billing — plan management                               │
+│  Writes bl_live_xxx API key to user's account on login          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
+### Zone 1: User's Machine (open-source proxy)
 - **Proxy:** FastAPI reverse proxy. Intercepts via SDK BASE_URL env vars. Forwards requests unmodified, logs on response.
 - **Storage:** SQLite with WAL mode. Zero external dependencies.
 - **Dashboard:** Static HTML + Chart.js served by FastAPI. No React, no build step.
 - **CLI:** Typer-based. Commands: start, stop, top, report, analyze, ui.
 - **Cost Engine:** JSON pricing files per provider. Calculates cost from token usage in response.
+- **Cloud Sync:** `burnlens/cloud/sync.py` batches anonymised records (hashes + token counts, never prompt content) and POSTs to Railway every 60s.
+- **PyPI package:** `burnlens` (the only thing users install)
+
+### Zone 2: Railway (SaaS backend)
+- **Package:** `burnlens_cloud/` in this repo. Never published to PyPI — deployed as a private service.
+- **Stack:** FastAPI + asyncpg + PostgreSQL
+- **Deploys via:** `git push → Railway auto-builds → api.burnlens.app`
+- **Why Railway over Lambda:** persistent Postgres connection pooling + always-on ingest endpoint, not ephemeral functions.
+- **Core schema:** `org_id, ts, provider, model, tokens_in, tokens_out, cost_usd, tag_*`
+
+### Zone 3: Vercel (frontend)
+- **Stack:** Next.js at `burnlens.app`
+- **Handles:** login (Auth.js or Clerk), cloud dashboard UI (org-wide spend), Stripe billing, `burnlens login` API key flow.
+- **Talks to:** Railway REST API for all data.
+
+### Money Flow
+1. User runs `burnlens login` → browser opens Vercel login page
+2. Vercel writes `bl_live_xxx` API key to their account
+3. CLI stores key locally in `~/.burnlens/config.yaml`
+4. Every sync batch includes the key → Railway validates → routes to org in Postgres
 
 ## Tech Stack
 
@@ -142,20 +188,11 @@ burnlens/
 - Error handling: log and continue, never crash the proxy
 - Tests: pytest + pytest-asyncio
 
-## Current Sprint
+## Current Status
 
-Sprint 1 (Week 1): Proxy Core
-- [ ] Project skeleton + pyproject.toml
-- [ ] FastAPI proxy server (server.py)
-- [ ] OpenAI request forwarding (non-streaming)
-- [ ] Anthropic request forwarding
-- [ ] Google request forwarding
-- [ ] SQLite storage + schema creation
-- [ ] Request logging with token extraction
-- [ ] Cost calculation engine + pricing JSON files
-- [ ] Streaming SSE passthrough
-- [ ] Tag extraction from headers
-- [ ] `burnlens start` CLI command with env var setup
+- **Open-source proxy (`burnlens`):** v1.0.0 on PyPI. Fully functional.
+- **Cloud backend (`burnlens_cloud`):** v1.0.1. Deployed as private service on Railway. NOT on PyPI.
+- **Frontend (`burnlens.app`):** Next.js on Vercel. Landing page live.
 
 ## Important Notes
 
