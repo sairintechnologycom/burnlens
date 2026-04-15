@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "burnlens-cloud"
-version = "0.1.0"
+version = "1.0.1"
 description = "BurnLens Cloud Backend — Cost aggregation and billing service"
 authors = [{name = "Bhushan", email = "bhushan@burnlens.app"}]
 requires-python = ">=3.11"
@@ -29,6 +29,9 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "httpx>=0.25.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["burnlens_cloud*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
