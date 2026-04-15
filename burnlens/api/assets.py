@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Query
 
 from burnlens.config import load_config
-from burnlens.storage.queries import get_assets, get_assets_count
+from burnlens.storage.queries import get_assets, get_assets_count, get_total_spend_all_assets
 
 logger = logging.getLogger(__name__)
 
@@ -80,3 +80,25 @@ async def list_assets_endpoint(
         "sort_by": sort_by,
         "sort_dir": sort_dir,
     }
+
+
+@router.get("/api/v1/assets/summary")
+async def assets_summary_endpoint(
+    status: str | None = Query(default=None),
+    provider: str | None = Query(default=None),
+    risk_tier: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+) -> dict:
+    """Return aggregated KPI summary across ALL matching assets (no pagination)."""
+    cfg = load_config()
+    db_path = cfg.db_path
+
+    summary = await get_total_spend_all_assets(
+        db_path,
+        status=status,
+        provider=provider,
+        risk_tier=risk_tier,
+        search=search,
+    )
+    summary["computed_over"] = "all_assets"
+    return summary
