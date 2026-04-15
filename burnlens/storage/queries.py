@@ -59,6 +59,12 @@ async def get_asset_by_id(db_path: str, asset_id: int) -> AiAsset | None:
     return _row_to_asset(row)
 
 
+_VALID_SORT_COLUMNS = {
+    "first_seen_at", "last_active_at", "monthly_spend_usd", "monthly_requests",
+    "model_name", "provider", "owner_team", "status", "risk_tier",
+}
+
+
 async def get_assets(
     db_path: str,
     provider: str | None = None,
@@ -69,15 +75,26 @@ async def get_assets(
     search_query: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    sort_by: str = "first_seen_at",
+    sort_dir: str = "desc",
 ) -> list[AiAsset]:
-    """Return a list of AiAsset records, ordered by last_active_at DESC.
+    """Return a list of AiAsset records with server-side sorting.
 
     Filters are applied only when the corresponding argument is not None.
     Supports pagination via limit and offset parameters.
     date_since filters on first_seen_at >= ? (ISO date string, e.g. '2026-01-01').
     search_query performs an OR LIKE search across model_name, provider, owner_team,
     endpoint_url, and tags (stored as JSON text).
+
+    sort_by must be one of the whitelisted column names; invalid values fall back
+    to 'first_seen_at'. sort_dir must be 'asc' or 'desc'; invalid values fall back
+    to 'desc'. A secondary sort on id ASC is always appended for stable pagination.
     """
+    if sort_by not in _VALID_SORT_COLUMNS:
+        sort_by = "first_seen_at"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+
     where_clauses: list[str] = []
     params: list[Any] = []
 
@@ -111,7 +128,7 @@ async def get_assets(
             f"""
             SELECT * FROM ai_assets
             {where_sql}
-            ORDER BY last_active_at DESC
+            ORDER BY {sort_by} {sort_dir.upper()}, id ASC
             LIMIT ? OFFSET ?
             """,
             params + [limit, offset],

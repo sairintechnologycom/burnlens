@@ -124,6 +124,25 @@ _CREATE_PROVIDER_SIGNATURES_PROVIDER_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_provider_signatures_provider ON provider_signatures(provider);
 """
 
+_CREATE_DISCOVERY_EVENTS_ARCHIVE_TABLE = """
+CREATE TABLE IF NOT EXISTS discovery_events_archive (
+    id              INTEGER PRIMARY KEY,
+    asset_id        INTEGER,
+    event_type      TEXT NOT NULL,
+    detected_at     TEXT NOT NULL,
+    details         TEXT,
+    archived_at     TEXT NOT NULL
+);
+"""
+
+_CREATE_ARCHIVE_DETECTED_AT_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_archive_detected_at ON discovery_events_archive(detected_at);
+"""
+
+_CREATE_ARCHIVE_ASSET_ID_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_archive_asset_id ON discovery_events_archive(asset_id);
+"""
+
 _CREATE_FIRED_ALERTS_TABLE = """
 CREATE TABLE IF NOT EXISTS fired_alerts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,6 +202,11 @@ async def init_db(db_path: str) -> None:
         await db.execute(_CREATE_AI_ASSETS_LAST_ACTIVE_INDEX)
         await db.execute(_CREATE_DISCOVERY_EVENTS_ASSET_DETECTED_INDEX)
         await db.execute(_CREATE_PROVIDER_SIGNATURES_PROVIDER_INDEX)
+
+        # Discovery events archive table
+        await db.execute(_CREATE_DISCOVERY_EVENTS_ARCHIVE_TABLE)
+        await db.execute(_CREATE_ARCHIVE_DETECTED_AT_INDEX)
+        await db.execute(_CREATE_ARCHIVE_ASSET_ID_INDEX)
 
         # Fired alerts dedup table
         await db.execute(_CREATE_FIRED_ALERTS_TABLE)
@@ -569,6 +593,76 @@ async def purge_old_fired_alerts(db_path: str, older_than_days: int = 30) -> int
         )
         await db.commit()
         return cursor.rowcount
+
+
+async def archive_old_discovery_events(db_path: str, retention_days: int = 90) -> int:
+    """Move discovery_events older than retention_days to discovery_events_archive.
+
+    Returns count of events archived.
+
+    Strategy:
+    1. BEGIN TRANSACTION
+    2. INSERT INTO discovery_events_archive SELECT ... WHERE detected_at < cutoff
+    3. Temporarily drop the append-only triggers
+    4. DELETE FROM discovery_events WHERE detected_at < cutoff
+    5. Recreate the append-only triggers
+    6. COMMIT
+    7. Run VACUUM to reclaim disk space (outside transaction)
+
+    Returns 0 and logs warning on any exception — never raises.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+    archived_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        async with aiosqlite.connect(db_path) as db:
+            # Copy old events to archive
+            await db.execute(
+                """
+                INSERT INTO discovery_events_archive
+                    (id, asset_id, event_type, detected_at, details, archived_at)
+                SELECT id, asset_id, event_type, detected_at, details, ?
+                FROM discovery_events
+                WHERE detected_at < ?
+                """,
+                (archived_at, cutoff),
+            )
+
+            # Count how many were archived
+            cursor = await db.execute(
+                "SELECT changes()",
+            )
+            row = await cursor.fetchone()
+            count = row[0] if row else 0
+
+            if count > 0:
+                # Drop append-only triggers so we can delete
+                await db.execute("DROP TRIGGER IF EXISTS prevent_discovery_events_update")
+                await db.execute("DROP TRIGGER IF EXISTS prevent_discovery_events_delete")
+
+                # Delete archived rows from the live table
+                await db.execute(
+                    "DELETE FROM discovery_events WHERE detected_at < ?",
+                    (cutoff,),
+                )
+
+                # Recreate the append-only triggers
+                await db.execute(_TRIGGER_NO_UPDATE)
+                await db.execute(_TRIGGER_NO_DELETE)
+
+            await db.commit()
+
+        # VACUUM outside the transaction to reclaim disk space
+        if count > 0:
+            async with aiosqlite.connect(db_path) as db:
+                await db.execute("VACUUM")
+
+        return count
+    except Exception as e:
+        logger.warning("Discovery events archival failed (non-fatal): %s", e)
+        return 0
 
 
 async def insert_request(db_path: str, record: RequestRecord) -> int:
