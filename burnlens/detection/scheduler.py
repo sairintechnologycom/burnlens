@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 from burnlens.detection.billing import run_all_parsers
 from burnlens.detection.classifier import classify_new_assets
-from burnlens.storage.database import purge_old_fired_alerts
+from burnlens.storage.database import archive_old_discovery_events, purge_old_fired_alerts
 from burnlens.alerts.discovery import DiscoveryAlertEngine
 from burnlens.config import BurnLensConfig
 
@@ -174,9 +174,19 @@ def register_alert_jobs(
         kwargs={"db_path": db_path},
     )
 
+    scheduler.add_job(
+        _run_discovery_events_archival,
+        trigger=CronTrigger(hour=2, minute=0),
+        id="discovery_events_archival",
+        replace_existing=True,
+        misfire_grace_time=3600,
+        kwargs={"db_path": db_path},
+    )
+
     logger.info(
         "Alert jobs registered (hourly discovery, daily digest at 08:00 UTC, "
-        "weekly digest Mon 08:00 UTC, nightly fired_alerts purge at 03:00 UTC)"
+        "weekly digest Mon 08:00 UTC, nightly fired_alerts purge at 03:00 UTC, "
+        "nightly discovery_events archival at 02:00 UTC)"
     )
 
 
@@ -239,3 +249,16 @@ async def _purge_old_fired_alerts(db_path: str) -> None:
             logger.info("Purged %d old fired_alerts records", deleted)
     except Exception:
         logger.error("fired_alerts purge failed", exc_info=True)
+
+
+async def _run_discovery_events_archival(db_path: str) -> None:
+    """Archive discovery_events older than 90 days.
+
+    Runs nightly at 02:00 UTC.  Fail-open.
+    """
+    try:
+        count = await archive_old_discovery_events(db_path, retention_days=90)
+        if count > 0:
+            logger.info("Archived %d discovery events older than 90 days", count)
+    except Exception:
+        logger.error("Discovery events archival failed", exc_info=True)
