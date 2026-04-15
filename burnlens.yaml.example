@@ -1,0 +1,26 @@
+# BurnLens configuration example
+# Copy to burnlens.yaml and edit as needed.
+
+port: 8420
+host: 127.0.0.1
+log_level: info
+
+# Provider admin keys for Shadow AI discovery via billing APIs
+# openai_admin_key: sk-admin-...
+# anthropic_admin_key: sk-ant-admin-...
+
+# Google Cloud Billing API — discover Vertex AI / Gemini usage
+google_billing:
+  enabled: false
+  auth_mode: api_key          # "api_key" or "service_account"
+  api_key: AIza...            # Google API key with Cloud Billing API enabled
+  # service_account_json_path: /path/to/service-account.json
+  billing_account_id: XXXXXX-XXXXXX-XXXXXX
+  # project_id: my-gcp-project
+  lookback_days: 30
+
+alerts:
+  terminal: true
+  # slack_webhook: https://hooks.slack.com/services/...
+  # budget_limit_usd: 100.0
+  # per_request_limit_usd: 5.0

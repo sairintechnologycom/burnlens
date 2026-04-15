@@ -45,6 +45,19 @@ class CustomerBudgetsConfig:
 
 
 @dataclass
+class GoogleBillingConfig:
+    """Google Cloud Billing API configuration for Shadow AI discovery."""
+
+    enabled: bool = False
+    auth_mode: str = "api_key"  # "api_key" | "service_account"
+    api_key: str | None = None
+    service_account_json_path: str | None = None
+    billing_account_id: str | None = None  # format: "XXXXXX-XXXXXX-XXXXXX"
+    project_id: str | None = None
+    lookback_days: int = 30
+
+
+@dataclass
 class CloudConfig:
     """Cloud sync configuration for burnlens.app SaaS backend."""
 
@@ -97,6 +110,7 @@ class BurnLensConfig:
     email: EmailConfig = field(default_factory=EmailConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     cloud: CloudConfig = field(default_factory=CloudConfig)
+    google_billing: GoogleBillingConfig = field(default_factory=GoogleBillingConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -235,6 +249,20 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             anonymise_prompts=bool(cloud_data.get("anonymise_prompts", True)),
         )
         kwargs["cloud"] = cloud
+
+    # Parse google_billing config
+    gb_data = data.get("google_billing")
+    if gb_data:
+        google_billing = GoogleBillingConfig(
+            enabled=bool(gb_data.get("enabled", False)),
+            auth_mode=str(gb_data.get("auth_mode", "api_key")),
+            api_key=gb_data.get("api_key"),
+            service_account_json_path=gb_data.get("service_account_json_path"),
+            billing_account_id=gb_data.get("billing_account_id"),
+            project_id=gb_data.get("project_id"),
+            lookback_days=int(gb_data.get("lookback_days", 30)),
+        )
+        kwargs["google_billing"] = google_billing
 
     cfg = BurnLensConfig(**kwargs)
     _apply_env_overrides(cfg)

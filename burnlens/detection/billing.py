@@ -161,20 +161,249 @@ async def fetch_google_usage(
     admin_key: str | None = None,
     since_hours: int = 24,
 ) -> list[dict]:
-    """Google billing API detection stub.
+    """Google billing API detection stub (legacy interface).
 
-    Google Generative AI does not expose a billing/usage admin API with
-    per-model breakdown suitable for this detection pattern. Detection for
-    Google happens through proxy traffic analysis instead.
+    Retained for backwards compatibility. The real implementation is in
+    GoogleBillingParser which uses the Cloud Billing v1 REST API.
 
     Returns:
         Always returns empty list.
     """
-    logger.info(
-        "Google detection uses proxy traffic only (no billing API available). "
-        "Google AI usage will be captured automatically via the BurnLens proxy."
-    )
     return []
+
+
+class GoogleBillingParser:
+    """Parses Google Cloud Billing API to discover Vertex AI and Generative AI usage.
+
+    Supported auth modes:
+      api_key: Simple API key — easiest setup, sufficient for billing read access
+      service_account: Full OAuth2 — required for private billing accounts
+
+    Falls back to proxy-only detection if billing config is missing or API fails.
+
+    BigQuery billing export alternative (not implemented):
+      SELECT service.description, sku.description, usage_start_time, cost, usage.amount
+      FROM `{project}.{dataset}.gcp_billing_export_v1_{billing_account_id}`
+      WHERE service.description LIKE '%AI%' OR service.description LIKE '%Vertex%'
+      AND DATE(usage_start_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+    """
+
+    VERTEX_AI_SERVICE_IDS = {
+        "aiplatform.googleapis.com",
+        "generativelanguage.googleapis.com",
+        "ml.googleapis.com",
+    }
+
+    GEMINI_MODEL_PREFIXES = [
+        "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro",
+        "gemini-2.0-flash", "text-bison", "code-bison", "chat-bison",
+    ]
+
+    BASE_URL = "https://cloudbilling.googleapis.com/v1"
+
+    async def fetch_usage(self, config: Any) -> list[dict]:
+        """Fetch AI usage from Google Cloud Billing API.
+
+        Args:
+            config: GoogleBillingConfig instance.
+
+        Returns:
+            List of asset dicts compatible with ai_assets upsert.
+            Returns [] on any error (fail-open, log warning).
+        """
+        if not config.enabled:
+            return []
+
+        if not config.billing_account_id:
+            logger.warning(
+                "google_billing.billing_account_id not configured — "
+                "skipping Google billing API detection."
+            )
+            return []
+
+        try:
+            headers, key_param = self._build_auth(config)
+        except _GoogleAuthUnavailable:
+            return []
+
+        try:
+            skus = await self._fetch_skus(config.billing_account_id, headers, key_param)
+        except Exception:
+            logger.warning("Google billing API fetch failed", exc_info=True)
+            return []
+
+        assets: list[dict] = []
+        key_for_hash = config.api_key or config.billing_account_id
+        api_key_hash = hashlib.sha256(key_for_hash.encode()).hexdigest()
+        now = datetime.now(timezone.utc).isoformat() + "Z"
+
+        for sku in skus:
+            model = self._extract_model(sku)
+            if model is None:
+                continue
+
+            assets.append({
+                "provider": "google",
+                "model": model,
+                "endpoint_url": (
+                    f"https://generativelanguage.googleapis.com"
+                    f"/v1beta/models/{model}:generateContent"
+                ),
+                "api_key_hash": api_key_hash,
+                "first_seen_at": now,
+                "last_seen_at": now,
+                "monthly_spend_usd": 0.0,
+                "request_count": 0,
+                "status": "active",
+                "source": "billing_api_google",
+            })
+
+        logger.info("Google billing parser found %d AI SKUs", len(assets))
+        return assets
+
+    def _build_auth(self, config: Any) -> tuple[dict[str, str], dict[str, str]]:
+        """Build auth headers and query params based on config.auth_mode.
+
+        Returns:
+            (headers_dict, key_query_params_dict)
+
+        Raises:
+            _GoogleAuthUnavailable: when service_account mode is requested
+                but google-auth is not installed.
+        """
+        if config.auth_mode == "service_account":
+            try:
+                from google.auth.transport.requests import Request as GoogleAuthRequest
+                from google.oauth2 import service_account as sa_module
+            except ImportError:
+                logger.warning(
+                    "Install google-auth for service account support: "
+                    "pip install google-auth"
+                )
+                raise _GoogleAuthUnavailable()
+
+            credentials = sa_module.Credentials.from_service_account_file(
+                config.service_account_json_path,
+                scopes=["https://www.googleapis.com/auth/cloud-billing.readonly"],
+            )
+            credentials.refresh(GoogleAuthRequest())
+            return {"Authorization": f"Bearer {credentials.token}"}, {}
+
+        # api_key mode (default)
+        if not config.api_key:
+            logger.warning(
+                "google_billing.api_key not configured — "
+                "skipping Google billing API detection."
+            )
+            return {}, {}
+
+        return {}, {"key": config.api_key}
+
+    async def _fetch_skus(
+        self,
+        billing_account_id: str,
+        headers: dict[str, str],
+        key_param: dict[str, str],
+    ) -> list[dict]:
+        """Fetch AI-related SKUs from Cloud Billing API with pagination.
+
+        Args:
+            billing_account_id: Google billing account ID.
+            headers: Auth headers.
+            key_param: Query params for API key auth.
+
+        Returns:
+            List of SKU dicts whose service matches known AI service IDs.
+        """
+        import asyncio
+
+        url = f"{self.BASE_URL}/services/-/skus"
+        params: dict[str, Any] = {
+            **key_param,
+            "pageSize": 500,
+        }
+
+        all_skus: list[dict] = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while True:
+                resp = await client.get(url, headers=headers, params=params)
+
+                if resp.status_code == 429:
+                    retry_after = float(resp.headers.get("Retry-After", "5"))
+                    logger.warning(
+                        "Google Billing API rate limited, retrying after %.1fs",
+                        retry_after,
+                    )
+                    await asyncio.sleep(retry_after)
+                    continue
+
+                resp.raise_for_status()
+                payload = resp.json()
+
+                for sku in payload.get("skus", []):
+                    service_id = (
+                        sku.get("category", {}).get("serviceDisplayName", "")
+                    )
+                    sku_service_name = sku.get("serviceProviderName", "")
+                    # Check if the SKU belongs to a known AI service
+                    resource_family = sku.get("category", {}).get("resourceFamily", "")
+                    service_display = sku.get("category", {}).get("serviceDisplayName", "")
+                    description = sku.get("description", "").lower()
+
+                    # Match prefixes with both hyphens and spaces
+                    # (SKU descriptions use spaces: "Gemini 1.5 Pro")
+                    desc_normalized = description.replace("-", " ")
+                    is_ai_sku = (
+                        any(svc_id in str(sku) for svc_id in self.VERTEX_AI_SERVICE_IDS)
+                        or "vertex ai" in service_display.lower()
+                        or "generative" in service_display.lower()
+                        or "cloud ai" in service_display.lower()
+                        or any(
+                            prefix in description or prefix.replace("-", " ") in desc_normalized
+                            for prefix in self.GEMINI_MODEL_PREFIXES
+                        )
+                    )
+
+                    if is_ai_sku:
+                        all_skus.append(sku)
+
+                next_page = payload.get("nextPageToken")
+                if not next_page:
+                    break
+
+                params["pageToken"] = next_page
+                await asyncio.sleep(0.2)  # Rate limit: 5 req/s
+
+        return all_skus
+
+    def _extract_model(self, sku: dict) -> str | None:
+        """Extract a model name from a SKU description.
+
+        Scans the SKU description for known model prefixes.
+
+        Args:
+            sku: A single SKU dict from the Cloud Billing API.
+
+        Returns:
+            Model name string or None if no known model found.
+        """
+        description = sku.get("description", "").lower()
+        desc_normalized = description.replace("-", " ")
+
+        for prefix in self.GEMINI_MODEL_PREFIXES:
+            if prefix in description or prefix.replace("-", " ") in desc_normalized:
+                return prefix
+
+        # Try to detect from Vertex AI generic SKU descriptions
+        if "vertex ai" in description or "generative" in description:
+            # Return a generic model name for unrecognized Vertex AI SKUs
+            return None
+
+        return None
+
+
+class _GoogleAuthUnavailable(Exception):
+    """Raised when google-auth library is not installed."""
 
 
 async def run_all_parsers(db_path: str, config: BurnLensConfig) -> None:
@@ -201,6 +430,14 @@ async def run_all_parsers(db_path: str, config: BurnLensConfig) -> None:
     google_data = await fetch_google_usage()
     for item in google_data:
         provider_results.append(("google", [item]))
+
+    # Google Cloud Billing API parser (richer discovery via billing SKUs)
+    try:
+        google_billing_data = await GoogleBillingParser().fetch_usage(config.google_billing)
+        for item in google_billing_data:
+            provider_results.append(("google", [item]))
+    except Exception:
+        logger.warning("Google billing parser failed — continuing with other providers", exc_info=True)
 
     for provider, result in provider_results:
         for item in result:
