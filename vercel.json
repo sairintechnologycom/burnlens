@@ -1,7 +1,6 @@
 {
-  "framework": "nextjs",
   "installCommand": "cd frontend && npm install",
-  "buildCommand": "cd frontend && npm run build",
+  "buildCommand": "cd frontend && npx next build",
   "outputDirectory": "frontend/out",
   "rewrites": [
     {"source": "/(.*)", "destination": "/index.html"}
