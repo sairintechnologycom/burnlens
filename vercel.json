@@ -1,8 +1,5 @@
 {
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npx next build",
-  "outputDirectory": "frontend/out",
-  "rewrites": [
-    {"source": "/(.*)", "destination": "/index.html"}
-  ]
+  "outputDirectory": "frontend/out"
 }
