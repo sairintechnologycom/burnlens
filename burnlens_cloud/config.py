@@ -43,14 +43,13 @@ class Settings(BaseSettings):
         "enterprise": 999,
     }
 
-    # SSO Configuration
-    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
-    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "https://api.burnlens.app/auth/google/callback")
-
-    github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
-    github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
-    github_redirect_uri: str = os.getenv("GITHUB_REDIRECT_URI", "https://api.burnlens.app/auth/github/callback")
+    # SSO Configuration (disabled — not implemented yet, API key auth only for now)
+    # google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    # google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    # google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "https://api.burnlens.app/auth/google/callback")
+    # github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
+    # github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    # github_redirect_uri: str = os.getenv("GITHUB_REDIRECT_URI", "https://api.burnlens.app/auth/github/callback")
 
     # Email Configuration
     sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")

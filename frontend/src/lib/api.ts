@@ -1,0 +1,52 @@
+"use client";
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
+
+export class AuthError extends Error {
+  constructor(message: string = "Invalid API key") {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
+export class PaymentRequiredError extends Error {
+  constructor(message: string = "Upgrade required") {
+    super(message);
+    this.name = "PaymentRequiredError";
+  }
+}
+
+export function apiKey(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("burnlens_api_key");
+}
+
+export async function apiFetch(endpoint: string, key: string, options: RequestInit = {}) {
+  const url = `${BASE_URL}${endpoint}`;
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+    "Content-Type": "application/json",
+  };
+
+  // Only send API key header for cloud mode (non-local keys)
+  if (key && key !== "local") {
+    headers["X-API-Key"] = key;
+  }
+
+  const resp = await fetch(url, { ...options, headers });
+
+  if (resp.status === 401) {
+    throw new AuthError();
+  }
+
+  if (resp.status === 402) {
+    throw new PaymentRequiredError();
+  }
+
+  if (!resp.ok) {
+    const errorData = await resp.json().catch(() => ({ detail: "Unknown error" }));
+    throw new Error(errorData.detail || `Request failed with status ${resp.status}`);
+  }
+
+  return resp.json();
+}
