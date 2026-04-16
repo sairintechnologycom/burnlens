@@ -229,17 +229,17 @@ async def get_db():
 
 async def execute_query(query: str, *args):
     """Execute a query and return results."""
-    async with await get_db() as conn:
+    async with pool.acquire() as conn:
         return await conn.fetch(query, *args)
 
 
 async def execute_insert(query: str, *args):
     """Execute an insert query and return the number of rows affected."""
-    async with await get_db() as conn:
+    async with pool.acquire() as conn:
         return await conn.execute(query, *args)
 
 
 async def execute_bulk_insert(query: str, args_list: list):
     """Execute bulk insert using executemany."""
-    async with await get_db() as conn:
+    async with pool.acquire() as conn:
         return await conn.executemany(query, args_list)
