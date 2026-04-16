@@ -1,4 +1,7 @@
+burnlens/
+burnlens_cloud/
 tests/
+api/
 migrations/
 .pytest_cache/
 .env
@@ -8,5 +11,8 @@ migrations/
 __pycache__/
 .venv/
 venv/
+requirements.txt
+pyproject.toml
+Procfile
 *.md
 !README.md
