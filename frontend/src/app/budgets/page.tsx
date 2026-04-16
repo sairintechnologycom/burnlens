@@ -48,8 +48,8 @@ function BudgetsContent() {
     setError("");
     try {
       const [b, t] = await Promise.all([
-        apiFetch("/api/budget", session.apiKey).catch(() => null),
-        apiFetch("/api/team-budgets", session.apiKey).catch(() => []),
+        apiFetch("/api/budget", session.token).catch(() => null),
+        apiFetch("/api/team-budgets", session.token).catch(() => []),
       ]);
       setBudget(b);
       setTeams(t as TeamBudget[]);

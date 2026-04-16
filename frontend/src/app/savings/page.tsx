@@ -33,7 +33,7 @@ function SavingsContent() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch("/api/v1/recommendations", session.apiKey);
+      const data = await apiFetch("/api/v1/recommendations", session.token);
       setRecs(data as Recommendation[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();

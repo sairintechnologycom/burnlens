@@ -29,8 +29,8 @@ export default function RightPanel() {
     if (!session) return;
     setLoading(true);
     Promise.all([
-      apiFetch(`/api/v1/usage/by-model?days=${days}`, session.apiKey).catch(() => []),
-      apiFetch(`/api/v1/waste-alerts`, session.apiKey).catch(() => []),
+      apiFetch(`/api/v1/usage/by-model?days=${days}`, session.token).catch(() => []),
+      apiFetch(`/api/v1/waste-alerts`, session.token).catch(() => []),
     ]).then(([m, a]) => {
       setModels((m as any[]).slice(0, 4));
       setAlerts((a as any[]).slice(0, 3));

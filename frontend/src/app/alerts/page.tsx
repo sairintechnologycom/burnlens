@@ -52,7 +52,7 @@ function AlertsContent() {
   const fetchAlerts = async () => {
     if (!session) return;
     try {
-      const data = await apiFetch("/api/v1/alerts", session.apiKey);
+      const data = await apiFetch("/api/v1/alerts", session.token);
       setAlerts(Array.isArray(data) ? data : data.alerts || []);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
@@ -73,7 +73,7 @@ function AlertsContent() {
     if (!session || !name.trim() || !threshold) return;
     setSaving(true);
     try {
-      await apiFetch("/api/v1/alerts", session.apiKey, {
+      await apiFetch("/api/v1/alerts", session.token, {
         method: "POST",
         body: JSON.stringify({
           name: name.trim(),
@@ -99,7 +99,7 @@ function AlertsContent() {
   const handleDelete = async (id: string) => {
     if (!session || !confirm("Delete this alert?")) return;
     try {
-      await apiFetch(`/api/v1/alerts/${id}`, session.apiKey, { method: "DELETE" });
+      await apiFetch(`/api/v1/alerts/${id}`, session.token, { method: "DELETE" });
       setAlerts(alerts.filter(a => a.id !== id));
       showToast("Alert deleted", "success");
     } catch (err: any) {

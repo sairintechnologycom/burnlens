@@ -37,7 +37,7 @@ function RequestsContent() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch(`/api/v1/requests?days=${days}&limit=${limit}`, session.apiKey);
+      const data = await apiFetch(`/api/v1/requests?days=${days}&limit=${limit}`, session.token);
       setRequests(data as RequestRecord[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();

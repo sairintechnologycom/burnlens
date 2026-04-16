@@ -30,7 +30,7 @@ function OptimizationsContent() {
   const fetchOpts = async () => {
     if (!session) return;
     try {
-      const data = await apiFetch("/api/v1/optimizations", session.apiKey);
+      const data = await apiFetch("/api/v1/optimizations", session.token);
       setOpts(data);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
@@ -65,7 +65,7 @@ function OptimizationsContent() {
     if (!session) return;
     setTriggering(true);
     try {
-      await apiFetch("/api/v1/optimize", session.apiKey, { method: "POST" });
+      await apiFetch("/api/v1/optimize", session.token, { method: "POST" });
       setTimeout(fetchOpts, 3000);
     } catch (err: any) {
       showToast("Failed: " + err.message, "error");

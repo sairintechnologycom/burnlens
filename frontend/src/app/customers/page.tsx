@@ -27,7 +27,7 @@ function CustomersContent() {
     if (!session) return;
     setLoading(true);
     setNeedsUpgrade(false);
-    apiFetch(`/api/v1/usage/by-customer?days=${days}`, session.apiKey)
+    apiFetch(`/api/v1/usage/by-customer?days=${days}`, session.token)
       .then((data) => setCustomers(data as CustomerData[]))
       .catch((err) => {
         if (err instanceof AuthError) logout();

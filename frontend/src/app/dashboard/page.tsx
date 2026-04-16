@@ -55,9 +55,9 @@ function DashboardContent() {
     setError("");
     try {
       const [sum, ts, reqs] = await Promise.all([
-        apiFetch(`/api/v1/usage/summary?days=${days}`, session.apiKey),
-        apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.apiKey).catch(() => []),
-        apiFetch(`/api/v1/requests?days=${days}&limit=${requestLimit}`, session.apiKey).catch(() => []),
+        apiFetch(`/api/v1/usage/summary?days=${days}`, session.token),
+        apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.token).catch(() => []),
+        apiFetch(`/api/v1/requests?days=${days}&limit=${requestLimit}`, session.token).catch(() => []),
       ]);
       setSummary(sum);
 

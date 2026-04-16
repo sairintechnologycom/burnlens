@@ -29,7 +29,7 @@ function TeamsContent() {
     if (!session) return;
     setLoading(true);
     setNeedsUpgrade(false);
-    apiFetch(`/api/v1/usage/by-team?days=${days}`, session.apiKey)
+    apiFetch(`/api/v1/usage/by-team?days=${days}`, session.token)
       .then((data) => setTeams(data as TeamData[]))
       .catch((err) => {
         if (err instanceof AuthError) logout();

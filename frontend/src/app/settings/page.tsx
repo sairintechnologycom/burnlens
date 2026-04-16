@@ -30,7 +30,7 @@ function SettingsContent() {
     if (!confirm("Regenerate your API key? The old key will stop working immediately.")) return;
     setRegenerating(true);
     try {
-      const data = await apiFetch("/api/v1/orgs/regenerate-key", session.apiKey, { method: "POST" });
+      const data = await apiFetch("/api/v1/orgs/regenerate-key", session.token, { method: "POST" });
       localStorage.setItem("burnlens_api_key", data.api_key);
       showToast("API key regenerated", "success");
       window.location.reload();
@@ -46,7 +46,7 @@ function SettingsContent() {
     if (!session) return;
     setSyncing(true);
     try {
-      await apiFetch("/api/v1/sync/trigger", session.apiKey, { method: "POST" });
+      await apiFetch("/api/v1/sync/trigger", session.token, { method: "POST" });
       showToast("Sync triggered", "success");
     } catch (err: any) {
       if (err instanceof AuthError) logout();
@@ -73,7 +73,7 @@ function SettingsContent() {
               <label className="form-label">Org name</label>
               <input
                 className="form-input"
-                defaultValue={session?.orgName}
+                defaultValue={session?.workspaceName}
                 style={{ fontFamily: "var(--font-sans)" }}
               />
             </div>
