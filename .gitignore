@@ -34,3 +34,4 @@ graphify-out/
 
 # Data exports
 burnlens_export.csv
+.gstack/
