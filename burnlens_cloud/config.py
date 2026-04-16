@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # Stripe
     stripe_api_key: str = os.getenv("STRIPE_API_KEY", "")
     stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    stripe_price_personal: str = os.getenv("STRIPE_PRICE_PERSONAL", "")
+    stripe_price_team: str = os.getenv("STRIPE_PRICE_TEAM", "")
 
     # App
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
