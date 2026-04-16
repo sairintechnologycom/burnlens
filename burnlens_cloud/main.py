@@ -17,7 +17,7 @@ from .deployment_api import router as deployment_router
 from .deployment.status import get_status_checker
 
 # Configure logging
-logging.basicConfig(level=settings.log_level)
+logging.basicConfig(level=settings.log_level.upper())
 logger = logging.getLogger(__name__)
 
 
