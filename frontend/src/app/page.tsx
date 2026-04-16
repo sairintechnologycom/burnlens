@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from "react";
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
   { prompt: false, text: "Collecting burnlens", delay: 800 },
-  { prompt: false, text: "  Downloading burnlens-0.4.2.tar.gz (42 kB)", delay: 1200 },
-  { prompt: false, text: "Successfully installed burnlens-0.4.2", delay: 1800 },
+  { prompt: false, text: "  Downloading burnlens-1.0.1.tar.gz (42 kB)", delay: 1200 },
+  { prompt: false, text: "Successfully installed burnlens-1.0.1", delay: 1800 },
   { prompt: true,  text: "burnlens start", delay: 2400 },
-  { prompt: false, text: "BurnLens v0.4.2 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
+  { prompt: false, text: "BurnLens v1.0.1 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
   { prompt: false, text: "Intercepting: OPENAI_BASE_URL, ANTHROPIC_BASE_URL", delay: 3400 },
   { prompt: false, text: "Ready. Waiting for requests...", delay: 3800, highlight: true },
 ];
@@ -472,6 +472,92 @@ export default function LandingPage() {
           to { opacity: 1; transform: translateY(0); }
         }
 
+        /* PRICING */
+        .lp-pricing {
+          max-width: 960px; margin: 0 auto; padding: 80px 24px;
+          border-top: 1px solid var(--border);
+        }
+        .lp-pricing-title {
+          font-weight: 800; font-size: 28px; text-align: center;
+          color: var(--l-text); margin-bottom: 8px;
+        }
+        .lp-pricing-sub {
+          text-align: center; font-size: 14px; color: var(--muted2);
+          margin-bottom: 40px;
+        }
+        .lp-pricing-grid {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+        }
+        .lp-plan {
+          background: var(--bg2); border: 1px solid var(--border);
+          border-radius: 10px; padding: 24px 20px; position: relative;
+          display: flex; flex-direction: column;
+        }
+        .lp-plan.featured { border-color: var(--cyan); }
+        .lp-plan-badge {
+          position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+          background: var(--cyan); color: #080c10; font-size: 10px;
+          font-weight: 700; padding: 2px 12px; border-radius: 10px;
+          letter-spacing: 0.04em;
+        }
+        .lp-plan-name {
+          font-weight: 700; font-size: 16px; color: var(--l-text); margin-bottom: 8px;
+        }
+        .lp-plan-price {
+          font-family: var(--font-mono), monospace;
+          font-size: 28px; font-weight: 700; color: var(--l-text); margin-bottom: 16px;
+        }
+        .lp-plan-price span { font-size: 13px; color: var(--l-muted); font-weight: 400; }
+        .lp-plan-features {
+          list-style: none; flex: 1; margin-bottom: 20px;
+        }
+        .lp-plan-features li {
+          font-size: 13px; color: var(--muted2); line-height: 2;
+          padding-left: 16px; position: relative;
+        }
+        .lp-plan-features li::before {
+          content: '\2713'; position: absolute; left: 0; color: var(--cyan); font-size: 11px;
+        }
+        .lp-plan-cta {
+          display: block; text-align: center; padding: 8px 16px;
+          border-radius: 6px; font-size: 13px; font-weight: 600;
+          text-decoration: none; transition: all 0.15s;
+        }
+        .lp-plan-cta.outline {
+          border: 1px solid var(--border); color: var(--l-text);
+        }
+        .lp-plan-cta.outline:hover { border-color: var(--l-muted); }
+        .lp-plan-cta.primary {
+          background: var(--cyan); color: #080c10; border: none;
+        }
+        .lp-plan-cta.primary:hover { background: var(--cyan-dim); }
+
+        /* WHAT'S NEW */
+        .lp-whats-new {
+          max-width: 640px; margin: 0 auto; padding: 60px 24px 80px;
+        }
+        .lp-wn-title {
+          font-weight: 800; font-size: 22px; text-align: center;
+          color: var(--l-text); margin-bottom: 24px;
+        }
+        .lp-wn-list {
+          display: flex; flex-direction: column; gap: 10px;
+        }
+        .lp-wn-item {
+          display: flex; align-items: center; gap: 10px;
+          font-size: 13px; color: var(--muted2);
+          padding: 8px 14px; background: var(--bg2);
+          border: 1px solid var(--border); border-radius: 6px;
+        }
+        .lp-wn-tag {
+          font-family: var(--font-mono), monospace;
+          font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+          text-transform: uppercase; padding: 2px 8px;
+          border-radius: 3px; flex-shrink: 0;
+        }
+        .lp-wn-tag.fix { background: rgba(34,201,138,0.12); color: #22c98a; }
+        .lp-wn-tag.new { background: rgba(0,229,200,0.12); color: var(--cyan); }
+
         @media (max-width: 768px) {
           .lp-nav { padding: 0 16px; }
           .lp-ed-section { grid-template-columns: 1fr; gap: 8px; }
@@ -480,6 +566,7 @@ export default function LandingPage() {
           .dash-stats { grid-template-columns: repeat(2, 1fr); }
           .dash-stat:nth-child(2) { border-right: none; }
           .dash-topbar-nav { display: none; }
+          .lp-pricing-grid { grid-template-columns: 1fr; max-width: 360px; margin: 0 auto; }
         }
       `}</style>
 
@@ -499,6 +586,8 @@ export default function LandingPage() {
           </Link>
           <div className="lp-nav-right">
             <a href="#how">How it works</a>
+            <a href="#pricing">Pricing</a>
+            <a href="https://github.com/bhushan/burnlens#readme">Docs</a>
             <Link href="/dashboard" className="outline">Dashboard</Link>
             <Link href="/setup" className="primary">Get Started</Link>
           </div>
@@ -588,6 +677,90 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        {/* PRICING */}
+        <section className="lp-pricing" id="pricing">
+          <h2 className="lp-pricing-title">Simple pricing</h2>
+          <p className="lp-pricing-sub">Free forever for individual developers. Pay only when your team needs cloud sync.</p>
+          <div className="lp-pricing-grid">
+            <div className="lp-plan">
+              <div className="lp-plan-name">Free</div>
+              <div className="lp-plan-price">$0<span>/mo</span></div>
+              <ul className="lp-plan-features">
+                <li>Local proxy + dashboard</li>
+                <li>All 3 providers</li>
+                <li>5 waste detection rules</li>
+                <li>Budget alerts</li>
+                <li>7-day history</li>
+              </ul>
+              <Link href="/setup" className="lp-plan-cta outline">Get Started</Link>
+            </div>
+            <div className="lp-plan featured">
+              <div className="lp-plan-badge">Popular</div>
+              <div className="lp-plan-name">Cloud</div>
+              <div className="lp-plan-price">$29<span>/mo</span></div>
+              <ul className="lp-plan-features">
+                <li>Everything in Free</li>
+                <li>Cloud sync + team dashboard</li>
+                <li>90-day history</li>
+                <li>Up to 3 seats</li>
+                <li>Email alerts</li>
+              </ul>
+              <Link href="/setup" className="lp-plan-cta primary">Start Free Trial</Link>
+            </div>
+            <div className="lp-plan">
+              <div className="lp-plan-name">Teams</div>
+              <div className="lp-plan-price">$99<span>/mo</span></div>
+              <ul className="lp-plan-features">
+                <li>Everything in Cloud</li>
+                <li>Up to 10 seats</li>
+                <li>RBAC (owner/admin/viewer)</li>
+                <li>365-day history</li>
+                <li>Audit log</li>
+              </ul>
+              <Link href="/setup" className="lp-plan-cta outline">Get Started</Link>
+            </div>
+            <div className="lp-plan">
+              <div className="lp-plan-name">Enterprise</div>
+              <div className="lp-plan-price">Custom</div>
+              <ul className="lp-plan-features">
+                <li>Everything in Teams</li>
+                <li>Unlimited seats</li>
+                <li>OTEL export</li>
+                <li>Custom pricing rules</li>
+                <li>10-year retention</li>
+              </ul>
+              <a href="mailto:bhushan@burnlens.app" className="lp-plan-cta outline">Contact Us</a>
+            </div>
+          </div>
+        </section>
+
+        {/* WHAT'S NEW */}
+        <section className="lp-whats-new">
+          <h2 className="lp-wn-title">What&apos;s new in v1.0.1</h2>
+          <div className="lp-wn-list">
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag fix">Fixed</span>
+              <span>Alert deduplication now persists across proxy restarts</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Google Cloud Billing API integration — Vertex AI + Gemini asset discovery</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag fix">Fixed</span>
+              <span>Server-side asset sorting — global sort across all pages</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag fix">Fixed</span>
+              <span>Monthly spend KPI now aggregates all assets, not just current page</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>90-day discovery events archival with nightly cleanup</span>
+            </div>
+          </div>
+        </section>
 
         {/* INSTALL CTA */}
         <section className="lp-install">
