@@ -82,6 +82,26 @@ async def verify_token(request: Request) -> TokenPayload:
     return payload
 
 
+# Role hierarchy for permission checking
+ROLE_HIERARCHY = {"viewer": 0, "admin": 1, "owner": 2}
+
+
+async def require_role(required_role: str, token: TokenPayload):
+    """
+    Check if user has required role.
+    Raises 403 HTTPException if insufficient permissions.
+    """
+    if ROLE_HIERARCHY.get(token.role, -1) < ROLE_HIERARCHY.get(required_role, 999):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "insufficient_role",
+                "required": required_role,
+                "current": token.role,
+            },
+        )
+
+
 async def upsert_user(
     email: str,
     name: Optional[str] = None,
