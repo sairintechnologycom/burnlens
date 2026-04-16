@@ -17,14 +17,18 @@ const interTight = Inter_Tight({
 });
 
 export const metadata: Metadata = {
-  title: "BurnLens — AI FinOps Dashboard",
-  description: "Track, analyze, and optimize your LLM API spend across Anthropic, OpenAI & Google AI.",
-  robots: "noindex, nofollow",
+  title: "BurnLens — See exactly what your AI API calls cost",
+  description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy for Anthropic, OpenAI & Google AI.",
   openGraph: {
-    title: "BurnLens Dashboard",
-    description: "AI FinOps dashboard — track LLM API costs across providers.",
+    title: "BurnLens — See exactly what your AI API calls cost",
+    description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy that shows developers where their AI API money goes.",
     siteName: "BurnLens",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BurnLens — See exactly what your AI API calls cost",
+    description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps for Anthropic, OpenAI & Google AI.",
   },
 };
 
