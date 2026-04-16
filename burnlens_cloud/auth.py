@@ -1,7 +1,7 @@
 import logging
 import secrets
 import time
-from uuid import uuid4
+from uuid import uuid4, UUID
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -444,7 +444,7 @@ async def signup(request: SignupRequest):
 
         return SignupResponse(
             api_key=api_key,
-            workspace_id=workspace_id,
+            workspace_id=UUID(workspace_id),
             token=token,
             expires_in=settings.jwt_expiration_seconds,
             workspace=workspace,
