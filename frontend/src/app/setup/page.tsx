@@ -3,12 +3,11 @@
 import { useState, useEffect, Suspense, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { BASE_URL } from "@/lib/api";
 
 function isLocalBackend(): boolean {
   try {
-    const url = new URL(API_BASE);
+    const url = new URL(BASE_URL);
     const host = url.hostname;
     return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
   } catch {
@@ -16,78 +15,90 @@ function isLocalBackend(): boolean {
   }
 }
 
+function storeSession(data: {
+  token: string;
+  workspace: { id: string; name: string; plan: string; api_key: string };
+}) {
+  localStorage.setItem("burnlens_token", data.token);
+  localStorage.setItem("burnlens_workspace_id", data.workspace.id);
+  localStorage.setItem("burnlens_workspace_name", data.workspace.name);
+  localStorage.setItem("burnlens_plan", data.workspace.plan);
+  localStorage.setItem("burnlens_api_key", data.workspace.api_key);
+}
+
 function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "1";
-  const [mode, setMode] = useState<"enter" | "register">("enter");
-  const [apiKey, setApiKey] = useState("");
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // If running locally, redirect straight to dashboard
+  // Login fields
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Register fields
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+
   useEffect(() => {
     if (isLocalBackend()) {
       router.replace("/dashboard");
     }
   }, [router]);
-  const [error, setError] = useState("");
 
-  const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [generatedKey, setGeneratedKey] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  const validateKey = useCallback(async () => {
+  const handleLogin = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/orgs/me`, {
-        headers: { "X-API-Key": apiKey },
+      const resp = await fetch(`${BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
-      if (!resp.ok) throw new Error("Invalid API key");
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ detail: "Login failed" }));
+        throw new Error(data.detail || "Login failed");
+      }
       const data = await resp.json();
-      localStorage.setItem("burnlens_api_key", apiKey);
-      localStorage.setItem("burnlens_org_id", data.org_id);
-      localStorage.setItem("burnlens_org_name", data.name);
+      storeSession(data);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Could not validate API key");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [apiKey, router]);
+  }, [email, password, router]);
 
   const handleRegister = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/orgs/register`, {
+      const resp = await fetch(`${BASE_URL}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: regName, email: regEmail }),
+        body: JSON.stringify({
+          email: regEmail,
+          password: regPassword,
+          workspace_name: regName,
+        }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({ detail: "Registration failed" }));
-        throw new Error(data.detail);
+        throw new Error(data.detail || "Registration failed");
       }
       const data = await resp.json();
-      setGeneratedKey(data.api_key);
-      localStorage.setItem("burnlens_api_key", data.api_key);
-      localStorage.setItem("burnlens_org_id", data.org_id);
-      localStorage.setItem("burnlens_org_name", regName);
+      storeSession(data);
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [regName, regEmail]);
-
-  const copyKey = useCallback(() => {
-    navigator.clipboard.writeText(generatedKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [generatedKey]);
+  }, [regName, regEmail, regPassword, router]);
 
   return (
     <>
@@ -101,8 +112,6 @@ function SetupContent() {
           font-family: var(--font-sans), system-ui, sans-serif;
           color: var(--s-text);
         }
-
-        /* Top bar */
         .sp-topbar {
           display: flex; align-items: center; justify-content: space-between;
           padding: 0 32px; height: 56px;
@@ -120,13 +129,9 @@ function SetupContent() {
           text-decoration: none; transition: color 0.15s;
         }
         .sp-back:hover { color: var(--s-text); }
-
-        /* Main area */
         .sp-main {
           flex: 1; display: grid; grid-template-columns: 1fr 1fr;
         }
-
-        /* Left side — branding */
         .sp-left {
           display: flex; flex-direction: column; justify-content: center;
           padding: 64px; border-right: 1px solid var(--border);
@@ -163,17 +168,11 @@ function SetupContent() {
           font-family: var(--font-mono), monospace;
           font-size: 12px; color: var(--s-muted); letter-spacing: 0.02em;
         }
-
-        /* Right side — form */
         .sp-right {
           display: flex; align-items: center; justify-content: center;
           padding: 64px 48px;
         }
-        .sp-form-area {
-          width: 100%; max-width: 380px;
-        }
-
-        /* Tab switcher */
+        .sp-form-area { width: 100%; max-width: 380px; }
         .sp-tabs {
           display: flex; gap: 0; margin-bottom: 32px;
           border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
@@ -185,11 +184,8 @@ function SetupContent() {
           color: var(--s-muted); background: var(--bg);
           border: none; cursor: pointer; transition: all 0.15s;
         }
-        .sp-tab.active {
-          background: var(--bg3); color: var(--s-text);
-        }
+        .sp-tab.active { background: var(--bg3); color: var(--s-text); }
         .sp-tab:first-child { border-right: 1px solid var(--border); }
-
         .sp-form-title {
           font-weight: 700; font-size: 20px; color: var(--s-text);
           margin-bottom: 4px;
@@ -197,8 +193,6 @@ function SetupContent() {
         .sp-form-sub {
           font-size: 13px; color: var(--s-muted); margin-bottom: 24px;
         }
-
-        /* Inputs */
         .sp-label {
           display: block; font-family: var(--font-mono), monospace;
           font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em;
@@ -212,10 +206,7 @@ function SetupContent() {
         }
         .sp-input:focus { border-color: var(--cyan); }
         .sp-input::placeholder { color: #2a3540; }
-
         .sp-field { margin-bottom: 16px; }
-
-        /* Buttons */
         .sp-btn-primary {
           width: 100%; padding: 11px 0; border: none; border-radius: 6px;
           background: var(--cyan); color: #080c10;
@@ -224,54 +215,16 @@ function SetupContent() {
         }
         .sp-btn-primary:hover { background: var(--cyan-dim); }
         .sp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        /* Error */
         .sp-error {
           padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;
           background: rgba(240,64,96,0.08); border: 1px solid rgba(240,64,96,0.2);
           color: var(--s-red); font-size: 12px;
         }
-
-        /* Warning */
         .sp-warning {
           padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;
           background: rgba(240,169,40,0.08); border: 1px solid rgba(240,169,40,0.2);
           color: var(--amber); font-size: 12px;
         }
-
-        /* Generated key */
-        .sp-key-row {
-          display: flex; gap: 8px; margin-bottom: 12px;
-        }
-        .sp-key-input {
-          flex: 1; background: var(--bg); border: 1px solid var(--border);
-          border-radius: 6px; padding: 10px 14px; color: var(--cyan);
-          font-family: var(--font-mono), monospace; font-size: 12px;
-          outline: none;
-        }
-        .sp-btn-copy {
-          padding: 0 16px; border: 1px solid var(--border); border-radius: 6px;
-          background: var(--bg); color: var(--s-muted);
-          font-family: var(--font-mono), monospace; font-size: 11px;
-          cursor: pointer; transition: all 0.15s; white-space: nowrap;
-        }
-        .sp-btn-copy:hover { border-color: var(--cyan); color: var(--cyan); }
-
-        .sp-code-block {
-          background: var(--bg); border: 1px solid var(--border);
-          border-radius: 6px; padding: 14px 16px; margin-bottom: 12px;
-          font-family: var(--font-mono), monospace; font-size: 11px;
-          color: var(--cyan); line-height: 1.8; overflow-x: auto;
-        }
-
-        .sp-success-icon {
-          width: 48px; height: 48px; border-radius: 50%;
-          background: rgba(0,229,200,0.08); border: 1px solid rgba(0,229,200,0.2);
-          display: flex; align-items: center; justify-content: center;
-          margin-bottom: 20px;
-        }
-
-        /* Footer */
         .sp-footer {
           padding: 16px 32px; border-top: 1px solid var(--border);
           display: flex; align-items: center; justify-content: center; gap: 20px;
@@ -284,7 +237,6 @@ function SetupContent() {
         .sp-footer-dot {
           width: 3px; height: 3px; border-radius: 50%; background: #1e2830;
         }
-
         @media (max-width: 768px) {
           .sp-main { grid-template-columns: 1fr; }
           .sp-left { display: none; }
@@ -294,7 +246,6 @@ function SetupContent() {
       `}</style>
 
       <div className="sp">
-        {/* Top bar */}
         <div className="sp-topbar">
           <Link href="/" className="sp-logo">
             <svg width="20" height="20" viewBox="0 0 26 26" fill="none">
@@ -314,7 +265,6 @@ function SetupContent() {
         </div>
 
         <div className="sp-main">
-          {/* Left branding panel */}
           <div className="sp-left">
             <h2>
               See where every<br />
@@ -344,148 +294,124 @@ function SetupContent() {
             </div>
           </div>
 
-          {/* Right form panel */}
           <div className="sp-right">
             <div className="sp-form-area">
-              {generatedKey ? (
-                /* ── Success state ── */
+              {isExpired && (
+                <div className="sp-warning">
+                  Session expired. Please sign in again.
+                </div>
+              )}
+
+              <div className="sp-tabs">
+                <button
+                  className={`sp-tab ${mode === "login" ? "active" : ""}`}
+                  onClick={() => { setMode("login"); setError(""); }}
+                >
+                  Sign in
+                </button>
+                <button
+                  className={`sp-tab ${mode === "register" ? "active" : ""}`}
+                  onClick={() => { setMode("register"); setError(""); }}
+                >
+                  Register
+                </button>
+              </div>
+
+              {error && <div className="sp-error">{error}</div>}
+
+              {mode === "login" ? (
                 <>
-                  <div className="sp-success-icon">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path d="M5 10l4 4 6-8" stroke="#00e5c8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <div className="sp-form-title">You&apos;re in</div>
-                  <div className="sp-form-sub">Save your API key — you won&apos;t see it again.</div>
+                  <div className="sp-form-title">Welcome back</div>
+                  <div className="sp-form-sub">Sign in to access your dashboard.</div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Your API key</label>
-                    <div className="sp-key-row">
-                      <input className="sp-key-input" readOnly value={generatedKey} />
-                      <button className="sp-btn-copy" onClick={copyKey}>
-                        {copied ? "Copied" : "Copy"}
-                      </button>
-                    </div>
+                    <label className="sp-label">Email</label>
+                    <input
+                      type="email"
+                      className="sp-input"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && email && password) handleLogin(); }}
+                    />
                   </div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Add to burnlens.yaml</label>
-                    <pre className="sp-code-block">
-{`cloud:
-  enabled: true
-  api_key: "${generatedKey}"
-  endpoint: "${API_BASE}"`}
-                    </pre>
-                  </div>
-
-                  <div className="sp-warning">
-                    This key grants full access. Store it securely.
+                    <label className="sp-label">Password</label>
+                    <input
+                      type="password"
+                      className="sp-input"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && email && password) handleLogin(); }}
+                    />
                   </div>
 
                   <button
                     className="sp-btn-primary"
-                    onClick={() => router.push("/dashboard")}
+                    onClick={handleLogin}
+                    disabled={loading || !email || !password}
                   >
-                    Open Dashboard
+                    {loading ? "Signing in..." : "Sign in"}
                   </button>
                 </>
               ) : (
-                /* ── Login / Register ── */
-                <>
-                  {isExpired && (
-                    <div className="sp-warning">
-                      Session expired. Please sign in again.
-                    </div>
-                  )}
+                <form onSubmit={handleRegister}>
+                  <div className="sp-form-title">Create your workspace</div>
+                  <div className="sp-form-sub">Start tracking LLM costs in under a minute.</div>
 
-                  <div className="sp-tabs">
-                    <button
-                      className={`sp-tab ${mode === "enter" ? "active" : ""}`}
-                      onClick={() => { setMode("enter"); setError(""); }}
-                    >
-                      Sign in
-                    </button>
-                    <button
-                      className={`sp-tab ${mode === "register" ? "active" : ""}`}
-                      onClick={() => { setMode("register"); setError(""); }}
-                    >
-                      Register
-                    </button>
+                  <div className="sp-field">
+                    <label className="sp-label">Workspace name</label>
+                    <input
+                      type="text"
+                      required
+                      className="sp-input"
+                      placeholder="Acme Engineering"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      style={{ fontFamily: "var(--font-sans), system-ui" }}
+                    />
                   </div>
 
-                  {error && <div className="sp-error">{error}</div>}
+                  <div className="sp-field">
+                    <label className="sp-label">Email</label>
+                    <input
+                      type="email"
+                      required
+                      className="sp-input"
+                      placeholder="you@company.com"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                    />
+                  </div>
 
-                  {mode === "enter" ? (
-                    <>
-                      <div className="sp-form-title">Welcome back</div>
-                      <div className="sp-form-sub">Enter your API key to access the dashboard.</div>
+                  <div className="sp-field">
+                    <label className="sp-label">Password</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      className="sp-input"
+                      placeholder="Min 8 characters"
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                    />
+                  </div>
 
-                      <div className="sp-field">
-                        <label className="sp-label">API key</label>
-                        <input
-                          type="password"
-                          className="sp-input"
-                          placeholder="bl_live_..."
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && apiKey) validateKey(); }}
-                        />
-                      </div>
-
-                      <button
-                        className="sp-btn-primary"
-                        onClick={validateKey}
-                        disabled={loading || !apiKey}
-                      >
-                        {loading ? "Connecting..." : "Connect"}
-                      </button>
-                    </>
-                  ) : (
-                    <form onSubmit={handleRegister}>
-                      <div className="sp-form-title">Create your org</div>
-                      <div className="sp-form-sub">Start tracking LLM costs in under a minute.</div>
-
-                      <div className="sp-field">
-                        <label className="sp-label">Organization name</label>
-                        <input
-                          type="text"
-                          required
-                          className="sp-input"
-                          placeholder="Acme Engineering"
-                          value={regName}
-                          onChange={(e) => setRegName(e.target.value)}
-                          style={{ fontFamily: "var(--font-sans), system-ui" }}
-                        />
-                      </div>
-
-                      <div className="sp-field">
-                        <label className="sp-label">Email</label>
-                        <input
-                          type="email"
-                          required
-                          className="sp-input"
-                          placeholder="eng@acme.com"
-                          value={regEmail}
-                          onChange={(e) => setRegEmail(e.target.value)}
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="sp-btn-primary"
-                        disabled={loading}
-                      >
-                        {loading ? "Creating..." : "Create Organization"}
-                      </button>
-                    </form>
-                  )}
-                </>
+                  <button
+                    type="submit"
+                    className="sp-btn-primary"
+                    disabled={loading}
+                  >
+                    {loading ? "Creating..." : "Create Workspace"}
+                  </button>
+                </form>
               )}
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="sp-footer">
           <span>Open source</span>
           <span className="sp-footer-dot" />

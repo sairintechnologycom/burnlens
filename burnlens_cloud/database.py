@@ -87,11 +87,25 @@ async def init_db():
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 email TEXT UNIQUE NOT NULL,
                 name TEXT,
+                password_hash TEXT,
                 google_id TEXT UNIQUE,
                 github_id TEXT UNIQUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 last_login TIMESTAMPTZ
             )
+        """)
+
+        # Migration: add password_hash column if missing
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'password_hash'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN password_hash TEXT;
+                END IF;
+            END $$;
         """)
 
         await conn.execute("""

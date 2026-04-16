@@ -37,8 +37,8 @@ function WasteContent() {
     if (!session) return;
     setLoading(true);
     Promise.all([
-      apiFetch("/api/v1/waste-alerts", session.apiKey).catch(() => []),
-      apiFetch("/api/v1/recommendations", session.apiKey).catch(() => []),
+      apiFetch("/api/v1/waste-alerts", session.token).catch(() => []),
+      apiFetch("/api/v1/recommendations", session.token).catch(() => []),
     ])
       .then(([a, r]) => {
         setAlerts(a as WasteAlert[]);

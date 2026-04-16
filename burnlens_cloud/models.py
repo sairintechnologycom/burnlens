@@ -66,8 +66,10 @@ class IngestResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Schema for login request."""
-    api_key: str
+    """Schema for login request — API key OR email+password."""
+    api_key: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
 
 
 class LoginResponse(BaseModel):
@@ -80,6 +82,7 @@ class LoginResponse(BaseModel):
 class SignupRequest(BaseModel):
     """Schema for signup request."""
     email: str
+    password: str
     workspace_name: str
 
 
@@ -87,7 +90,10 @@ class SignupResponse(BaseModel):
     """Schema for signup response."""
     api_key: str
     workspace_id: UUID
-    message: str = "Workspace created. Check your email for next steps."
+    token: str
+    expires_in: int
+    workspace: WorkspaceResponse
+    message: str = "Workspace created successfully."
 
 
 class TokenPayload(BaseModel):

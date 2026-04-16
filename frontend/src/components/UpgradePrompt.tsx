@@ -9,7 +9,7 @@ export default function UpgradePrompt({ feature }: { feature: string }) {
   const handleUpgrade = async () => {
     if (!session) return;
     try {
-      const data = await apiFetch("/api/v1/billing/checkout", session.apiKey, { method: "POST" });
+      const data = await apiFetch("/api/v1/billing/checkout", session.token, { method: "POST" });
       if (data.url) window.location.href = data.url;
     } catch {
       // fallback

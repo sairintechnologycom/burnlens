@@ -26,7 +26,7 @@ function ModelsContent() {
   useEffect(() => {
     if (!session) return;
     setLoading(true);
-    apiFetch(`/api/v1/usage/by-model?days=${days}`, session.apiKey)
+    apiFetch(`/api/v1/usage/by-model?days=${days}`, session.token)
       .then((data) => setModels(data as ModelData[]))
       .catch((err) => {
         if (err instanceof AuthError) logout();

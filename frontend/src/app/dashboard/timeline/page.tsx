@@ -30,7 +30,7 @@ function TimelineContent() {
     setLoading(true);
     setError("");
     try {
-      const ts = await apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.apiKey);
+      const ts = await apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.token);
       const byDate: Record<string, { cost: number; calls: number }> = {};
       (ts as TimeseriesPoint[]).forEach((p) => {
         if (!byDate[p.date]) byDate[p.date] = { cost: 0, calls: 0 };

@@ -32,7 +32,7 @@ function ConnectionsContent() {
   const fetchConnections = async () => {
     if (!session) return;
     try {
-      const data = await apiFetch("/api/v1/connections", session.apiKey);
+      const data = await apiFetch("/api/v1/connections", session.token);
       setConnections(data);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
@@ -65,7 +65,7 @@ function ConnectionsContent() {
   const handleDelete = async (id: string) => {
     if (!session || !confirm("Delete this connection?")) return;
     try {
-      await apiFetch(`/api/v1/connections/${id}`, session.apiKey, { method: "DELETE" });
+      await apiFetch(`/api/v1/connections/${id}`, session.token, { method: "DELETE" });
       setConnections(connections.filter(c => c.id !== id));
       showToast("Connection deleted", "success");
     } catch (err: any) {

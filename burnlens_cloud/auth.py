@@ -5,7 +5,9 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
+from passlib.hash import bcrypt
 
 from .config import settings
 from .database import execute_query, execute_insert
@@ -19,8 +21,6 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
-
-from fastapi.responses import RedirectResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -85,6 +85,7 @@ async def verify_token(request: Request) -> TokenPayload:
 async def upsert_user(
     email: str,
     name: Optional[str] = None,
+    password: Optional[str] = None,
     google_id: Optional[str] = None,
     github_id: Optional[str] = None,
 ) -> str:
@@ -92,6 +93,8 @@ async def upsert_user(
     Upsert user by email, google_id, or github_id.
     Returns user_id.
     """
+    password_hash = bcrypt.hash(password) if password else None
+
     # Try to find existing user
     if google_id:
         result = await execute_query(
@@ -117,21 +120,26 @@ async def upsert_user(
     if result:
         user_id = str(result[0]["id"])
         # Update OAuth IDs if provided
-        if google_id or github_id:
-            update_fields = []
-            update_params = []
-            param_idx = 1
+        update_fields = []
+        update_params = []
+        param_idx = 1
 
-            if google_id:
-                update_fields.append(f"google_id = ${param_idx}")
-                update_params.append(google_id)
-                param_idx += 1
+        if google_id:
+            update_fields.append(f"google_id = ${param_idx}")
+            update_params.append(google_id)
+            param_idx += 1
 
-            if github_id:
-                update_fields.append(f"github_id = ${param_idx}")
-                update_params.append(github_id)
-                param_idx += 1
+        if github_id:
+            update_fields.append(f"github_id = ${param_idx}")
+            update_params.append(github_id)
+            param_idx += 1
 
+        if password_hash:
+            update_fields.append(f"password_hash = ${param_idx}")
+            update_params.append(password_hash)
+            param_idx += 1
+
+        if update_fields:
             update_params.append(user_id)
             await execute_insert(
                 f"UPDATE users SET {', '.join(update_fields)} WHERE id = ${param_idx}",
@@ -145,12 +153,13 @@ async def upsert_user(
     try:
         await execute_insert(
             """
-            INSERT INTO users (id, email, name, google_id, github_id, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO users (id, email, name, password_hash, google_id, github_id, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             """,
             user_id,
             email,
             name,
+            password_hash,
             google_id,
             github_id,
             datetime.utcnow(),
@@ -265,39 +274,76 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """
-    Login with API key.
+    Login with email+password or API key.
     Returns JWT token and workspace details.
     """
-    result = await execute_query(
-        "SELECT id, name, owner_email, plan, api_key, created_at, active FROM workspaces WHERE api_key = $1 AND active = true",
-        request.api_key,
-    )
+    if request.email and request.password:
+        # Email + password login
+        user_result = await execute_query(
+            "SELECT id, email, password_hash FROM users WHERE email = $1",
+            request.email,
+        )
+        if not user_result or not user_result[0]["password_hash"]:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if not result:
-        logger.warning(f"Failed login attempt with invalid API key")
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        user_row = user_result[0]
+        if not bcrypt.verify(request.password, user_row["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    row = result[0]
-    workspace_id = str(row["id"])
+        user_id = str(user_row["id"])
 
-    # Auto-migrate workspace if needed (create user + member records)
-    user_id, role = await auto_migrate_user_for_workspace(workspace_id, row["owner_email"])
+        # Update last_login
+        await execute_insert(
+            "UPDATE users SET last_login = $1 WHERE id = $2",
+            datetime.utcnow(), user_id,
+        )
 
-    # If already migrated, get user_id and role
-    if user_id is None:
+        # Find user's workspace membership
         member_result = await execute_query(
             """
-            SELECT user_id, role FROM workspace_members
-            WHERE workspace_id = $1 AND active = true
+            SELECT wm.workspace_id, wm.role, w.id, w.name, w.owner_email, w.plan, w.api_key, w.created_at, w.active
+            FROM workspace_members wm
+            JOIN workspaces w ON w.id = wm.workspace_id
+            WHERE wm.user_id = $1 AND wm.active = true AND w.active = true
+            ORDER BY wm.joined_at ASC
             LIMIT 1
             """,
-            workspace_id,
+            user_id,
         )
         if not member_result:
-            logger.error(f"No workspace members found after migration for {workspace_id}")
-            raise HTTPException(status_code=500, detail="Failed to get user role")
-        user_id = str(member_result[0]["user_id"])
-        role = member_result[0]["role"]
+            raise HTTPException(status_code=401, detail="No workspace found for this account")
+
+        row = member_result[0]
+        workspace_id = str(row["workspace_id"])
+        role = row["role"]
+
+    elif request.api_key:
+        # API key login (legacy / CLI flow)
+        result = await execute_query(
+            "SELECT id, name, owner_email, plan, api_key, created_at, active FROM workspaces WHERE api_key = $1 AND active = true",
+            request.api_key,
+        )
+        if not result:
+            logger.warning("Failed login attempt with invalid API key")
+            raise HTTPException(status_code=401, detail="Invalid API key")
+
+        row = result[0]
+        workspace_id = str(row["id"])
+
+        # Auto-migrate workspace if needed
+        user_id, role = await auto_migrate_user_for_workspace(workspace_id, row["owner_email"])
+
+        if user_id is None:
+            member_result = await execute_query(
+                "SELECT user_id, role FROM workspace_members WHERE workspace_id = $1 AND active = true LIMIT 1",
+                workspace_id,
+            )
+            if not member_result:
+                raise HTTPException(status_code=500, detail="Failed to get user role")
+            user_id = str(member_result[0]["user_id"])
+            role = member_result[0]["role"]
+    else:
+        raise HTTPException(status_code=400, detail="Provide email+password or api_key")
 
     token = encode_jwt(workspace_id, user_id, role, row["plan"])
 
@@ -321,9 +367,19 @@ async def login(request: LoginRequest):
 @router.post("/signup", response_model=SignupResponse)
 async def signup(request: SignupRequest):
     """
-    Create a new workspace and user.
-    Returns API key for use in future login and ingest calls.
+    Create a new workspace and user with email+password.
+    Returns JWT token so user is logged in immediately.
     """
+    # Check if email already exists
+    existing = await execute_query(
+        "SELECT id FROM users WHERE email = $1", request.email,
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
+
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
     workspace_id = str(uuid4())
     api_key = generate_api_key()
 
@@ -343,17 +399,39 @@ async def signup(request: SignupRequest):
             True,
         )
 
-        # Create user and add to workspace
-        user_id = await upsert_user(email=request.email, name=request.email.split("@")[0])
+        # Create user with password and add to workspace
+        user_id = await upsert_user(
+            email=request.email,
+            name=request.email.split("@")[0],
+            password=request.password,
+        )
         await ensure_workspace_member(workspace_id, user_id, role="owner")
 
         logger.info(f"New workspace created: {workspace_id} with user {user_id}")
 
+        # Generate JWT so user is logged in immediately
+        token = encode_jwt(workspace_id, user_id, "owner", "free")
+
+        workspace = WorkspaceResponse(
+            id=workspace_id,
+            name=request.workspace_name,
+            owner_email=request.email,
+            plan="free",
+            api_key=api_key,
+            created_at=datetime.utcnow(),
+            active=True,
+        )
+
         return SignupResponse(
             api_key=api_key,
             workspace_id=workspace_id,
-            message="Workspace created successfully. Use the API key to login and start syncing data.",
+            token=token,
+            expires_in=settings.jwt_expiration_seconds,
+            workspace=workspace,
+            message="Workspace created successfully.",
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create workspace: {e}")
         raise HTTPException(status_code=500, detail="Failed to create workspace")

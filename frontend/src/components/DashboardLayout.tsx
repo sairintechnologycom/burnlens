@@ -97,7 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div style={{ borderTop: "1px solid var(--card-border)", paddingTop: 20, marginTop: "auto" }}>
           <div style={{ padding: "0 8px", marginBottom: 12 }}>
             <p style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", fontFamily: "var(--font-mono)", letterSpacing: "0.06em", marginBottom: 4 }}>Organization</p>
-            <p style={{ fontSize: 14, color: "#fff", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.orgName}</p>
+            <p style={{ fontSize: 14, color: "#fff", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.workspaceName}</p>
           </div>
           <button
             onClick={logout}
@@ -137,7 +137,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--muted)" }}>
             <span style={{ opacity: 0.5 }}>Dashboard</span>
             <ChevronRight size={12} style={{ opacity: 0.3 }} />
-            <span style={{ color: "#fff", fontWeight: 500 }}>{session.orgName}</span>
+            <span style={{ color: "#fff", fontWeight: 500 }}>{session.workspaceName}</span>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -149,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               display: "flex", alignItems: "center", justifyContent: "center",
               color: "var(--muted)", fontSize: 14, fontWeight: 600,
             }}>
-              {session.orgName[0].toUpperCase()}
+              {session.workspaceName[0].toUpperCase()}
             </div>
           </div>
         </header>

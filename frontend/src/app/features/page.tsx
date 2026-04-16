@@ -29,7 +29,7 @@ function FeaturesContent() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch(`/api/v1/usage/by-feature?days=${days}`, session.apiKey);
+      const data = await apiFetch(`/api/v1/usage/by-feature?days=${days}`, session.token);
       setFeatures(data as FeatureRow[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
