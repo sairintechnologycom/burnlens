@@ -1,19 +1,7 @@
 {
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/out",
-  "routes": [
-    {"src": "/api/(.*)", "dest": "api/main.py"},
-    {"src": "/auth/callback.html", "dest": "/auth/callback.html"},
-    {"src": "/auth/(.*)", "dest": "api/main.py"},
-    {"src": "/billing/(.*)", "dest": "api/main.py"},
-    {"src": "/team/(.*)", "dest": "api/main.py"},
-    {"src": "/invite/(.*)", "dest": "api/main.py"},
-    {"handle": "filesystem"},
-    {"src": "/(.*)", "dest": "/index.html"}
-  ],
-  "functions": {
-    "api/main.py": {
-      "runtime": "@vercel/python"
-    }
-  }
+  "rewrites": [
+    {"source": "/(.*)", "destination": "/index.html"}
+  ]
 }
