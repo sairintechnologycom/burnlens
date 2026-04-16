@@ -17,7 +17,7 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["dashboard"])
+router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
 # Role hierarchy for permission checking
 ROLE_HIERARCHY = {"viewer": 0, "admin": 1, "owner": 2}
@@ -60,15 +60,14 @@ async def parse_period(period_str: str) -> datetime:
     return now - timedelta(days=days)
 
 
-@router.get("/summary", response_model=StatsSummary)
+@router.get("/usage/summary", response_model=StatsSummary)
 async def get_summary(
     token: TokenPayload = Depends(verify_token),
-    period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
+    days: int = Query(7, description="Number of days to look back"),
 ):
     """Get cost summary for workspace (viewer+ can access)."""
     await require_role("viewer", token)
 
-    days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
     cutoff = await parse_period(f"{days}d")
@@ -97,15 +96,14 @@ async def get_summary(
     )
 
 
-@router.get("/costs/by-model", response_model=List[CostByModel])
+@router.get("/usage/by-model", response_model=List[CostByModel])
 async def get_costs_by_model(
     token: TokenPayload = Depends(verify_token),
-    period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
+    days: int = Query(7, description="Number of days to look back"),
 ):
     """Get costs broken down by model (viewer+ can access)."""
     await require_role("viewer", token)
 
-    days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
     cutoff = await parse_period(f"{days}d")
@@ -141,16 +139,15 @@ async def get_costs_by_model(
     ]
 
 
-@router.get("/costs/by-tag", response_model=List[CostByTag])
+@router.get("/usage/by-tag", response_model=List[CostByTag])
 async def get_costs_by_tag(
     token: TokenPayload = Depends(verify_token),
     tag_type: str = Query("team", description="Tag type: team, feature, customer"),
-    period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
+    days: int = Query(7, description="Number of days to look back"),
 ):
     """Get costs broken down by tag (team, feature, customer) (viewer+ can access)."""
     await require_role("viewer", token)
 
-    days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
     cutoff = await parse_period(f"{days}d")
@@ -184,16 +181,42 @@ async def get_costs_by_tag(
     ]
 
 
-@router.get("/costs/timeline", response_model=List[CostTimeline])
+@router.get("/usage/by-customer", response_model=List[CostByTag])
+async def get_costs_by_customer(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+):
+    """Get costs broken down by customer tag (viewer+ can access)."""
+    return await get_costs_by_tag(token=token, tag_type="customer", days=days)
+
+
+@router.get("/usage/by-team", response_model=List[CostByTag])
+async def get_costs_by_team(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+):
+    """Get costs broken down by team tag (viewer+ can access)."""
+    return await get_costs_by_tag(token=token, tag_type="team", days=days)
+
+
+@router.get("/usage/by-feature", response_model=List[CostByTag])
+async def get_costs_by_feature(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+):
+    """Get costs broken down by feature tag (viewer+ can access)."""
+    return await get_costs_by_tag(token=token, tag_type="feature", days=days)
+
+
+@router.get("/usage/timeseries", response_model=List[CostTimeline])
 async def get_costs_timeline(
     token: TokenPayload = Depends(verify_token),
-    period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
-    granularity: str = Query("daily", description="Granularity: daily, hourly"),
+    days: int = Query(7, description="Number of days to look back"),
+    granularity: str = Query("day", description="Granularity: day, hour"),
 ):
     """Get cost timeline (viewer+ can access)."""
     await require_role("viewer", token)
 
-    days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
     cutoff = await parse_period(f"{days}d")
@@ -228,12 +251,11 @@ async def get_costs_timeline(
 async def get_requests(
     token: TokenPayload = Depends(verify_token),
     limit: int = Query(50, ge=1, le=500, description="Max 500"),
-    period: str = Query("7d", description="Period: 7d, 30d, 90d, etc."),
+    days: int = Query(7, description="Number of days to look back"),
 ):
     """Get recent requests (viewer+ can access)."""
     await require_role("viewer", token)
 
-    days = int(period[:-1]) if period.endswith("d") else 7
     days = clamp_days_by_plan(days, token.plan)
 
     cutoff = await parse_period(f"{days}d")
@@ -279,7 +301,7 @@ async def get_requests(
     ]
 
 
-@router.get("/waste")
+@router.get("/waste-alerts")
 async def get_waste_alerts(token: TokenPayload = Depends(verify_token)):
     """Get waste detection findings (stub for MVP)."""
     return {
