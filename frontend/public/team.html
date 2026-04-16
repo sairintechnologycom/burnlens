@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team — BurnLens</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#080c10;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:1rem 2rem;border-bottom:1px solid #21262d}
+header h1{font-size:1.3rem;color:#fff}
+.cyan{color:#00e5c8}
+nav a{color:#8b949e;text-decoration:none;font-size:.85rem;margin-left:1.5rem}
+nav a.active{color:#58a6ff;font-weight:600}
+.controls{display:flex;gap:.75rem;align-items:center}
+.logout{background:transparent;border:1px solid #30363d;color:#8b949e;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem}
+main{padding:1.5rem 2rem;max-width:900px;margin:0 auto}
+.card{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:1.25rem;margin-bottom:1.5rem}
+.card h2{font-size:1rem;color:#fff;margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{text-align:left;color:#8b949e;font-weight:600;padding:.5rem .75rem;border-bottom:1px solid #21262d}
+td{padding:.5rem .75rem;border-bottom:1px solid #161b22;color:#c9d1d9}
+tr:hover td{background:#161b22}
+.role-badge{font-size:.7rem;padding:.15rem .4rem;border-radius:3px;font-weight:700;text-transform:uppercase}
+.role-owner{background:#3b2506;color:#f0a928}
+.role-admin{background:#1a2744;color:#58a6ff}
+.role-viewer{background:#30363d;color:#8b949e}
+.empty{color:#8b949e;text-align:center;padding:1.5rem;font-size:.9rem}
+.invite-form{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.invite-form input{flex:1;min-width:200px;padding:.5rem .75rem;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:.85rem}
+.invite-form select{background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:.5rem .6rem;border-radius:6px;font-size:.85rem}
+.invite-form button{background:#00e5c8;color:#080c10;border:none;padding:.5rem 1rem;border-radius:6px;font-weight:700;cursor:pointer;font-size:.85rem}
+.msg{font-size:.85rem;margin-top:.5rem}
+.msg-ok{color:#3fb950}
+.msg-err{color:#f85149}
+.seat-bar{margin-top:.75rem}
+.seat-bar .track{height:8px;background:#21262d;border-radius:4px;overflow:hidden}
+.seat-bar .fill{height:100%;border-radius:4px;transition:width .3s}
+.seat-info{font-size:.85rem;color:#8b949e;margin-bottom:.4rem}
+.btn-sm{font-size:.75rem;padding:.2rem .5rem;border-radius:4px;border:1px solid #30363d;background:transparent;color:#8b949e;cursor:pointer}
+.btn-sm:hover{border-color:#58a6ff;color:#58a6ff}
+.btn-danger{border-color:#f85149;color:#f85149}
+.btn-danger:hover{background:#f8514922}
+.pending-table{margin-top:.75rem}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;align-items:center">
+    <h1>Burn<span class="cyan">Lens</span></h1>
+    <nav>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/team" class="active">Team</a>
+    </nav>
+  </div>
+  <div class="controls">
+    <button class="logout" id="logout-btn">Logout</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Seat Usage</h2>
+    <div class="seat-info" id="seat-info">Loading...</div>
+    <div class="seat-bar"><div class="track"><div class="fill" id="seat-fill" style="width:0"></div></div></div>
+  </div>
+
+  <div class="card">
+    <h2>Members</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last Active</th><th></th></tr></thead>
+      <tbody id="member-table"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Invite a Team Member</h2>
+    <div class="invite-form" id="invite-form">
+      <input type="email" id="invite-email" placeholder="colleague@company.com" required>
+      <select id="invite-role"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+      <button id="invite-btn">Send Invite</button>
+    </div>
+    <div class="msg" id="invite-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Pending Invitations</h2>
+    <table class="pending-table">
+      <thead><tr><th>Email</th><th>Role</th><th>Sent</th><th>Expires</th></tr></thead>
+      <tbody id="pending-table"><tr><td colspan="4" class="empty">No pending invitations</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+var TOKEN=localStorage.getItem('bl_token');
+var PLAN=localStorage.getItem('bl_plan')||'free';
+var SEAT_LIMITS={free:1,cloud:3,teams:10,enterprise:999};
+
+if(!TOKEN){window.location.href='/signup';}
+
+async function api(path,opts){
+  var r=await fetch(path,Object.assign({headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}},opts||{}));
+  if(r.status===401){localStorage.removeItem('bl_token');window.location.href='/signup';throw new Error('Unauthorized');}
+  return r;
+}
+
+function roleBadge(role){
+  var span=document.createElement('span');
+  span.className='role-badge role-'+role;
+  span.textContent=role;
+  return span;
+}
+
+async function loadMembers(){
+  var r=await api('/team/members');
+  var data=await r.json();
+  var tb=document.getElementById('member-table');
+  tb.textContent='';
+
+  if(!data.members.length){
+    var row=document.createElement('tr');
+    var td=document.createElement('td');
+    td.colSpan=5;td.className='empty';
+    td.textContent='No other members yet. Invite your team below.';
+    row.appendChild(td);tb.appendChild(row);
+  } else {
+    data.members.forEach(function(m){
+      var tr=document.createElement('tr');
+      var tdName=document.createElement('td');tdName.textContent=m.name||'\u2014';
+      var tdEmail=document.createElement('td');tdEmail.textContent=m.email;
+      var tdRole=document.createElement('td');tdRole.appendChild(roleBadge(m.role));
+      var tdLast=document.createElement('td');tdLast.textContent=m.last_login?new Date(m.last_login).toLocaleDateString():'\u2014';
+      var tdActions=document.createElement('td');
+      if(m.role!=='owner'){
+        var rmBtn=document.createElement('button');
+        rmBtn.className='btn-sm btn-danger';rmBtn.textContent='Remove';
+        rmBtn.addEventListener('click',(function(uid){return function(){removeMember(uid);};})(m.user_id));
+        tdActions.appendChild(rmBtn);
+      }
+      tr.appendChild(tdName);tr.appendChild(tdEmail);tr.appendChild(tdRole);tr.appendChild(tdLast);tr.appendChild(tdActions);
+      tb.appendChild(tr);
+    });
+  }
+
+  // Pending
+  var ptb=document.getElementById('pending-table');
+  ptb.textContent='';
+  if(!data.pending.length){
+    var pr=document.createElement('tr');var ptd=document.createElement('td');
+    ptd.colSpan=4;ptd.className='empty';ptd.textContent='No pending invitations';
+    pr.appendChild(ptd);ptb.appendChild(pr);
+  } else {
+    data.pending.forEach(function(p){
+      var tr=document.createElement('tr');
+      var cells=[p.email,p.role,new Date(p.created_at).toLocaleDateString(),new Date(p.expires_at).toLocaleDateString()];
+      cells.forEach(function(t){var td=document.createElement('td');td.textContent=t;tr.appendChild(td);});
+      ptb.appendChild(tr);
+    });
+  }
+
+  // Seat usage
+  var used=data.members.length;
+  var limit=SEAT_LIMITS[PLAN]||10;
+  document.getElementById('seat-info').textContent=used+' of '+limit+' seats used';
+  var pct=Math.min(100,Math.round(used/limit*100));
+  var fill=document.getElementById('seat-fill');
+  fill.style.width=pct+'%';
+  if(pct>=100)fill.style.background='#f85149';
+  else if(pct>=80)fill.style.background='#f0a928';
+  else fill.style.background='#00e5c8';
+}
+
+async function removeMember(userId){
+  var r=await api('/team/members/'+userId,{method:'DELETE'});
+  if(r.ok)loadMembers();
+}
+
+document.getElementById('invite-btn').addEventListener('click',async function(){
+  var email=document.getElementById('invite-email').value;
+  var role=document.getElementById('invite-role').value;
+  var msgEl=document.getElementById('invite-msg');
+  if(!email){msgEl.className='msg msg-err';msgEl.textContent='Enter an email.';return;}
+  var r=await api('/team/invite',{method:'POST',body:JSON.stringify({email:email,role:role})});
+  var d=await r.json();
+  if(r.ok){
+    msgEl.className='msg msg-ok';msgEl.textContent='Invite sent to '+email+'.';
+    document.getElementById('invite-email').value='';
+    loadMembers();
+  } else {
+    var err=(d.detail&&typeof d.detail==='object')?d.detail.error:d.detail;
+    msgEl.className='msg msg-err';msgEl.textContent=err||'Failed to send invite.';
+  }
+});
+
+document.getElementById('logout-btn').addEventListener('click',function(){
+  localStorage.removeItem('bl_token');localStorage.removeItem('bl_plan');localStorage.removeItem('bl_ws_name');
+  window.location.href='/signup';
+});
+
+loadMembers();
+</script>
+</body>
+</html>
