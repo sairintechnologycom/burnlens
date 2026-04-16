@@ -1,18 +1,19 @@
 {
-  "builds": [
-    {"src": "api/main.py", "use": "@vercel/python"},
-    {"src": "frontend/**", "use": "@vercel/static"}
-  ],
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/out",
   "routes": [
     {"src": "/api/(.*)", "dest": "api/main.py"},
-    {"src": "/auth/callback.html", "dest": "frontend/auth/callback.html"},
+    {"src": "/auth/callback.html", "dest": "/auth/callback.html"},
     {"src": "/auth/(.*)", "dest": "api/main.py"},
     {"src": "/billing/(.*)", "dest": "api/main.py"},
     {"src": "/team/(.*)", "dest": "api/main.py"},
     {"src": "/invite/(.*)", "dest": "api/main.py"},
-    {"src": "/dashboard", "dest": "frontend/dashboard.html"},
-    {"src": "/team", "dest": "frontend/team.html"},
-    {"src": "/signup", "dest": "frontend/signup.html"},
-    {"src": "/(.*)", "dest": "frontend/index.html"}
-  ]
+    {"handle": "filesystem"},
+    {"src": "/(.*)", "dest": "/index.html"}
+  ],
+  "functions": {
+    "api/main.py": {
+      "runtime": "@vercel/python"
+    }
+  }
 }
