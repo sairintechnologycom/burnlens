@@ -48,7 +48,7 @@ def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str) -> str:
     )
 
     return jwt.encode(
-        payload.model_dump(),
+        payload.model_dump(mode="json"),
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )
