@@ -1,5 +1,12 @@
 {
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npx next build",
-  "outputDirectory": "frontend/out"
+  "outputDirectory": "frontend/out",
+  "rewrites": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "api.burnlens.app" }],
+      "destination": "https://burnlens-proxy-production.up.railway.app/:path*"
+    }
+  ]
 }
