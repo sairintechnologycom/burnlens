@@ -6,7 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from urllib.parse import urlparse
 
-from .auth import verify_token, require_role
+from .auth import verify_token
+from .dashboard_api import require_role
 from .database import execute_query, execute_insert, get_db
 from .encryption import get_encryption_manager, EncryptionManager
 from .models import (
