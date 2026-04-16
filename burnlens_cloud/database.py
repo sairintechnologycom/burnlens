@@ -67,18 +67,8 @@ async def init_db():
         """)
 
         await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_request_records_workspace_team
-            ON request_records USING GIN(workspace_id, (tags -> 'team'))
-        """)
-
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_request_records_workspace_customer
-            ON request_records USING GIN(workspace_id, (tags -> 'customer'))
-        """)
-
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_request_records_workspace_feature
-            ON request_records USING GIN(workspace_id, (tags -> 'feature'))
+            CREATE INDEX IF NOT EXISTS idx_request_records_tags
+            ON request_records USING GIN(tags)
         """)
 
         # Teams support tables
