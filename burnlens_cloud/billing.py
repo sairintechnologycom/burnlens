@@ -146,6 +146,44 @@ async def get_plan_from_product(product_id: str) -> str:
     return plan_mapping.get(product_id, "free")
 
 
+@router.post("/checkout")
+async def create_checkout_session(token: TokenPayload = Depends(verify_token)):
+    """
+    Create a Stripe Checkout session for plan upgrade.
+    Returns a redirect URL to the hosted Stripe checkout page.
+    """
+    if not settings.stripe_api_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+
+    # Pick price based on current workspace plan (personal → team upgrade)
+    price_id = settings.stripe_price_team or settings.stripe_price_personal
+    if not price_id:
+        raise HTTPException(status_code=500, detail="Stripe price IDs not configured")
+
+    # Get or create Stripe customer for this workspace
+    result = await execute_query(
+        "SELECT stripe_customer_id FROM workspaces WHERE id = $1",
+        str(token.workspace_id),
+    )
+    customer_id = result[0].get("stripe_customer_id") if result else None
+
+    try:
+        session_params = {
+            "mode": "subscription",
+            "line_items": [{"price": price_id, "quantity": 1}],
+            "success_url": f"{settings.burnlens_frontend_url}/dashboard?upgraded=1",
+            "cancel_url": f"{settings.burnlens_frontend_url}/settings",
+        }
+        if customer_id:
+            session_params["customer"] = customer_id
+
+        session = stripe.checkout.Session.create(**session_params)
+        return {"url": session.url}
+    except stripe.error.StripeError as e:
+        logger.error(f"Failed to create checkout session: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+
+
 @router.get("/portal")
 async def billing_portal(token: TokenPayload = Depends(verify_token)):
     """
