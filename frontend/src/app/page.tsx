@@ -164,7 +164,7 @@ export default function LandingPage() {
           <div className="lp-nav-right">
             <a href="#how">How it works</a>
             <a href="#pricing">Pricing</a>
-            <a href="https://github.com/bhushan/burnlens#readme">Docs</a>
+            <a href="https://github.com/sairintechnologycom/burnlens#readme">Docs</a>
             <Link href="/dashboard" className="outline">Dashboard</Link>
             <Link href="/setup" className="primary">Get Started</Link>
           </div>
@@ -358,7 +358,7 @@ export default function LandingPage() {
           </div>
           <div className="lp-install-cta">
             <Link href="/setup" className="lp-btn-go">Get Started</Link>
-            <a href="https://github.com/bhushan/burnlens" className="lp-btn-gh">View on GitHub</a>
+            <a href="https://github.com/sairintechnologycom/burnlens" className="lp-btn-gh">View on GitHub</a>
           </div>
         </section>
 
