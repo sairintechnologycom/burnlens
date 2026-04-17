@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from typing import Optional
@@ -14,19 +15,25 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 
+def _default_base_url() -> str:
+    """Pick the loopback URL matching the port uvicorn is actually bound to."""
+    port = os.getenv("PORT") or "8000"
+    return f"http://localhost:{port}"
+
+
 class StatusChecker:
     """Monitors health of BurnLens cloud services and records uptime."""
 
-    # Endpoints to check
+    # Probed via GET; every path must return 2xx when the component is healthy.
     ENDPOINTS = {
-        "Ingest API": "/v1/ingest",
-        "Dashboard API": "/api/cost-summary",
+        "Ingest API": "/health",
+        "Dashboard API": "/health",
         "Cloud Sync": "/health/sync",
     }
 
-    def __init__(self, base_url: str = "http://localhost:8000", timeout_seconds: int = 5):
+    def __init__(self, base_url: Optional[str] = None, timeout_seconds: int = 5):
         """Initialize status checker."""
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or _default_base_url()).rstrip("/")
         self.timeout_seconds = timeout_seconds
 
     async def check_endpoint(self, name: str, path: str) -> tuple[bool, int]:
@@ -40,25 +47,7 @@ class StatusChecker:
         start = time.time()
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                # Special handling for ingest endpoint (POST with dummy payload)
-                if "ingest" in path.lower():
-                    response = await client.post(
-                        f"{self.base_url}{path}",
-                        json={
-                            "api_key": "sk_test_dummy",
-                            "records": [
-                                {
-                                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                                    "provider": "test",
-                                    "model": "test",
-                                    "input_tokens": 1,
-                                    "output_tokens": 1,
-                                }
-                            ],
-                        },
-                    )
-                else:
-                    response = await client.get(f"{self.base_url}{path}")
+                response = await client.get(f"{self.base_url}{path}")
 
             latency_ms = int((time.time() - start) * 1000)
             ok = 200 <= response.status_code < 300
