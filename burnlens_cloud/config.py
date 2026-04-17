@@ -13,11 +13,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_seconds: int = 86400  # 24 hours
 
-    # Stripe
-    stripe_api_key: str = os.getenv("STRIPE_API_KEY", "")
-    stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-    stripe_price_personal: str = os.getenv("STRIPE_PRICE_PERSONAL", "")
-    stripe_price_team: str = os.getenv("STRIPE_PRICE_TEAM", "")
+    # Paddle Billing
+    paddle_api_key: str = os.getenv("PADDLE_API_KEY", "")
+    paddle_webhook_secret: str = os.getenv("PADDLE_WEBHOOK_SECRET", "")
+    paddle_cloud_price_id: str = os.getenv("PADDLE_CLOUD_PRICE_ID", "")
+    paddle_teams_price_id: str = os.getenv("PADDLE_TEAMS_PRICE_ID", "")
+    paddle_environment: str = os.getenv("PADDLE_ENVIRONMENT", "production")  # "sandbox" | "production"
 
     # App
     log_level: str = os.getenv("LOG_LEVEL", "INFO")

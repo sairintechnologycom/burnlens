@@ -77,7 +77,7 @@ export default function PrivacyPage() {
             <li>Email address</li>
             <li>Hashed password (bcrypt)</li>
             <li>Workspace name and API key</li>
-            <li>Stripe customer ID (for billing)</li>
+            <li>Paddle customer ID (for billing)</li>
             <li>Plan and subscription status</li>
           </ul>
         </section>

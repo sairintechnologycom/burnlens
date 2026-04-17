@@ -28,6 +28,9 @@ async def init_db():
                 name TEXT NOT NULL,
                 owner_email TEXT NOT NULL,
                 stripe_customer_id TEXT,
+                paddle_customer_id TEXT,
+                paddle_subscription_id TEXT,
+                subscription_status TEXT,
                 plan TEXT NOT NULL DEFAULT 'free',
                 api_key TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -37,6 +40,40 @@ async def init_db():
                 otel_enabled BOOLEAN NOT NULL DEFAULT false,
                 otel_last_push TIMESTAMPTZ
             )
+        """)
+
+        # Migration: add Paddle columns for existing deployments (post-Stripe)
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'paddle_customer_id'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN paddle_customer_id TEXT;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'paddle_subscription_id'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN paddle_subscription_id TEXT;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'subscription_status'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN subscription_status TEXT;
+                END IF;
+            END $$;
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspaces_paddle_customer
+            ON workspaces(paddle_customer_id) WHERE paddle_customer_id IS NOT NULL
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspaces_paddle_subscription
+            ON workspaces(paddle_subscription_id) WHERE paddle_subscription_id IS NOT NULL
         """)
 
         await conn.execute("""
