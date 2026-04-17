@@ -270,7 +270,7 @@ export default function LandingPage() {
                 <li>Budget alerts</li>
                 <li>7-day history</li>
               </ul>
-              <Link href="/setup" className="lp-plan-cta outline">Get Started</Link>
+              <a href="#install" className="lp-plan-cta outline">Install free</a>
             </div>
             <div className="lp-plan featured">
               <div className="lp-plan-badge">Popular</div>
@@ -283,7 +283,7 @@ export default function LandingPage() {
                 <li>Up to 3 seats</li>
                 <li>Email alerts</li>
               </ul>
-              <Link href="/setup" className="lp-plan-cta primary">Start Free Trial</Link>
+              <Link href="/setup" className="lp-plan-cta primary">Start free trial</Link>
             </div>
             <div className="lp-plan">
               <div className="lp-plan-name">Teams</div>
@@ -295,7 +295,7 @@ export default function LandingPage() {
                 <li>365-day history</li>
                 <li>Audit log</li>
               </ul>
-              <Link href="/setup" className="lp-plan-cta outline">Get Started</Link>
+              <a href="mailto:contact@sairintechnology.com?subject=BurnLens%20Teams%20plan" className="lp-plan-cta outline">Talk to sales</a>
             </div>
             <div className="lp-plan">
               <div className="lp-plan-name">Enterprise</div>
@@ -340,7 +340,7 @@ export default function LandingPage() {
         </section>
 
         {/* INSTALL CTA */}
-        <section className="lp-install">
+        <section className="lp-install" id="install">
           <h2>Up in 3 commands</h2>
           <div className="lp-install-code">
             <div className="lp-install-line">

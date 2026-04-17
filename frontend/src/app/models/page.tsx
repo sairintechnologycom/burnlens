@@ -48,7 +48,7 @@ function ModelsContent() {
     return (
       <div style={{ padding: 24 }}>
         <span className="error-inline" onClick={() => window.location.reload()}>
-          Failed to load — retry &#x2197;
+          Couldn’t reach server — retry &#x2197;
         </span>
       </div>
     );

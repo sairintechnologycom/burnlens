@@ -69,7 +69,7 @@ function TimelineContent() {
   if (error) {
     return (
       <div style={{ padding: 24 }}>
-        <span className="error-inline" onClick={fetchData}>Failed to load — retry &#x2197;</span>
+        <span className="error-inline" onClick={fetchData}>Couldn’t reach server — retry &#x2197;</span>
       </div>
     );
   }
