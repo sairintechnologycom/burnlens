@@ -1,0 +1,31 @@
+name: Deploy burnlens_cloud to Railway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "burnlens_cloud/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "Procfile"
+      - ".github/workflows/deploy-railway.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: railway-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: curl -fsSL https://railway.com/install.sh | sh
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service burnlens-proxy --environment production --ci --detach
