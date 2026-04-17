@@ -207,7 +207,7 @@ async def billing_portal(token: TokenPayload = Depends(verify_token)):
         # Create billing portal session
         session = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url="https://burnlens.app/dashboard",
+            return_url=f"{settings.burnlens_frontend_url}/dashboard",
         )
 
         return {"url": session.url}
