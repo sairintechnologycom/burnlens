@@ -1,6 +1,17 @@
 "use client";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
+function resolveBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is not set. Public builds must point at a reachable API origin (e.g. https://api.burnlens.app)."
+    );
+  }
+  return "http://localhost:8420";
+}
+
+const BASE_URL = resolveBaseUrl();
 
 export { BASE_URL };
 
