@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@burnlens.app")
     burnlens_frontend_url: str = os.getenv("BURNLENS_FRONTEND_URL", "https://burnlens.app")
 
+    # Company / Legal
+    parent_company: str = "Sairin Technology"
+    parent_company_domain: str = "sairintechnology.com"
+
     # Invitation expiry (hours)
     invitation_expiry_hours: int = 48
 

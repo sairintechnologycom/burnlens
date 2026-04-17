@@ -307,7 +307,7 @@ export default function LandingPage() {
                 <li>Custom pricing rules</li>
                 <li>10-year retention</li>
               </ul>
-              <a href="mailto:bhushan@burnlens.app" className="lp-plan-cta outline">Contact Us</a>
+              <a href="mailto:contact@sairintechnology.com" className="lp-plan-cta outline">Contact Us</a>
             </div>
           </div>
         </section>
@@ -363,7 +363,19 @@ export default function LandingPage() {
         </section>
 
         <footer className="lp-footer">
-          BurnLens &copy; 2026 · Open Source · Self-Hosted
+          <div className="lp-footer-main">
+            BurnLens &copy; 2026 · Open Source · Self-Hosted
+          </div>
+          <div className="lp-footer-company">
+            A product of <a href="https://sairintechnology.com" target="_blank" rel="noopener noreferrer">Sairin Technology</a>
+          </div>
+          <div className="lp-footer-legal">
+            <a href="/terms">Terms &amp; Conditions</a>
+            <span>·</span>
+            <a href="/privacy">Privacy Policy</a>
+            <span>·</span>
+            <a href="/refund">Refund Policy</a>
+          </div>
         </footer>
       </div>
     </>
