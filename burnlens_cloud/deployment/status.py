@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 
 def _default_base_url() -> str:
     """Pick the loopback URL matching the port uvicorn is actually bound to."""
-    port = os.getenv("PORT") or "8000"
+    # Match the Procfile default (${PORT:-8080}) so the self-probe hits
+    # the same port uvicorn binds to when PORT is unset.
+    port = os.getenv("PORT") or "8080"
     return f"http://localhost:{port}"
 
 
