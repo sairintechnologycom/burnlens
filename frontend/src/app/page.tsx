@@ -40,9 +40,9 @@ function TerminalAnimation({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="term-window">
       <div className="term-bar">
-        <span className="term-dot" style={{ background: "#f04060" }} />
-        <span className="term-dot" style={{ background: "#f0a928" }} />
-        <span className="term-dot" style={{ background: "#22c98a" }} />
+        <span className="term-dot" style={{ background: "var(--red)" }} />
+        <span className="term-dot" style={{ background: "var(--amber)" }} />
+        <span className="term-dot" style={{ background: "var(--green)" }} />
         <span className="term-bar-title">Terminal</span>
       </div>
       <div className="term-body">
@@ -196,7 +196,7 @@ export default function LandingPage() {
               <p style={{
                 textAlign: "center", marginTop: 16,
                 fontFamily: "var(--font-mono), monospace",
-                fontSize: 11, color: "#6b7785", letterSpacing: "0.06em"
+                fontSize: 11, color: "var(--l-muted)", letterSpacing: "0.06em"
               }}>
                 localhost:8420/ui — your data never leaves your machine
               </p>

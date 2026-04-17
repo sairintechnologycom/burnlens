@@ -209,7 +209,7 @@ function SetupContent() {
         .sp-field { margin-bottom: 16px; }
         .sp-btn-primary {
           width: 100%; padding: 11px 0; border: none; border-radius: 6px;
-          background: var(--cyan); color: #080c10;
+          background: var(--cyan); color: var(--bg);
           font-weight: 600; font-size: 14px; cursor: pointer;
           transition: background 0.15s;
         }
@@ -235,7 +235,7 @@ function SetupContent() {
           color: #2a3347; text-transform: uppercase;
         }
         .sp-footer-dot {
-          width: 3px; height: 3px; border-radius: 50%; background: #1e2830;
+          width: 3px; height: 3px; border-radius: 50%; background: var(--border);
         }
         @media (max-width: 768px) {
           .sp-main { grid-template-columns: 1fr; }

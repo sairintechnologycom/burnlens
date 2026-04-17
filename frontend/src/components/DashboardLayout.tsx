@@ -109,7 +109,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               cursor: "pointer", transition: "color 0.2s, background 0.2s",
               fontFamily: "var(--font-sans)",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#f87171"; e.currentTarget.style.background = "rgba(248,113,113,0.06)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--red)"; e.currentTarget.style.background = "var(--sev-c-bg)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.background = "none"; }}
           >
             <LogOut size={17} />
