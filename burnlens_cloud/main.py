@@ -94,7 +94,7 @@ def get_app() -> FastAPI:
     app.include_router(auth_router)      # /auth/login, /auth/signup
     app.include_router(ingest_router)    # /v1/ingest
     app.include_router(dashboard_router) # /api/v1/* (usage/summary, usage/by-model, etc.)
-    app.include_router(billing_router)   # /billing/portal, /billing/webhooks/stripe
+    app.include_router(billing_router)   # /billing/checkout, /billing/portal, /billing/webhook (Paddle)
     app.include_router(team_router)      # /team/invite, /team/members, /team/activity
     app.include_router(settings_router)  # /settings/otel, /settings/pricing
     app.include_router(audit_router)     # /api/audit-log, /api/audit-log/export
