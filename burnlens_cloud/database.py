@@ -246,6 +246,41 @@ async def init_db():
             )
         """)
 
+        # Plan limits — single source of truth for per-plan caps (Phase 6)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS plan_limits (
+                plan TEXT PRIMARY KEY,
+                monthly_request_cap INT,
+                seat_count INT,
+                retention_days INT,
+                api_key_count INT,
+                paddle_price_id TEXT,
+                paddle_product_id TEXT,
+                gated_features JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        # Partial index on Paddle price ID — Phase 7 webhook handler looks up plan by price
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_plan_limits_paddle_price
+            ON plan_limits(paddle_price_id) WHERE paddle_price_id IS NOT NULL
+        """)
+
+        # Phase 6: per-workspace sparse override column (merged over plan defaults by resolve_limits)
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'limit_overrides'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN limit_overrides JSONB;
+                END IF;
+            END $$;
+        """)
+
         logger.info("Database tables created/verified")
 
 
