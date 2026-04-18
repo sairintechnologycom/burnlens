@@ -30,7 +30,7 @@ class StatusChecker:
     ENDPOINTS = {
         "Ingest API": "/health",
         "Dashboard API": "/health",
-        "Cloud Sync": "/health/sync",
+        "Cloud Sync": "/health",
     }
 
     def __init__(self, base_url: Optional[str] = None, timeout_seconds: int = 5):
