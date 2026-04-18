@@ -268,6 +268,43 @@ async def init_db():
             ON plan_limits(paddle_price_id) WHERE paddle_price_id IS NOT NULL
         """)
 
+        # Phase 6: seed the three known plans — idempotent, preserves any manual production edits
+        await conn.execute("""
+            INSERT INTO plan_limits (
+                plan, monthly_request_cap, seat_count, retention_days, api_key_count,
+                paddle_price_id, paddle_product_id, gated_features
+            ) VALUES (
+                'free', 10000, 1, 7, 1,
+                NULL, NULL,
+                '{"custom_signatures": false, "team_seats": false, "otel_export": false}'::jsonb
+            )
+            ON CONFLICT (plan) DO NOTHING
+        """)
+
+        await conn.execute("""
+            INSERT INTO plan_limits (
+                plan, monthly_request_cap, seat_count, retention_days, api_key_count,
+                paddle_price_id, paddle_product_id, gated_features
+            ) VALUES (
+                'cloud', 1000000, 1, 30, 3,
+                'pri_01kpe2gkbz9w85btadnw8ckkyn', 'pro_01kpe2dxvfmnp3xeaj37krsksm',
+                '{"custom_signatures": true, "team_seats": false, "otel_export": false}'::jsonb
+            )
+            ON CONFLICT (plan) DO NOTHING
+        """)
+
+        await conn.execute("""
+            INSERT INTO plan_limits (
+                plan, monthly_request_cap, seat_count, retention_days, api_key_count,
+                paddle_price_id, paddle_product_id, gated_features
+            ) VALUES (
+                'teams', 10000000, 10, 90, 25,
+                'pri_01kpe4f0aj537x609d6we7qpg7', 'pro_01kpe4etanc8971v5eesj5npn7',
+                '{"custom_signatures": true, "team_seats": true, "otel_export": true}'::jsonb
+            )
+            ON CONFLICT (plan) DO NOTHING
+        """)
+
         # Phase 6: per-workspace sparse override column (merged over plan defaults by resolve_limits)
         await conn.execute("""
             DO $$
