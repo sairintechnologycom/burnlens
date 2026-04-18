@@ -318,6 +318,44 @@ async def init_db():
             END $$;
         """)
 
+        # Phase 6: resolver function — merges workspace overrides over plan defaults
+        # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
+        #
+        # Merge rules:
+        #   - Scalar fields: COALESCE(override, plan_default). NULL = unlimited.
+        #   - gated_features: plan.gated_features || override.gated_features
+        #     (JSONB shallow merge, right side wins per key — D-04).
+        #
+        # Returns a single row (or no rows if workspace_id does not exist).
+        await conn.execute("""
+            CREATE OR REPLACE FUNCTION resolve_limits(ws_id UUID)
+            RETURNS TABLE (
+                plan TEXT,
+                monthly_request_cap INT,
+                seat_count INT,
+                retention_days INT,
+                api_key_count INT,
+                gated_features JSONB
+            )
+            LANGUAGE SQL
+            STABLE
+            AS $$
+                SELECT
+                    pl.plan,
+                    COALESCE((w.limit_overrides->>'monthly_request_cap')::int, pl.monthly_request_cap) AS monthly_request_cap,
+                    COALESCE((w.limit_overrides->>'seat_count')::int,          pl.seat_count)          AS seat_count,
+                    COALESCE((w.limit_overrides->>'retention_days')::int,      pl.retention_days)      AS retention_days,
+                    COALESCE((w.limit_overrides->>'api_key_count')::int,       pl.api_key_count)       AS api_key_count,
+                    (
+                        pl.gated_features
+                        || COALESCE(w.limit_overrides->'gated_features', '{}'::jsonb)
+                    ) AS gated_features
+                FROM workspaces w
+                JOIN plan_limits pl ON pl.plan = w.plan
+                WHERE w.id = ws_id
+            $$;
+        """)
+
         logger.info("Database tables created/verified")
 
 
