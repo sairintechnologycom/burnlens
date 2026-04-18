@@ -285,3 +285,36 @@ class CustomPricingRequest(BaseModel):
 class PricingResponse(BaseModel):
     """Response for current pricing (default or custom)."""
     pricing: dict[str, dict[str, float]]
+
+
+# Phase 6: plan limits
+class PlanLimits(BaseModel):
+    """Row from the plan_limits table — the plan default before any override merge.
+
+    NULL scalar values mean "unlimited" (D-02). `gated_features` is an object of booleans
+    whose keys follow D-08: `custom_signatures`, `team_seats`, `otel_export`.
+    """
+    plan: str
+    monthly_request_cap: Optional[int] = None
+    seat_count: Optional[int] = None
+    retention_days: Optional[int] = None
+    api_key_count: Optional[int] = None
+    paddle_price_id: Optional[str] = None
+    paddle_product_id: Optional[str] = None
+    gated_features: dict = Field(default_factory=dict)
+
+
+class ResolvedLimits(BaseModel):
+    """Effective limits for a workspace — the per-workspace override merged over the
+    plan default by the Postgres `resolve_limits()` function (PLAN-04).
+
+    A `None` scalar means the workspace is uncapped on that dimension.
+    `gated_features` is the shallow-merged boolean map (workspace override wins per flag).
+    Does not carry paddle_price_id / paddle_product_id — those are billing-layer concerns.
+    """
+    plan: str
+    monthly_request_cap: Optional[int] = None
+    seat_count: Optional[int] = None
+    retention_days: Optional[int] = None
+    api_key_count: Optional[int] = None
+    gated_features: dict = Field(default_factory=dict)
