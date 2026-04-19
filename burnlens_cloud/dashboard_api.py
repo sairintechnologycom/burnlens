@@ -303,19 +303,13 @@ async def get_requests(
 
 @router.get("/waste-alerts")
 async def get_waste_alerts(token: TokenPayload = Depends(verify_token)):
-    """Get waste detection findings (stub for MVP)."""
-    return {
-        "findings": [
-            {
-                "detector": "duplicate_prompts",
-                "severity": "medium",
-                "title": "Duplicate system prompts",
-                "description": "Same system prompt sent 5 times",
-                "estimated_waste_usd": 0.15,
-                "affected_count": 5,
-            }
-        ]
-    }
+    """Get waste detection findings (stub for MVP).
+
+    Returns a bare array — frontend RightPanel and /waste page both call
+    `.slice`/`.filter` on the result. See
+    .planning/backlog/frontend-api-gaps.md for the real detector work.
+    """
+    return []
 
 
 @router.get("/budget")
