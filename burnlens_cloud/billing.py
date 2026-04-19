@@ -6,7 +6,7 @@ import hmac
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
@@ -798,5 +798,105 @@ async def cancel_subscription(
     reason_code = body.reason_code if body else None
     reason_text = body.reason_text if body else None
     await _insert_cancel_survey(workspace_id, current_plan, reason_code, reason_text)
+
+    return await _load_billing_summary(workspace_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 (D-13/D-14/D-15): reactivate a canceled-but-not-ended subscription
+# ---------------------------------------------------------------------------
+
+
+@router.post("/reactivate", response_model=BillingSummary)
+async def reactivate_subscription(
+    token: TokenPayload = Depends(verify_token),
+):
+    """Remove a scheduled cancel.
+
+    D-13: Paddle PATCH /subscriptions/{id} with scheduled_change=null.
+    D-15: If the period has already ended (cancel materialized), return 400 —
+          user must re-checkout. We do NOT secretly do fresh checkout.
+    D-31: Idempotent — if nothing is scheduled, return current summary, no Paddle call.
+    D-20: On 2xx, flip cancel_at_period_end=false synchronously.
+    D-22: Response body is the fresh BillingSummary.
+    D-28: Paddle 5xx/timeout -> 502 + logger.error.
+    D-33: workspace_id from JWT.
+    """
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=500, detail="Paddle not configured")
+
+    workspace_id = str(token.workspace_id)
+    rows = await execute_query(
+        """
+        SELECT plan, paddle_subscription_id, cancel_at_period_end,
+               current_period_ends_at, subscription_status
+        FROM workspaces WHERE id = $1
+        """,
+        workspace_id,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    subscription_id = rows[0]["paddle_subscription_id"]
+    is_canceled = bool(rows[0]["cancel_at_period_end"])
+    period_ends_at = rows[0]["current_period_ends_at"]
+    status_str = (rows[0]["subscription_status"] or "").lower()
+
+    # D-31 idempotent: nothing scheduled.
+    if not is_canceled:
+        return await _load_billing_summary(workspace_id)
+
+    # D-15: period already ended — Paddle will reject reactivate; return 400.
+    now = datetime.now(timezone.utc)  # uses module-level imports (Edit A)
+    if status_str == "canceled" or (period_ends_at is not None and period_ends_at <= now):
+        raise HTTPException(
+            status_code=400,
+            detail="Subscription period has ended. Start a new checkout instead.",
+        )
+
+    if not subscription_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No subscription to reactivate.",
+        )
+
+    payload = {"scheduled_change": None}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.patch(
+                f"{_paddle_base_url()}/subscriptions/{subscription_id}",
+                headers=_paddle_headers(),
+                json=payload,
+            )
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        logger.error(
+            "Paddle reactivate transport failure: workspace=%s op=reactivate err=%s",
+            workspace_id, e,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider did not respond")
+
+    if resp.status_code >= 500:
+        logger.error(
+            "Paddle reactivate upstream 5xx: workspace=%s op=reactivate status=%s body=%s",
+            workspace_id, resp.status_code, resp.text,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider error")
+    if resp.status_code >= 400:
+        logger.error(
+            "Paddle reactivate rejected: workspace=%s status=%s body=%s",
+            workspace_id, resp.status_code, resp.text,
+        )
+        raise HTTPException(status_code=502, detail="Failed to reactivate subscription")
+
+    # D-20: write expected end-state synchronously.
+    await execute_insert(
+        """
+        UPDATE workspaces
+        SET cancel_at_period_end = false
+        WHERE id = $1::uuid
+        """,
+        workspace_id,
+    )
 
     return await _load_billing_summary(workspace_id)
