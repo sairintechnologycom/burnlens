@@ -5,6 +5,7 @@ import { PeriodProvider } from "@/lib/contexts/PeriodContext";
 import { BillingProvider } from "@/lib/contexts/BillingContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 import Topbar from "./Topbar";
+import BillingStatusBanner from "./BillingStatusBanner";
 import Sidebar from "./Sidebar";
 import RightPanel from "./RightPanel";
 
@@ -31,6 +32,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <BillingProvider>
         <div className="shell">
           <Topbar />
+          <BillingStatusBanner />
           <div className="shell-main">
             <Sidebar />
             <main className="shell-content">
