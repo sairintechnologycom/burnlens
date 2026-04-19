@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from .auth import verify_token, TokenPayload
 from .config import settings
 from .database import execute_insert, execute_query
-from .models import BillingSummary
+from .models import BillingSummary, ChangePlanBody
 
 logger = logging.getLogger(__name__)
 
@@ -493,3 +493,185 @@ async def billing_summary(token: TokenPayload = Depends(verify_token)):
             if row["cancel_at_period_end"] is not None
             else False,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 (D-04/D-05/D-07/W1): change plan between paid tiers
+# ---------------------------------------------------------------------------
+
+_PLAN_TIER = {"free": 0, "cloud": 1, "teams": 2}
+
+
+async def _load_billing_summary(workspace_id: str) -> BillingSummary:
+    """Read the workspaces-row cache and shape as BillingSummary.
+
+    Mirrors GET /billing/summary exactly so mutation endpoints
+    (/change-plan, /cancel, /reactivate) can return a post-mutation
+    snapshot without a second round-trip (D-22).
+
+    W1: includes `scheduled_plan` + `scheduled_change_at` so the UI can
+    render a pending-downgrade info line above the Billing action row.
+    """
+    rows = await execute_query(
+        """
+        SELECT plan, price_cents, currency, subscription_status,
+               trial_ends_at, current_period_ends_at, cancel_at_period_end,
+               scheduled_plan, scheduled_change_at
+        FROM workspaces
+        WHERE id = $1
+        """,
+        workspace_id,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    row = rows[0]
+    return BillingSummary(
+        plan=row["plan"],
+        price_cents=row["price_cents"],
+        currency=row["currency"],
+        status=row["subscription_status"] or "active",
+        trial_ends_at=row["trial_ends_at"],
+        current_period_ends_at=row["current_period_ends_at"],
+        cancel_at_period_end=bool(row["cancel_at_period_end"])
+            if row["cancel_at_period_end"] is not None
+            else False,
+        scheduled_plan=row["scheduled_plan"],
+        scheduled_change_at=row["scheduled_change_at"],
+    )
+
+
+@router.post("/change-plan", response_model=BillingSummary)
+async def change_plan(
+    body: ChangePlanBody,
+    token: TokenPayload = Depends(verify_token),
+):
+    """Switch between paid plans (Cloud <-> Teams).
+
+    D-32: only client input is `target_plan`, validated by Pydantic allowlist.
+    D-33: workspace_id comes from the JWT.
+    D-31: idempotent — if target_plan == current plan, return current summary, no Paddle call.
+    D-04: Cloud -> Teams => proration_billing_mode='prorated_immediately'.
+    D-05: Teams -> Cloud => effective_from='next_billing_period' (no proration).
+    D-06: Cloud -> Free is NOT supported here; client must call /billing/cancel.
+    D-20: On 2xx, write expected end-state to workspaces row synchronously.
+    D-22: Response body is the fresh BillingSummary.
+    D-28: On Paddle 5xx/timeout, return 502 and DO NOT mutate workspaces row.
+    W1:   On downgrade 2xx, write scheduled_plan + scheduled_change_at so the UI
+          can render "Pending downgrade to Cloud on {date}" without a second call.
+    """
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=500, detail="Paddle not configured")
+
+    workspace_id = str(token.workspace_id)
+    rows = await execute_query(
+        """
+        SELECT plan, paddle_subscription_id, paddle_customer_id,
+               current_period_ends_at
+        FROM workspaces WHERE id = $1
+        """,
+        workspace_id,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    current_plan = (rows[0]["plan"] or "free").lower()
+    subscription_id = rows[0]["paddle_subscription_id"]
+    current_period_ends_at = rows[0]["current_period_ends_at"]
+    target_plan = body.target_plan  # already lowercased + allowlisted by validator
+
+    # D-31: idempotent no-op
+    if current_plan == target_plan:
+        return await _load_billing_summary(workspace_id)
+
+    # D-06: Cloud -> Free is a cancel, not a change
+    if target_plan == "free":
+        raise HTTPException(
+            status_code=400,
+            detail="Downgrading to Free is a cancel. Call /billing/cancel instead.",
+        )
+
+    # Paid-to-paid requires an existing subscription
+    if not subscription_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No active subscription to change. Start a new checkout via /billing/checkout.",
+        )
+
+    target_price_id = _plan_to_price_id(target_plan)
+    if not target_price_id:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Missing Paddle price_id for plan '{target_plan}'",
+        )
+
+    # Build PATCH payload per direction.
+    is_upgrade = _PLAN_TIER.get(target_plan, -1) > _PLAN_TIER.get(current_plan, -1)
+    payload: dict[str, Any] = {
+        "items": [{"price_id": target_price_id, "quantity": 1}],
+    }
+    if is_upgrade:
+        # D-04: prorate now, switch immediately.
+        payload["proration_billing_mode"] = "prorated_immediately"
+    else:
+        # D-05: swap at next billing period, no proration.
+        payload["proration_billing_mode"] = "do_not_bill"
+        payload["effective_from"] = "next_billing_period"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.patch(
+                f"{_paddle_base_url()}/subscriptions/{subscription_id}",
+                headers=_paddle_headers(),
+                json=payload,
+            )
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        logger.error(
+            "Paddle change-plan transport failure: workspace=%s op=change-plan target=%s err=%s",
+            workspace_id, target_plan, e,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider did not respond")
+
+    if resp.status_code >= 500:
+        logger.error(
+            "Paddle change-plan upstream 5xx: workspace=%s op=change-plan target=%s status=%s body=%s",
+            workspace_id, target_plan, resp.status_code, resp.text,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider error")
+    if resp.status_code >= 400:
+        logger.error(
+            "Paddle change-plan rejected: workspace=%s op=change-plan target=%s status=%s body=%s",
+            workspace_id, target_plan, resp.status_code, resp.text,
+        )
+        raise HTTPException(status_code=502, detail="Failed to change plan")
+
+    # D-20: sync DB write after 2xx Paddle response.
+    if is_upgrade:
+        # Plan flips NOW; price_cents/currency come from next webhook (authoritative).
+        # Clear any stale scheduled_plan so the UI doesn't render a pending-downgrade
+        # line for a subscription that has been upgraded past it.
+        await execute_insert(
+            """
+            UPDATE workspaces
+            SET plan = $1,
+                scheduled_plan = NULL,
+                scheduled_change_at = NULL
+            WHERE id = $2::uuid
+            """,
+            target_plan, workspace_id,
+        )
+    else:
+        # W1: Downgrade — plan stays until period end. Record the scheduled state
+        # so the UI can render "Pending downgrade to Cloud on {date}" immediately
+        # without waiting for the webhook. `current_period_ends_at` is the
+        # best-known effective date; the webhook `subscription.updated` will
+        # reconcile if Paddle chose a slightly different timestamp.
+        await execute_insert(
+            """
+            UPDATE workspaces
+            SET scheduled_plan = $1,
+                scheduled_change_at = $2
+            WHERE id = $3::uuid
+            """,
+            target_plan, current_period_ends_at, workspace_id,
+        )
+
+    return await _load_billing_summary(workspace_id)

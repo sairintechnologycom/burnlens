@@ -352,6 +352,21 @@ async def init_db():
                 ) THEN
                     ALTER TABLE workspaces ADD COLUMN currency TEXT;
                 END IF;
+                -- Phase 8 (W1): local mirror of Paddle's scheduled_change for a pending
+                -- downgrade. Populated by POST /billing/change-plan after a 2xx Paddle
+                -- PATCH (Teams->Cloud). Reconciled by subscription.updated webhook.
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'scheduled_plan'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN scheduled_plan TEXT;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'scheduled_change_at'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN scheduled_change_at TIMESTAMPTZ;
+                END IF;
             END $$;
         """)
 
