@@ -35,6 +35,7 @@ graphify-out/
 # Data exports
 burnlens_export.csv
 .gstack/
+.claude/
 
 # Phase 7 tests — empty env stub used to isolate burnlens_cloud.config from the project .env
 tests/_phase7_billing_test.env
