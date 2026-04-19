@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import time
+from datetime import datetime
 from typing import Any, Optional
 
 import httpx
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 from .auth import verify_token, TokenPayload
 from .config import settings
 from .database import execute_insert, execute_query
+from .models import BillingSummary
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +49,92 @@ def _plan_to_price_id(plan: str) -> Optional[str]:
     return None
 
 
-def _plan_from_price_id(price_id: str) -> str:
-    if price_id and price_id == settings.paddle_cloud_price_id:
+async def _plan_from_price_id(price_id: str) -> str:
+    """Map Paddle price_id → internal plan.
+
+    DB first (Phase 6 plan_limits.paddle_price_id, indexed via
+    idx_plan_limits_paddle_price). Env fallback for safety if the seed
+    hasn't run in this environment.
+    """
+    if not price_id:
+        return "free"
+    rows = await execute_query(
+        "SELECT plan FROM plan_limits WHERE paddle_price_id = $1",
+        price_id,
+    )
+    if rows:
+        return rows[0]["plan"]
+    # Legacy env fallback — matches pre-Phase-7 behaviour.
+    if price_id == settings.paddle_cloud_price_id:
         return "cloud"
-    if price_id and price_id == settings.paddle_teams_price_id:
+    if price_id == settings.paddle_teams_price_id:
         return "teams"
     return "free"
+
+
+# ---------------------------------------------------------------------------
+# Paddle payload extraction — fail-soft helpers. Return None / False on any
+# KeyError / TypeError / ValueError so a malformed payload never crashes the
+# handler (D-11 silent-success invariant).
+# ---------------------------------------------------------------------------
+
+def _parse_iso(value: Any) -> Optional[datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        # Paddle emits e.g. "2026-05-19T00:00:00Z" — fromisoformat handles "+00:00" after replace.
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_period_end(data: dict) -> Optional[datetime]:
+    try:
+        return _parse_iso((data.get("current_billing_period") or {}).get("ends_at"))
+    except Exception:
+        return None
+
+
+def _extract_trial_end(data: dict) -> Optional[datetime]:
+    # Populated whenever Paddle gives us trial_dates, regardless of status — the
+    # Settings card only renders it for status=='trialing' (D-14 is UI concern).
+    try:
+        return _parse_iso((data.get("trial_dates") or {}).get("ends_at"))
+    except Exception:
+        return None
+
+
+def _extract_cancel_at_period_end(data: dict) -> bool:
+    try:
+        sc = data.get("scheduled_change") or {}
+        return sc.get("action") == "cancel"
+    except Exception:
+        return False
+
+
+def _extract_price(data: dict) -> tuple[Optional[int], Optional[str]]:
+    try:
+        items = data.get("items") or []
+        if not items:
+            return (None, None)
+        price = (items[0] or {}).get("price") or {}
+        unit = price.get("unit_price") or {}
+        amount = unit.get("amount")
+        currency = unit.get("currency_code")
+        cents = int(amount) if amount is not None else None
+        return (cents, currency.upper() if isinstance(currency, str) else None)
+    except (TypeError, ValueError):
+        return (None, None)
+
+
+def _extract_price_id(data: dict) -> Optional[str]:
+    try:
+        items = data.get("items") or []
+        if not items:
+            return None
+        return ((items[0] or {}).get("price") or {}).get("id")
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -158,16 +240,41 @@ async def paddle_webhook(request: Request):
     sig_header = request.headers.get("paddle-signature", "")
     raw_body = await request.body()
 
+    if not sig_header:
+        # ROADMAP SC-1: signature-level failures are HTTP 401.
+        raise HTTPException(status_code=401, detail="Missing signature")
     if not _verify_signature(sig_header, raw_body, settings.paddle_webhook_secret):
-        raise HTTPException(status_code=400, detail="Invalid signature")
+        raise HTTPException(status_code=401, detail="Invalid signature")
 
     try:
         event = json.loads(raw_body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
+    event_id = event.get("event_id") or event.get("id")
     event_type = event.get("event_type", "")
     data = event.get("data", {}) or {}
+
+    if not event_id:
+        # Signature passed but the envelope is malformed (no dedup key). This is a
+        # client-formatting error, distinct from SC-1's signature-rejection path,
+        # so it stays as 400 (per must_haves.truths[0]).
+        raise HTTPException(status_code=400, detail="Missing event_id")
+
+    # Dedup: insert-or-skip. If the INSERT returns no row, we already saw this event.
+    # $3::jsonb cast — no JSONB codec registered on the asyncpg pool, so the explicit
+    # cast converts the json.dumps(event) string to jsonb at the SQL layer.
+    inserted = await execute_query(
+        """
+        INSERT INTO paddle_events (event_id, event_type, payload)
+        VALUES ($1, $2, $3::jsonb)
+        ON CONFLICT (event_id) DO NOTHING
+        RETURNING event_id
+        """,
+        event_id, event_type, json.dumps(event),
+    )
+    if not inserted:
+        return {"received": True, "deduped": True}
 
     try:
         if event_type == "subscription.activated":
@@ -177,24 +284,35 @@ async def paddle_webhook(request: Request):
         elif event_type in ("subscription.canceled", "subscription.paused"):
             await _handle_subscription_canceled(data)
         elif event_type == "transaction.payment_failed":
-            logger.warning("Payment failed for customer %s", data.get("customer_id"))
+            await _handle_payment_failed(data)
         else:
             logger.debug("Unhandled Paddle event: %s", event_type)
-    except Exception:
-        # Log but return 200 so Paddle doesn't retry-storm on a bug.
+        await execute_insert(
+            "UPDATE paddle_events SET processed_at = now() WHERE event_id = $1",
+            event_id,
+        )
+    except Exception as e:
         logger.exception("Error handling Paddle event %s", event_type)
+        await execute_insert(
+            "UPDATE paddle_events SET error = $1 WHERE event_id = $2",
+            str(e), event_id,
+        )
 
     return {"received": True}
 
 
 async def _handle_subscription_activated(data: dict) -> None:
-    """Subscription is paid and live. Upgrade workspace plan + persist IDs."""
+    """Subscription is paid and live. Upgrade workspace plan + persist IDs + period cache."""
     workspace_id = (data.get("custom_data") or {}).get("workspace_id")
     customer_id = data.get("customer_id")
     subscription_id = data.get("id")
-    items = data.get("items") or []
-    price_id = (items[0].get("price") or {}).get("id") if items else None
-    plan = _plan_from_price_id(price_id or "")
+    status = data.get("status") or "active"
+    price_id = _extract_price_id(data) or ""
+    plan = await _plan_from_price_id(price_id)
+    trial_ends_at = _extract_trial_end(data)
+    current_period_ends_at = _extract_period_end(data)
+    cancel_at_period_end = _extract_cancel_at_period_end(data)
+    price_cents, currency = _extract_price(data)
 
     if not workspace_id:
         logger.warning(
@@ -209,33 +327,51 @@ async def _handle_subscription_activated(data: dict) -> None:
         SET plan = $1,
             paddle_customer_id = $2,
             paddle_subscription_id = $3,
-            subscription_status = 'active'
-        WHERE id = $4::uuid
+            subscription_status = $4,
+            trial_ends_at = $5,
+            current_period_ends_at = $6,
+            cancel_at_period_end = $7,
+            price_cents = $8,
+            currency = $9
+        WHERE id = $10::uuid
         """,
-        plan, customer_id, subscription_id, workspace_id,
+        plan, customer_id, subscription_id, status,
+        trial_ends_at, current_period_ends_at, cancel_at_period_end,
+        price_cents, currency,
+        workspace_id,
     )
     logger.info(
-        "Workspace %s activated on %s (customer=%s sub=%s)",
-        workspace_id, plan, customer_id, subscription_id,
+        "Workspace %s activated on %s (status=%s customer=%s sub=%s)",
+        workspace_id, plan, status, customer_id, subscription_id,
     )
 
 
 async def _handle_subscription_updated(data: dict) -> None:
-    """Plan change or renewal. Sync plan + status from the subscription."""
+    """Plan change, renewal, or status transition (D-03)."""
     subscription_id = data.get("id")
     status = data.get("status") or "active"
-    items = data.get("items") or []
-    price_id = (items[0].get("price") or {}).get("id") if items else None
-    plan = _plan_from_price_id(price_id or "")
+    price_id = _extract_price_id(data) or ""
+    plan = await _plan_from_price_id(price_id)
+    trial_ends_at = _extract_trial_end(data)
+    current_period_ends_at = _extract_period_end(data)
+    cancel_at_period_end = _extract_cancel_at_period_end(data)
+    price_cents, currency = _extract_price(data)
 
     await execute_insert(
         """
         UPDATE workspaces
         SET plan = $1,
-            subscription_status = $2
-        WHERE paddle_subscription_id = $3
+            subscription_status = $2,
+            trial_ends_at = $3,
+            current_period_ends_at = $4,
+            cancel_at_period_end = $5,
+            price_cents = $6,
+            currency = $7
+        WHERE paddle_subscription_id = $8
         """,
-        plan, status, subscription_id,
+        plan, status, trial_ends_at, current_period_ends_at,
+        cancel_at_period_end, price_cents, currency,
+        subscription_id,
     )
     logger.info("Subscription %s updated: plan=%s status=%s", subscription_id, plan, status)
 
@@ -253,6 +389,33 @@ async def _handle_subscription_canceled(data: dict) -> None:
         subscription_id,
     )
     logger.info("Subscription %s canceled; workspace downgraded to free", subscription_id)
+
+
+async def _handle_payment_failed(data: dict) -> None:
+    """transaction.payment_failed → flip workspace to past_due; plan unchanged (D-21).
+
+    Paddle will retry payment automatically; a successful retry fires
+    subscription.updated with status='active' and clears past_due upstream.
+    """
+    subscription_id = (
+        data.get("subscription_id")
+        or (data.get("subscription") or {}).get("id")
+    )
+    if not subscription_id:
+        logger.warning(
+            "transaction.payment_failed missing subscription_id: %s",
+            data.get("id"),
+        )
+        return
+    await execute_insert(
+        """
+        UPDATE workspaces
+        SET subscription_status = 'past_due'
+        WHERE paddle_subscription_id = $1
+        """,
+        subscription_id,
+    )
+    logger.warning("Subscription %s flipped to past_due", subscription_id)
 
 
 # ---------------------------------------------------------------------------
@@ -293,3 +456,40 @@ async def billing_portal(token: TokenPayload = Depends(verify_token)):
     if not url:
         raise HTTPException(status_code=502, detail="Portal URL missing in Paddle response")
     return {"url": url}
+
+
+# ---------------------------------------------------------------------------
+# Read-only billing summary — feeds Topbar + Settings via polling (D-16..D-18)
+# ---------------------------------------------------------------------------
+
+@router.get("/summary", response_model=BillingSummary)
+async def billing_summary(token: TokenPayload = Depends(verify_token)):
+    """Read the workspaces-row cache for the caller's workspace.
+
+    Single indexed lookup; no Paddle API round-trip. Polled by the frontend
+    every 30s (and on window focus) to satisfy the 60s freshness SLA (D-18).
+    Workspace-scoped via verify_token (D-17) — cross-tenant reads are impossible.
+    """
+    rows = await execute_query(
+        """
+        SELECT plan, price_cents, currency, subscription_status,
+               trial_ends_at, current_period_ends_at, cancel_at_period_end
+        FROM workspaces
+        WHERE id = $1
+        """,
+        str(token.workspace_id),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    row = rows[0]
+    return BillingSummary(
+        plan=row["plan"],
+        price_cents=row["price_cents"],
+        currency=row["currency"],
+        status=row["subscription_status"] or "active",
+        trial_ends_at=row["trial_ends_at"],
+        current_period_ends_at=row["current_period_ends_at"],
+        cancel_at_period_end=bool(row["cancel_at_period_end"])
+            if row["cancel_at_period_end"] is not None
+            else False,
+    )
