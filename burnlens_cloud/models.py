@@ -147,6 +147,28 @@ class BillingPortalResponse(BaseModel):
     url: str
 
 
+# Phase 7: billing summary response model — read-only view of workspaces-row cache
+# populated by the Paddle webhook. See .planning/phases/07-paddle-lifecycle-sync/07-CONTEXT.md D-16.
+class BillingSummary(BaseModel):
+    """Read model for GET /billing/summary.
+
+    Reflects the workspaces-row cache written by the Paddle webhook (Phase 7).
+    No Paddle API round-trip on read. `price_cents` and `currency` are null for
+    free-tier workspaces (D-07). Date fields are null when Paddle has not
+    populated them (free plan, or new sub before first Paddle payload).
+    `status` values expected from Paddle: 'active' | 'trialing' | 'past_due'
+    | 'canceled' | 'paused'. Stored as plain str so Paddle can add new states
+    without breaking the read path.
+    """
+    plan: str
+    price_cents: Optional[int] = None
+    currency: Optional[str] = None
+    status: str
+    trial_ends_at: Optional[datetime] = None
+    current_period_ends_at: Optional[datetime] = None
+    cancel_at_period_end: bool = False
+
+
 # Teams models
 class UserResponse(BaseModel):
     """User response model."""
