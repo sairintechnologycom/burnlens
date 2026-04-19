@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # Request/Response Schemas
@@ -167,6 +167,13 @@ class BillingSummary(BaseModel):
     trial_ends_at: Optional[datetime] = None
     current_period_ends_at: Optional[datetime] = None
     cancel_at_period_end: bool = False
+    # Phase 8 (W1): pending scheduled plan change (downgrade scheduled at period end).
+    # Both are None when no change is pending. When a downgrade has been scheduled,
+    # `scheduled_plan` is the target plan ("cloud") and `scheduled_change_at` is the
+    # ISO timestamp at which Paddle will materialize the swap (typically equal to
+    # current_period_ends_at).
+    scheduled_plan: Optional[str] = None
+    scheduled_change_at: Optional[datetime] = None
 
 
 # Teams models
@@ -340,3 +347,57 @@ class ResolvedLimits(BaseModel):
     retention_days: Optional[int] = None
     api_key_count: Optional[int] = None
     gated_features: dict = Field(default_factory=dict)
+
+
+# Phase 8: billing self-service models
+
+class CancelBody(BaseModel):
+    """Request body for POST /billing/cancel.
+
+    Both fields are optional (D-10). When both are None/missing, no
+    survey row is inserted. Free-text is intentionally unbounded at
+    schema level; the endpoint should truncate at write time if needed.
+    """
+    reason_code: Optional[str] = None
+    reason_text: Optional[str] = None
+
+
+class ChangePlanBody(BaseModel):
+    """Request body for POST /billing/change-plan.
+
+    `target_plan` is the ONLY client-controlled field on any Phase 8
+    mutation (D-32). All Paddle identifiers (customer_id, subscription_id,
+    price_id) are server-read from the workspaces row.
+    """
+    target_plan: str
+
+    @field_validator("target_plan")
+    @classmethod
+    def _validate_target_plan(cls, v: str) -> str:
+        allowed = {"cloud", "teams"}
+        lowered = (v or "").strip().lower()
+        if lowered not in allowed:
+            raise ValueError("target_plan must be one of: cloud, teams")
+        return lowered
+
+
+class Invoice(BaseModel):
+    """One row in GET /billing/invoices response.
+
+    Shape projects Paddle's Transaction object down to just what the UI
+    renders. `invoice_pdf_url` is the Paddle-hosted signed URL; the
+    frontend links directly to it, BurnLens never proxies bytes (D-19).
+    When Paddle's PDF lookup fails or times out (W4), the field is None
+    and the UI renders "—" instead of a broken Download link.
+    """
+    id: str
+    billed_at: Optional[datetime] = None
+    amount_cents: Optional[int] = None
+    currency: Optional[str] = None
+    status: str
+    invoice_pdf_url: Optional[str] = None
+
+
+class InvoicesResponse(BaseModel):
+    """Response envelope for GET /billing/invoices."""
+    invoices: list[Invoice] = Field(default_factory=list)
