@@ -999,6 +999,8 @@ async def list_invoices(token: TokenPayload = Depends(verify_token)):
                 )
                 raise HTTPException(status_code=502, detail="Failed to load invoices")
 
+
+
             # Paddle response is a plain dict here — .get() is CORRECT on dicts.
             data = resp.json().get("data") or []
             # Defensive cap: ignore extra rows Paddle might return on edge cases.
@@ -1043,3 +1045,59 @@ async def list_invoices(token: TokenPayload = Depends(verify_token)):
         raise HTTPException(status_code=502, detail="Billing provider did not respond")
 
     return InvoicesResponse(invoices=invoices)
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 (D-26): plan comparison data for PlanPickerModal
+# ---------------------------------------------------------------------------
+
+@router.get("/plans")
+async def list_plans(token: TokenPayload = Depends(verify_token)):
+    """Return the plan_limits catalog for the Plan-picker modal.
+
+    D-26: UI comparison is a projection of this response — no hand-maintained
+    marketing copy. Includes Cloud + Teams (Free omitted; the modal is shown
+    specifically to surface paid options).
+
+    Response: { "plans": [{plan, monthly_request_cap, seat_count, retention_days,
+                           api_key_count, paddle_price_id, paddle_product_id,
+                           gated_features}, ...] }
+
+    B2: Row access uses subscript (row["key"]) — asyncpg Record has no .get().
+    """
+    rows = await execute_query(
+        """
+        SELECT plan, monthly_request_cap, seat_count, retention_days,
+               api_key_count, paddle_price_id, paddle_product_id, gated_features
+        FROM plan_limits
+        WHERE plan IN ('cloud', 'teams')
+        ORDER BY CASE plan WHEN 'cloud' THEN 1 WHEN 'teams' THEN 2 ELSE 3 END
+        """,
+    )
+    plans: list[dict[str, Any]] = []
+    for row in rows:
+        # B2: subscript access on asyncpg Record — NOT `.get()`.
+        gated_raw = row["gated_features"]
+        # gated_features is JSONB — asyncpg may return it as dict or as str
+        # depending on encoder config. Normalize to dict.
+        if isinstance(gated_raw, str):
+            try:
+                gated = json.loads(gated_raw)
+            except Exception:
+                gated = {}
+        elif isinstance(gated_raw, dict):
+            gated = gated_raw
+        else:
+            gated = {}
+
+        plans.append({
+            "plan": row["plan"],
+            "monthly_request_cap": row["monthly_request_cap"],
+            "seat_count": row["seat_count"],
+            "retention_days": row["retention_days"],
+            "api_key_count": row["api_key_count"],
+            "paddle_price_id": row["paddle_price_id"],
+            "paddle_product_id": row["paddle_product_id"],
+            "gated_features": gated,
+        })
+    return {"plans": plans}
