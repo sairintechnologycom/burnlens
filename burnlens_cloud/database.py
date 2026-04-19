@@ -373,6 +373,25 @@ async def init_db():
             ON paddle_events(received_at DESC)
         """)
 
+        # Phase 8 (D-10): optional cancel-reason capture.
+        # Never blocks cancel — best-effort insert from /billing/cancel.
+        # workspace_id FK ON DELETE CASCADE so deleting a workspace does not leave orphans.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS cancellation_surveys (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                reason_code TEXT,
+                reason_text TEXT,
+                plan_at_cancel TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_cancellation_surveys_workspace_ts
+            ON cancellation_surveys(workspace_id, created_at DESC)
+        """)
+
         # Phase 6: resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
