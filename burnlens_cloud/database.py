@@ -318,6 +318,43 @@ async def init_db():
             END $$;
         """)
 
+        # Phase 7 (D-04..D-08): Paddle lifecycle state columns — all nullable except cancel_at_period_end (boolean NOT NULL DEFAULT false)
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'trial_ends_at'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN trial_ends_at TIMESTAMPTZ;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'current_period_ends_at'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN current_period_ends_at TIMESTAMPTZ;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'cancel_at_period_end'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN cancel_at_period_end BOOLEAN NOT NULL DEFAULT false;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'price_cents'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN price_cents INTEGER;
+                END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'currency'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN currency TEXT;
+                END IF;
+            END $$;
+        """)
+
         # Phase 6: resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
