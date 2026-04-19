@@ -14,6 +14,7 @@ from .team_api import router as team_router
 from .settings_api import router as settings_router
 from .compliance.audit import router as audit_router
 from .deployment_api import router as deployment_router
+from .stubs_api import router as stubs_router
 from .deployment.status import get_status_checker
 
 # Configure logging
@@ -99,6 +100,7 @@ def get_app() -> FastAPI:
     app.include_router(settings_router)  # /settings/otel, /settings/pricing
     app.include_router(audit_router)     # /api/audit-log, /api/audit-log/export
     app.include_router(deployment_router) # /status, /api/status
+    app.include_router(stubs_router)     # stub endpoints — see burnlens_cloud/stubs_api.py
 
     return app
 
