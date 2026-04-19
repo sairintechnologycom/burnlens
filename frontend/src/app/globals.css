@@ -204,6 +204,40 @@ img, svg { display: block; }
   color: var(--cyan);
 }
 
+.plan-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.plan-pill:hover { opacity: 0.85; }
+
+.plan-pill-free {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--amber);
+}
+
+.plan-pill-paid {
+  background: rgba(34, 211, 184, 0.1);
+  border: 1px solid rgba(34, 211, 184, 0.3);
+  color: var(--cyan);
+}
+
+.plan-pill-upgrade {
+  margin-left: 4px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
 .live-dot {
   width: 5px;
   height: 5px;

@@ -4,6 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+
+const PLAN_LABELS: Record<string, string> = {
+  free: "Free",
+  local: "Local",
+  cloud: "Cloud",
+  teams: "Teams",
+  enterprise: "Enterprise",
+};
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Overview" },
@@ -31,6 +40,10 @@ export default function Topbar() {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
   const { period, setPeriod } = usePeriod();
+  const { session } = useAuth();
+  const planKey = (session?.plan || "free").toLowerCase();
+  const planLabel = PLAN_LABELS[planKey] ?? planKey.charAt(0).toUpperCase() + planKey.slice(1);
+  const isFree = planKey === "free";
 
   return (
     <div className="topbar">
@@ -54,6 +67,17 @@ export default function Topbar() {
       </div>
 
       <div className="topbar-right">
+        {session && (
+          <Link
+            href="/settings#billing"
+            className={`plan-pill ${isFree ? "plan-pill-free" : "plan-pill-paid"}`}
+            title={`Current plan: ${planLabel}. Click to manage billing.`}
+          >
+            {planLabel}
+            {isFree && <span className="plan-pill-upgrade"> · Upgrade</span>}
+          </Link>
+        )}
+
         <div className="live-pill">
           <span className="live-dot" />
           LIVE

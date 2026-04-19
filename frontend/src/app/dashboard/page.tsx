@@ -84,8 +84,10 @@ function DashboardContent() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const wasteAmount = summary ? (summary.total_cost * 0.15) : 0; // estimate
-  const avgPerReq = summary && summary.total_calls > 0 ? summary.total_cost / summary.total_calls : 0;
+  const totalCost = summary?.total_cost ?? 0;
+  const totalCalls = summary?.total_calls ?? 0;
+  const wasteAmount = totalCost * 0.15; // estimate
+  const avgPerReq = totalCalls > 0 ? totalCost / totalCalls : 0;
 
   if (loading && !summary) {
     return (
