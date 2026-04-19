@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from .auth import verify_token, TokenPayload
 from .config import settings
 from .database import execute_insert, execute_query
-from .models import BillingSummary, ChangePlanBody, CancelBody
+from .models import BillingSummary, ChangePlanBody, CancelBody, Invoice, InvoicesResponse
 
 logger = logging.getLogger(__name__)
 
@@ -900,3 +900,146 @@ async def reactivate_subscription(
     )
 
     return await _load_billing_summary(workspace_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 (D-16..D-19, W4): invoice history — server-proxy Paddle transactions
+# ---------------------------------------------------------------------------
+
+_INVOICE_LIMIT = 24  # D-18
+_PDF_FETCH_TIMEOUT_S = 5.0  # W4: short per-call timeout so a slow PDF doesn't stall the list
+
+
+async def _fetch_paddle_pdf_url(transaction_id: str) -> Optional[str]:
+    """Fetch the Paddle-hosted signed PDF URL for a transaction.
+
+    Fails soft: on any error — timeout, 4xx, 5xx, JSON shape drift, network —
+    we return None and the UI renders "—" instead of a broken Download link.
+
+    W4: each call uses its own short 5s timeout. This bounds the worst-case
+    latency at ~N * 5s even if every PDF lookup stalls; in practice Paddle's
+    PDF endpoint responds in <1s so typical latency is unaffected.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=_PDF_FETCH_TIMEOUT_S) as client:
+            resp = await client.get(
+                f"{_paddle_base_url()}/transactions/{transaction_id}/invoice",
+                headers=_paddle_headers(),
+            )
+            if resp.status_code >= 400:
+                return None
+            data = resp.json()
+            if not isinstance(data, dict):
+                return None
+            inner = data.get("data") or {}
+            if not isinstance(inner, dict):
+                return None
+            url = inner.get("url")
+            return url if isinstance(url, str) else None
+    except (httpx.TimeoutException, httpx.TransportError):
+        return None
+    except Exception:  # noqa: BLE001 — defensive; PDF fetch MUST never crash the endpoint
+        return None
+
+
+@router.get("/invoices", response_model=InvoicesResponse)
+async def list_invoices(token: TokenPayload = Depends(verify_token)):
+    """List recent invoices for the caller's workspace.
+
+    D-17: server-proxy GET /transactions filtered by server-read customer_id.
+    D-18: max 24 rows.
+    D-19: invoice_pdf_url is Paddle-hosted signed URL; no byte-proxying.
+    D-28: Paddle 5xx/timeout on the LIST call -> 502 + logger.error.
+    D-33: workspace_id from JWT; customer_id read from our DB; never from client.
+    B2:  asyncpg Record access uses subscript (row["key"]); not `.get()`.
+    W4:  Per-row PDF fetches have their own short timeout; failures degrade to
+         invoice_pdf_url=None so the row still renders with a "—" placeholder.
+    """
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=500, detail="Paddle not configured")
+
+    workspace_id = str(token.workspace_id)
+    rows = await execute_query(
+        "SELECT paddle_customer_id FROM workspaces WHERE id = $1",
+        workspace_id,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    # B2: asyncpg Record has no .get(); use subscript.
+    customer_id = rows[0]["paddle_customer_id"]
+
+    # Free workspace (never had a paid subscription) — empty state per D-16.
+    if not customer_id:
+        return InvoicesResponse(invoices=[])
+
+    params = {
+        "customer_id": customer_id,
+        "status": "completed,paid",
+        "order_by": "billed_at[DESC]",
+        "per_page": str(_INVOICE_LIMIT),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{_paddle_base_url()}/transactions",
+                headers=_paddle_headers(),
+                params=params,
+            )
+            if resp.status_code >= 500:
+                logger.error(
+                    "Paddle transactions list upstream 5xx: workspace=%s status=%s body=%s",
+                    workspace_id, resp.status_code, resp.text,
+                )
+                raise HTTPException(status_code=502, detail="Billing provider error")
+            if resp.status_code >= 400:
+                logger.error(
+                    "Paddle transactions list rejected: workspace=%s status=%s body=%s",
+                    workspace_id, resp.status_code, resp.text,
+                )
+                raise HTTPException(status_code=502, detail="Failed to load invoices")
+
+            # Paddle response is a plain dict here — .get() is CORRECT on dicts.
+            data = resp.json().get("data") or []
+            # Defensive cap: ignore extra rows Paddle might return on edge cases.
+            data = data[:_INVOICE_LIMIT]
+
+            invoices: list[Invoice] = []
+            for txn in data:
+                if not isinstance(txn, dict):
+                    continue
+                # Plain dict; .get() is fine here.
+                txn_id = txn.get("id")
+                if not txn_id:
+                    continue
+                status = txn.get("status") or "unknown"
+                billed_at = _parse_iso(txn.get("billed_at"))
+                details = (txn.get("details") or {}).get("totals") or {}
+                amount_raw = details.get("grand_total")
+                try:
+                    amount_cents = int(amount_raw) if amount_raw is not None else None
+                except (TypeError, ValueError):
+                    amount_cents = None
+                currency = details.get("currency_code") or txn.get("currency_code")
+
+                # W4: per-row PDF fetch — short-timeout, failure-soft.
+                pdf_url = await _fetch_paddle_pdf_url(txn_id)
+
+                invoices.append(Invoice(
+                    id=txn_id,
+                    billed_at=billed_at,
+                    amount_cents=amount_cents,
+                    currency=currency.upper() if isinstance(currency, str) else None,
+                    status=status,
+                    invoice_pdf_url=pdf_url,
+                ))
+    except HTTPException:
+        raise
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        logger.error(
+            "Paddle transactions list transport failure: workspace=%s err=%s",
+            workspace_id, e,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider did not respond")
+
+    return InvoicesResponse(invoices=invoices)
