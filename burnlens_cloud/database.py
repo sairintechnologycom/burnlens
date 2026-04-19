@@ -355,6 +355,24 @@ async def init_db():
             END $$;
         """)
 
+        # Phase 7 (D-09): webhook dedup + audit log. event_id is Paddle's event-envelope id;
+        # INSERT ... ON CONFLICT (event_id) DO NOTHING gives us idempotency for free (D-10).
+        # processed_at / error let production debug stuck events without replays (D-11).
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS paddle_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                payload JSONB NOT NULL,
+                processed_at TIMESTAMPTZ,
+                error TEXT
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_paddle_events_received_at
+            ON paddle_events(received_at DESC)
+        """)
+
         # Phase 6: resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
