@@ -17,7 +17,7 @@ phase_range: "6-10"
 ## Phases
 
 - [x] **Phase 6: Plan Limits Foundation** — Seed plan_limits table and build a single effective-limits resolver (completed 2026-04-18)
-- [ ] **Phase 7: Paddle Lifecycle Sync** — Webhook handlers drive plan/subscription state and the read-only Billing summary
+- [x] **Phase 7: Paddle Lifecycle Sync** — Webhook handlers drive plan/subscription state and the read-only Billing summary (completed 2026-04-19)
 - [ ] **Phase 8: Billing Self-Service** — Checkout, invoice history, cancel, and reactivate flows in Settings → Billing
 - [ ] **Phase 9: Quota Tracking & Soft Enforcement** — Monthly counters, seat/API-key 402s, retention pruning, backend entitlement middleware
 - [ ] **Phase 10: Feature Gating & Usage Visibility UI** — Plan-gated UI, upgrade CTAs, and the sidebar usage meter
