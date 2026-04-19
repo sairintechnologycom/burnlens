@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from .auth import verify_token, TokenPayload
 from .config import settings
 from .database import execute_insert, execute_query
-from .models import BillingSummary, ChangePlanBody
+from .models import BillingSummary, ChangePlanBody, CancelBody
 
 logger = logging.getLogger(__name__)
 
@@ -673,5 +673,130 @@ async def change_plan(
             """,
             target_plan, current_period_ends_at, workspace_id,
         )
+
+    return await _load_billing_summary(workspace_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 (D-08/D-10/D-11): cancel-at-period-end
+# ---------------------------------------------------------------------------
+
+async def _insert_cancel_survey(
+    workspace_id: str,
+    plan_at_cancel: str,
+    reason_code: Optional[str],
+    reason_text: Optional[str],
+) -> None:
+    """Best-effort write of the optional cancel-reason survey row.
+
+    Swallows ALL exceptions — D-10: cancel must never block on survey-write failure.
+    """
+    if reason_code is None and reason_text is None:
+        return
+    try:
+        await execute_insert(
+            """
+            INSERT INTO cancellation_surveys
+                (workspace_id, reason_code, reason_text, plan_at_cancel)
+            VALUES ($1::uuid, $2, $3, $4)
+            """,
+            workspace_id, reason_code, reason_text, plan_at_cancel,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "cancellation_surveys insert failed (best-effort, ignored): workspace=%s err=%s",
+            workspace_id, e,
+        )
+
+
+@router.post("/cancel", response_model=BillingSummary)
+async def cancel_subscription(
+    body: Optional[CancelBody] = None,
+    token: TokenPayload = Depends(verify_token),
+):
+    """Cancel-at-period-end.
+
+    D-11: Paddle POST /subscriptions/{id}/cancel with effective_from=next_billing_period.
+    D-20: On 2xx, write cancel_at_period_end=true to workspaces row synchronously.
+          subscription_status stays 'active' (user still has access until period end).
+          plan stays as-is.
+    D-22: Response body is the fresh BillingSummary.
+    D-31: Idempotent — if cancel_at_period_end already true, return current summary, no Paddle call.
+    D-28: Paddle 5xx/timeout -> 502 + logger.error, no DB mutation.
+    D-33: workspace_id from JWT only.
+    D-10: Optional survey write, best-effort, never blocks.
+    """
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=500, detail="Paddle not configured")
+
+    workspace_id = str(token.workspace_id)
+    rows = await execute_query(
+        """
+        SELECT plan, paddle_subscription_id, cancel_at_period_end
+        FROM workspaces WHERE id = $1
+        """,
+        workspace_id,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    current_plan = (rows[0]["plan"] or "free").lower()
+    subscription_id = rows[0]["paddle_subscription_id"]
+    already_canceled = bool(rows[0]["cancel_at_period_end"])
+
+    # D-31 idempotent: already scheduled for cancel.
+    if already_canceled:
+        return await _load_billing_summary(workspace_id)
+
+    # No active paid subscription to cancel.
+    if current_plan == "free" or not subscription_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No active subscription to cancel.",
+        )
+
+    payload = {"effective_from": "next_billing_period"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{_paddle_base_url()}/subscriptions/{subscription_id}/cancel",
+                headers=_paddle_headers(),
+                json=payload,
+            )
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        logger.error(
+            "Paddle cancel transport failure: workspace=%s op=cancel err=%s",
+            workspace_id, e,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider did not respond")
+
+    if resp.status_code >= 500:
+        logger.error(
+            "Paddle cancel upstream 5xx: workspace=%s op=cancel status=%s body=%s",
+            workspace_id, resp.status_code, resp.text,
+        )
+        raise HTTPException(status_code=502, detail="Billing provider error")
+    if resp.status_code >= 400:
+        logger.error(
+            "Paddle cancel rejected: workspace=%s status=%s body=%s",
+            workspace_id, resp.status_code, resp.text,
+        )
+        raise HTTPException(status_code=502, detail="Failed to cancel subscription")
+
+    # D-20: write expected end-state synchronously.
+    # subscription_status stays 'active' until period end; plan unchanged.
+    await execute_insert(
+        """
+        UPDATE workspaces
+        SET cancel_at_period_end = true
+        WHERE id = $1::uuid
+        """,
+        workspace_id,
+    )
+
+    # D-10: best-effort survey write.
+    reason_code = body.reason_code if body else None
+    reason_text = body.reason_text if body else None
+    await _insert_cancel_survey(workspace_id, current_plan, reason_code, reason_text)
 
     return await _load_billing_summary(workspace_id)
