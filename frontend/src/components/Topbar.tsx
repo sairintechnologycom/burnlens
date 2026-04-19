@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useBilling } from "@/lib/contexts/BillingContext";
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",
@@ -41,8 +42,10 @@ export default function Topbar() {
   const { theme, toggle } = useTheme();
   const { period, setPeriod } = usePeriod();
   const { session } = useAuth();
-  const planKey = (session?.plan || "free").toLowerCase();
-  const planLabel = PLAN_LABELS[planKey] ?? planKey.charAt(0).toUpperCase() + planKey.slice(1);
+  const { billing } = useBilling();
+  const planKey = (billing?.plan ?? session?.plan ?? "free").toLowerCase();
+  const planLabel =
+    PLAN_LABELS[planKey] ?? planKey.charAt(0).toUpperCase() + planKey.slice(1);
   const isFree = planKey === "free";
 
   return (
