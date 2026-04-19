@@ -30,6 +30,7 @@ interface BillingContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  setBilling: (next: BillingSummary) => void;
 }
 
 const DEFAULT_VALUE: BillingContextValue = {
@@ -37,6 +38,7 @@ const DEFAULT_VALUE: BillingContextValue = {
   loading: true,
   error: null,
   refresh: async () => {},
+  setBilling: () => {},
 };
 
 const BillingContext = createContext<BillingContextValue>(DEFAULT_VALUE);
@@ -58,7 +60,7 @@ const KNOWN_STATUSES = new Set<string>([
 
 export function BillingProvider({ children }: { children: React.ReactNode }) {
   const { session, logout } = useAuth();
-  const [billing, setBilling] = useState<BillingSummary | null>(null);
+  const [billing, setBillingState] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const lastFetchRef = useRef(0);
@@ -73,7 +75,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         ...data,
         status: KNOWN_STATUSES.has(data.status) ? data.status : "active",
       };
-      setBilling(safe);
+      setBillingState(safe);
       setError(null);
       lastFetchRef.current = Date.now();
     } catch (err: any) {
@@ -86,6 +88,21 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   }, [session, logout]);
+
+  // D-22 escape hatch: mutation endpoints return a fresh BillingSummary in their
+  // response body. Callers pass that body straight to setBilling() so the UI
+  // flips without a separate /summary round-trip. Applies the same W5
+  // KNOWN_STATUSES coercion as refresh(), clears any stale error, and bumps
+  // lastFetchRef so the focus-staleness logic does not immediately re-fetch.
+  const applyBilling = useCallback((next: BillingSummary) => {
+    const safe: BillingSummary = {
+      ...next,
+      status: KNOWN_STATUSES.has(next.status) ? next.status : "active",
+    };
+    setBillingState(safe);
+    setError(null);
+    lastFetchRef.current = Date.now();
+  }, []);
 
   // Initial fetch + polling interval (paused when tab is hidden).
   useEffect(() => {
@@ -112,7 +129,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   }, [session, refresh]);
 
   return (
-    <BillingContext.Provider value={{ billing, loading, error, refresh }}>
+    <BillingContext.Provider value={{ billing, loading, error, refresh, setBilling: applyBilling }}>
       {children}
     </BillingContext.Provider>
   );
