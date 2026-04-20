@@ -1,4 +1,5 @@
 import asyncpg
+import hashlib
 import logging
 from .config import settings
 
@@ -74,6 +75,44 @@ async def init_db():
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_workspaces_paddle_subscription
             ON workspaces(paddle_subscription_id) WHERE paddle_subscription_id IS NOT NULL
+        """)
+
+        # Migration (M-1 from 2026-04 security review): add api_key_hash so
+        # lookups can compare hashes instead of plaintext keys. All existing
+        # rows are backfilled here; the application thereafter dual-writes
+        # both columns on signup and reads exclusively from api_key_hash.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'api_key_hash'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN api_key_hash TEXT;
+                END IF;
+            END $$;
+        """)
+
+        # Backfill any rows that are missing the hash. Computed in Python so
+        # we don't require the pgcrypto extension.
+        rows_missing_hash = await conn.fetch(
+            "SELECT id, api_key FROM workspaces WHERE api_key_hash IS NULL AND api_key IS NOT NULL"
+        )
+        if rows_missing_hash:
+            logger.info(
+                "Backfilling api_key_hash for %d existing workspace(s)", len(rows_missing_hash)
+            )
+            for row in rows_missing_hash:
+                digest = hashlib.sha256(row["api_key"].encode("utf-8")).hexdigest()
+                await conn.execute(
+                    "UPDATE workspaces SET api_key_hash = $1 WHERE id = $2",
+                    digest,
+                    row["id"],
+                )
+
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_api_key_hash
+            ON workspaces(api_key_hash) WHERE api_key_hash IS NOT NULL
         """)
 
         await conn.execute("""

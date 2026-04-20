@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import secrets
 import time
@@ -65,6 +66,25 @@ _api_key_cache: dict = {}
 def generate_api_key() -> str:
     """Generate a new API key with 'bl_live_' prefix."""
     return f"bl_live_{secrets.token_hex(16)}"
+
+
+def hash_api_key(api_key: str) -> str:
+    """Derive the lookup hash stored in the DB for an API key.
+
+    SHA-256 of the plaintext key is adequate here because the key already
+    carries ~128 bits of entropy from secrets.token_hex — we do not need a
+    slow KDF (which exists to defeat dictionary attacks on low-entropy
+    passwords). The purpose of hashing is defense-in-depth: a read-only DB
+    breach reveals only hashes, not usable keys.
+    """
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def mask_api_key_for_display(api_key: str) -> str:
+    """Return a display-safe masked form: 'bl_live_****<last4>'."""
+    if not api_key or len(api_key) <= 4:
+        return "****"
+    return f"bl_live_****{api_key[-4:]}"
 
 
 def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str) -> str:
@@ -304,19 +324,25 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
     """
     Get workspace by API key with caching.
     Returns: (workspace_id, plan) or None if not found.
+
+    Lookup is performed against the stored `api_key_hash` column so the
+    plaintext never appears in any query log. The in-memory cache is also
+    keyed on the hash to avoid leaking plaintext through a process dump.
     """
-    # Check cache first
-    if api_key in _api_key_cache:
-        workspace_id, plan, cached_at = _api_key_cache[api_key]
+    key_hash = hash_api_key(api_key)
+
+    # Check cache first (keyed on hash)
+    if key_hash in _api_key_cache:
+        workspace_id, plan, cached_at = _api_key_cache[key_hash]
         if time.time() - cached_at < settings.api_key_cache_ttl:
             return (workspace_id, plan)
         else:
-            del _api_key_cache[api_key]
+            del _api_key_cache[key_hash]
 
-    # Query database
+    # Query database by hash
     result = await execute_query(
-        "SELECT id, plan FROM workspaces WHERE api_key = $1 AND active = true",
-        api_key,
+        "SELECT id, plan FROM workspaces WHERE api_key_hash = $1 AND active = true",
+        key_hash,
     )
 
     if not result:
@@ -326,8 +352,7 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
     workspace_id = str(row["id"])
     plan = row["plan"]
 
-    # Cache the result
-    _api_key_cache[api_key] = (workspace_id, plan, time.time())
+    _api_key_cache[key_hash] = (workspace_id, plan, time.time())
 
     return (workspace_id, plan)
 
@@ -386,10 +411,10 @@ async def login(request: LoginRequest):
         role = row["role"]
 
     elif request.api_key:
-        # API key login (legacy / CLI flow)
+        # API key login (legacy / CLI flow) — look up by hash, never by plaintext.
         result = await execute_query(
-            "SELECT id, name, owner_email, plan, api_key, created_at, active FROM workspaces WHERE api_key = $1 AND active = true",
-            request.api_key,
+            "SELECT id, name, owner_email, plan, api_key, created_at, active FROM workspaces WHERE api_key_hash = $1 AND active = true",
+            hash_api_key(request.api_key),
         )
         if not result:
             logger.warning("Failed login attempt with invalid API key")
@@ -415,12 +440,14 @@ async def login(request: LoginRequest):
 
     token = encode_jwt(workspace_id, user_id, role, row["plan"])
 
+    # Never echo the full plaintext API key on login — the user received it
+    # once at signup. Return a masked form sufficient for UI display.
     workspace = WorkspaceResponse(
         id=workspace_id,
         name=row["name"],
         owner_email=row["owner_email"],
         plan=row["plan"],
-        api_key=row["api_key"],
+        api_key=mask_api_key_for_display(row["api_key"]),
         created_at=row["created_at"],
         active=row["active"],
     )
@@ -454,19 +481,24 @@ async def signup(request: SignupRequest):
 
     workspace_id = str(uuid4())
     api_key = generate_api_key()
+    api_key_hash_value = hash_api_key(api_key)
 
     try:
-        # Create workspace
+        # Create workspace. Dual-write api_key (plaintext, for the one-time
+        # reveal on signup) and api_key_hash (lookup column for all future
+        # reads). Reads MUST go through api_key_hash; see M-1 in the security
+        # review for context.
         await execute_insert(
             """
-            INSERT INTO workspaces (id, name, owner_email, plan, api_key, created_at, active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO workspaces (id, name, owner_email, plan, api_key, api_key_hash, created_at, active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             workspace_id,
             request.workspace_name,
             email_norm,
             "free",
             api_key,
+            api_key_hash_value,
             datetime.utcnow(),
             True,
         )
