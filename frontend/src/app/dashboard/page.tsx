@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import Shell from "@/components/Shell";
 import BarChart from "@/components/charts/BarChart";
 import { apiFetch, AuthError } from "@/lib/api";
@@ -118,48 +119,82 @@ function DashboardContent() {
     );
   }
 
+  const hasData = totalCalls > 0;
+
   return (
     <div>
       {/* Stat strip */}
       <div className="stat-strip">
         <div className="stat-cell">
           <div className="stat-label">Total spend</div>
-          <div className="stat-value cyan">${formatCost(summary?.total_cost ?? 0)}</div>
+          <div className="stat-value">
+            {hasData ? `$${formatCost(summary?.total_cost ?? 0)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+          </div>
         </div>
         <div className="stat-cell">
           <div className="stat-label">Requests</div>
-          <div className="stat-value">{(summary?.total_calls ?? 0).toLocaleString()}</div>
+          <div className="stat-value">
+            {hasData ? (summary?.total_calls ?? 0).toLocaleString() : <span style={{ color: "var(--dim)" }}>—</span>}
+          </div>
         </div>
         <div className="stat-cell">
           <div className="stat-label">Avg / req</div>
-          <div className="stat-value">${formatCost(avgPerReq)}</div>
+          <div className="stat-value">
+            {hasData ? `$${formatCost(avgPerReq)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+          </div>
         </div>
         <div className="stat-cell">
           <div className="stat-label">Waste</div>
-          <div className={`stat-value${wasteAmount > 0 ? " amber" : ""}`}>${formatCost(wasteAmount)}</div>
+          <div className={`stat-value${wasteAmount > 0 ? " amber" : ""}`}>
+            {hasData ? `$${formatCost(wasteAmount)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+          </div>
         </div>
       </div>
+
+      {!hasData && (
+        <div className="card" style={{ margin: 16, padding: 32 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
+              Connect your first provider
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 480, lineHeight: 1.5 }}>
+              Install BurnLens locally, point your SDK at the proxy, and spend shows up here within seconds.
+              No code changes, no account required to start.
+            </div>
+            <div className="empty-state-code" style={{ marginTop: 8 }}>
+              <span className="empty-state-code-prompt">$</span>pip install burnlens &amp;&amp; burnlens start
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <Link href="/setup" className="upgrade-btn" style={{ textDecoration: "none" }}>Setup guide</Link>
+              <Link href="/connections" className="period-btn" style={{ textDecoration: "none" }}>Connections</Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Daily spend chart */}
-      <div className="card" style={{ margin: 16, marginBottom: 0 }}>
-        <div className="section-header">
-          <span className="section-header-title">Daily spend</span>
-          <span className="section-header-action">{days}d</span>
-        </div>
-        {timeseries.length > 0 ? (
-          <BarChart
-            labels={timeseries.map((d) => d.label)}
-            data={timeseries.map((d) => d.cost)}
-            height={180}
-          />
-        ) : (
-          <div style={{ padding: 32, textAlign: "center", fontSize: 11, color: "var(--muted)" }}>
-            No spend data for this period
+      {hasData && (
+        <div className="card" style={{ margin: 16, marginBottom: 0 }}>
+          <div className="section-header">
+            <span className="section-header-title">Daily spend</span>
+            <span className="section-header-action">{days}d</span>
           </div>
-        )}
-      </div>
+          {timeseries.length > 0 ? (
+            <BarChart
+              labels={timeseries.map((d) => d.label)}
+              data={timeseries.map((d) => d.cost)}
+              height={180}
+            />
+          ) : (
+            <div style={{ padding: 32, textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+              No spend data for this period
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recent requests table */}
+      {hasData && (
       <div className="card" style={{ margin: 16 }}>
         <div className="section-header">
           <span className="section-header-title">Recent requests</span>
@@ -219,6 +254,7 @@ function DashboardContent() {
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }
