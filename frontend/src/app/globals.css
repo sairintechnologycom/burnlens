@@ -697,6 +697,22 @@ img, svg { display: block; }
   background: rgba(240,64,96,0.08);
 }
 
+.btn-green {
+  background: var(--green);
+  color: var(--bg);
+  border: 1px solid var(--green);
+}
+
+.btn-green:hover {
+  filter: brightness(1.1);
+}
+
+.btn-green:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: none;
+}
+
 /* ── Forms ─────────────────────────────────────────────────────── */
 .form-label {
   display: block;
