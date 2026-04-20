@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useToast } from "@/lib/contexts/ToastContext";
 import { useBilling } from "@/lib/contexts/BillingContext";
+import type { BillingSummary } from "@/lib/contexts/BillingContext";
+import { usePaddleCheckout } from "@/lib/hooks/usePaddleCheckout";
+import CancelSubscriptionModal from "@/components/CancelSubscriptionModal";
+import InvoicesCard from "@/components/InvoicesCard";
+import PlanPickerModal from "@/components/PlanPickerModal";
 
 function SettingsContent() {
   const { session, logout } = useAuth();
   const { showToast } = useToast();
-  const { billing, loading: billingLoading, error: billingError, refresh: refreshBilling } = useBilling();
+  const {
+    billing,
+    loading: billingLoading,
+    error: billingError,
+    refresh: refreshBilling,
+    setBilling: applyBilling,
+  } = useBilling();
   const [copied, setCopied] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -93,10 +104,13 @@ function SettingsContent() {
             loading={billingLoading}
             error={billingError}
             onRetry={refreshBilling}
+            applyBilling={applyBilling}
           />
         </div>
       </div>
       {/* /Billing — Phase 7 */}
+
+      <InvoicesCard />
 
       {/* Organization */}
       <div className="card" style={{ margin: 16, marginBottom: 0 }}>
@@ -185,10 +199,11 @@ function SettingsContent() {
 
 // -- Billing card body -------------------------------------------------------
 type BillingCardBodyProps = {
-  billing: import("@/lib/contexts/BillingContext").BillingSummary | null;
+  billing: BillingSummary | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  applyBilling: (next: BillingSummary) => void;
 };
 
 function formatPrice(
@@ -249,7 +264,118 @@ function statusDisplay(
   return { label: "Active", dot: "var(--cyan)", labelColor: "var(--text)" };
 }
 
-function BillingCardBody({ billing, loading, error, onRetry }: BillingCardBodyProps) {
+function BillingCardBody({
+  billing,
+  loading,
+  error,
+  onRetry,
+  applyBilling,
+}: BillingCardBodyProps) {
+  const { session, logout } = useAuth();
+  const { showToast } = useToast();
+  const { startCheckout, loading: checkoutLoading } = usePaddleCheckout();
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [planPickerOpen, setPlanPickerOpen] = useState(false);
+  const [mutating, setMutating] = useState(false);
+
+  // D-21: 0s applied via applyBilling by the mutation response; schedule 3s +
+  // 10s follow-up refreshes. The 30s poll from BillingContext remains as the
+  // reconciliation floor.
+  const scheduleRefresh = useCallback(() => {
+    const t1 = window.setTimeout(() => onRetry(), 3000);
+    const t2 = window.setTimeout(() => onRetry(), 10000);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [onRetry]);
+
+  const handleReactivate = async () => {
+    if (!session || mutating) return;
+    setMutating(true);
+    try {
+      const next = (await apiFetch("/billing/reactivate", session.token, {
+        method: "POST",
+      })) as BillingSummary;
+      applyBilling(next); // D-22 0s
+      showToast("Subscription resumed", "success"); // D-14
+      scheduleRefresh(); // D-21 3s + 10s
+    } catch (err: any) {
+      if (err instanceof AuthError) {
+        logout();
+        return;
+      }
+      // D-28 exact copy — MUST include `support@burnlens.app` (W5).
+      showToast(
+        "Couldn't resume subscription — our billing provider didn't respond. Try again in a moment; if it persists, email support@burnlens.app.",
+        "error",
+      );
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleChangePlan = async (target: "cloud" | "teams") => {
+    if (!session || mutating) return;
+    setMutating(true);
+    try {
+      const next = (await apiFetch("/billing/change-plan", session.token, {
+        method: "POST",
+        body: JSON.stringify({ target_plan: target }),
+      })) as BillingSummary;
+      applyBilling(next);
+
+      // W1: Distinguish upgrade (immediate) from downgrade (scheduled).
+      // The response's `scheduled_plan` (when set and equal to the target)
+      // signals "change applied at period end".
+      const nextAny = next as unknown as {
+        scheduled_plan?: string | null;
+        scheduled_change_at?: string | null;
+      };
+      const scheduled =
+        !!nextAny.scheduled_plan && nextAny.scheduled_plan === target;
+      if (target === "teams") {
+        showToast("Plan changed to Teams", "success");
+      } else if (scheduled) {
+        const when = nextAny.scheduled_change_at
+          ? formatDate(nextAny.scheduled_change_at)
+          : next.current_period_ends_at
+          ? formatDate(next.current_period_ends_at)
+          : "your next billing date";
+        // Fall back to "success" if the toast system rejects "info" — the
+        // critical surface for the user is the pending-downgrade info line
+        // that now renders persistently above the action row.
+        showToast(
+          `You'll switch to Cloud on ${when}.`,
+          "success",
+        );
+      } else {
+        // Immediate path (rare for a downgrade, but be safe).
+        showToast("Plan changed to Cloud", "success");
+      }
+      scheduleRefresh();
+    } catch (err: any) {
+      if (err instanceof AuthError) {
+        logout();
+        return;
+      }
+      // D-28 exact copy — MUST include `support@burnlens.app` (W5).
+      showToast(
+        "Couldn't change plan — our billing provider didn't respond. Try again in a moment; if it persists, email support@burnlens.app.",
+        "error",
+      );
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleCancelSuccess = (next: BillingSummary) => {
+    applyBilling(next);
+    scheduleRefresh();
+    setCancelOpen(false);
+    // The modal itself emits the success toast.
+  };
+
   if (loading && !billing) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -261,15 +387,6 @@ function BillingCardBody({ billing, loading, error, onRetry }: BillingCardBodyPr
           />
         </div>
         <div className="skeleton" style={{ width: 160, height: 13, borderRadius: 3 }} />
-        <button
-          className="btn"
-          disabled
-          aria-disabled="true"
-          title="Coming soon — self-serve billing ships in Phase 8"
-          style={{ opacity: 0.6, cursor: "not-allowed", alignSelf: "flex-start" }}
-        >
-          Manage billing →
-        </button>
       </div>
     );
   }
@@ -296,15 +413,6 @@ function BillingCardBody({ billing, loading, error, onRetry }: BillingCardBodyPr
             Retry
           </button>
         </div>
-        <button
-          className="btn"
-          disabled
-          aria-disabled="true"
-          title="Coming soon — self-serve billing ships in Phase 8"
-          style={{ opacity: 0.6, cursor: "not-allowed", alignSelf: "flex-start" }}
-        >
-          Manage billing →
-        </button>
       </div>
     );
   }
@@ -332,10 +440,42 @@ function BillingCardBody({ billing, loading, error, onRetry }: BillingCardBodyPr
       )
     : null;
 
-  const ctaLabel = isFree ? "Upgrade to Cloud" : "Manage billing →";
-  const ctaTitle = isFree
-    ? "Coming soon — checkout ships in Phase 8"
-    : "Coming soon — self-serve billing ships in Phase 8";
+  // W1: BillingSummary additions (scheduled_plan / scheduled_change_at) live
+  // in Plan 08-08. Read them off the billing object defensively so this file
+  // doesn't hard-break if the type drifts behind the data shape during rollout.
+  const billingAny = billing as unknown as {
+    scheduled_plan?: string | null;
+    scheduled_change_at?: string | null;
+  };
+
+  const periodEndsAt = billing.current_period_ends_at;
+  const now = Date.now();
+  const periodEndMs = periodEndsAt ? new Date(periodEndsAt).getTime() : null;
+  const periodStillActive =
+    periodEndMs === null || Number.isNaN(periodEndMs) || periodEndMs > now;
+  const showResume =
+    !isFree && billing.cancel_at_period_end && periodStillActive;
+  const showCancel = !isFree && !billing.cancel_at_period_end;
+
+  // W1: pending-downgrade (distinct from a scheduled cancel). Only render
+  // when a downgrade is pending AND the subscription is not also canceled —
+  // if both signals are set, the cancel banner takes priority (user canceled
+  // after scheduling the downgrade, effectively superseding it).
+  const showPendingDowngrade =
+    !isFree &&
+    !billing.cancel_at_period_end &&
+    typeof billingAny.scheduled_plan === "string" &&
+    billingAny.scheduled_plan.length > 0;
+  const pendingDowngradeDate = billingAny.scheduled_change_at
+    ? formatDate(billingAny.scheduled_change_at)
+    : formatDate(billing.current_period_ends_at);
+  const pendingDowngradeLabel =
+    billingAny.scheduled_plan === "cloud"
+      ? "Cloud"
+      : billingAny.scheduled_plan
+      ? billingAny.scheduled_plan.charAt(0).toUpperCase() +
+        billingAny.scheduled_plan.slice(1)
+      : "";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -378,16 +518,102 @@ function BillingCardBody({ billing, loading, error, onRetry }: BillingCardBodyPr
       </div>
       {/* Row 2: next billing OR trial ends OR (hidden for free) */}
       {row2}
-      {/* Row 3: disabled CTA */}
-      <button
-        className="btn"
-        disabled
-        aria-disabled="true"
-        title={ctaTitle}
-        style={{ opacity: 0.6, cursor: "not-allowed", alignSelf: "flex-start" }}
-      >
-        {ctaLabel}
-      </button>
+
+      {/* D-12 amber message when canceled but period still running */}
+      {showResume && (
+        <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--amber)" }}>
+          Canceled — ends {formatDate(billing.current_period_ends_at)}. Resume to keep access.
+        </div>
+      )}
+
+      {/* W1: info line when a downgrade is scheduled */}
+      {showPendingDowngrade && (
+        <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--muted)" }}>
+          Pending downgrade to {pendingDowngradeLabel} on {pendingDowngradeDate}
+        </div>
+      )}
+
+      {/* Row 3: action row */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {isFree && (
+          <>
+            <button
+              className="btn btn-cyan"
+              onClick={() => startCheckout({ plan: "cloud" })}
+              disabled={checkoutLoading}
+            >
+              {checkoutLoading ? "Loading…" : "Upgrade to Cloud"}
+            </button>
+            <button
+              onClick={() => setPlanPickerOpen(true)}
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                fontSize: 12,
+                color: "var(--cyan)",
+                textDecoration: "underline",
+                cursor: "pointer",
+                alignSelf: "center",
+              }}
+            >
+              or Teams — $99/mo
+            </button>
+          </>
+        )}
+
+        {planKey === "cloud" && (
+          <button
+            className="btn btn-cyan"
+            onClick={() => startCheckout({ plan: "teams" })}
+            disabled={checkoutLoading}
+          >
+            {checkoutLoading ? "Loading…" : "Upgrade to Teams"}
+          </button>
+        )}
+
+        {planKey === "teams" && !showPendingDowngrade && (
+          <button
+            className="btn"
+            onClick={() => handleChangePlan("cloud")}
+            disabled={mutating}
+          >
+            {mutating ? "Changing…" : "Change plan"}
+          </button>
+        )}
+
+        {showResume && (
+          <button
+            className="btn btn-green"
+            onClick={handleReactivate}
+            disabled={mutating}
+          >
+            {mutating ? "Resuming…" : "Resume subscription"}
+          </button>
+        )}
+
+        {showCancel && (
+          <button
+            className="btn btn-red"
+            onClick={() => setCancelOpen(true)}
+            disabled={mutating}
+          >
+            Cancel subscription
+          </button>
+        )}
+      </div>
+
+      <CancelSubscriptionModal
+        open={cancelOpen}
+        planLabel={planLabel}
+        currentPeriodEndsAt={billing.current_period_ends_at}
+        onClose={() => setCancelOpen(false)}
+        onSuccess={handleCancelSuccess}
+      />
+      <PlanPickerModal
+        open={planPickerOpen}
+        onClose={() => setPlanPickerOpen(false)}
+      />
     </div>
   );
 }
