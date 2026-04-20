@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { initializePaddle, type Paddle } from "@paddle/paddle-js";
 
-import { apiFetch } from "@/lib/api";
+import { apiFetch, AuthError } from "@/lib/api";
 import { useToast } from "@/lib/contexts/ToastContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -38,7 +38,7 @@ export interface UsePaddleCheckout {
 }
 
 export function usePaddleCheckout(): UsePaddleCheckout {
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const { showToast } = useToast();
   const paddleRef = useRef<Paddle | undefined>(undefined);
   const [ready, setReady] = useState(false);
@@ -93,6 +93,10 @@ export function usePaddleCheckout(): UsePaddleCheckout {
           "error",
         );
       } catch (err) {
+        if (err instanceof AuthError) {
+          logout();
+          return;
+        }
         const detail =
           err instanceof Error && err.message ? err.message : "Unknown error";
         showToast(`Couldn't open checkout: ${detail}`, "error");
@@ -100,7 +104,7 @@ export function usePaddleCheckout(): UsePaddleCheckout {
         setLoading(false);
       }
     },
-    [session, loading],
+    [session, loading, logout, showToast],
   );
 
   return { ready, loading, startCheckout };
