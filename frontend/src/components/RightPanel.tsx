@@ -38,6 +38,11 @@ export default function RightPanel() {
   }, [session, days]);
 
   const maxCost = models.length > 0 ? models[0].total_cost : 1;
+  const isEmpty = !loading && models.length === 0 && alerts.length === 0;
+
+  // Hide the 260px rail entirely when there is nothing to show.
+  // Re-appears as soon as the workspace has any data.
+  if (isEmpty) return null;
 
   return (
     <aside className="right-panel">
