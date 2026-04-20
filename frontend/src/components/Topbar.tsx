@@ -70,27 +70,7 @@ export default function Topbar() {
       </div>
 
       <div className="topbar-right">
-        {session && (
-          <Link
-            href="/settings#billing"
-            className={`plan-pill ${isFree ? "plan-pill-free" : "plan-pill-paid"}`}
-            title={`Current plan: ${planLabel}`}
-          >
-            {planLabel}
-          </Link>
-        )}
-        {session && isFree && (
-          <Link href="/settings#billing" className="upgrade-btn">
-            Upgrade
-          </Link>
-        )}
-
-        <div className="live-pill">
-          <span className="live-dot" />
-          LIVE
-        </div>
-
-        <div style={{ display: "flex", gap: 2 }}>
+        <div style={{ display: "flex", gap: 4 }}>
           {PERIODS.map((p) => (
             <button
               key={p}
@@ -102,9 +82,23 @@ export default function Topbar() {
           ))}
         </div>
 
-        <button className="theme-toggle" onClick={toggle}>
+        <button className="theme-toggle" onClick={toggle} aria-label="Toggle theme">
           {theme === "dark" ? "\u2600" : "\u263E"}
         </button>
+
+        {session && isFree ? (
+          <Link href="/settings#billing" className="upgrade-btn">
+            Upgrade
+          </Link>
+        ) : session ? (
+          <Link
+            href="/settings#billing"
+            className="plan-pill plan-pill-paid"
+            title={`Current plan: ${planLabel}`}
+          >
+            {planLabel}
+          </Link>
+        ) : null}
       </div>
     </div>
   );
