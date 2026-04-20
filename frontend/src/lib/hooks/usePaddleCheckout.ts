@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { initializePaddle, type Paddle } from "@paddle/paddle-js";
 
 import { apiFetch } from "@/lib/api";
+import { useToast } from "@/lib/contexts/ToastContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 const PADDLE_ENV = (process.env.NEXT_PUBLIC_PADDLE_ENV || "sandbox") as
@@ -29,15 +30,16 @@ export interface UsePaddleCheckout {
    *   1. POST /billing/checkout { plan } → { transaction_id, url }
    *   2. If Paddle.js initialized AND transaction_id present: Paddle.Checkout.open({ transactionId })
    *   3. Else if data.url present: window.location.href = data.url
-   *   4. Else: window.location.href = "/settings" (same-origin fallback)
+   *   4. Else: showToast error so the user knows the click failed.
    *
-   * Never throws. On any error, navigates to /settings so the user isn't stranded.
+   * Never throws. On any error, surfaces a toast so the user isn't silently stranded.
    */
   startCheckout: (opts: StartCheckoutOptions) => Promise<void>;
 }
 
 export function usePaddleCheckout(): UsePaddleCheckout {
   const { session } = useAuth();
+  const { showToast } = useToast();
   const paddleRef = useRef<Paddle | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -86,9 +88,14 @@ export function usePaddleCheckout(): UsePaddleCheckout {
           return;
         }
 
-        window.location.href = "/settings";
-      } catch {
-        window.location.href = "/settings";
+        showToast(
+          "Couldn't open checkout. Please try again or email contact@sairintechnology.com.",
+          "error",
+        );
+      } catch (err) {
+        const detail =
+          err instanceof Error && err.message ? err.message : "Unknown error";
+        showToast(`Couldn't open checkout: ${detail}`, "error");
       } finally {
         setLoading(false);
       }
