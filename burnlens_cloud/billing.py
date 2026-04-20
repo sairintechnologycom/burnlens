@@ -195,7 +195,18 @@ async def create_checkout(
 
     if resp.status_code >= 400:
         logger.error("Paddle create transaction failed: %s %s", resp.status_code, resp.text)
-        raise HTTPException(status_code=502, detail="Failed to create checkout")
+        paddle_err: dict[str, Any] = {}
+        try:
+            paddle_err = (resp.json() or {}).get("error", {}) or {}
+        except (ValueError, TypeError):
+            paddle_err = {}
+        code = paddle_err.get("code")
+        detail = paddle_err.get("detail")
+        if code or detail:
+            msg = f"Checkout unavailable ({code or 'paddle_error'}): {detail or 'see logs'}"
+        else:
+            msg = "Failed to create checkout"
+        raise HTTPException(status_code=502, detail=msg)
 
     data = resp.json().get("data", {}) or {}
     checkout = data.get("checkout") or {}
