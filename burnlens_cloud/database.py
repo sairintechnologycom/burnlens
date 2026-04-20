@@ -1,6 +1,7 @@
 import asyncpg
 import hashlib
 import logging
+import os
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -185,6 +186,92 @@ async def init_db():
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id)
         """)
+
+        # Phase 1 PII encryption (2026-04): additive columns for the
+        # encrypt-and-hash pattern on email / google_id / github_id.
+        # Backfill + dual-write is gated on PII_MASTER_KEY being present so
+        # this migration is safe to deploy before the key is provisioned —
+        # the columns exist but stay NULL until the app can encrypt.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='email_encrypted') THEN
+                    ALTER TABLE users ADD COLUMN email_encrypted TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='email_hash') THEN
+                    ALTER TABLE users ADD COLUMN email_hash TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='google_id_encrypted') THEN
+                    ALTER TABLE users ADD COLUMN google_id_encrypted TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='google_id_hash') THEN
+                    ALTER TABLE users ADD COLUMN google_id_hash TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='github_id_encrypted') THEN
+                    ALTER TABLE users ADD COLUMN github_id_encrypted TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='users' AND column_name='github_id_hash') THEN
+                    ALTER TABLE users ADD COLUMN github_id_hash TEXT;
+                END IF;
+            END $$;
+        """)
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_hash
+            ON users(email_hash) WHERE email_hash IS NOT NULL
+        """)
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id_hash
+            ON users(google_id_hash) WHERE google_id_hash IS NOT NULL
+        """)
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_id_hash
+            ON users(github_id_hash) WHERE github_id_hash IS NOT NULL
+        """)
+
+        # Backfill runs only when PII_MASTER_KEY is set. Missing key is a
+        # deliberate no-op so this migration can ship before the operator
+        # has provisioned the key in Railway.
+        if os.getenv("PII_MASTER_KEY", "").strip():
+            from .pii_crypto import encrypt_pii, lookup_hash, PIICryptoError
+            try:
+                rows_to_fill = await conn.fetch(
+                    """
+                    SELECT id, email, google_id, github_id
+                    FROM users
+                    WHERE email_hash IS NULL
+                    """
+                )
+                if rows_to_fill:
+                    logger.info(
+                        "PII Phase 1: backfilling %d user row(s)", len(rows_to_fill)
+                    )
+                for r in rows_to_fill:
+                    await conn.execute(
+                        """
+                        UPDATE users SET
+                            email_encrypted = $1, email_hash = $2,
+                            google_id_encrypted = $3, google_id_hash = $4,
+                            github_id_encrypted = $5, github_id_hash = $6
+                        WHERE id = $7
+                        """,
+                        encrypt_pii(r["email"]) if r["email"] else None,
+                        lookup_hash(r["email"]) if r["email"] else None,
+                        encrypt_pii(r["google_id"]) if r["google_id"] else None,
+                        lookup_hash(r["google_id"]) if r["google_id"] else None,
+                        encrypt_pii(r["github_id"]) if r["github_id"] else None,
+                        lookup_hash(r["github_id"]) if r["github_id"] else None,
+                        r["id"],
+                    )
+            except PIICryptoError as e:
+                # Log and continue; the app should still boot. The operator
+                # fixes the key, next restart resumes the backfill.
+                logger.error("PII backfill aborted: %s", e)
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS workspace_members (
