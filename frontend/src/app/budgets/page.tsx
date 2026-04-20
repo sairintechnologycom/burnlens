@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -139,9 +140,12 @@ function BudgetsContent() {
           <span className="section-header-title">Team budgets</span>
         </div>
         {teams.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", fontSize: 11, color: "var(--muted)" }}>
-            No team budgets configured. Add team budgets in burnlens.yaml.
-          </div>
+          <EmptyState
+            title="No team budgets configured"
+            description="Set per-team monthly caps in burnlens.yaml. BurnLens will warn at 80% and hard-block at 100% — per team, per customer, or globally."
+            code={'budgets:\n  teams:\n    search: 500\n    chat: 2000'}
+            action={{ label: "Configuration docs", href: "https://github.com/sairintechnologycom/burnlens#readme" }}
+          />
         ) : (
           <table className="data-table">
             <thead>

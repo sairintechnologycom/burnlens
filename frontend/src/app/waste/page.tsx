@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -89,9 +90,13 @@ function WasteContent() {
           <span className="section-header-action">{activeAlerts.length} active</span>
         </div>
         {activeAlerts.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", fontSize: 11, color: "var(--muted)" }}>
-            No active waste alerts
-          </div>
+          <EmptyState
+            title="No waste alerts yet"
+            description="Once BurnLens sees your traffic, we watch for duplicate prompts, oversized models, prompt-caching opportunities, and more. Install the local proxy to start collecting data."
+            code={"pip install burnlens\nburnlens start"}
+            action={{ label: "View install docs", href: "https://github.com/sairintechnologycom/burnlens#readme" }}
+            secondaryAction={{ label: "Connect a provider", href: "/connections" }}
+          />
         ) : (
           activeAlerts.map((a) => (
             <div key={a.id} style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>
@@ -145,9 +150,10 @@ function WasteContent() {
           <span className="section-header-title">Model recommendations</span>
         </div>
         {recommendations.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", fontSize: 11, color: "var(--muted)" }}>
-            No recommendations
-          </div>
+          <EmptyState
+            title="No recommendations yet"
+            description="Model right-sizing and provider arbitrage suggestions appear here once we've seen at least a few hundred requests."
+          />
         ) : (
           recommendations.map((r) => (
             <div key={r.id} style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>

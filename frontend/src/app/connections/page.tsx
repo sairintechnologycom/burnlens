@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useToast } from "@/lib/contexts/ToastContext";
@@ -90,12 +91,11 @@ function ConnectionsContent() {
             ))}
           </div>
         ) : connections.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>No connections yet</div>
-            <button className="btn btn-cyan" onClick={() => setAdding(true)}>
-              Add first connection
-            </button>
-          </div>
+          <EmptyState
+            title="No provider connections yet"
+            description="Connect Anthropic, OpenAI, or Google AI to let BurnLens discover your assets and track spend across providers. Credentials are encrypted at rest."
+            action={{ label: "Add first connection", onClick: () => setAdding(true) }}
+          />
         ) : (
           <table className="data-table">
             <thead>

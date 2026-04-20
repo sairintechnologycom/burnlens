@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Shell from "@/components/Shell";
+import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -83,9 +84,13 @@ function SavingsContent() {
           <span className="section-header-title">Model switch recommendations</span>
         </div>
         {recs.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", fontSize: 11, color: "var(--muted)" }}>
-            No savings opportunities found yet. Keep using BurnLens to build up usage data.
-          </div>
+          <EmptyState
+            title="No savings opportunities yet"
+            description="We need ~500 requests per feature to confidently recommend a cheaper model. Install the local proxy or connect a provider to start collecting data."
+            code={"pip install burnlens\nburnlens start"}
+            action={{ label: "View install docs", href: "https://github.com/sairintechnologycom/burnlens#readme" }}
+            secondaryAction={{ label: "Connect a provider", href: "/connections" }}
+          />
         ) : (
           <table className="data-table">
             <thead>
