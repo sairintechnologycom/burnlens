@@ -1,11 +1,14 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import settings
 from .database import init_db, close_db
+from .rate_limit import RateLimitMiddleware, DEFAULT_RULES
 from .auth import router as auth_router
 from .ingest import router as ingest_router
 from .dashboard_api import router as dashboard_router
@@ -72,14 +75,37 @@ def get_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS middleware
+    # CORS — restrict to known frontends. Override via ALLOWED_ORIGINS env (comma-sep).
+    _default_origins = f"{settings.burnlens_frontend_url},https://www.burnlens.app"
+    _allowed_origins = [
+        o.strip()
+        for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+        if o.strip()
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # TODO: restrict to burnlens.app domains in production
+        allow_origins=_allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
     )
+
+    class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            response = await call_next(request)
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
+            return response
+
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    # Rate limit auth + ingest paths (per-IP sliding window, in-process).
+    app.add_middleware(RateLimitMiddleware, rules=DEFAULT_RULES)
 
     # Health check endpoint (outside /api prefix)
     @app.get("/health")

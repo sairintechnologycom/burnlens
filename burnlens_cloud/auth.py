@@ -1,15 +1,49 @@
 import logging
 import secrets
 import time
+import urllib.parse
 from uuid import uuid4, UUID
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
-from jose import JWTError, jwt
-from passlib.hash import bcrypt
+import bcrypt as _bcrypt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from .config import settings
+
+
+def _safe_redirect(target: Optional[str]) -> Optional[str]:
+    """Return `target` only if it is a safe in-app redirect; else None.
+
+    Prevents open-redirect pivots where an attacker crafts a link that accepts
+    an invitation and then bounces the authenticated user to an attacker-
+    controlled origin. Accepts only relative paths (starting with '/') that
+    do NOT start with '//' (protocol-relative), or absolute URLs whose origin
+    matches `settings.burnlens_frontend_url`.
+    """
+    if not target:
+        return None
+    target = target.strip()
+    if not target:
+        return None
+    # Allow same-origin relative paths.
+    if target.startswith("/") and not target.startswith("//"):
+        return target
+    # Allow absolute URLs only if host matches the configured frontend.
+    try:
+        parsed = urllib.parse.urlsplit(target)
+    except ValueError:
+        return None
+    allowed = urllib.parse.urlsplit(settings.burnlens_frontend_url)
+    if (
+        parsed.scheme in ("http", "https")
+        and parsed.scheme == allowed.scheme
+        and parsed.netloc == allowed.netloc
+    ):
+        return target
+    return None
 from .database import execute_query, execute_insert
 from .models import (
     LoginRequest,
@@ -63,7 +97,7 @@ def decode_jwt(token: str) -> Optional[TokenPayload]:
             algorithms=[settings.jwt_algorithm],
         )
         return TokenPayload(**payload)
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 
@@ -113,7 +147,11 @@ async def upsert_user(
     Upsert user by email, google_id, or github_id.
     Returns user_id.
     """
-    password_hash = bcrypt.hash(password) if password else None
+    password_hash = (
+        _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
+        if password
+        else None
+    )
 
     # Try to find existing user
     if google_id:
@@ -139,7 +177,10 @@ async def upsert_user(
     )
     if result:
         user_id = str(result[0]["id"])
-        # Update OAuth IDs if provided
+        # Update OAuth IDs if provided.
+        # SECURITY: `update_fields` elements MUST remain hardcoded literal strings
+        # (e.g. "google_id = $N"). Never build them from user input or dynamic
+        # column names — that would turn the f-string below into a SQL injection.
         update_fields = []
         update_params = []
         param_idx = 1
@@ -311,7 +352,10 @@ async def login(request: LoginRequest):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         user_row = user_result[0]
-        if not bcrypt.verify(request.password, user_row["password_hash"]):
+        if not _bcrypt.checkpw(
+            request.password.encode("utf-8"),
+            user_row["password_hash"].encode("utf-8"),
+        ):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         user_id = str(user_row["id"])
@@ -555,13 +599,15 @@ async def accept_invitation(token: str, redirect_to: Optional[str] = None, reque
             logger.error(f"Failed to accept invitation: {e}")
             raise HTTPException(status_code=500, detail="Failed to accept invitation")
 
-        # Redirect to dashboard
-        redirect_url = redirect_to or f"{settings.burnlens_frontend_url}/dashboard"
+        # Redirect to dashboard — validate redirect_to against allowlist to prevent
+        # open-redirect phishing pivots.
+        redirect_url = _safe_redirect(redirect_to) or f"{settings.burnlens_frontend_url}/dashboard"
         return RedirectResponse(url=redirect_url, status_code=303)
 
     else:
         # User not authenticated, redirect to signup with invite token
         signup_url = f"{settings.burnlens_frontend_url}/signup?invite={token}"
-        if redirect_to:
-            signup_url += f"&redirect_to={redirect_to}"
+        safe_redirect = _safe_redirect(redirect_to)
+        if safe_redirect:
+            signup_url += f"&redirect_to={urllib.parse.quote(safe_redirect, safe='')}"
         return RedirectResponse(url=signup_url, status_code=303)

@@ -1,4 +1,14 @@
-"""Stripe billing endpoints — checkout, webhook, portal."""
+"""Stripe billing endpoints — checkout, webhook, portal.
+
+DEPRECATED (2026-04): This module is pre-Paddle legacy code. The deployed
+Railway service is `burnlens_cloud.main:app` (see Procfile), which routes
+billing through `burnlens_cloud/billing.py` (Paddle). This `api/billing.py`
+is retained only for the pytest suite under `tests/test_billing.py` and
+MUST NOT be exposed in production. It has no webhook event deduplication
+and still uses Stripe's discontinued session-based checkout pattern.
+
+Do not add new features here. Fix in `burnlens_cloud/billing.py` instead.
+"""
 from __future__ import annotations
 
 import logging

@@ -229,7 +229,7 @@ async def create_checkout(
 # Webhook — HMAC-signed event stream from Paddle
 # ---------------------------------------------------------------------------
 
-def _verify_signature(header: str, raw_body: bytes, secret: str, tolerance: int = 300) -> bool:
+def _verify_signature(header: str, raw_body: bytes, secret: str, tolerance: int = 60) -> bool:
     """Verify Paddle-Signature header (`ts=...;h1=...`) via HMAC-SHA256."""
     if not header:
         return False

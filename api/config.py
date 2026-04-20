@@ -8,8 +8,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://localhost:5432/burnlens")
-JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+
+_JWT_SECRET = os.getenv("JWT_SECRET", "")
+if ENVIRONMENT == "production":
+    if not _JWT_SECRET or len(_JWT_SECRET) < 32:
+        raise RuntimeError(
+            "JWT_SECRET env var must be set to a value of at least 32 chars in production"
+        )
+elif not _JWT_SECRET:
+    _JWT_SECRET = "dev-only-insecure-do-not-use-in-production"
+JWT_SECRET: str = _JWT_SECRET
 
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRATION_SECONDS: int = 86400  # 24 hours

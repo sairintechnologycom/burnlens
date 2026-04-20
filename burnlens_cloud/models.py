@@ -56,7 +56,9 @@ class RequestRecordResponse(RequestRecordCreate):
 class IngestRequest(BaseModel):
     """Schema for ingest endpoint request."""
     api_key: str
-    records: list[RequestRecordBase]
+    # Bound list size — a single batch above this is rejected to prevent
+    # memory/DB exhaustion from a misbehaving or stolen-key client.
+    records: list[RequestRecordBase] = Field(..., max_length=10_000)
 
 
 class IngestResponse(BaseModel):
@@ -355,11 +357,11 @@ class CancelBody(BaseModel):
     """Request body for POST /billing/cancel.
 
     Both fields are optional (D-10). When both are None/missing, no
-    survey row is inserted. Free-text is intentionally unbounded at
-    schema level; the endpoint should truncate at write time if needed.
+    survey row is inserted. Free-text is length-capped at schema level
+    to prevent storage abuse from an authenticated but hostile user.
     """
-    reason_code: Optional[str] = None
-    reason_text: Optional[str] = None
+    reason_code: Optional[str] = Field(None, max_length=64)
+    reason_text: Optional[str] = Field(None, max_length=1000)
 
 
 class ChangePlanBody(BaseModel):
