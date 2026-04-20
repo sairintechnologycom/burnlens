@@ -298,10 +298,14 @@ async def login(request: LoginRequest):
     Returns JWT token and workspace details.
     """
     if request.email and request.password:
-        # Email + password login
+        # Email + password login — normalize email to lowercase so mixed-case
+        # typing (e.g. iPhone auto-capitalize) matches the stored row.
+        if len(request.password) > 128:
+            raise HTTPException(status_code=400, detail="Password too long")
+        email_norm = request.email.strip().lower()
         user_result = await execute_query(
-            "SELECT id, email, password_hash FROM users WHERE email = $1",
-            request.email,
+            "SELECT id, email, password_hash FROM users WHERE LOWER(email) = $1",
+            email_norm,
         )
         if not user_result or not user_result[0]["password_hash"]:
             raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -390,15 +394,19 @@ async def signup(request: SignupRequest):
     Create a new workspace and user with email+password.
     Returns JWT token so user is logged in immediately.
     """
-    # Check if email already exists
+    # Normalize email so case differences don't create duplicate/unreachable accounts.
+    email_norm = request.email.strip().lower()
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if len(request.password) > 128:
+        raise HTTPException(status_code=400, detail="Password too long (max 128 chars)")
+
+    # Check if email already exists (case-insensitive)
     existing = await execute_query(
-        "SELECT id FROM users WHERE email = $1", request.email,
+        "SELECT id FROM users WHERE LOWER(email) = $1", email_norm,
     )
     if existing:
         raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
-
-    if len(request.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     workspace_id = str(uuid4())
     api_key = generate_api_key()
@@ -412,7 +420,7 @@ async def signup(request: SignupRequest):
             """,
             workspace_id,
             request.workspace_name,
-            request.email,
+            email_norm,
             "free",
             api_key,
             datetime.utcnow(),
@@ -421,8 +429,8 @@ async def signup(request: SignupRequest):
 
         # Create user with password and add to workspace
         user_id = await upsert_user(
-            email=request.email,
-            name=request.email.split("@")[0],
+            email=email_norm,
+            name=email_norm.split("@")[0],
             password=request.password,
         )
         await ensure_workspace_member(workspace_id, user_id, role="owner")
@@ -435,7 +443,7 @@ async def signup(request: SignupRequest):
         workspace = WorkspaceResponse(
             id=workspace_id,
             name=request.workspace_name,
-            owner_email=request.email,
+            owner_email=email_norm,
             plan="free",
             api_key=api_key,
             created_at=datetime.utcnow(),
