@@ -74,10 +74,14 @@ export default function Topbar() {
           <Link
             href="/settings#billing"
             className={`plan-pill ${isFree ? "plan-pill-free" : "plan-pill-paid"}`}
-            title={`Current plan: ${planLabel}. Click to manage billing.`}
+            title={`Current plan: ${planLabel}`}
           >
             {planLabel}
-            {isFree && <span className="plan-pill-upgrade"> · Upgrade</span>}
+          </Link>
+        )}
+        {session && isFree && (
+          <Link href="/settings#billing" className="upgrade-btn">
+            Upgrade
           </Link>
         )}
 

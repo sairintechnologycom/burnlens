@@ -238,6 +238,29 @@ img, svg { display: block; }
   font-weight: 500;
 }
 
+.upgrade-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  background: var(--cyan);
+  color: var(--bg);
+  border: 1px solid var(--cyan);
+  transition: filter 0.15s, transform 0.15s;
+  margin-left: 6px;
+}
+
+.upgrade-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
 .live-dot {
   width: 5px;
   height: 5px;
