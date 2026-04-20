@@ -35,9 +35,9 @@ const GROUPS: SidebarGroup[] = [
   {
     label: "Intelligence",
     items: [
-      { href: "/waste", label: "Waste alerts", badge: { count: 3, color: "red" } },
-      { href: "/savings", label: "Savings", badge: { count: 2, color: "green" } },
-      { href: "/budgets", label: "Budgets", badge: { count: 1, color: "amber" } },
+      { href: "/waste", label: "Waste alerts" },
+      { href: "/savings", label: "Savings" },
+      { href: "/budgets", label: "Budgets" },
     ],
   },
   {
