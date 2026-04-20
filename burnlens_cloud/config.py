@@ -90,3 +90,16 @@ if settings.environment == "production":
         )
 elif not settings.jwt_secret:
     settings.jwt_secret = "dev-only-insecure-do-not-use-in-production"
+
+
+# Fail-fast PII_MASTER_KEY validation. Production boots must refuse to start
+# without a real key so future PII columns can never silently write plaintext.
+# In development we allow the key to be absent — the pii_crypto module is only
+# exercised by tests and the phased migrations that start in Phase 1.
+if settings.environment == "production":
+    _pii_key = os.getenv("PII_MASTER_KEY", "").strip()
+    if not _pii_key:
+        raise RuntimeError(
+            "PII_MASTER_KEY env var must be set in production. Generate with:\n"
+            '  python -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"'
+        )
