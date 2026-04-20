@@ -1303,16 +1303,19 @@ img, svg { display: block; }
   display: grid; grid-template-columns: repeat(4, 1fr);
   border-bottom: 1px solid var(--border);
 }
-.dash-stat { padding: 12px 14px; border-right: 1px solid var(--border); }
+.dash-stat { padding: 16px 14px; border-right: 1px solid var(--border); }
 .dash-stat:last-child { border-right: none; }
 .dash-stat-label {
   font-family: var(--font-mono), monospace;
   font-size: var(--fs-10); text-transform: uppercase;
-  letter-spacing: 0.12em; color: var(--l-muted); margin-bottom: 2px;
+  letter-spacing: 0.14em; color: var(--l-muted); margin-bottom: 6px;
+  font-weight: 500;
 }
 .dash-stat-value {
   font-family: var(--font-mono), monospace;
-  font-size: var(--fs-17); font-weight: 500; color: var(--l-text);
+  font-size: var(--fs-28); font-weight: 500; color: var(--l-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 .dash-stat-value.cyan { color: var(--cyan); }
 .dash-stat-value.amber { color: var(--amber); }
