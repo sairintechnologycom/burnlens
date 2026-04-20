@@ -156,6 +156,17 @@ async def require_role(required_role: str, token: TokenPayload):
         )
 
 
+def _pii_enabled() -> bool:
+    """True when the PII master key is available for encrypt/hash writes.
+
+    Gating dual-writes on this flag lets the code deploy safely before the
+    operator provisions PII_MASTER_KEY in Railway — new rows get plaintext
+    only, and a future boot backfills them.
+    """
+    import os as _os
+    return bool(_os.getenv("PII_MASTER_KEY", "").strip())
+
+
 async def upsert_user(
     email: str,
     name: Optional[str] = None,
@@ -166,12 +177,28 @@ async def upsert_user(
     """
     Upsert user by email, google_id, or github_id.
     Returns user_id.
+
+    PII Phase 1: when PII_MASTER_KEY is set, writes encrypted + hashed
+    forms into the parallel columns. Reads still go through plaintext —
+    the read cutover is Phase 1b, gated on ENCRYPTED_PII_READS.
     """
     password_hash = (
         _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
         if password
         else None
     )
+
+    # Derive encrypted + hash forms once if possible.
+    if _pii_enabled():
+        from .pii_crypto import encrypt_pii, lookup_hash
+        email_enc = encrypt_pii(email) if email else None
+        email_h = lookup_hash(email) if email else None
+        google_enc = encrypt_pii(google_id) if google_id else None
+        google_h = lookup_hash(google_id) if google_id else None
+        github_enc = encrypt_pii(github_id) if github_id else None
+        github_h = lookup_hash(github_id) if github_id else None
+    else:
+        email_enc = email_h = google_enc = google_h = github_enc = github_h = None
 
     # Try to find existing user
     if google_id:
@@ -209,11 +236,25 @@ async def upsert_user(
             update_fields.append(f"google_id = ${param_idx}")
             update_params.append(google_id)
             param_idx += 1
+            if _pii_enabled():
+                update_fields.append(f"google_id_encrypted = ${param_idx}")
+                update_params.append(google_enc)
+                param_idx += 1
+                update_fields.append(f"google_id_hash = ${param_idx}")
+                update_params.append(google_h)
+                param_idx += 1
 
         if github_id:
             update_fields.append(f"github_id = ${param_idx}")
             update_params.append(github_id)
             param_idx += 1
+            if _pii_enabled():
+                update_fields.append(f"github_id_encrypted = ${param_idx}")
+                update_params.append(github_enc)
+                param_idx += 1
+                update_fields.append(f"github_id_hash = ${param_idx}")
+                update_params.append(github_h)
+                param_idx += 1
 
         if password_hash:
             update_fields.append(f"password_hash = ${param_idx}")
@@ -229,13 +270,20 @@ async def upsert_user(
 
         return user_id
 
-    # Create new user
+    # Create new user. Dual-write encrypted+hashed forms when the master
+    # key is available; otherwise new rows carry NULL there and a later
+    # backfill will fill them in.
     user_id = str(uuid4())
     try:
         await execute_insert(
             """
-            INSERT INTO users (id, email, name, password_hash, google_id, github_id, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO users (
+                id, email, name, password_hash, google_id, github_id, created_at,
+                email_encrypted, email_hash,
+                google_id_encrypted, google_id_hash,
+                github_id_encrypted, github_id_hash
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             """,
             user_id,
             email,
@@ -244,8 +292,14 @@ async def upsert_user(
             google_id,
             github_id,
             datetime.utcnow(),
+            email_enc,
+            email_h,
+            google_enc,
+            google_h,
+            github_enc,
+            github_h,
         )
-        logger.info(f"Created new user: {user_id} ({email})")
+        logger.info("Created new user: %s", user_id)
     except Exception as e:
         logger.error(f"Failed to create user: {e}")
         raise HTTPException(status_code=500, detail="Failed to create user")
