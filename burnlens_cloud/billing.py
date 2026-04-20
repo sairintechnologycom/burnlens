@@ -186,12 +186,19 @@ async def create_checkout(
     elif owner_email:
         payload["customer"] = {"email": owner_email}
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(
-            f"{_paddle_base_url()}/transactions",
-            headers=_paddle_headers(),
-            json=payload,
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{_paddle_base_url()}/transactions",
+                headers=_paddle_headers(),
+                json=payload,
+            )
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        logger.error(
+            "Paddle create-checkout transport failure: workspace=%s plan=%s err=%s",
+            str(token.workspace_id), plan, e,
         )
+        raise HTTPException(status_code=502, detail="Billing provider did not respond")
 
     if resp.status_code >= 400:
         logger.error("Paddle create transaction failed: %s %s", resp.status_code, resp.text)
@@ -201,9 +208,11 @@ async def create_checkout(
         except (ValueError, TypeError):
             paddle_err = {}
         code = paddle_err.get("code")
-        detail = paddle_err.get("detail")
-        if code or detail:
-            msg = f"Checkout unavailable ({code or 'paddle_error'}): {detail or 'see logs'}"
+        # Only echo the Paddle error CODE to clients — it is a machine enum
+        # and safe to surface. The `detail` field is free-form and may include
+        # vendor IDs, emails, or URLs; keep it in server logs only.
+        if code:
+            msg = f"Checkout unavailable ({code}). Contact support if this persists."
         else:
             msg = "Failed to create checkout"
         raise HTTPException(status_code=502, detail=msg)
