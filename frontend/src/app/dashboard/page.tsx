@@ -136,7 +136,7 @@ function DashboardContent() {
         </div>
         <div className="stat-cell">
           <div className="stat-label">Waste</div>
-          <div className="stat-value amber">${formatCost(wasteAmount)}</div>
+          <div className={`stat-value${wasteAmount > 0 ? " amber" : ""}`}>${formatCost(wasteAmount)}</div>
         </div>
       </div>
 
