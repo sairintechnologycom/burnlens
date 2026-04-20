@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+BurnLens frontend — Next.js app for burnlens.app (landing, login, cloud dashboard). Deployed to Vercel.
 
 ## Getting Started
 
