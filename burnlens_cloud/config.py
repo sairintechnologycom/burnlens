@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     # Database
     database_url: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/burnlens_cloud")
 
-    # JWT
-    jwt_secret: str = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
+    # JWT — in production, JWT_SECRET must be set to >=32 chars (validated post-init).
+    jwt_secret: str = os.getenv("JWT_SECRET", "")
     jwt_algorithm: str = "HS256"
     jwt_expiration_seconds: int = 86400  # 24 hours
 
@@ -81,3 +81,12 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+# Fail-fast JWT secret validation (avoids silent fallback to a weak default).
+if settings.environment == "production":
+    if not settings.jwt_secret or len(settings.jwt_secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET env var must be set to a value of at least 32 chars in production"
+        )
+elif not settings.jwt_secret:
+    settings.jwt_secret = "dev-only-insecure-do-not-use-in-production"

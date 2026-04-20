@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from . import config
 from .models import (
@@ -54,7 +55,7 @@ def _encode_jwt(
 def _decode_jwt(token: str) -> dict | None:
     try:
         return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 
@@ -382,7 +383,8 @@ async def google_callback(request: Request, code: str = "", state: str = ""):
             },
         )
         if token_resp.status_code != 200:
-            logger.error("Google token exchange failed: %s", token_resp.text)
+            # Do not log token_resp.text — it may echo client_secret or other OAuth state.
+            logger.error("Google token exchange failed: status=%s", token_resp.status_code)
             raise HTTPException(status_code=502, detail="Google authentication failed")
 
         tokens = token_resp.json()
@@ -464,7 +466,8 @@ async def github_callback(request: Request, code: str = "", state: str = ""):
             headers={"Accept": "application/json"},
         )
         if token_resp.status_code != 200:
-            logger.error("GitHub token exchange failed: %s", token_resp.text)
+            # Do not log token_resp.text — may contain sensitive OAuth state.
+            logger.error("GitHub token exchange failed: status=%s", token_resp.status_code)
             raise HTTPException(status_code=502, detail="GitHub authentication failed")
 
         token_data = token_resp.json()
