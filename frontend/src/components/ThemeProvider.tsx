@@ -16,36 +16,16 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Dark is the brand default — matches the marketing site and the
+    // tools our users compare us to (Datadog, Grafana, Vercel, Linear).
+    // Respect an explicit user choice from localStorage; otherwise dark.
     const stored = localStorage.getItem("bl-theme") as Theme | null;
-    if (stored) {
-      setTheme(stored);
-      document.documentElement.className = `theme-${stored}`;
-    } else {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const detected = prefersDark ? "dark" : "light";
-      setTheme(detected);
-      document.documentElement.className = `theme-${detected}`;
-    }
-    setMounted(true);
+    const initial: Theme = stored === "light" || stored === "dark" ? stored : "dark";
+    setTheme(initial);
+    document.documentElement.className = `theme-${initial}`;
   }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const stored = localStorage.getItem("bl-theme");
-    if (stored) return; // user overrode, don't listen to system
-
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => {
-      const t = e.matches ? "dark" : "light";
-      setTheme(t);
-      document.documentElement.className = `theme-${t}`;
-    };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [mounted]);
 
   const toggle = useCallback(() => {
     const next = theme === "dark" ? "light" : "dark";
