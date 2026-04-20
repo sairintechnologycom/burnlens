@@ -313,12 +313,12 @@ img, svg { display: block; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 16px;
+  padding: 7px 16px 7px 14px;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
   color: var(--muted);
-  border-left: 2px solid transparent;
+  border-left: 3px solid transparent;
   transition: all 0.12s;
   border-top: none;
   border-right: none;
@@ -336,8 +336,9 @@ img, svg { display: block; }
 
 .sidebar-item.active {
   border-left-color: var(--cyan);
-  background: var(--bg2);
+  background: color-mix(in srgb, var(--cyan) 10%, var(--bg2));
   color: var(--text);
+  font-weight: 600;
 }
 
 .sidebar-badge {
