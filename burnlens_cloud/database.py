@@ -234,10 +234,17 @@ async def init_db():
             ON users(github_id_hash) WHERE github_id_hash IS NOT NULL
         """)
 
-        # Backfill runs only when PII_MASTER_KEY is set. Missing key is a
-        # deliberate no-op so this migration can ship before the operator
-        # has provisioned the key in Railway.
-        if os.getenv("PII_MASTER_KEY", "").strip():
+        # Backfill runs only when PII_MASTER_KEY is set AND the plaintext
+        # source columns still exist. After Phase 1c drops those columns
+        # the SELECT below would fail; guard against it so a cold boot
+        # post-1c doesn't crash init_db.
+        plaintext_email_col_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='users' AND column_name='email'
+            )
+        """)
+        if os.getenv("PII_MASTER_KEY", "").strip() and plaintext_email_col_exists:
             from .pii_crypto import encrypt_pii, lookup_hash, PIICryptoError
             try:
                 rows_to_fill = await conn.fetch(
@@ -272,6 +279,30 @@ async def init_db():
                 # Log and continue; the app should still boot. The operator
                 # fixes the key, next restart resumes the backfill.
                 logger.error("PII backfill aborted: %s", e)
+
+        # Phase 1c (2026-04): drop plaintext PII columns once every row has
+        # a hash. Guarded by a row-level safety check — if ANY row is
+        # missing email_hash we refuse to drop, log loudly, and the
+        # operator fixes the data before the next boot retries.
+        if plaintext_email_col_exists:
+            rows_without_hash = await conn.fetchval(
+                "SELECT COUNT(*) FROM users WHERE email_hash IS NULL"
+            )
+            total_rows = await conn.fetchval("SELECT COUNT(*) FROM users")
+            if total_rows and rows_without_hash:
+                logger.error(
+                    "PII Phase 1c ABORTED: %d/%d user row(s) still lack email_hash; "
+                    "refusing to drop plaintext columns. Fix the data and restart.",
+                    rows_without_hash, total_rows,
+                )
+            else:
+                logger.info(
+                    "PII Phase 1c: dropping plaintext email / google_id / github_id columns"
+                )
+                # DROP COLUMN cascades the old unique constraints + indexes.
+                await conn.execute("ALTER TABLE users DROP COLUMN IF EXISTS email")
+                await conn.execute("ALTER TABLE users DROP COLUMN IF EXISTS google_id")
+                await conn.execute("ALTER TABLE users DROP COLUMN IF EXISTS github_id")
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS workspace_members (
