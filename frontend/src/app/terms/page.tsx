@@ -1,8 +1,17 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Terms & Conditions — BurnLens",
   description: "Terms and conditions for using BurnLens and burnlens.app.",
+  alternates: { canonical: "/terms" },
+  openGraph: {
+    title: "Terms & Conditions — BurnLens",
+    description: "Terms and conditions for using BurnLens and burnlens.app.",
+    url: "https://burnlens.app/terms",
+    siteName: "BurnLens",
+    type: "article",
+  },
 };
 
 export default function TermsPage() {

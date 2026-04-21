@@ -1,8 +1,17 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Privacy Policy — BurnLens",
   description: "How BurnLens and Sairin Technology handle your data.",
+  alternates: { canonical: "/privacy" },
+  openGraph: {
+    title: "Privacy Policy — BurnLens",
+    description: "How BurnLens and Sairin Technology handle your data.",
+    url: "https://burnlens.app/privacy",
+    siteName: "BurnLens",
+    type: "article",
+  },
 };
 
 export default function PrivacyPage() {
