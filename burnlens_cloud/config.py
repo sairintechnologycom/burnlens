@@ -74,6 +74,15 @@ class Settings(BaseSettings):
     status_check_interval_seconds: int = 60
     status_check_timeout_seconds: int = 5
 
+    # Phase 3: workspace_activity ip_address / user_agent retention window.
+    # Rows older than this have those two columns NULL-ed by a background
+    # purge. The audit row itself (action, timestamp, workspace_id, user_id)
+    # is preserved; only the PII fields are redacted.
+    activity_pii_retention_days: int = int(os.getenv("ACTIVITY_PII_RETENTION_DAYS", "90"))
+    activity_pii_purge_interval_seconds: int = int(
+        os.getenv("ACTIVITY_PII_PURGE_INTERVAL_SECONDS", "86400")
+    )
+
     class Config:
         env_file = ".env"
         case_sensitive = False
