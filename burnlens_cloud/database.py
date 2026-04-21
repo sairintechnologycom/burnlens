@@ -793,6 +793,29 @@ async def init_db():
             ON cancellation_surveys(workspace_id, created_at DESC)
         """)
 
+        # Phase 9 (D-01): per-workspace monthly usage counter anchored to either
+        # the Paddle billing period (paid) or the UTC calendar month (free).
+        # The UNIQUE (workspace_id, cycle_start) index is the conflict target for
+        # Plan 05's ingest UPSERT — do not rename it.
+        # notified_80_at / notified_100_at are atomic claim flags for D-06 dedup.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_usage_cycles (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                cycle_start TIMESTAMPTZ NOT NULL,
+                cycle_end TIMESTAMPTZ NOT NULL,
+                request_count BIGINT NOT NULL DEFAULT 0,
+                notified_80_at TIMESTAMPTZ NULL,
+                notified_100_at TIMESTAMPTZ NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_usage_cycles_ws_start
+            ON workspace_usage_cycles(workspace_id, cycle_start)
+        """)
+
         # Phase 6: resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
