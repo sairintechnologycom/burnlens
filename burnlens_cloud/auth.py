@@ -5,7 +5,7 @@ import time
 import urllib.parse
 from uuid import uuid4, UUID
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 import bcrypt as _bcrypt
@@ -237,6 +237,88 @@ async def require_role(required_role: str, token: TokenPayload):
         )
 
 
+# ---------------------------------------------------------------------------
+# Plan-entitlement middleware (Phase 9 D-17 / GATE-05)
+# ---------------------------------------------------------------------------
+# `require_feature(name)` is a FastAPI dependency factory that raises 402 when
+# the caller's workspace plan does not include the named gated feature. The
+# lookup goes through `resolve_limits` so `plan_limits.gated_features` is the
+# single source of truth (Phase 6 D-08) — adding a new gated feature in a
+# future phase is a seed change, not a code change.
+#
+# Security notes (threat_model T-09-12): the gate decision is based on the
+# server-side `resolve_limits(token.workspace_id)` lookup, NOT on the
+# `token.plan` claim inside the JWT. A stale or forged `token.plan` cannot
+# grant access; `token.plan` only appears in the 402 body as display copy.
+
+# Deterministic price order for "cheapest plan with this feature" lookups.
+# Alphabetic sort would put "cloud" before "free" which is wrong — this tuple
+# is authoritative. Enterprise is intentionally absent until it has a fixed
+# public price.
+_PLAN_PRICE_ORDER = ("free", "cloud", "teams")
+
+
+async def _lowest_plan_with_feature(name: str) -> Optional[str]:
+    """Return the cheapest plan whose `gated_features[name]` is true, or None.
+
+    Reads `plan_limits.gated_features` directly — this is a per-call lookup,
+    not per-workspace, so it does not go through `resolve_limits`. Callers:
+    the 402 body builder in `require_feature` and (future) team_api seat-limit
+    / api-key-limit handlers that want to suggest an upgrade target.
+    """
+    rows = await execute_query(
+        "SELECT plan, gated_features FROM plan_limits WHERE (gated_features->>$1)::boolean = true",
+        name,
+    )
+    if not rows:
+        return None
+    plans_with_feature = {row["plan"] for row in rows}
+    for candidate in _PLAN_PRICE_ORDER:
+        if candidate in plans_with_feature:
+            return candidate
+    return None
+
+
+def require_feature(name: str) -> Callable:
+    """FastAPI dependency factory: 402 if caller's plan does not include `name`.
+
+    Usage:
+      `@router.get("/customers", dependencies=[Depends(require_feature("customers_view"))])`
+      or `async def handler(token: TokenPayload = Depends(require_feature("teams_view")))`.
+
+    Per D-17, the 402 body is:
+      {error: "feature_not_in_plan", required_feature, current_plan, required_plan, upgrade_url}
+
+    `required_plan` is the cheapest plan whose `gated_features` has the flag
+    true; None if no plan covers the feature. The upgrade_url points at the
+    Phase 8 billing card anchor (`/settings#billing`), not the pre-Phase-8
+    `/upgrade` URL.
+    """
+    # Lazy import to avoid any future auth <-> plans import cycle. `plans.py`
+    # currently does not import from auth, but keeping this lazy is cheap
+    # insurance for downstream refactors.
+    from .plans import resolve_limits
+
+    async def checker(token: TokenPayload = Depends(verify_token)) -> TokenPayload:
+        limits = await resolve_limits(token.workspace_id)
+        features = limits.gated_features if limits is not None else {}
+        if not features.get(name, False):
+            required = await _lowest_plan_with_feature(name)
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "feature_not_in_plan",
+                    "required_feature": name,
+                    "current_plan": token.plan,
+                    "required_plan": required,
+                    "upgrade_url": f"{settings.burnlens_frontend_url}/settings#billing",
+                },
+            )
+        return token
+
+    return checker
+
+
 async def upsert_user(
     email: str,
     name: Optional[str] = None,
@@ -443,11 +525,28 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
         else:
             del _api_key_cache[key_hash]
 
-    # Query database by hash
+    # Query database by hash — dual-read transition (Phase 9 D-12):
+    # prefer the new `api_keys` table so keys created via Plan 04's POST
+    # /api-keys endpoint authenticate immediately, and fall back to the
+    # legacy `workspaces.api_key_hash` column for pre-migration keys.
+    # The fallback is scheduled for removal in a follow-up release
+    # (v1.1.1+) once every live key has been migrated.
     result = await execute_query(
-        "SELECT id, plan FROM workspaces WHERE api_key_hash = $1 AND active = true",
+        """
+        SELECT w.id AS id, w.plan AS plan
+        FROM api_keys ak
+        JOIN workspaces w ON w.id = ak.workspace_id
+        WHERE ak.key_hash = $1 AND ak.revoked_at IS NULL AND w.active = true
+        LIMIT 1
+        """,
         key_hash,
     )
+    if not result:
+        # Legacy fallback for keys created before the api_keys table landed.
+        result = await execute_query(
+            "SELECT id, plan FROM workspaces WHERE api_key_hash = $1 AND active = true",
+            key_hash,
+        )
 
     if not result:
         return None
