@@ -854,6 +854,25 @@ async def init_db():
               AND NOT EXISTS (SELECT 1 FROM api_keys ak WHERE ak.key_hash = w.api_key_hash)
         """)
 
+        # Phase 9 (D-19): seed supplement — add teams_view / customers_view flags
+        # to plan_limits.gated_features per plan. JSONB `||` is an additive merge:
+        # Phase 6 keys (custom_signatures, team_seats, otel_export) are preserved.
+        # Idempotent by construction: re-applying the same `||` right-hand side is
+        # a no-op once the keys already exist with the target values.
+        #   - Free  → teams_view=false, customers_view=false
+        #   - Cloud → teams_view=false, customers_view=false
+        #   - Teams → teams_view=true,  customers_view=true
+        await conn.execute("""
+            UPDATE plan_limits
+            SET gated_features = gated_features || '{"teams_view": false, "customers_view": false}'::jsonb
+            WHERE plan IN ('free', 'cloud')
+        """)
+        await conn.execute("""
+            UPDATE plan_limits
+            SET gated_features = gated_features || '{"teams_view": true, "customers_view": true}'::jsonb
+            WHERE plan = 'teams'
+        """)
+
         # Phase 6: resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
