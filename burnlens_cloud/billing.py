@@ -24,6 +24,34 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 
 # ---------------------------------------------------------------------------
+# Phase 2b: feature-flagged PII reads on workspaces. When ENCRYPTED_WORKSPACE_READS
+# is true AND PII_MASTER_KEY is set, lookups switch to *_hash columns and
+# display values are decrypted from *_encrypted columns. Default off —
+# plaintext columns are still dual-written by Phase 2a, so flipping the flag
+# back to false is an instant rollback.
+# ---------------------------------------------------------------------------
+
+def _ws_reads_encrypted() -> bool:
+    """True when workspace PII reads should use the encrypted / hash columns."""
+    import os as _os
+    if _os.getenv("ENCRYPTED_WORKSPACE_READS", "").strip().lower() != "true":
+        return False
+    return bool(_os.getenv("PII_MASTER_KEY", "").strip())
+
+
+def _ws_pii_value(row: Any, plaintext_col: str, encrypted_col: str) -> Optional[str]:
+    """Read a workspace PII field: decrypt from *_encrypted under the flag,
+    else fall back to the dual-written plaintext column."""
+    if _ws_reads_encrypted():
+        val = row[encrypted_col]
+        if not val:
+            return None
+        from .pii_crypto import decrypt_pii
+        return decrypt_pii(val)
+    return row[plaintext_col]
+
+
+# ---------------------------------------------------------------------------
 # Paddle HTTP client helpers
 # ---------------------------------------------------------------------------
 
@@ -168,13 +196,19 @@ async def create_checkout(
         )
 
     rows = await execute_query(
-        "SELECT owner_email, paddle_customer_id FROM workspaces WHERE id = $1",
+        """
+        SELECT owner_email, owner_email_encrypted,
+               paddle_customer_id, paddle_customer_id_encrypted
+        FROM workspaces WHERE id = $1
+        """,
         str(token.workspace_id),
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    owner_email = rows[0].get("owner_email")
-    paddle_customer_id = rows[0].get("paddle_customer_id")
+    owner_email = _ws_pii_value(rows[0], "owner_email", "owner_email_encrypted")
+    paddle_customer_id = _ws_pii_value(
+        rows[0], "paddle_customer_id", "paddle_customer_id_encrypted"
+    )
 
     payload: dict[str, Any] = {
         "items": [{"price_id": price_id, "quantity": 1}],
@@ -398,8 +432,17 @@ async def _handle_subscription_updated(data: dict) -> None:
     cancel_at_period_end = _extract_cancel_at_period_end(data)
     price_cents, currency = _extract_price(data)
 
+    # Phase 2b: hash the subscription_id under flag so the WHERE uses the
+    # indexed *_hash column instead of the plaintext (to-be-dropped) column.
+    if _ws_reads_encrypted():
+        from .pii_crypto import lookup_hash as _lh
+        where_sql = "WHERE paddle_subscription_id_hash = $8"
+        where_val = _lh(subscription_id) if subscription_id else None
+    else:
+        where_sql = "WHERE paddle_subscription_id = $8"
+        where_val = subscription_id
     await execute_insert(
-        """
+        f"""
         UPDATE workspaces
         SET plan = $1,
             subscription_status = $2,
@@ -408,11 +451,11 @@ async def _handle_subscription_updated(data: dict) -> None:
             cancel_at_period_end = $5,
             price_cents = $6,
             currency = $7
-        WHERE paddle_subscription_id = $8
+        {where_sql}
         """,
         plan, status, trial_ends_at, current_period_ends_at,
         cancel_at_period_end, price_cents, currency,
-        subscription_id,
+        where_val,
     )
     logger.info("Subscription %s updated: plan=%s status=%s", subscription_id, plan, status)
 
@@ -420,14 +463,21 @@ async def _handle_subscription_updated(data: dict) -> None:
 async def _handle_subscription_canceled(data: dict) -> None:
     """Subscription ended. Downgrade to free."""
     subscription_id = data.get("id")
+    if _ws_reads_encrypted():
+        from .pii_crypto import lookup_hash as _lh
+        where_sql = "WHERE paddle_subscription_id_hash = $1"
+        where_val = _lh(subscription_id) if subscription_id else None
+    else:
+        where_sql = "WHERE paddle_subscription_id = $1"
+        where_val = subscription_id
     await execute_insert(
-        """
+        f"""
         UPDATE workspaces
         SET plan = 'free',
             subscription_status = 'canceled'
-        WHERE paddle_subscription_id = $1
+        {where_sql}
         """,
-        subscription_id,
+        where_val,
     )
     logger.info("Subscription %s canceled; workspace downgraded to free", subscription_id)
 
@@ -448,13 +498,20 @@ async def _handle_payment_failed(data: dict) -> None:
             data.get("id"),
         )
         return
+    if _ws_reads_encrypted():
+        from .pii_crypto import lookup_hash as _lh
+        where_sql = "WHERE paddle_subscription_id_hash = $1"
+        where_val = _lh(subscription_id)
+    else:
+        where_sql = "WHERE paddle_subscription_id = $1"
+        where_val = subscription_id
     await execute_insert(
-        """
+        f"""
         UPDATE workspaces
         SET subscription_status = 'past_due'
-        WHERE paddle_subscription_id = $1
+        {where_sql}
         """,
-        subscription_id,
+        where_val,
     )
     logger.warning("Subscription %s flipped to past_due", subscription_id)
 
@@ -470,16 +527,23 @@ async def billing_portal(token: TokenPayload = Depends(verify_token)):
         raise HTTPException(status_code=500, detail="Paddle not configured")
 
     rows = await execute_query(
-        "SELECT paddle_customer_id FROM workspaces WHERE id = $1",
+        """
+        SELECT paddle_customer_id, paddle_customer_id_encrypted
+        FROM workspaces WHERE id = $1
+        """,
         str(token.workspace_id),
     )
-    if not rows or not rows[0].get("paddle_customer_id"):
+    _portal_customer = (
+        _ws_pii_value(rows[0], "paddle_customer_id", "paddle_customer_id_encrypted")
+        if rows else None
+    )
+    if not rows or not _portal_customer:
         raise HTTPException(
             status_code=404,
             detail="No billing information found for this workspace",
         )
 
-    customer_id = rows[0]["paddle_customer_id"]
+    customer_id = _portal_customer
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             f"{_paddle_base_url()}/customers/{customer_id}/portal-sessions",
@@ -606,7 +670,8 @@ async def change_plan(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id, paddle_customer_id,
+        SELECT plan, paddle_subscription_id, paddle_subscription_id_encrypted,
+               paddle_customer_id, paddle_customer_id_encrypted,
                current_period_ends_at
         FROM workspaces WHERE id = $1
         """,
@@ -615,7 +680,9 @@ async def change_plan(
     if not rows:
         raise HTTPException(status_code=404, detail="Workspace not found")
     current_plan = (rows[0]["plan"] or "free").lower()
-    subscription_id = rows[0]["paddle_subscription_id"]
+    subscription_id = _ws_pii_value(
+        rows[0], "paddle_subscription_id", "paddle_subscription_id_encrypted"
+    )
     current_period_ends_at = rows[0]["current_period_ends_at"]
     target_plan = body.target_plan  # already lowercased + allowlisted by validator
 
@@ -773,7 +840,8 @@ async def cancel_subscription(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id, cancel_at_period_end
+        SELECT plan, paddle_subscription_id, paddle_subscription_id_encrypted,
+               cancel_at_period_end
         FROM workspaces WHERE id = $1
         """,
         workspace_id,
@@ -781,7 +849,9 @@ async def cancel_subscription(
     if not rows:
         raise HTTPException(status_code=404, detail="Workspace not found")
     current_plan = (rows[0]["plan"] or "free").lower()
-    subscription_id = rows[0]["paddle_subscription_id"]
+    subscription_id = _ws_pii_value(
+        rows[0], "paddle_subscription_id", "paddle_subscription_id_encrypted"
+    )
     already_canceled = bool(rows[0]["cancel_at_period_end"])
 
     # D-31 idempotent: already scheduled for cancel.
@@ -869,7 +939,8 @@ async def reactivate_subscription(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id, cancel_at_period_end,
+        SELECT plan, paddle_subscription_id, paddle_subscription_id_encrypted,
+               cancel_at_period_end,
                current_period_ends_at, subscription_status
         FROM workspaces WHERE id = $1
         """,
@@ -878,7 +949,9 @@ async def reactivate_subscription(
     if not rows:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    subscription_id = rows[0]["paddle_subscription_id"]
+    subscription_id = _ws_pii_value(
+        rows[0], "paddle_subscription_id", "paddle_subscription_id_encrypted"
+    )
     is_canceled = bool(rows[0]["cancel_at_period_end"])
     period_ends_at = rows[0]["current_period_ends_at"]
     status_str = (rows[0]["subscription_status"] or "").lower()
@@ -1001,13 +1074,18 @@ async def list_invoices(token: TokenPayload = Depends(verify_token)):
 
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
-        "SELECT paddle_customer_id FROM workspaces WHERE id = $1",
+        """
+        SELECT paddle_customer_id, paddle_customer_id_encrypted
+        FROM workspaces WHERE id = $1
+        """,
         workspace_id,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    # B2: asyncpg Record has no .get(); use subscript.
-    customer_id = rows[0]["paddle_customer_id"]
+    # B2: asyncpg Record has no .get(); use subscript (handled by _ws_pii_value).
+    customer_id = _ws_pii_value(
+        rows[0], "paddle_customer_id", "paddle_customer_id_encrypted"
+    )
 
     # Free workspace (never had a paid subscription) — empty state per D-16.
     if not customer_id:
