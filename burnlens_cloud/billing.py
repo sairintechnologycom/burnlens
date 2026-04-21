@@ -341,21 +341,42 @@ async def _handle_subscription_activated(data: dict) -> None:
         )
         return
 
+    # Phase 2a: dual-write Paddle IDs to encrypted + hash columns alongside
+    # the plaintext source of truth. Hash column drives lookups in
+    # subscription.updated / subscription.canceled / payment_failed handlers
+    # post-2b cutover. If PII_MASTER_KEY is missing we fall back to NULLs
+    # and rely on the backfill at next boot.
+    try:
+        from .pii_crypto import encrypt_pii as _pii_enc, lookup_hash as _pii_hash, PIICryptoError
+        cust_enc = _pii_enc(customer_id) if customer_id else None
+        cust_hash = _pii_hash(customer_id) if customer_id else None
+        sub_enc = _pii_enc(subscription_id) if subscription_id else None
+        sub_hash = _pii_hash(subscription_id) if subscription_id else None
+    except PIICryptoError:
+        cust_enc = cust_hash = sub_enc = sub_hash = None
+
     await execute_insert(
         """
         UPDATE workspaces
         SET plan = $1,
             paddle_customer_id = $2,
-            paddle_subscription_id = $3,
-            subscription_status = $4,
-            trial_ends_at = $5,
-            current_period_ends_at = $6,
-            cancel_at_period_end = $7,
-            price_cents = $8,
-            currency = $9
-        WHERE id = $10::uuid
+            paddle_customer_id_encrypted = $3,
+            paddle_customer_id_hash = $4,
+            paddle_subscription_id = $5,
+            paddle_subscription_id_encrypted = $6,
+            paddle_subscription_id_hash = $7,
+            subscription_status = $8,
+            trial_ends_at = $9,
+            current_period_ends_at = $10,
+            cancel_at_period_end = $11,
+            price_cents = $12,
+            currency = $13
+        WHERE id = $14::uuid
         """,
-        plan, customer_id, subscription_id, status,
+        plan,
+        customer_id, cust_enc, cust_hash,
+        subscription_id, sub_enc, sub_hash,
+        status,
         trial_ends_at, current_period_ends_at, cancel_at_period_end,
         price_cents, currency,
         workspace_id,

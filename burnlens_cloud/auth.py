@@ -509,6 +509,19 @@ async def signup(request: SignupRequest):
     api_key = generate_api_key()
     api_key_hash_value = hash_api_key(api_key)
 
+    # Phase 2a: dual-write owner_email plaintext + encrypted + hash. The
+    # plaintext column is still the source of truth until Phase 2b cuts reads
+    # over. encrypted/hash are only written if PII_MASTER_KEY is configured;
+    # if not, the row lands with NULL encrypted/hash and the Phase 2a backfill
+    # will pick it up on the next boot after the key is provisioned.
+    try:
+        from .pii_crypto import encrypt_pii as _pii_enc, lookup_hash as _pii_hash, PIICryptoError
+        owner_email_encrypted = _pii_enc(email_norm)
+        owner_email_hash = _pii_hash(email_norm)
+    except PIICryptoError:
+        owner_email_encrypted = None
+        owner_email_hash = None
+
     try:
         # Create workspace. Dual-write api_key (plaintext, for the one-time
         # reveal on signup) and api_key_hash (lookup column for all future
@@ -516,12 +529,17 @@ async def signup(request: SignupRequest):
         # review for context.
         await execute_insert(
             """
-            INSERT INTO workspaces (id, name, owner_email, plan, api_key, api_key_hash, created_at, active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO workspaces (
+                id, name, owner_email, owner_email_encrypted, owner_email_hash,
+                plan, api_key, api_key_hash, created_at, active
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """,
             workspace_id,
             request.workspace_name,
             email_norm,
+            owner_email_encrypted,
+            owner_email_hash,
             "free",
             api_key,
             api_key_hash_value,
