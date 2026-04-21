@@ -3,35 +3,36 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 8 context gathered; ready to plan.
-last_updated: "2026-04-19T17:55:00.000Z"
-last_activity: 2026-04-19
+stopped_at: Phase 8 complete (human_needed — 8 live-Paddle UAT items pending).
+last_updated: "2026-04-20T00:00:00.000Z"
+last_activity: 2026-04-20
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_phases: 3
+  total_plans: 31
+  completed_plans: 19
+  percent: 61
 ---
 
 # State
 
 ## Current Position
 
+Phase: 09 (quota-tracking-soft-enforcement) — NOT STARTED
 **Milestone:** v1.1 Billing & Quota
-**Phase:** 8 — Billing Self-Service (context gathered, not yet planned)
+**Phase:** 9 — Quota Tracking & Soft Enforcement (ready to plan)
 **Plan:** —
-**Status:** Ready to plan — CONTEXT.md committed
-**Last activity:** 2026-04-19
+**Status:** Phase 8 complete (human_needed); awaiting Phase 9 planning
+**Last activity:** 2026-04-20
 
-Progress: [████░░░░░░] 40% (2/5 phases complete)
+Progress: [██████░░░░] 60% (3/5 phases complete)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** v1.1 — Plan limits foundation (shipped), Paddle webhooks (next), billing self-service, soft quota enforcement, gating + usage meter UI
+**Current focus:** Phase 09 — quota-tracking-soft-enforcement (ready to plan)
 
 ## Phase Plan (v1.1)
 
@@ -39,7 +40,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 |---|-------|------------|--------|
 | 6 | Plan Limits Foundation | — | ✓ Complete (2026-04-18) |
 | 7 | Paddle Lifecycle Sync | Phase 6 | ✓ Complete (2026-04-19, human_needed) |
-| 8 | Billing Self-Service | Phase 7 | Not started |
+| 8 | Billing Self-Service | Phase 7 | ✓ Complete (2026-04-20, human_needed) |
 | 9 | Quota Tracking & Soft Enforcement | Phase 6 (+ Phase 7 for trustworthy plan state) | Not started |
 | 10 | Feature Gating & Usage Visibility UI | Phase 9, Phase 7 | Not started |
 
@@ -60,6 +61,23 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 - `plan_limits` Postgres table is the single source of truth; per-workspace overrides live on the workspace row.
 - Paddle webhooks are authoritative for plan state — the app reads, never computes from checkout redirect.
 - Entitlement middleware on gated API routes is mandatory; UI gating alone is not sufficient.
+
+### Phase 8 Shipped (2026-04-20, human_needed)
+
+- Schema: `cancellation_surveys` table (FK cascade to workspaces, nullable reason_code/reason_text) + `workspaces.scheduled_plan` / `scheduled_change_at` columns — all idempotent in `init_db()`
+- Pydantic models (`burnlens_cloud/models.py`): `CancelBody`, `ChangePlanBody` (allowlist `{cloud, teams}` with case-normalization), `Invoice`, `InvoicesResponse`; `BillingSummary` gained optional `scheduled_plan` + `scheduled_change_at`
+- 5 new endpoints on `burnlens_cloud/billing.py`, all `verify_token`-gated, server-read Paddle IDs, idempotent, 502-on-Paddle-fail without DB mutation, D-22 fresh-BillingSummary responses:
+  - `POST /billing/change-plan` — upgrade prorated_immediately / downgrade next_billing_period; downgrade response carries scheduled_plan+scheduled_change_at (W1)
+  - `POST /billing/cancel` — Paddle effective_from=next_billing_period; best-effort cancellation_surveys insert only if reason fields present
+  - `POST /billing/reactivate` — clears scheduled_change; 400 when period already ended (D-15); W3-compliant module-level datetime import
+  - `GET /billing/invoices` — Paddle transactions proxy, 24-row cap, per-row PDF lookup with W4 null-fallback; B2-compliant asyncpg subscript access
+  - `GET /billing/plans` — serves plan_limits data for PlanPickerModal comparison
+- Frontend hook: `usePaddleCheckout.ts` (initializePaddle + Paddle.Checkout.open + hosted-URL fallback; never throws); UpgradePrompt refactored to consume it
+- `BillingContext.setBilling(next)` escape hatch with W5 KNOWN_STATUSES coercion — powers D-22 optimistic flip without /summary round-trip
+- 3 new components: `CancelSubscriptionModal` (exact D-08 body + D-10 radios + D-28 support@burnlens.app toast); `InvoicesCard` (24-row table, Date/Amount/Status/PDF, `—` for null PDF, Retry on error); `PlanPickerModal` (data-driven Cloud/Teams comparison from /billing/plans)
+- Settings page rewired: replaces two disabled Phase 7 CTAs with per-plan action rows (Free: Upgrade to Cloud + Teams link; Cloud: Upgrade to Teams + Cancel/Resume; Teams: Change plan + Cancel/Resume); W1 pending-downgrade info line; D-12 amber canceled-state message; D-21 refresh cadence (0s/3s/10s + 30s context poll); .btn-green (new globals.css utility, B1 contrast guaranteed) for Resume, .btn-red for Cancel
+- Tests: 32/32 billing-adjacent pytest pass (`test_billing*.py`); frontend `tsc --noEmit` clean
+- Open: 8 items in 08-HUMAN-UAT.md (all require live Paddle sandbox — upgrades, downgrade, cancel-with-reason, reactivate, invoice PDFs, 502 toast copy, PlanPickerModal discoverability)
 
 ### Phase 7 Shipped (2026-04-19, human_needed)
 
@@ -106,6 +124,6 @@ None at this time.
 
 ## Session Continuity
 
-**To resume:** Run `/gsd-plan-phase 8` to plan Phase 8 (Billing Self-Service).
-**Stopped at:** Phase 8 context gathered; 34 decisions locked across 8 areas.
-**Next action:** `/gsd-plan-phase 8` — break phase into atomic plans based on 08-CONTEXT.md.
+**To resume:** Run `/gsd-discuss-phase 9` or `/gsd-plan-phase 9` to begin Phase 9 (Quota Tracking & Soft Enforcement).
+**Stopped at:** Phase 8 complete (human_needed — 8 live-Paddle UAT items pending in 08-HUMAN-UAT.md).
+**Next action:** `/gsd-discuss-phase 9` — gather context before planning Phase 9.

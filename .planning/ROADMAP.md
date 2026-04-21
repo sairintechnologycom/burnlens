@@ -18,7 +18,7 @@ phase_range: "6-10"
 
 - [x] **Phase 6: Plan Limits Foundation** — Seed plan_limits table and build a single effective-limits resolver (completed 2026-04-18)
 - [x] **Phase 7: Paddle Lifecycle Sync** — Webhook handlers drive plan/subscription state and the read-only Billing summary (completed 2026-04-19)
-- [ ] **Phase 8: Billing Self-Service** — Checkout, invoice history, cancel, and reactivate flows in Settings → Billing
+- [x] **Phase 8: Billing Self-Service** — Checkout, invoice history, cancel, and reactivate flows in Settings → Billing (completed 2026-04-20)
 - [ ] **Phase 9: Quota Tracking & Soft Enforcement** — Monthly counters, seat/API-key 402s, retention pruning, backend entitlement middleware
 - [ ] **Phase 10: Feature Gating & Usage Visibility UI** — Plan-gated UI, upgrade CTAs, and the sidebar usage meter
 
@@ -74,7 +74,19 @@ phase_range: "6-10"
 **Canonical refs**:
   - REQ-IDs: BILL-03, BILL-04, BILL-05, BILL-06
   - Extend: `burnlens_cloud/billing.py` (checkout session, cancel/reactivate endpoints, invoice list proxy), `frontend/src/app/settings/page.tsx` (Billing panel mutation UI)
-**Plans**: TBD
+**Plans**: 12 plans
+- [x] 08-01-cancellation-surveys-schema-PLAN.md — Idempotent cancellation_surveys table migration in init_db (BILL-05)
+- [x] 08-02-billing-models-PLAN.md — CancelBody / ChangePlanBody (allowlist) / Invoice / InvoicesResponse Pydantic models (BILL-03, BILL-04, BILL-05, BILL-06)
+- [x] 08-03-change-plan-endpoint-PLAN.md — POST /billing/change-plan (upgrade prorated, downgrade at period end, idempotent, 502-on-paddle-fail) (BILL-03)
+- [x] 08-04-cancel-endpoint-PLAN.md — POST /billing/cancel (Paddle effective_from=next_billing_period, best-effort survey insert, idempotent) (BILL-05)
+- [x] 08-05-reactivate-endpoint-PLAN.md — POST /billing/reactivate (clears scheduled_change, idempotent, 400 when period already ended) (BILL-06)
+- [x] 08-06-invoices-endpoint-PLAN.md — GET /billing/invoices (Paddle transactions proxy, 24-row cap, signed PDF URLs) (BILL-04)
+- [x] 08-07-paddle-checkout-hook-PLAN.md — usePaddleCheckout hook + UpgradePrompt refactor (BILL-03)
+- [x] 08-08-billing-context-setter-PLAN.md — BillingContext.setBilling escape hatch for optimistic post-mutation flip (BILL-03, BILL-05, BILL-06)
+- [x] 08-09-cancel-modal-PLAN.md — CancelSubscriptionModal with exact D-08 body copy + D-10 reason radios (BILL-05)
+- [x] 08-10-invoices-card-PLAN.md — InvoicesCard with Date/Amount/Status/Download PDF (BILL-04)
+- [x] 08-11-plan-picker-modal-PLAN.md — GET /billing/plans + PlanPickerModal side-by-side comparison (BILL-03)
+- [x] 08-12-settings-billing-wiring-PLAN.md — Replace disabled CTAs, mount InvoicesCard, wire Cancel/Resume/Change with D-21 refresh cadence (BILL-03, BILL-04, BILL-05, BILL-06)
 **UI hint**: yes
 
 ### Phase 9: Quota Tracking & Soft Enforcement
@@ -115,7 +127,7 @@ phase_range: "6-10"
 |-------|----------------|--------|-----------|
 | 6. Plan Limits Foundation | 3/3 | Complete | 2026-04-18 |
 | 7. Paddle Lifecycle Sync | 0/4 | Planned | — |
-| 8. Billing Self-Service | 0/0 | Not started | — |
+| 8. Billing Self-Service | 12/12 | Complete | 2026-04-20 |
 | 9. Quota Tracking & Soft Enforcement | 0/0 | Not started | — |
 | 10. Feature Gating & Usage Visibility UI | 0/0 | Not started | — |
 
