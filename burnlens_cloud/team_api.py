@@ -140,7 +140,11 @@ async def _lowest_plan_with_seat_count(current: int) -> Optional[str]:
     return None
 
 
-@router.get("/members", response_model=List[WorkspaceMemberResponse])
+@router.get(
+    "/members",
+    response_model=List[WorkspaceMemberResponse],
+    dependencies=[Depends(require_feature("teams_view"))],
+)
 async def list_members(token: TokenPayload = Depends(verify_token)):
     """List all members of workspace."""
     # Any authenticated workspace member can list members
@@ -174,7 +178,10 @@ async def list_members(token: TokenPayload = Depends(verify_token)):
     return members
 
 
-@router.delete("/members/{member_id}")
+@router.delete(
+    "/members/{member_id}",
+    dependencies=[Depends(require_feature("teams_view"))],
+)
 async def remove_member(
     member_id: UUID,
     token: TokenPayload = Depends(verify_token),
@@ -237,7 +244,10 @@ async def remove_member(
     return {"status": "removed", "user_id": str(member_user_id)}
 
 
-@router.patch("/members/{member_id}")
+@router.patch(
+    "/members/{member_id}",
+    dependencies=[Depends(require_feature("teams_view"))],
+)
 async def update_member_role(
     member_id: UUID,
     update: MemberRoleUpdate,
@@ -312,7 +322,11 @@ async def update_member_role(
     return {"id": str(member_id), "role": update.role}
 
 
-@router.post("/invite", response_model=InvitationResponse)
+@router.post(
+    "/invite",
+    response_model=InvitationResponse,
+    dependencies=[Depends(require_feature("teams_view"))],
+)
 async def invite_member(
     request: InvitationRequest,
     token: TokenPayload = Depends(verify_token),
@@ -430,7 +444,10 @@ async def invite_member(
     )
 
 
-@router.get("/activity")
+@router.get(
+    "/activity",
+    dependencies=[Depends(require_feature("teams_view"))],
+)
 async def get_activity(
     token: TokenPayload = Depends(verify_token),
     limit: int = Query(50, ge=1, le=500),
