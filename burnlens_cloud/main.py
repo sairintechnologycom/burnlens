@@ -14,6 +14,7 @@ from .ingest import router as ingest_router
 from .dashboard_api import router as dashboard_router
 from .billing import router as billing_router
 from .team_api import router as team_router
+from .api_keys_api import router as api_keys_router
 from .settings_api import router as settings_router
 from .compliance.audit import router as audit_router
 from .deployment_api import router as deployment_router
@@ -137,6 +138,7 @@ def get_app() -> FastAPI:
     app.include_router(audit_router)     # /api/audit-log, /api/audit-log/export
     app.include_router(deployment_router) # /status, /api/status
     app.include_router(stubs_router)     # stub endpoints — see burnlens_cloud/stubs_api.py
+    app.include_router(api_keys_router)  # /api-keys CRUD (Phase 9 GATE-04)
 
     return app
 
