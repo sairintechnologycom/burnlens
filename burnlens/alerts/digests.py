@@ -213,7 +213,7 @@ def _build_digest_html(
         f'    <p style="color:#555; font-size:14px;">{intro}</p>\n'
         f'    {table_html}\n'
         '    <p style="color:#aaa; font-size:11px; margin-top:20px;">\n'
-        '      Sent by BurnLens &mdash; <a href="https://github.com/burnlens/burnlens" style="color:#aaa;">github.com/burnlens/burnlens</a>\n'
+        '      Sent by BurnLens &mdash; <a href="https://github.com/sairintechnologycom/burnlens" style="color:#aaa;">github.com/sairintechnologycom/burnlens</a>\n'
         '    </p>\n'
         '  </div>\n'
         '</body>\n'
