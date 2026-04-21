@@ -46,6 +46,33 @@ def _safe_redirect(target: Optional[str]) -> Optional[str]:
         return target
     return None
 from .database import execute_query, execute_insert
+
+
+# ---------------------------------------------------------------------------
+# Phase 2b: feature-flagged PII reads on workspaces. Same env var governs
+# reads across auth.py and billing.py. Small helper is duplicated here
+# rather than imported to avoid a burnlens_cloud.auth ↔ burnlens_cloud.billing
+# import cycle.
+# ---------------------------------------------------------------------------
+
+
+def _ws_reads_encrypted() -> bool:
+    import os as _os
+    if _os.getenv("ENCRYPTED_WORKSPACE_READS", "").strip().lower() != "true":
+        return False
+    return bool(_os.getenv("PII_MASTER_KEY", "").strip())
+
+
+def _ws_pii_value(row, plaintext_col: str, encrypted_col: str):
+    """Read a workspace PII field: decrypt from *_encrypted under the flag,
+    else fall back to the dual-written plaintext column."""
+    if _ws_reads_encrypted():
+        val = row[encrypted_col]
+        if not val:
+            return None
+        from .pii_crypto import decrypt_pii
+        return decrypt_pii(val)
+    return row[plaintext_col]
 from .models import (
     LoginRequest,
     LoginResponse,
@@ -415,10 +442,14 @@ async def login(request: LoginRequest):
             datetime.utcnow(), user_id,
         )
 
-        # Find user's workspace membership
+        # Find user's workspace membership. Select both plaintext and
+        # encrypted owner_email; `_ws_reads_encrypted` below decides which
+        # to surface (Phase 2b).
         member_result = await execute_query(
             """
-            SELECT wm.workspace_id, wm.role, w.id, w.name, w.owner_email, w.plan, w.api_key, w.created_at, w.active
+            SELECT wm.workspace_id, wm.role, w.id, w.name,
+                   w.owner_email, w.owner_email_encrypted,
+                   w.plan, w.api_key, w.created_at, w.active
             FROM workspace_members wm
             JOIN workspaces w ON w.id = wm.workspace_id
             WHERE wm.user_id = $1 AND wm.active = true AND w.active = true
@@ -436,8 +467,14 @@ async def login(request: LoginRequest):
 
     elif request.api_key:
         # API key login (legacy / CLI flow) — look up by hash, never by plaintext.
+        # Phase 2b: also fetch owner_email_encrypted so we can surface the
+        # encrypted form under the flag without a second round-trip.
         result = await execute_query(
-            "SELECT id, name, owner_email, plan, api_key, created_at, active FROM workspaces WHERE api_key_hash = $1 AND active = true",
+            """
+            SELECT id, name, owner_email, owner_email_encrypted,
+                   plan, api_key, created_at, active
+            FROM workspaces WHERE api_key_hash = $1 AND active = true
+            """,
             hash_api_key(request.api_key),
         )
         if not result:
@@ -447,8 +484,15 @@ async def login(request: LoginRequest):
         row = result[0]
         workspace_id = str(row["id"])
 
-        # Auto-migrate workspace if needed
-        user_id, role = await auto_migrate_user_for_workspace(workspace_id, row["owner_email"])
+        # Auto-migrate workspace if needed. Resolve owner_email through the
+        # Phase 2b helper so the migration seeds users.email from the
+        # decrypted value when the flag is active.
+        owner_email_resolved = _ws_pii_value(
+            row, "owner_email", "owner_email_encrypted"
+        )
+        user_id, role = await auto_migrate_user_for_workspace(
+            workspace_id, owner_email_resolved
+        )
 
         if user_id is None:
             member_result = await execute_query(
@@ -466,10 +510,12 @@ async def login(request: LoginRequest):
 
     # Never echo the full plaintext API key on login — the user received it
     # once at signup. Return a masked form sufficient for UI display.
+    # Phase 2b: resolve owner_email through the encryption helper; both
+    # login branches selected owner_email + owner_email_encrypted above.
     workspace = WorkspaceResponse(
         id=workspace_id,
         name=row["name"],
-        owner_email=row["owner_email"],
+        owner_email=_ws_pii_value(row, "owner_email", "owner_email_encrypted"),
         plan=row["plan"],
         api_key=mask_api_key_for_display(row["api_key"]),
         created_at=row["created_at"],
