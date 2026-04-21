@@ -793,6 +793,86 @@ async def init_db():
             ON cancellation_surveys(workspace_id, created_at DESC)
         """)
 
+        # Phase 9 (D-01): per-workspace monthly usage counter anchored to either
+        # the Paddle billing period (paid) or the UTC calendar month (free).
+        # The UNIQUE (workspace_id, cycle_start) index is the conflict target for
+        # Plan 05's ingest UPSERT — do not rename it.
+        # notified_80_at / notified_100_at are atomic claim flags for D-06 dedup.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS workspace_usage_cycles (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                cycle_start TIMESTAMPTZ NOT NULL,
+                cycle_end TIMESTAMPTZ NOT NULL,
+                request_count BIGINT NOT NULL DEFAULT 0,
+                notified_80_at TIMESTAMPTZ NULL,
+                notified_100_at TIMESTAMPTZ NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_usage_cycles_ws_start
+            ON workspace_usage_cycles(workspace_id, cycle_start)
+        """)
+
+        # Phase 9 (D-11): per-workspace API keys, hashed-only storage.
+        # key_hash UNIQUE makes the (D-12) set-based backfill safe to repeat.
+        # created_by_user_id uses ON DELETE SET NULL (not cascade) so the audit
+        # trail survives user deletion — a revoked/compromised-key history row
+        # MUST NOT disappear when the user who created it is removed.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                key_hash TEXT NOT NULL UNIQUE,
+                last4 TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT 'Primary',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                revoked_at TIMESTAMPTZ NULL,
+                created_by_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL
+            )
+        """)
+
+        # Partial index: fast active-count lookups for the D-13/D-14 plan-cap check.
+        # Predicate MUST be `WHERE revoked_at IS NULL` (Plan 04 reads rely on it).
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_api_keys_workspace_active
+            ON api_keys(workspace_id) WHERE revoked_at IS NULL
+        """)
+
+        # Phase 9 (D-12): backfill existing workspaces.api_key_hash rows into api_keys.
+        # Set-based INSERT ... SELECT ... WHERE NOT EXISTS so second run inserts zero rows
+        # (UNIQUE(key_hash) + the NOT EXISTS guard make this idempotent by construction).
+        # The dual-read in auth.get_workspace_by_api_key will look at api_keys first and
+        # fall back to workspaces.api_key_hash until the latter is dropped in v1.1.1+.
+        await conn.execute("""
+            INSERT INTO api_keys (id, workspace_id, key_hash, last4, name, created_at)
+            SELECT gen_random_uuid(), w.id, w.api_key_hash, COALESCE(w.api_key_last4, '****'), 'Primary', w.created_at
+            FROM workspaces w
+            WHERE w.api_key_hash IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM api_keys ak WHERE ak.key_hash = w.api_key_hash)
+        """)
+
+        # Phase 9 (D-19): seed supplement — add teams_view / customers_view flags
+        # to plan_limits.gated_features per plan. JSONB `||` is an additive merge:
+        # Phase 6 keys (custom_signatures, team_seats, otel_export) are preserved.
+        # Idempotent by construction: re-applying the same `||` right-hand side is
+        # a no-op once the keys already exist with the target values.
+        #   - Free  → teams_view=false, customers_view=false
+        #   - Cloud → teams_view=false, customers_view=false
+        #   - Teams → teams_view=true,  customers_view=true
+        await conn.execute("""
+            UPDATE plan_limits
+            SET gated_features = gated_features || '{"teams_view": false, "customers_view": false}'::jsonb
+            WHERE plan IN ('free', 'cloud')
+        """)
+        await conn.execute("""
+            UPDATE plan_limits
+            SET gated_features = gated_features || '{"teams_view": true, "customers_view": true}'::jsonb
+            WHERE plan = 'teams'
+        """)
+
         # Phase 6: resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
