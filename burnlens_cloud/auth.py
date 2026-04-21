@@ -525,11 +525,28 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
         else:
             del _api_key_cache[key_hash]
 
-    # Query database by hash
+    # Query database by hash — dual-read transition (Phase 9 D-12):
+    # prefer the new `api_keys` table so keys created via Plan 04's POST
+    # /api-keys endpoint authenticate immediately, and fall back to the
+    # legacy `workspaces.api_key_hash` column for pre-migration keys.
+    # The fallback is scheduled for removal in a follow-up release
+    # (v1.1.1+) once every live key has been migrated.
     result = await execute_query(
-        "SELECT id, plan FROM workspaces WHERE api_key_hash = $1 AND active = true",
+        """
+        SELECT w.id AS id, w.plan AS plan
+        FROM api_keys ak
+        JOIN workspaces w ON w.id = ak.workspace_id
+        WHERE ak.key_hash = $1 AND ak.revoked_at IS NULL AND w.active = true
+        LIMIT 1
+        """,
         key_hash,
     )
+    if not result:
+        # Legacy fallback for keys created before the api_keys table landed.
+        result = await execute_query(
+            "SELECT id, plan FROM workspaces WHERE api_key_hash = $1 AND active = true",
+            key_hash,
+        )
 
     if not result:
         return None
