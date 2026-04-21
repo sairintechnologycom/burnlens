@@ -403,3 +403,33 @@ class Invoice(BaseModel):
 class InvoicesResponse(BaseModel):
     """Response envelope for GET /billing/invoices."""
     invoices: list[Invoice] = Field(default_factory=list)
+
+
+class ApiKeyCreateRequest(BaseModel):
+    """Request body for POST /api-keys.
+
+    `name` is optional; defaults to "Primary" server-side if omitted.
+    """
+    name: Optional[str] = Field(None, max_length=64)
+
+
+class ApiKey(BaseModel):
+    """One row in GET /api-keys list response.
+
+    Never contains plaintext or hash — only the last-4 suffix for UI disambiguation.
+    """
+    id: UUID
+    name: str
+    last4: str
+    created_at: datetime
+    revoked_at: Optional[datetime] = None
+
+
+class ApiKeyCreateResponse(ApiKey):
+    """Response body for POST /api-keys.
+
+    Extends `ApiKey` with the plaintext `key`. This field is emitted EXACTLY ONCE
+    at key-creation time and is never stored server-side or re-emitted on any
+    subsequent request. Callers must capture it on the create-response.
+    """
+    key: str
