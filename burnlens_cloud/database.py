@@ -269,17 +269,10 @@ async def init_db():
             END $$;
         """)
 
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)
-        """)
-
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)
-        """)
-
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id)
-        """)
+        # Phase 1c dropped the plaintext email / google_id / github_id columns;
+        # the legacy CREATE INDEX statements that referenced them lived here
+        # and crashed cold boots post-1c. The lookup path now uses the
+        # *_hash indexes created further down.
 
         # Phase 1 PII encryption (2026-04): additive columns for the
         # encrypt-and-hash pattern on email / google_id / github_id.
