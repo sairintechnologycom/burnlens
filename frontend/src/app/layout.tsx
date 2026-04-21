@@ -17,11 +17,16 @@ const interTight = Inter_Tight({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://burnlens.app"),
   title: "BurnLens — See exactly what your AI API calls cost",
   description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy for Anthropic, OpenAI & Google AI.",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     title: "BurnLens — See exactly what your AI API calls cost",
     description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy that shows developers where their AI API money goes.",
+    url: "https://burnlens.app",
     siteName: "BurnLens",
     type: "website",
   },
