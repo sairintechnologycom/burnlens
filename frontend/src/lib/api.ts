@@ -36,11 +36,16 @@ export async function apiFetch(endpoint: string, token: string, options: Request
     "Content-Type": "application/json",
   };
 
-  if (token && token !== "local") {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
+  // C-3: auth is transported via the `burnlens_session` HttpOnly cookie set at
+  // login/signup. The `token` argument is retained for call-site compatibility
+  // and to discriminate the local-proxy case; its value is no longer sent.
+  const isRemoteSession = token && token !== "local";
 
-  const resp = await fetch(url, { ...options, headers });
+  const resp = await fetch(url, {
+    ...options,
+    headers,
+    credentials: isRemoteSession ? "include" : (options.credentials ?? "same-origin"),
+  });
 
   if (resp.status === 401) {
     throw new AuthError();
