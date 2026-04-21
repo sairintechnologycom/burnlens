@@ -686,10 +686,13 @@ async def accept_invitation(token: str, redirect_to: Optional[str] = None, reque
     If user is authenticated, accept immediately.
     If not authenticated, redirect to signup with invite token.
     """
-    # Look up invitation
+    # Phase 4: invitations store sha256(token), not the plaintext, so a DB
+    # leak does not yield usable invite credentials. The token from the URL
+    # must be hashed here before the lookup.
+    token_hash_value = hashlib.sha256(token.encode("utf-8")).hexdigest()
     result = await execute_query(
-        "SELECT id, workspace_id, email, role, expires_at, accepted_at FROM invitations WHERE token = $1",
-        token,
+        "SELECT id, workspace_id, email, role, expires_at, accepted_at FROM invitations WHERE token_hash = $1",
+        token_hash_value,
     )
 
     if not result:

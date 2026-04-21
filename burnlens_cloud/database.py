@@ -520,16 +520,59 @@ async def init_db():
         """)
 
         await conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token)
-        """)
-
-        await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_invitations_workspace ON invitations(workspace_id)
         """)
 
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email)
         """)
+
+        # Phase 4 (2026-04): invitation tokens must not be stored as plaintext.
+        # The email-delivered URL still carries the plaintext token; the DB
+        # only ever sees its SHA-256 hash. A DB read-only breach now yields
+        # no usable invite-acceptance credentials.
+        #
+        # Migration is three-step (additive, safety-gated, then destructive)
+        # so a rollback between deploys is possible if something goes wrong
+        # at any intermediate boot.
+        await conn.execute("""
+            ALTER TABLE invitations ADD COLUMN IF NOT EXISTS token_hash TEXT
+        """)
+
+        plaintext_token_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='invitations' AND column_name='token'
+            )
+        """)
+
+        if plaintext_token_exists:
+            backfilled = await conn.execute("""
+                UPDATE invitations
+                SET token_hash = encode(sha256(token::bytea), 'hex')
+                WHERE token_hash IS NULL AND token IS NOT NULL
+            """)
+            if backfilled and not backfilled.endswith(" 0"):
+                logger.info("Phase 4: backfilled invitations.token_hash (%s)", backfilled)
+
+        bad_rows = await conn.fetchval("""
+            SELECT COUNT(*) FROM invitations WHERE token_hash IS NULL
+        """) or 0
+        if bad_rows and plaintext_token_exists:
+            # Never drop the plaintext column while rows still need it.
+            logger.error(
+                "Phase 4 ABORTED: %s invitations rows have NULL token_hash; "
+                "refusing to drop invitations.token", bad_rows,
+            )
+        else:
+            await conn.execute("DROP INDEX IF EXISTS idx_invitations_token")
+            await conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_invitations_token_hash "
+                "ON invitations(token_hash)"
+            )
+            if plaintext_token_exists:
+                logger.info("Phase 4: dropping plaintext invitations.token column")
+                await conn.execute("ALTER TABLE invitations DROP COLUMN IF EXISTS token")
 
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS workspace_activity (
