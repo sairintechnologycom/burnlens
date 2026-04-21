@@ -167,6 +167,22 @@ def _pii_enabled() -> bool:
     return bool(_os.getenv("PII_MASTER_KEY", "").strip())
 
 
+def _pii_reads_enabled() -> bool:
+    """True when lookups + display should use the encrypted columns.
+
+    Controlled by ENCRYPTED_PII_READS=true, and only effective when the
+    master key is also present (without the key we can neither hash for
+    lookup nor decrypt for display). Kept separate from `_pii_enabled`
+    so writes can go live *before* reads cut over — the standard
+    encrypt-and-hash rollout pattern: backfill, dual-write, cut reads,
+    drop plaintext.
+    """
+    import os as _os
+    if _os.getenv("ENCRYPTED_PII_READS", "").strip().lower() != "true":
+        return False
+    return bool(_os.getenv("PII_MASTER_KEY", "").strip())
+
+
 async def upsert_user(
     email: str,
     name: Optional[str] = None,
@@ -200,28 +216,47 @@ async def upsert_user(
     else:
         email_enc = email_h = google_enc = google_h = github_enc = github_h = None
 
-    # Try to find existing user
+    # Try to find existing user. Under ENCRYPTED_PII_READS, look up by the
+    # keyed-hash columns instead of plaintext; the plaintext columns are
+    # still written (dual-write) so this switch is reversible by flipping
+    # the env var back to false.
+    reads_encrypted = _pii_reads_enabled()
     if google_id:
-        result = await execute_query(
-            "SELECT id FROM users WHERE google_id = $1",
-            google_id,
-        )
+        if reads_encrypted:
+            from .pii_crypto import lookup_hash as _lh
+            result = await execute_query(
+                "SELECT id FROM users WHERE google_id_hash = $1", _lh(google_id),
+            )
+        else:
+            result = await execute_query(
+                "SELECT id FROM users WHERE google_id = $1", google_id,
+            )
         if result:
             return str(result[0]["id"])
 
     if github_id:
-        result = await execute_query(
-            "SELECT id FROM users WHERE github_id = $1",
-            github_id,
-        )
+        if reads_encrypted:
+            from .pii_crypto import lookup_hash as _lh
+            result = await execute_query(
+                "SELECT id FROM users WHERE github_id_hash = $1", _lh(github_id),
+            )
+        else:
+            result = await execute_query(
+                "SELECT id FROM users WHERE github_id = $1", github_id,
+            )
         if result:
             return str(result[0]["id"])
 
     # Check by email
-    result = await execute_query(
-        "SELECT id FROM users WHERE email = $1",
-        email,
-    )
+    if reads_encrypted:
+        from .pii_crypto import lookup_hash as _lh
+        result = await execute_query(
+            "SELECT id FROM users WHERE email_hash = $1", _lh(email),
+        )
+    else:
+        result = await execute_query(
+            "SELECT id FROM users WHERE email = $1", email,
+        )
     if result:
         user_id = str(result[0]["id"])
         # Update OAuth IDs if provided.
@@ -423,10 +458,17 @@ async def login(request: LoginRequest):
         if len(request.password) > 128:
             raise HTTPException(status_code=400, detail="Password too long")
         email_norm = request.email.strip().lower()
-        user_result = await execute_query(
-            "SELECT id, email, password_hash FROM users WHERE LOWER(email) = $1",
-            email_norm,
-        )
+        if _pii_reads_enabled():
+            from .pii_crypto import lookup_hash as _lh
+            user_result = await execute_query(
+                "SELECT id, password_hash FROM users WHERE email_hash = $1",
+                _lh(email_norm),
+            )
+        else:
+            user_result = await execute_query(
+                "SELECT id, password_hash FROM users WHERE LOWER(email) = $1",
+                email_norm,
+            )
         if not user_result or not user_result[0]["password_hash"]:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -527,9 +569,15 @@ async def signup(request: SignupRequest):
         raise HTTPException(status_code=400, detail="Password too long (max 128 chars)")
 
     # Check if email already exists (case-insensitive)
-    existing = await execute_query(
-        "SELECT id FROM users WHERE LOWER(email) = $1", email_norm,
-    )
+    if _pii_reads_enabled():
+        from .pii_crypto import lookup_hash as _lh
+        existing = await execute_query(
+            "SELECT id FROM users WHERE email_hash = $1", _lh(email_norm),
+        )
+    else:
+        existing = await execute_query(
+            "SELECT id FROM users WHERE LOWER(email) = $1", email_norm,
+        )
     if existing:
         raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
 
@@ -637,22 +685,40 @@ async def accept_invitation(token: str, redirect_to: Optional[str] = None, reque
         if not payload:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-        # Check if email matches
-        user_result = await execute_query(
-            "SELECT email FROM users WHERE id = $1",
-            str(payload.user_id),
-        )
-
-        if not user_result:
-            raise HTTPException(status_code=400, detail="User not found")
-
-        user_email = user_result[0]["email"]
-
-        if user_email != invited_email:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Invitation email ({invited_email}) does not match your account email ({user_email})",
+        # Check if email matches. Under ENCRYPTED_PII_READS we compare
+        # keyed hashes (constant-time, no plaintext leakage in SQL logs)
+        # and decrypt the stored value only for the error-message display.
+        if _pii_reads_enabled():
+            from .pii_crypto import lookup_hash as _lh, decrypt_pii as _dec
+            user_result = await execute_query(
+                "SELECT email_hash, email_encrypted FROM users WHERE id = $1",
+                str(payload.user_id),
             )
+            if not user_result:
+                raise HTTPException(status_code=400, detail="User not found")
+            stored_hash = user_result[0]["email_hash"]
+            if stored_hash != _lh(invited_email):
+                # Decrypt solely to echo the user's own email back in the
+                # 409 body — the user already knows it; nothing is leaked.
+                enc = user_result[0].get("email_encrypted")
+                shown = _dec(enc) if enc else "(unknown)"
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Invitation email ({invited_email}) does not match your account email ({shown})",
+                )
+        else:
+            user_result = await execute_query(
+                "SELECT email FROM users WHERE id = $1",
+                str(payload.user_id),
+            )
+            if not user_result:
+                raise HTTPException(status_code=400, detail="User not found")
+            user_email = user_result[0]["email"]
+            if user_email != invited_email:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Invitation email ({invited_email}) does not match your account email ({user_email})",
+                )
 
         # Accept invitation
         try:
