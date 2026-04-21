@@ -32,6 +32,10 @@ async def resolve_limits(workspace_id: UUID) -> Optional[ResolvedLimits]:
     Returns:
         `ResolvedLimits` with scalar limits and merged `gated_features`, or `None`
         if no workspace exists with that id.
+
+    `retention_days = 0` in `workspaces.limit_overrides` means **retain forever**
+    (the retention-prune loop skips the workspace entirely). Zero is
+    sentinel-for-unlimited; null means "use plan default." Per D-23.
     """
     if pool is None:
         raise RuntimeError("Database pool not initialized — call init_db() first")
