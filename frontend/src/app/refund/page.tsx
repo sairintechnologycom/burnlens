@@ -1,8 +1,17 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Refund Policy — BurnLens",
   description: "BurnLens refund and cancellation policy.",
+  alternates: { canonical: "/refund" },
+  openGraph: {
+    title: "Refund Policy — BurnLens",
+    description: "BurnLens refund and cancellation policy.",
+    url: "https://burnlens.app/refund",
+    siteName: "BurnLens",
+    type: "article",
+  },
 };
 
 export default function RefundPage() {

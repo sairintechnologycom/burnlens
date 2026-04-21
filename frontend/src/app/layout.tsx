@@ -37,6 +37,37 @@ export const metadata: Metadata = {
   },
 };
 
+const structuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "BurnLens",
+    url: "https://burnlens.app",
+    logo: "https://burnlens.app/opengraph-image",
+    sameAs: ["https://github.com/sairintechnology/burnlens"],
+    parentOrganization: {
+      "@type": "Organization",
+      name: "Sairin Technology",
+      url: "https://sairintechnology.com",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "BurnLens",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "macOS, Linux, Windows",
+    url: "https://burnlens.app",
+    description:
+      "Open-source LLM FinOps proxy — install with pip, make zero code changes, see every AI API call's real cost across Anthropic, OpenAI, and Google AI.",
+    offers: [
+      { "@type": "Offer", name: "Open source proxy", price: "0", priceCurrency: "USD" },
+      { "@type": "Offer", name: "Cloud", price: "29", priceCurrency: "USD" },
+      { "@type": "Offer", name: "Teams", price: "99", priceCurrency: "USD" },
+    ],
+  },
+];
+
 export default function RootLayout({
   children,
 }: {
@@ -45,6 +76,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="theme-dark">
       <body className={`${dmMono.variable} ${interTight.variable}`}>
+        <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
         <ThemeProvider>
           <ToastProvider>
             {children}
