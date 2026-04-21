@@ -19,11 +19,16 @@ function storeSession(data: {
   token: string;
   workspace: { id: string; name: string; plan: string; api_key: string };
 }) {
-  localStorage.setItem("burnlens_token", data.token);
+  // C-3: the JWT is set by the backend as the `burnlens_session` HttpOnly
+  // cookie — we intentionally DO NOT persist `data.token` client-side.
+  // Only non-sensitive workspace metadata goes to localStorage, used by
+  // useAuth to hydrate the session hint on page load.
   localStorage.setItem("burnlens_workspace_id", data.workspace.id);
   localStorage.setItem("burnlens_workspace_name", data.workspace.name);
   localStorage.setItem("burnlens_plan", data.workspace.plan);
   localStorage.setItem("burnlens_api_key", data.workspace.api_key);
+  // Clean up legacy JWT if a previous (pre-C-3) session left one behind.
+  localStorage.removeItem("burnlens_token");
 }
 
 function SetupContent() {
@@ -57,6 +62,7 @@ function SetupContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
+        credentials: "include",
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({ detail: "Login failed" }));
@@ -85,6 +91,7 @@ function SetupContent() {
           password: regPassword,
           workspace_name: regName,
         }),
+        credentials: "include",
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({ detail: "Registration failed" }));

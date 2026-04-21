@@ -6,13 +6,69 @@ import urllib.parse
 from uuid import uuid4, UUID
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 import bcrypt as _bcrypt
 import jwt
 from jwt.exceptions import InvalidTokenError
 
 from .config import settings
+
+
+# ---------------------------------------------------------------------------
+# Session cookie (C-3) — browsers get the JWT as an HttpOnly cookie so XSS
+# cannot exfiltrate it from `localStorage`. The `token` field in login/signup
+# JSON responses is still populated so the CLI (which stores it in
+# ~/.burnlens/config.yaml and sends `Authorization: Bearer ...`) keeps working.
+# ---------------------------------------------------------------------------
+
+SESSION_COOKIE_NAME = "burnlens_session"
+
+
+def _session_cookie_domain() -> Optional[str]:
+    """Return the cookie Domain for cross-subdomain sharing in production.
+
+    In prod, `burnlens.app` (frontend) and `api.burnlens.app` (backend) must
+    share the cookie, so Domain must be set to the eTLD+1 parent. In dev
+    (`localhost:3000` → `localhost:8420`) browsers do not accept Domain=localhost,
+    so we leave it unset and the cookie is scoped to the backend host only.
+    """
+    if settings.environment != "production":
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(settings.burnlens_frontend_url)
+    except ValueError:
+        return None
+    host = (parsed.hostname or "").lower()
+    if not host or host in ("localhost", "127.0.0.1"):
+        return None
+    # Derive eTLD+1 the conservative way: strip a leading `www.`. For
+    # `burnlens.app` this yields `.burnlens.app` which matches
+    # `api.burnlens.app` as well as the apex.
+    if host.startswith("www."):
+        host = host[4:]
+    return f".{host}"
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=settings.jwt_expiration_seconds,
+        httponly=True,
+        secure=(settings.environment == "production"),
+        samesite="lax",
+        domain=_session_cookie_domain(),
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        domain=_session_cookie_domain(),
+        path="/",
+    )
 
 
 def _safe_redirect(target: Optional[str]) -> Optional[str]:
@@ -138,14 +194,23 @@ def decode_jwt(token: str) -> Optional[TokenPayload]:
 
 
 async def verify_token(request: Request) -> TokenPayload:
-    """Extract and verify JWT from Authorization header."""
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
+    """Extract and verify JWT.
+
+    Accepts two transports so browser and CLI clients share one pipeline:
+      1. `burnlens_session` HttpOnly cookie (browser — C-3).
+      2. `Authorization: Bearer <jwt>` header (CLI / API clients).
+    The cookie is checked first; the header is the fallback.
+    """
+    token: Optional[str] = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    if not token:
         raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
 
-    token = auth_header[7:]  # Remove "Bearer " prefix
     payload = decode_jwt(token)
-
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
@@ -397,7 +462,7 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, response: Response):
     """
     Login with email+password or API key.
     Returns JWT token and workspace details.
@@ -494,6 +559,7 @@ async def login(request: LoginRequest):
         raise HTTPException(status_code=400, detail="Provide email+password or api_key")
 
     token = encode_jwt(workspace_id, user_id, role, row["plan"])
+    _set_session_cookie(response, token)
 
     # Never echo the full plaintext API key on login — the user received it
     # once at signup. Return a masked form built from the persisted last4.
@@ -518,7 +584,7 @@ async def login(request: LoginRequest):
 
 
 @router.post("/signup", response_model=SignupResponse)
-async def signup(request: SignupRequest):
+async def signup(request: SignupRequest, response: Response):
     """
     Create a new workspace and user with email+password.
     Returns JWT token so user is logged in immediately.
@@ -586,6 +652,7 @@ async def signup(request: SignupRequest):
 
         # Generate JWT so user is logged in immediately
         token = encode_jwt(workspace_id, user_id, "owner", "free")
+        _set_session_cookie(response, token)
 
         workspace = WorkspaceResponse(
             id=workspace_id,
@@ -717,3 +784,10 @@ async def accept_invitation(token: str, redirect_to: Optional[str] = None, reque
         if safe_redirect:
             signup_url += f"&redirect_to={urllib.parse.quote(safe_redirect, safe='')}"
         return RedirectResponse(url=signup_url, status_code=303)
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Clear the session cookie. Idempotent; no auth required."""
+    _clear_session_cookie(response)
+    return {"ok": True}
