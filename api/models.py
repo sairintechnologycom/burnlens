@@ -67,20 +67,6 @@ class IngestResponse(BaseModel):
     rejected: int
 
 
-# --- Billing ---
-
-class CheckoutRequest(BaseModel):
-    plan: Literal["cloud", "teams"]
-
-
-class CheckoutResponse(BaseModel):
-    checkout_url: str
-
-
-class PortalResponse(BaseModel):
-    portal_url: str
-
-
 # --- Team ---
 
 class InviteRequest(BaseModel):
