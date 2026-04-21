@@ -279,14 +279,28 @@ async def test_subscription_activated_populates_all_columns(app_client):
     call = update_calls[0]
     sql = call.args[0]
     params = call.args[1:]
-    assert "cancel_at_period_end = $7" in sql
-    assert "price_cents = $8" in sql
-    assert "currency = $9" in sql
-    assert "WHERE id = $10::uuid" in sql
-    # params: plan, customer_id, subscription_id, status, trial_ends_at,
-    # current_period_ends_at, cancel_at_period_end, price_cents, currency, workspace_id
-    assert len(params) == 10
-    plan, customer_id, sub_id, status, trial_end, period_end, cancel_flag, price_cents, currency, ws_id = params
+    # Phase 2a: SQL now dual-writes paddle_customer_id and paddle_subscription_id
+    # into plaintext + encrypted + hash columns, shifting later placeholders.
+    assert "paddle_customer_id = $2" in sql
+    assert "paddle_customer_id_encrypted = $3" in sql
+    assert "paddle_customer_id_hash = $4" in sql
+    assert "paddle_subscription_id = $5" in sql
+    assert "paddle_subscription_id_encrypted = $6" in sql
+    assert "paddle_subscription_id_hash = $7" in sql
+    assert "cancel_at_period_end = $11" in sql
+    assert "price_cents = $12" in sql
+    assert "currency = $13" in sql
+    assert "WHERE id = $14::uuid" in sql
+    # params: plan, customer_id, cust_enc, cust_hash, subscription_id,
+    # sub_enc, sub_hash, status, trial_ends_at, current_period_ends_at,
+    # cancel_at_period_end, price_cents, currency, workspace_id
+    assert len(params) == 14
+    (
+        plan, customer_id, _cust_enc, _cust_hash,
+        sub_id, _sub_enc, _sub_hash,
+        status, trial_end, period_end, cancel_flag,
+        price_cents, currency, ws_id,
+    ) = params
     assert plan == "cloud"
     assert customer_id == "ctm_1"
     assert sub_id == "sub_act_1"

@@ -116,6 +116,100 @@ async def init_db():
             ON workspaces(api_key_hash) WHERE api_key_hash IS NOT NULL
         """)
 
+        # Phase 2a PII encryption (2026-04): additive encrypt-and-hash columns
+        # for workspaces.owner_email, paddle_customer_id, paddle_subscription_id.
+        # Mirrors the Phase 1 pattern on the users table. Columns are added
+        # unconditionally; backfill + dual-write only run when PII_MASTER_KEY
+        # is set, so it is safe to deploy this before provisioning the key.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='owner_email_encrypted') THEN
+                    ALTER TABLE workspaces ADD COLUMN owner_email_encrypted TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='owner_email_hash') THEN
+                    ALTER TABLE workspaces ADD COLUMN owner_email_hash TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='paddle_customer_id_encrypted') THEN
+                    ALTER TABLE workspaces ADD COLUMN paddle_customer_id_encrypted TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='paddle_customer_id_hash') THEN
+                    ALTER TABLE workspaces ADD COLUMN paddle_customer_id_hash TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='paddle_subscription_id_encrypted') THEN
+                    ALTER TABLE workspaces ADD COLUMN paddle_subscription_id_encrypted TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='paddle_subscription_id_hash') THEN
+                    ALTER TABLE workspaces ADD COLUMN paddle_subscription_id_hash TEXT;
+                END IF;
+            END $$;
+        """)
+        # Non-unique partial indexes matching the existing plaintext indexes;
+        # owner_email has no uniqueness constraint (multi-member workspaces
+        # may share an owner_email upstream), and Paddle IDs are looked up
+        # by equality but not enforced unique at this layer.
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspaces_owner_email_hash
+            ON workspaces(owner_email_hash) WHERE owner_email_hash IS NOT NULL
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspaces_paddle_customer_hash
+            ON workspaces(paddle_customer_id_hash) WHERE paddle_customer_id_hash IS NOT NULL
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workspaces_paddle_subscription_hash
+            ON workspaces(paddle_subscription_id_hash) WHERE paddle_subscription_id_hash IS NOT NULL
+        """)
+
+        # Backfill — same shape as the Phase 1 user backfill. Guarded on
+        # PII_MASTER_KEY being set AND the plaintext columns still existing
+        # (so a cold boot after Phase 2c drops them does not crash).
+        plaintext_owner_email_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='workspaces' AND column_name='owner_email'
+            )
+        """)
+        if os.getenv("PII_MASTER_KEY", "").strip() and plaintext_owner_email_exists:
+            from .pii_crypto import encrypt_pii, lookup_hash, PIICryptoError
+            try:
+                rows_to_fill = await conn.fetch(
+                    """
+                    SELECT id, owner_email, paddle_customer_id, paddle_subscription_id
+                    FROM workspaces
+                    WHERE owner_email_hash IS NULL
+                    """
+                )
+                if rows_to_fill:
+                    logger.info(
+                        "PII Phase 2a: backfilling %d workspace row(s)", len(rows_to_fill)
+                    )
+                for r in rows_to_fill:
+                    await conn.execute(
+                        """
+                        UPDATE workspaces SET
+                            owner_email_encrypted = $1, owner_email_hash = $2,
+                            paddle_customer_id_encrypted = $3, paddle_customer_id_hash = $4,
+                            paddle_subscription_id_encrypted = $5, paddle_subscription_id_hash = $6
+                        WHERE id = $7
+                        """,
+                        encrypt_pii(r["owner_email"]) if r["owner_email"] else None,
+                        lookup_hash(r["owner_email"]) if r["owner_email"] else None,
+                        encrypt_pii(r["paddle_customer_id"]) if r["paddle_customer_id"] else None,
+                        lookup_hash(r["paddle_customer_id"]) if r["paddle_customer_id"] else None,
+                        encrypt_pii(r["paddle_subscription_id"]) if r["paddle_subscription_id"] else None,
+                        lookup_hash(r["paddle_subscription_id"]) if r["paddle_subscription_id"] else None,
+                        r["id"],
+                    )
+            except PIICryptoError as e:
+                logger.error("PII Phase 2a backfill aborted: %s", e)
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS request_records (
                 id BIGSERIAL PRIMARY KEY,
