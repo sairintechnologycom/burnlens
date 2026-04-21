@@ -1,11 +1,9 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
-from dateutil import tz
 
 from .auth import get_workspace_by_api_key
-from .config import settings
 from .database import execute_query, execute_bulk_insert
 from .encryption import get_encryption_manager
 from .models import IngestRequest, IngestResponse
@@ -14,28 +12,6 @@ from .telemetry.forwarder import get_forwarder
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ingest"])
-
-
-async def check_free_tier_limit(workspace_id: str) -> bool:
-    """
-    Check if workspace has exceeded free tier monthly limit.
-    Returns True if under limit, False if exceeded.
-    """
-    # Get first day of current month (UTC)
-    now = datetime.now(tz.UTC)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-    result = await execute_query(
-        """
-        SELECT COUNT(*) as count FROM request_records
-        WHERE workspace_id = $1 AND received_at >= $2
-        """,
-        workspace_id,
-        month_start,
-    )
-
-    count = result[0]["count"] if result else 0
-    return count < settings.free_tier_monthly_limit
 
 
 @router.post("/v1/ingest", response_model=IngestResponse)
@@ -78,19 +54,6 @@ async def ingest(request: IngestRequest):
         workspace_id,
     )
     otel_config = workspace_details[0] if workspace_details else None
-
-    # Check free tier limit
-    if plan == "free":
-        if not await check_free_tier_limit(workspace_id):
-            logger.warning(f"Free tier limit exceeded for workspace {workspace_id}")
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "error": "free_tier_limit",
-                    "message": f"Free tier limit ({settings.free_tier_monthly_limit} records/month) exceeded",
-                    "upgrade_url": "https://burnlens.app/upgrade",
-                },
-            )
 
     # Prepare bulk insert data
     insert_data = []
