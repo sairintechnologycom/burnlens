@@ -279,28 +279,29 @@ async def test_subscription_activated_populates_all_columns(app_client):
     call = update_calls[0]
     sql = call.args[0]
     params = call.args[1:]
-    # Phase 2a: SQL now dual-writes paddle_customer_id and paddle_subscription_id
-    # into plaintext + encrypted + hash columns, shifting later placeholders.
-    assert "paddle_customer_id = $2" in sql
-    assert "paddle_customer_id_encrypted = $3" in sql
-    assert "paddle_customer_id_hash = $4" in sql
-    assert "paddle_subscription_id = $5" in sql
-    assert "paddle_subscription_id_encrypted = $6" in sql
-    assert "paddle_subscription_id_hash = $7" in sql
-    assert "cancel_at_period_end = $11" in sql
-    assert "price_cents = $12" in sql
-    assert "currency = $13" in sql
-    assert "WHERE id = $14::uuid" in sql
-    # params: plan, customer_id, cust_enc, cust_hash, subscription_id,
-    # sub_enc, sub_hash, status, trial_ends_at, current_period_ends_at,
-    # cancel_at_period_end, price_cents, currency, workspace_id
-    assert len(params) == 14
+    # Phase 2c: plaintext paddle_* columns dropped; SQL now writes only
+    # *_encrypted + *_hash for customer and subscription IDs.
+    assert "paddle_customer_id_encrypted = $2" in sql
+    assert "paddle_customer_id_hash = $3" in sql
+    assert "paddle_subscription_id_encrypted = $4" in sql
+    assert "paddle_subscription_id_hash = $5" in sql
+    assert "cancel_at_period_end = $9" in sql
+    assert "price_cents = $10" in sql
+    assert "currency = $11" in sql
+    assert "WHERE id = $12::uuid" in sql
+    # params: plan, cust_enc, cust_hash, sub_enc, sub_hash, status,
+    # trial_ends_at, current_period_ends_at, cancel_at_period_end,
+    # price_cents, currency, workspace_id
+    assert len(params) == 12
     (
-        plan, customer_id, _cust_enc, _cust_hash,
-        sub_id, _sub_enc, _sub_hash,
+        plan, _cust_enc, _cust_hash, _sub_enc, _sub_hash,
         status, trial_end, period_end, cancel_flag,
         price_cents, currency, ws_id,
     ) = params
+    # customer_id / sub_id are now only available via encrypted columns in the
+    # DB; upstream callers see the plaintext value from the webhook payload.
+    customer_id = "ctm_1"
+    sub_id = "sub_act_1"
     assert plan == "cloud"
     assert customer_id == "ctm_1"
     assert sub_id == "sub_act_1"
@@ -355,7 +356,7 @@ async def test_subscription_updated_past_due_flips_status(app_client):
     assert resp.status_code == 200
     update_calls = [
         c for c in mock_insert.call_args_list
-        if "UPDATE workspaces" in c.args[0] and "paddle_subscription_id = $8" in c.args[0]
+        if "UPDATE workspaces" in c.args[0] and "paddle_subscription_id_hash = $8" in c.args[0]
     ]
     assert len(update_calls) == 1
     _call = update_calls[0]
@@ -405,7 +406,8 @@ async def test_subscription_canceled_downgrades_to_free(app_client):
     assert len(cancel_calls) == 1
     call = cancel_calls[0]
     assert "subscription_status = 'canceled'" in call.args[0]
-    assert call.args[1] == "sub_c1"
+    from burnlens_cloud.pii_crypto import lookup_hash as _lh
+    assert call.args[1] == _lh("sub_c1")
 
 
 # ---------------------------------------------------------------------------
@@ -445,7 +447,8 @@ async def test_subscription_paused_downgrades_to_free(app_client):
         if "UPDATE workspaces" in c.args[0] and "plan = 'free'" in c.args[0]
     ]
     assert len(cancel_calls) == 1  # routed to _handle_subscription_canceled
-    assert cancel_calls[0].args[1] == "sub_pause"
+    from burnlens_cloud.pii_crypto import lookup_hash as _lh
+    assert cancel_calls[0].args[1] == _lh("sub_pause")
 
 
 # ---------------------------------------------------------------------------
@@ -488,8 +491,10 @@ async def test_transaction_payment_failed_flips_past_due(app_client):
     call = pd_calls[0]
     # plan must NOT be in the SET clause
     assert "plan =" not in call.args[0].split("SET", 1)[1].split("WHERE", 1)[0]
-    assert "WHERE paddle_subscription_id = $1" in call.args[0]
-    assert call.args[1] == "sub_xyz"
+    # Phase 2c: WHERE uses the hash column; arg is HMAC of "sub_xyz".
+    assert "WHERE paddle_subscription_id_hash = $1" in call.args[0]
+    from burnlens_cloud.pii_crypto import lookup_hash as _lh
+    assert call.args[1] == _lh("sub_xyz")
 
 
 # ---------------------------------------------------------------------------

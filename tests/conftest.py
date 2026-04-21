@@ -10,6 +10,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ["DATABASE_URL"] = "postgresql://localhost:5432/burnlens_test"
 os.environ["JWT_SECRET"] = "test-secret-key-for-unit-tests"
 os.environ["ENVIRONMENT"] = "test"
+# Phase 2c: PII encryption is mandatory once plaintext PII columns are
+# dropped. A deterministic test key lets unit tests encrypt / hash / decrypt
+# without any external setup. 32 bytes base64-encoded.
+os.environ.setdefault(
+    "PII_MASTER_KEY",
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+)
 
 import pytest
 import pytest_asyncio

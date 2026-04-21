@@ -45,17 +45,25 @@ async def workspace_factory(db):
         ws_id = uuid.uuid4()
         api_key = f"bl_test_{uuid.uuid4().hex}"
         overrides_json = json.dumps(limit_overrides) if limit_overrides is not None else None
+        # Phase 2c: plaintext owner_email + api_key columns are gone. Fixture
+        # writes the encrypted / hash / last4 forms directly so the schema
+        # invariants hold without pulling in PII_MASTER_KEY for tests.
         async with db.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO workspaces (id, name, owner_email, plan, api_key, limit_overrides)
-                VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                INSERT INTO workspaces (
+                    id, name, owner_email_encrypted, owner_email_hash,
+                    plan, api_key_hash, api_key_last4, limit_overrides
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
                 """,
                 ws_id,
                 f"test-{ws_id}",
-                f"{ws_id}@example.test",
+                f"v1:test-encrypted-{ws_id}",
+                f"test-hash-{ws_id}",
                 plan,
-                api_key,
+                f"test-apikey-hash-{ws_id}",
+                api_key[-4:],
                 overrides_json,
             )
         created.append(ws_id)

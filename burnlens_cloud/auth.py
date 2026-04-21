@@ -56,23 +56,19 @@ from .database import execute_query, execute_insert
 # ---------------------------------------------------------------------------
 
 
-def _ws_reads_encrypted() -> bool:
-    import os as _os
-    if _os.getenv("ENCRYPTED_WORKSPACE_READS", "").strip().lower() != "true":
-        return False
-    return bool(_os.getenv("PII_MASTER_KEY", "").strip())
+def _ws_pii_value(row, _plaintext_col: str, encrypted_col: str):
+    """Read a workspace PII field by decrypting the *_encrypted column.
 
-
-def _ws_pii_value(row, plaintext_col: str, encrypted_col: str):
-    """Read a workspace PII field: decrypt from *_encrypted under the flag,
-    else fall back to the dual-written plaintext column."""
-    if _ws_reads_encrypted():
-        val = row[encrypted_col]
-        if not val:
-            return None
-        from .pii_crypto import decrypt_pii
-        return decrypt_pii(val)
-    return row[plaintext_col]
+    Phase 2c dropped the plaintext columns; the `_plaintext_col` arg is
+    retained so call-sites across auth.py / billing.py stay uniform and
+    easy to grep. Returns None when the encrypted column is NULL (e.g.
+    a free-plan workspace with no paddle_*).
+    """
+    val = row[encrypted_col]
+    if not val:
+        return None
+    from .pii_crypto import decrypt_pii
+    return decrypt_pii(val)
 from .models import (
     LoginRequest,
     LoginResponse,
@@ -105,13 +101,6 @@ def hash_api_key(api_key: str) -> str:
     breach reveals only hashes, not usable keys.
     """
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
-
-
-def mask_api_key_for_display(api_key: str) -> str:
-    """Return a display-safe masked form: 'bl_live_****<last4>'."""
-    if not api_key or len(api_key) <= 4:
-        return "****"
-    return f"bl_live_****{api_key[-4:]}"
 
 
 def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str) -> str:
@@ -442,14 +431,14 @@ async def login(request: LoginRequest):
             datetime.utcnow(), user_id,
         )
 
-        # Find user's workspace membership. Select both plaintext and
-        # encrypted owner_email; `_ws_reads_encrypted` below decides which
-        # to surface (Phase 2b).
+        # Find user's workspace membership. Phase 2c: plaintext owner_email
+        # and plaintext api_key columns were dropped; read the encrypted
+        # owner_email + the api_key_last4 column needed for masked display.
         member_result = await execute_query(
             """
             SELECT wm.workspace_id, wm.role, w.id, w.name,
-                   w.owner_email, w.owner_email_encrypted,
-                   w.plan, w.api_key, w.created_at, w.active
+                   w.owner_email_encrypted,
+                   w.plan, w.api_key_last4, w.created_at, w.active
             FROM workspace_members wm
             JOIN workspaces w ON w.id = wm.workspace_id
             WHERE wm.user_id = $1 AND wm.active = true AND w.active = true
@@ -466,13 +455,14 @@ async def login(request: LoginRequest):
         role = row["role"]
 
     elif request.api_key:
-        # API key login (legacy / CLI flow) — look up by hash, never by plaintext.
-        # Phase 2b: also fetch owner_email_encrypted so we can surface the
-        # encrypted form under the flag without a second round-trip.
+        # API key login (legacy / CLI flow) — look up by hash. Phase 2c:
+        # plaintext api_key and owner_email columns are gone; read
+        # api_key_last4 for the masked display and decrypt owner_email
+        # for the auto-migration seed.
         result = await execute_query(
             """
-            SELECT id, name, owner_email, owner_email_encrypted,
-                   plan, api_key, created_at, active
+            SELECT id, name, owner_email_encrypted,
+                   plan, api_key_last4, created_at, active
             FROM workspaces WHERE api_key_hash = $1 AND active = true
             """,
             hash_api_key(request.api_key),
@@ -484,9 +474,6 @@ async def login(request: LoginRequest):
         row = result[0]
         workspace_id = str(row["id"])
 
-        # Auto-migrate workspace if needed. Resolve owner_email through the
-        # Phase 2b helper so the migration seeds users.email from the
-        # decrypted value when the flag is active.
         owner_email_resolved = _ws_pii_value(
             row, "owner_email", "owner_email_encrypted"
         )
@@ -509,15 +496,16 @@ async def login(request: LoginRequest):
     token = encode_jwt(workspace_id, user_id, role, row["plan"])
 
     # Never echo the full plaintext API key on login — the user received it
-    # once at signup. Return a masked form sufficient for UI display.
-    # Phase 2b: resolve owner_email through the encryption helper; both
-    # login branches selected owner_email + owner_email_encrypted above.
+    # once at signup. Return a masked form built from the persisted last4.
+    # Phase 2c: owner_email decrypted from owner_email_encrypted; api_key
+    # masked form built from api_key_last4 (plaintext column dropped).
+    _last4 = row["api_key_last4"] or ""
     workspace = WorkspaceResponse(
         id=workspace_id,
         name=row["name"],
         owner_email=_ws_pii_value(row, "owner_email", "owner_email_encrypted"),
         plan=row["plan"],
-        api_key=mask_api_key_for_display(row["api_key"]),
+        api_key=f"bl_live_****{_last4}" if _last4 else "****",
         created_at=row["created_at"],
         active=row["active"],
     )
@@ -555,40 +543,33 @@ async def signup(request: SignupRequest):
     api_key = generate_api_key()
     api_key_hash_value = hash_api_key(api_key)
 
-    # Phase 2a: dual-write owner_email plaintext + encrypted + hash. The
-    # plaintext column is still the source of truth until Phase 2b cuts reads
-    # over. encrypted/hash are only written if PII_MASTER_KEY is configured;
-    # if not, the row lands with NULL encrypted/hash and the Phase 2a backfill
-    # will pick it up on the next boot after the key is provisioned.
-    try:
-        from .pii_crypto import encrypt_pii as _pii_enc, lookup_hash as _pii_hash, PIICryptoError
-        owner_email_encrypted = _pii_enc(email_norm)
-        owner_email_hash = _pii_hash(email_norm)
-    except PIICryptoError:
-        owner_email_encrypted = None
-        owner_email_hash = None
+    # Phase 2c: plaintext owner_email + api_key columns are gone. Require
+    # encrypt+hash to succeed — a PIICryptoError here means PII_MASTER_KEY
+    # is misconfigured and we cannot create accounts at all, which is the
+    # correct fail-closed behavior.
+    from .pii_crypto import encrypt_pii as _pii_enc, lookup_hash as _pii_hash
+    owner_email_encrypted = _pii_enc(email_norm)
+    owner_email_hash = _pii_hash(email_norm)
 
     try:
-        # Create workspace. Dual-write api_key (plaintext, for the one-time
-        # reveal on signup) and api_key_hash (lookup column for all future
-        # reads). Reads MUST go through api_key_hash; see M-1 in the security
-        # review for context.
+        # Create workspace. api_key plaintext is returned in the signup
+        # response once and discarded; only api_key_hash (for lookups) and
+        # api_key_last4 (for masked display on later logins) are persisted.
         await execute_insert(
             """
             INSERT INTO workspaces (
-                id, name, owner_email, owner_email_encrypted, owner_email_hash,
-                plan, api_key, api_key_hash, created_at, active
+                id, name, owner_email_encrypted, owner_email_hash,
+                plan, api_key_hash, api_key_last4, created_at, active
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
             workspace_id,
             request.workspace_name,
-            email_norm,
             owner_email_encrypted,
             owner_email_hash,
             "free",
-            api_key,
             api_key_hash_value,
+            api_key[-4:],
             datetime.utcnow(),
             True,
         )

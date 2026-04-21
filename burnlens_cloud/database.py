@@ -210,6 +210,93 @@ async def init_db():
             except PIICryptoError as e:
                 logger.error("PII Phase 2a backfill aborted: %s", e)
 
+        # Phase 2c (2026-04): drop plaintext PII columns from workspaces now
+        # that reads cut over under ENCRYPTED_WORKSPACE_READS. Also retires
+        # the dead stripe_customer_id column (migrated to Paddle) and the
+        # plaintext api_key column (hash is authoritative for lookups; last4
+        # is persisted separately for the masked-display login response).
+        plaintext_owner_email_exists_2c = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='workspaces' AND column_name='owner_email'
+            )
+        """)
+        plaintext_api_key_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='workspaces' AND column_name='api_key'
+            )
+        """)
+
+        # Add api_key_last4 up-front so the login response can render the
+        # masked form without the plaintext column. Additive; safe regardless
+        # of where in the rollout we are.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name='workspaces' AND column_name='api_key_last4') THEN
+                    ALTER TABLE workspaces ADD COLUMN api_key_last4 TEXT;
+                END IF;
+            END $$;
+        """)
+
+        # Backfill api_key_last4 from the still-present plaintext column.
+        # Only runs while plaintext is available; after the drop below this
+        # becomes a no-op because plaintext_api_key_exists is false.
+        if plaintext_api_key_exists:
+            backfilled = await conn.execute("""
+                UPDATE workspaces
+                SET api_key_last4 = RIGHT(api_key, 4)
+                WHERE api_key_last4 IS NULL AND api_key IS NOT NULL
+            """)
+            if backfilled and not backfilled.endswith(" 0"):
+                logger.info("PII Phase 2c: backfilled api_key_last4 (%s)", backfilled)
+
+        # Safety gates — refuse to drop if ANY row would lose data we have
+        # not yet migrated to the successor column. Each gate is evaluated
+        # independently so we log precisely which condition blocked.
+        if plaintext_owner_email_exists_2c or plaintext_api_key_exists:
+            bad_owner_email = await conn.fetchval("""
+                SELECT COUNT(*) FROM workspaces
+                WHERE owner_email IS NOT NULL AND owner_email_hash IS NULL
+            """) if plaintext_owner_email_exists_2c else 0
+            bad_paddle_customer = await conn.fetchval("""
+                SELECT COUNT(*) FROM workspaces
+                WHERE paddle_customer_id IS NOT NULL AND paddle_customer_id_hash IS NULL
+            """) if plaintext_owner_email_exists_2c else 0
+            bad_paddle_sub = await conn.fetchval("""
+                SELECT COUNT(*) FROM workspaces
+                WHERE paddle_subscription_id IS NOT NULL AND paddle_subscription_id_hash IS NULL
+            """) if plaintext_owner_email_exists_2c else 0
+            bad_api_key_last4 = await conn.fetchval("""
+                SELECT COUNT(*) FROM workspaces
+                WHERE api_key IS NOT NULL AND api_key_last4 IS NULL
+            """) if plaintext_api_key_exists else 0
+            bad_total = (
+                (bad_owner_email or 0)
+                + (bad_paddle_customer or 0)
+                + (bad_paddle_sub or 0)
+                + (bad_api_key_last4 or 0)
+            )
+            if bad_total:
+                logger.error(
+                    "PII Phase 2c ABORTED: owner_email=%s paddle_customer=%s "
+                    "paddle_sub=%s api_key_last4=%s rows missing successor data; "
+                    "refusing to drop plaintext columns. Fix the data and restart.",
+                    bad_owner_email, bad_paddle_customer, bad_paddle_sub, bad_api_key_last4,
+                )
+            else:
+                logger.info(
+                    "PII Phase 2c: dropping plaintext owner_email / paddle_customer_id / "
+                    "paddle_subscription_id / stripe_customer_id / api_key columns"
+                )
+                await conn.execute("ALTER TABLE workspaces DROP COLUMN IF EXISTS owner_email")
+                await conn.execute("ALTER TABLE workspaces DROP COLUMN IF EXISTS paddle_customer_id")
+                await conn.execute("ALTER TABLE workspaces DROP COLUMN IF EXISTS paddle_subscription_id")
+                await conn.execute("ALTER TABLE workspaces DROP COLUMN IF EXISTS stripe_customer_id")
+                await conn.execute("ALTER TABLE workspaces DROP COLUMN IF EXISTS api_key")
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS request_records (
                 id BIGSERIAL PRIMARY KEY,
