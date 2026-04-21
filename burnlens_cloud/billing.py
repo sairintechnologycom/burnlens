@@ -117,6 +117,14 @@ def _extract_period_end(data: dict) -> Optional[datetime]:
         return None
 
 
+def _extract_period_start(data: dict) -> Optional[datetime]:
+    """Phase 9 QUOTA-01: cycle_start for workspace_usage_cycles anchoring (D-02)."""
+    try:
+        return _parse_iso((data.get("current_billing_period") or {}).get("starts_at"))
+    except Exception:
+        return None
+
+
 def _extract_trial_end(data: dict) -> Optional[datetime]:
     # Populated whenever Paddle gives us trial_dates, regardless of status — the
     # Settings card only renders it for status=='trialing' (D-14 is UI concern).
@@ -357,6 +365,7 @@ async def _handle_subscription_activated(data: dict) -> None:
     price_id = _extract_price_id(data) or ""
     plan = await _plan_from_price_id(price_id)
     trial_ends_at = _extract_trial_end(data)
+    current_period_started_at = _extract_period_start(data)
     current_period_ends_at = _extract_period_end(data)
     cancel_at_period_end = _extract_cancel_at_period_end(data)
     price_cents, currency = _extract_price(data)
@@ -406,6 +415,29 @@ async def _handle_subscription_activated(data: dict) -> None:
         workspace_id, plan, status, customer_id, subscription_id,
     )
 
+    # Phase 9 QUOTA-01: seed the workspace_usage_cycles row for the new paid period
+    # so the next /v1/ingest finds a ready row. ON CONFLICT handles the case where
+    # a previous webhook delivery already seeded this period (belt-and-suspenders
+    # with the outer paddle_events dedup at lines ~314-322).
+    if current_period_started_at and current_period_ends_at:
+        try:
+            await execute_insert(
+                """
+                INSERT INTO workspace_usage_cycles
+                    (workspace_id, cycle_start, cycle_end, request_count)
+                VALUES ($1, $2, $3, 0)
+                ON CONFLICT (workspace_id, cycle_start) DO NOTHING
+                """,
+                str(workspace_id),
+                current_period_started_at,
+                current_period_ends_at,
+            )
+        except Exception as exc:
+            logger.warning(
+                "workspace_usage_cycles.seed_failed workspace=%s cycle_start=%s err=%s",
+                workspace_id, current_period_started_at, exc,
+            )
+
 
 async def _handle_subscription_updated(data: dict) -> None:
     """Plan change, renewal, or status transition (D-03)."""
@@ -414,6 +446,7 @@ async def _handle_subscription_updated(data: dict) -> None:
     price_id = _extract_price_id(data) or ""
     plan = await _plan_from_price_id(price_id)
     trial_ends_at = _extract_trial_end(data)
+    current_period_started_at = _extract_period_start(data)
     current_period_ends_at = _extract_period_end(data)
     cancel_at_period_end = _extract_cancel_at_period_end(data)
     price_cents, currency = _extract_price(data)
@@ -435,6 +468,36 @@ async def _handle_subscription_updated(data: dict) -> None:
         _sub_id_hash(subscription_id),
     )
     logger.info("Subscription %s updated: plan=%s status=%s", subscription_id, plan, status)
+
+    # Phase 9 QUOTA-01: seed the workspace_usage_cycles row for the new paid period
+    # so the next /v1/ingest finds a ready row. ON CONFLICT handles the case where
+    # a previous webhook delivery already seeded this period (belt-and-suspenders
+    # with the outer paddle_events dedup at lines ~314-322). No-op for plan-change
+    # inside the same cycle — ON CONFLICT DO NOTHING preserves the running counter.
+    if current_period_started_at and current_period_ends_at:
+        try:
+            ws_row = await execute_query(
+                "SELECT id FROM workspaces WHERE paddle_subscription_id_hash = $1",
+                _sub_id_hash(subscription_id),
+            )
+            workspace_id = ws_row[0]["id"] if ws_row else None
+            if workspace_id:
+                await execute_insert(
+                    """
+                    INSERT INTO workspace_usage_cycles
+                        (workspace_id, cycle_start, cycle_end, request_count)
+                    VALUES ($1, $2, $3, 0)
+                    ON CONFLICT (workspace_id, cycle_start) DO NOTHING
+                    """,
+                    str(workspace_id),
+                    current_period_started_at,
+                    current_period_ends_at,
+                )
+        except Exception as exc:
+            logger.warning(
+                "workspace_usage_cycles.seed_failed sub=%s cycle_start=%s err=%s",
+                subscription_id, current_period_started_at, exc,
+            )
 
 
 async def _handle_subscription_canceled(data: dict) -> None:
