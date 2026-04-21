@@ -44,7 +44,7 @@ const structuredData = [
     name: "BurnLens",
     url: "https://burnlens.app",
     logo: "https://burnlens.app/opengraph-image",
-    sameAs: ["https://github.com/sairintechnology/burnlens"],
+    sameAs: ["https://github.com/sairintechnologycom/burnlens"],
     parentOrganization: {
       "@type": "Organization",
       name: "Sairin Technology",

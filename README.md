@@ -6,7 +6,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/burnlens?label=downloads&color=00e5c8)](https://pypi.org/project/burnlens)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
-[![GitHub stars](https://img.shields.io/github/stars/burnlens/burnlens?style=social)](https://github.com/burnlens/burnlens)
+[![GitHub stars](https://img.shields.io/github/stars/sairintechnologycom/burnlens?style=social)](https://github.com/sairintechnologycom/burnlens)
 
 > Zero code changes. Every dollar tracked. Works with the official OpenAI, Anthropic, and Google AI SDKs out of the box.
 
