@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -21,7 +21,8 @@ def _hash_invitation_token(token: str) -> str:
 
 from .config import settings
 from .database import execute_query, execute_insert
-from .auth import verify_token, TokenPayload, upsert_user, ensure_workspace_member
+from .plans import resolve_limits
+from .auth import verify_token, TokenPayload, upsert_user, ensure_workspace_member, require_feature
 from .models import (
     WorkspaceMemberResponse,
     InvitationRequest,
@@ -78,14 +79,25 @@ async def log_activity(
         # Don't raise - activity logging failures shouldn't break the request
 
 
-async def get_seat_limit(plan: str) -> int:
-    """Get seat limit for plan."""
-    return settings.seat_limits.get(plan, 1)
+async def get_seat_limit(workspace_id) -> int:
+    """Resolve the workspace's effective seat limit via plan_limits + overrides.
+
+    Returns a large sentinel (10**9) when the resolved seat_count is None
+    (meaning "unlimited" per Phase 6 D-02) so check_seat_limit's "current >= limit"
+    comparison behaves correctly for unlimited plans.
+    """
+    limits = await resolve_limits(workspace_id)
+    return limits.seat_count if limits is not None and limits.seat_count is not None else 10**9
 
 
 async def check_seat_limit(workspace_id: UUID, plan: str) -> bool:
-    """Check if workspace is at seat limit."""
-    limit = await get_seat_limit(plan)
+    """Check if workspace is at seat limit.
+
+    The `plan` parameter is retained for backwards compatibility with any
+    external caller; the authoritative limit now comes from `resolve_limits`
+    (plan_limits + per-workspace overrides) via `get_seat_limit(workspace_id)`.
+    """
+    limit = await get_seat_limit(workspace_id)
     result = await execute_query(
         """
         SELECT COUNT(*) as count FROM workspace_members
@@ -95,6 +107,37 @@ async def check_seat_limit(workspace_id: UUID, plan: str) -> bool:
     )
     current_count = result[0]["count"] if result else 0
     return current_count >= limit
+
+
+_PLAN_PRICE_ORDER = ("free", "cloud", "teams")
+
+
+async def _current_seat_count(workspace_id) -> int:
+    """Active-member count for the workspace (drives D-14 `current` field)."""
+    rows = await execute_query(
+        """
+        SELECT COUNT(*) AS c
+        FROM workspace_members
+        WHERE workspace_id = $1 AND active = true
+        """,
+        str(workspace_id),
+    )
+    return int(rows[0]["c"]) if rows else 0
+
+
+async def _lowest_plan_with_seat_count(current: int) -> Optional[str]:
+    """Cheapest plan whose seat_count > current (for D-14 `required_plan`)."""
+    rows = await execute_query(
+        "SELECT plan FROM plan_limits WHERE seat_count IS NULL OR seat_count > $1",
+        current,
+    )
+    if not rows:
+        return None
+    plans_ok = {row["plan"] for row in rows}
+    for candidate in _PLAN_PRICE_ORDER:
+        if candidate in plans_ok:
+            return candidate
+    return None
 
 
 @router.get("/members", response_model=List[WorkspaceMemberResponse])
@@ -288,16 +331,9 @@ async def invite_member(
     plan = ws_result[0]["plan"]
     ws_name = ws_result[0]["name"]
 
-    # Check if plan supports teams
-    if plan not in ["teams", "enterprise"]:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": "plan_does_not_support_teams",
-                "message": f"Plan '{plan}' does not support Teams. Upgrade to Teams plan.",
-                "upgrade_url": f"{settings.burnlens_frontend_url}/upgrade",
-            },
-        )
+    # Plan-gate is now enforced at the FastAPI dependency layer via
+    # `Depends(require_feature("teams_view"))` on this route. Free/Cloud
+    # workspaces hit 402 BEFORE this handler body runs (D-18).
 
     # Check if email already a member
     existing = await execute_query(
@@ -317,13 +353,17 @@ async def invite_member(
 
     # Check seat limit
     if await check_seat_limit(token.workspace_id, plan):
-        limit = await get_seat_limit(plan)
+        limit = await get_seat_limit(token.workspace_id)
+        current = await _current_seat_count(token.workspace_id)
+        required = await _lowest_plan_with_seat_count(current)
         raise HTTPException(
-            status_code=422,
+            status_code=402,
             detail={
                 "error": "seat_limit_reached",
                 "limit": limit,
-                "upgrade_url": f"{settings.burnlens_frontend_url}/upgrade",
+                "current": current,
+                "required_plan": required,
+                "upgrade_url": f"{settings.burnlens_frontend_url}/settings#billing",
             },
         )
 
