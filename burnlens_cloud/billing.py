@@ -24,31 +24,25 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 
 # ---------------------------------------------------------------------------
-# Phase 2b: feature-flagged PII reads on workspaces. When ENCRYPTED_WORKSPACE_READS
-# is true AND PII_MASTER_KEY is set, lookups switch to *_hash columns and
-# display values are decrypted from *_encrypted columns. Default off —
-# plaintext columns are still dual-written by Phase 2a, so flipping the flag
-# back to false is an instant rollback.
+# Phase 2c: workspace PII plaintext columns are gone. Reads always decrypt
+# from *_encrypted, and lookups always go through *_hash. The `_plaintext_col`
+# argument on _ws_pii_value is kept for call-site symmetry / grep-ability.
 # ---------------------------------------------------------------------------
 
-def _ws_reads_encrypted() -> bool:
-    """True when workspace PII reads should use the encrypted / hash columns."""
-    import os as _os
-    if _os.getenv("ENCRYPTED_WORKSPACE_READS", "").strip().lower() != "true":
-        return False
-    return bool(_os.getenv("PII_MASTER_KEY", "").strip())
+def _ws_pii_value(row: Any, _plaintext_col: str, encrypted_col: str) -> Optional[str]:
+    val = row[encrypted_col]
+    if not val:
+        return None
+    from .pii_crypto import decrypt_pii
+    return decrypt_pii(val)
 
 
-def _ws_pii_value(row: Any, plaintext_col: str, encrypted_col: str) -> Optional[str]:
-    """Read a workspace PII field: decrypt from *_encrypted under the flag,
-    else fall back to the dual-written plaintext column."""
-    if _ws_reads_encrypted():
-        val = row[encrypted_col]
-        if not val:
-            return None
-        from .pii_crypto import decrypt_pii
-        return decrypt_pii(val)
-    return row[plaintext_col]
+def _sub_id_hash(subscription_id: Optional[str]) -> Optional[str]:
+    """HMAC lookup hash for paddle_subscription_id (Phase 2c: plaintext col gone)."""
+    if not subscription_id:
+        return None
+    from .pii_crypto import lookup_hash
+    return lookup_hash(subscription_id)
 
 
 # ---------------------------------------------------------------------------
@@ -197,8 +191,7 @@ async def create_checkout(
 
     rows = await execute_query(
         """
-        SELECT owner_email, owner_email_encrypted,
-               paddle_customer_id, paddle_customer_id_encrypted
+        SELECT owner_email_encrypted, paddle_customer_id_encrypted
         FROM workspaces WHERE id = $1
         """,
         str(token.workspace_id),
@@ -375,41 +368,34 @@ async def _handle_subscription_activated(data: dict) -> None:
         )
         return
 
-    # Phase 2a: dual-write Paddle IDs to encrypted + hash columns alongside
-    # the plaintext source of truth. Hash column drives lookups in
-    # subscription.updated / subscription.canceled / payment_failed handlers
-    # post-2b cutover. If PII_MASTER_KEY is missing we fall back to NULLs
-    # and rely on the backfill at next boot.
-    try:
-        from .pii_crypto import encrypt_pii as _pii_enc, lookup_hash as _pii_hash, PIICryptoError
-        cust_enc = _pii_enc(customer_id) if customer_id else None
-        cust_hash = _pii_hash(customer_id) if customer_id else None
-        sub_enc = _pii_enc(subscription_id) if subscription_id else None
-        sub_hash = _pii_hash(subscription_id) if subscription_id else None
-    except PIICryptoError:
-        cust_enc = cust_hash = sub_enc = sub_hash = None
+    # Phase 2c: plaintext paddle_* columns have been dropped. Write only
+    # *_encrypted + *_hash. PII_MASTER_KEY is required (fail-fast at boot
+    # in production), so we can encrypt unconditionally.
+    from .pii_crypto import encrypt_pii as _pii_enc, lookup_hash as _pii_hash
+    cust_enc = _pii_enc(customer_id) if customer_id else None
+    cust_hash = _pii_hash(customer_id) if customer_id else None
+    sub_enc = _pii_enc(subscription_id) if subscription_id else None
+    sub_hash = _pii_hash(subscription_id) if subscription_id else None
 
     await execute_insert(
         """
         UPDATE workspaces
         SET plan = $1,
-            paddle_customer_id = $2,
-            paddle_customer_id_encrypted = $3,
-            paddle_customer_id_hash = $4,
-            paddle_subscription_id = $5,
-            paddle_subscription_id_encrypted = $6,
-            paddle_subscription_id_hash = $7,
-            subscription_status = $8,
-            trial_ends_at = $9,
-            current_period_ends_at = $10,
-            cancel_at_period_end = $11,
-            price_cents = $12,
-            currency = $13
-        WHERE id = $14::uuid
+            paddle_customer_id_encrypted = $2,
+            paddle_customer_id_hash = $3,
+            paddle_subscription_id_encrypted = $4,
+            paddle_subscription_id_hash = $5,
+            subscription_status = $6,
+            trial_ends_at = $7,
+            current_period_ends_at = $8,
+            cancel_at_period_end = $9,
+            price_cents = $10,
+            currency = $11
+        WHERE id = $12::uuid
         """,
         plan,
-        customer_id, cust_enc, cust_hash,
-        subscription_id, sub_enc, sub_hash,
+        cust_enc, cust_hash,
+        sub_enc, sub_hash,
         status,
         trial_ends_at, current_period_ends_at, cancel_at_period_end,
         price_cents, currency,
@@ -432,17 +418,8 @@ async def _handle_subscription_updated(data: dict) -> None:
     cancel_at_period_end = _extract_cancel_at_period_end(data)
     price_cents, currency = _extract_price(data)
 
-    # Phase 2b: hash the subscription_id under flag so the WHERE uses the
-    # indexed *_hash column instead of the plaintext (to-be-dropped) column.
-    if _ws_reads_encrypted():
-        from .pii_crypto import lookup_hash as _lh
-        where_sql = "WHERE paddle_subscription_id_hash = $8"
-        where_val = _lh(subscription_id) if subscription_id else None
-    else:
-        where_sql = "WHERE paddle_subscription_id = $8"
-        where_val = subscription_id
     await execute_insert(
-        f"""
+        """
         UPDATE workspaces
         SET plan = $1,
             subscription_status = $2,
@@ -451,11 +428,11 @@ async def _handle_subscription_updated(data: dict) -> None:
             cancel_at_period_end = $5,
             price_cents = $6,
             currency = $7
-        {where_sql}
+        WHERE paddle_subscription_id_hash = $8
         """,
         plan, status, trial_ends_at, current_period_ends_at,
         cancel_at_period_end, price_cents, currency,
-        where_val,
+        _sub_id_hash(subscription_id),
     )
     logger.info("Subscription %s updated: plan=%s status=%s", subscription_id, plan, status)
 
@@ -463,21 +440,14 @@ async def _handle_subscription_updated(data: dict) -> None:
 async def _handle_subscription_canceled(data: dict) -> None:
     """Subscription ended. Downgrade to free."""
     subscription_id = data.get("id")
-    if _ws_reads_encrypted():
-        from .pii_crypto import lookup_hash as _lh
-        where_sql = "WHERE paddle_subscription_id_hash = $1"
-        where_val = _lh(subscription_id) if subscription_id else None
-    else:
-        where_sql = "WHERE paddle_subscription_id = $1"
-        where_val = subscription_id
     await execute_insert(
-        f"""
+        """
         UPDATE workspaces
         SET plan = 'free',
             subscription_status = 'canceled'
-        {where_sql}
+        WHERE paddle_subscription_id_hash = $1
         """,
-        where_val,
+        _sub_id_hash(subscription_id),
     )
     logger.info("Subscription %s canceled; workspace downgraded to free", subscription_id)
 
@@ -498,20 +468,13 @@ async def _handle_payment_failed(data: dict) -> None:
             data.get("id"),
         )
         return
-    if _ws_reads_encrypted():
-        from .pii_crypto import lookup_hash as _lh
-        where_sql = "WHERE paddle_subscription_id_hash = $1"
-        where_val = _lh(subscription_id)
-    else:
-        where_sql = "WHERE paddle_subscription_id = $1"
-        where_val = subscription_id
     await execute_insert(
-        f"""
+        """
         UPDATE workspaces
         SET subscription_status = 'past_due'
-        {where_sql}
+        WHERE paddle_subscription_id_hash = $1
         """,
-        where_val,
+        _sub_id_hash(subscription_id),
     )
     logger.warning("Subscription %s flipped to past_due", subscription_id)
 
@@ -528,7 +491,7 @@ async def billing_portal(token: TokenPayload = Depends(verify_token)):
 
     rows = await execute_query(
         """
-        SELECT paddle_customer_id, paddle_customer_id_encrypted
+        SELECT paddle_customer_id_encrypted
         FROM workspaces WHERE id = $1
         """,
         str(token.workspace_id),
@@ -670,8 +633,8 @@ async def change_plan(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id, paddle_subscription_id_encrypted,
-               paddle_customer_id, paddle_customer_id_encrypted,
+        SELECT plan, paddle_subscription_id_encrypted,
+               paddle_customer_id_encrypted,
                current_period_ends_at
         FROM workspaces WHERE id = $1
         """,
@@ -840,7 +803,7 @@ async def cancel_subscription(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id, paddle_subscription_id_encrypted,
+        SELECT plan, paddle_subscription_id_encrypted,
                cancel_at_period_end
         FROM workspaces WHERE id = $1
         """,
@@ -939,7 +902,7 @@ async def reactivate_subscription(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id, paddle_subscription_id_encrypted,
+        SELECT plan, paddle_subscription_id_encrypted,
                cancel_at_period_end,
                current_period_ends_at, subscription_status
         FROM workspaces WHERE id = $1
@@ -1075,7 +1038,7 @@ async def list_invoices(token: TokenPayload = Depends(verify_token)):
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT paddle_customer_id, paddle_customer_id_encrypted
+        SELECT paddle_customer_id_encrypted
         FROM workspaces WHERE id = $1
         """,
         workspace_id,
