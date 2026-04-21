@@ -11,7 +11,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .database import init_db, close_db
 from .auth import router as auth_router
-from .billing import router as billing_router
 from .ingest import router as ingest_router
 from .dashboard import router as dashboard_router
 from .team import router as team_router
@@ -69,7 +68,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router)
-app.include_router(billing_router)
 app.include_router(ingest_router)
 app.include_router(dashboard_router)
 app.include_router(team_router)
