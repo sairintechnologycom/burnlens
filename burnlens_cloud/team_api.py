@@ -1,11 +1,23 @@
 """Team management API endpoints."""
 
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
 from typing import List
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+
+def _hash_invitation_token(token: str) -> str:
+    """Derive the DB-storage hash for an invitation token.
+
+    Tokens are 128-bit uuid4-derived values, so plain SHA-256 is sufficient —
+    no slow KDF is needed (the attacker cannot dictionary-attack a high-entropy
+    secret). The purpose of hashing is to ensure a DB leak does not yield
+    usable invite-acceptance credentials.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 from .config import settings
 from .database import execute_query, execute_insert
@@ -328,14 +340,14 @@ async def invite_member(
         await execute_insert(
             """
             INSERT INTO invitations
-            (id, workspace_id, email, role, token, invited_by, expires_at, created_at)
+            (id, workspace_id, email, role, token_hash, invited_by, expires_at, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             invitation_id,
             str(token.workspace_id),
             request.email,
             request.role,
-            token_str,
+            _hash_invitation_token(token_str),
             str(token.user_id),
             expires_at,
             datetime.utcnow(),
