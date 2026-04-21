@@ -19,6 +19,7 @@ from .compliance.audit import router as audit_router
 from .deployment_api import router as deployment_router
 from .stubs_api import router as stubs_router
 from .deployment.status import get_status_checker
+from .compliance.purge import run_periodic_purge
 
 # Configure logging
 logging.basicConfig(level=settings.log_level.upper())
@@ -46,20 +47,29 @@ async def lifespan(app: FastAPI):
 
     # Start background status checker if enabled
     status_checker_task = None
+    pii_purge_task = None
     if settings.scheduler_enabled:
         logger.info("Starting background status checker...")
         status_checker_task = asyncio.create_task(_background_status_checker())
+        logger.info("Starting background activity-PII purge...")
+        pii_purge_task = asyncio.create_task(
+            run_periodic_purge(
+                initial_delay_s=60,
+                interval_s=settings.activity_pii_purge_interval_seconds,
+            )
+        )
 
     yield
 
     # Shutdown
-    if status_checker_task:
-        logger.info("Stopping background status checker...")
-        status_checker_task.cancel()
-        try:
-            await status_checker_task
-        except asyncio.CancelledError:
-            pass
+    for task, name in ((status_checker_task, "status checker"), (pii_purge_task, "activity-PII purge")):
+        if task:
+            logger.info("Stopping background %s...", name)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     logger.info("Closing database...")
     await close_db()
