@@ -142,10 +142,20 @@ async def get_costs_by_model(
 @router.get("/usage/by-tag", response_model=List[CostByTag])
 async def get_costs_by_tag(
     token: TokenPayload = Depends(verify_token),
-    tag_type: str = Query("team", description="Tag type: team, feature, customer"),
+    tag_type: str = Query("team", pattern="^(team|feature|customer)$", description="Tag type: team, feature, customer"),
     days: int = Query(7, description="Number of days to look back"),
 ):
-    """Get costs broken down by tag (team, feature, customer) (viewer+ can access)."""
+    """Get costs broken down by tag (team, feature, customer) (viewer+ can access).
+
+    WR-01: /usage/by-customer and /usage/by-team apply require_feature gates,
+    but this generic endpoint exposes the same data. Enforce the matching
+    feature gate inline here so the gate cannot be bypassed by calling
+    /usage/by-tag directly with ?tag_type=customer|team.
+    """
+    if tag_type == "customer":
+        await require_feature("customers_view")(token=token)
+    elif tag_type == "team":
+        await require_feature("teams_view")(token=token)
     await require_role("viewer", token)
 
     days = clamp_days_by_plan(days, token.plan)
