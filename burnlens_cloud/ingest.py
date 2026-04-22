@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from .auth import get_workspace_by_api_key
 from .database import execute_query, execute_bulk_insert
-from .email import send_usage_warning_email
+from .email import send_usage_warning_email, track_email_task
 from .encryption import get_encryption_manager
 from .models import IngestRequest, IngestResponse
 from .plans import resolve_limits
@@ -136,7 +136,9 @@ async def _record_usage_and_maybe_notify(
                 cycle_id,
             )
             if claim:
-                asyncio.create_task(
+                # WR-03: track the fire-and-forget task so GC doesn't drop it
+                # and lifespan shutdown can drain outstanding sends.
+                track_email_task(asyncio.create_task(
                     send_usage_warning_email(
                         workspace_id=workspace_id,
                         threshold="100",
@@ -145,7 +147,7 @@ async def _record_usage_and_maybe_notify(
                         cycle_end_date=cycle_end_date_str,
                         plan_label=plan_label,
                     )
-                )
+                ))
         elif pct_prev < 0.8 <= pct_new:
             claim = await execute_query(
                 """
@@ -157,7 +159,9 @@ async def _record_usage_and_maybe_notify(
                 cycle_id,
             )
             if claim:
-                asyncio.create_task(
+                # WR-03: track the fire-and-forget task so GC doesn't drop it
+                # and lifespan shutdown can drain outstanding sends.
+                track_email_task(asyncio.create_task(
                     send_usage_warning_email(
                         workspace_id=workspace_id,
                         threshold="80",
@@ -166,7 +170,7 @@ async def _record_usage_and_maybe_notify(
                         cycle_end_date=cycle_end_date_str,
                         plan_label=plan_label,
                     )
-                )
+                ))
     except Exception as exc:
         logger.warning(
             "usage.record_failed workspace=%s err=%s",

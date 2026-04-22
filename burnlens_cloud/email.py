@@ -14,6 +14,43 @@ logger = logging.getLogger(__name__)
 
 _TEMPLATE_DIR = Path(__file__).parent / "emails" / "templates"
 
+# WR-03: Module-level registry for outstanding fire-and-forget email tasks.
+# asyncio.create_task returns a reference the event loop holds weakly; without
+# a strong reference, the GC may drop a scheduled task mid-flight. Keeping the
+# task in this set (and discarding on completion) ensures the coroutine runs
+# to completion, and lets the FastAPI lifespan shutdown wait briefly on the
+# outstanding set before cancelling. Call track_email_task() to register.
+_pending_email_tasks: "set[asyncio.Task]" = set()
+
+
+def track_email_task(task: "asyncio.Task") -> "asyncio.Task":
+    """Register a fire-and-forget email task so the event loop retains it.
+
+    Returns the same task for call-site convenience:
+      task = track_email_task(asyncio.create_task(_send_background()))
+    """
+    _pending_email_tasks.add(task)
+    task.add_done_callback(_pending_email_tasks.discard)
+    return task
+
+
+async def drain_pending_email_tasks(timeout: float = 5.0) -> None:
+    """Wait up to `timeout` seconds for outstanding email tasks to finish.
+
+    Called from the FastAPI lifespan shutdown so in-flight SendGrid POSTs
+    have a grace period to complete before the process exits. Any tasks
+    still pending after the timeout are left to whatever cleanup the event
+    loop performs during shutdown (typically cancellation).
+    """
+    if not _pending_email_tasks:
+        return
+    try:
+        await asyncio.wait(
+            set(_pending_email_tasks), timeout=timeout
+        )
+    except Exception as exc:  # pragma: no cover — best-effort drain
+        logger.warning("drain_pending_email_tasks error: %s", exc)
+
 
 async def send_invitation_email(
     recipient_email: str,
@@ -242,7 +279,9 @@ async def send_usage_warning_email(
             """Send email in background thread, off the ingest hot path."""
             await asyncio.to_thread(_send)
 
-        asyncio.create_task(_send_background())
+        # WR-03: register with module-level set so the task is not dropped
+        # by GC and the lifespan shutdown can drain outstanding sends.
+        track_email_task(asyncio.create_task(_send_background()))
         return True
 
     except Exception as e:
