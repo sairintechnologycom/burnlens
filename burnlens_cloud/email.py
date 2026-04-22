@@ -130,12 +130,17 @@ async def send_invitation_email(
                 logger.error(f"Failed to send invitation email to {recipient_email}: {e}")
                 return False
 
-        # Run in background task (non-blocking)
-        asyncio.create_task(_send_background())
-
+        # WR-05: Define background wrapper BEFORE scheduling — the previous
+        # ordering referenced `_send_background` before its definition, raising
+        # NameError on every call (silently swallowed by the outer except).
         async def _send_background():
             """Send email in background."""
             await asyncio.to_thread(_send)
+
+        # Run in background task (non-blocking). Register with track_email_task
+        # for parity with send_usage_warning_email so the lifespan shutdown
+        # drain covers invitation sends too.
+        track_email_task(asyncio.create_task(_send_background()))
 
         return True
 
