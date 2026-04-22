@@ -103,7 +103,15 @@ phase_range: "6-10"
 **Canonical refs**:
   - REQ-IDs: QUOTA-01, QUOTA-02, QUOTA-03, QUOTA-04, QUOTA-05, GATE-04, GATE-05
   - Extend: `burnlens_cloud/ingest.py` (usage counter increment), `burnlens_cloud/team_api.py` (seat 402), `burnlens_cloud/settings_api.py` (API-key 402), `burnlens_cloud/database.py` (usage table + retention job), `burnlens_cloud/email.py` + `burnlens_cloud/emails/` (80%/100% templates), `burnlens_cloud/auth.py` (entitlement middleware)
-**Plans**: TBD
+**Plans**: 8 plans
+- [ ] 09-01-PLAN.md — Schema: workspace_usage_cycles + api_keys tables + api_keys backfill + gated_features teams_view/customers_view seed supplement (QUOTA-01, QUOTA-05, GATE-04, GATE-05)
+- [ ] 09-02-PLAN.md — Pydantic ApiKey models + 80/100% HTML email templates + send_usage_warning_email + retention_days=0 docstring (QUOTA-02, GATE-04)
+- [ ] 09-03-PLAN.md — require_feature(name) dependency factory + dual-read get_workspace_by_api_key (GATE-04, GATE-05)
+- [ ] 09-04-PLAN.md — /api-keys CRUD router (POST/GET/DELETE) with 402 cap + main.py mount (GATE-04)
+- [ ] 09-05-PLAN.md — Ingest counter UPSERT + 80/100% email enqueue + remove 429 (QUOTA-01, QUOTA-02, QUOTA-03)
+- [ ] 09-06-PLAN.md — Paddle webhook seeds workspace_usage_cycles row on period rollover (QUOTA-01)
+- [ ] 09-07-PLAN.md — team_api 422→402 + require_feature(teams_view) + get_seat_limit via resolve_limits (QUOTA-04, GATE-05)
+- [ ] 09-08-PLAN.md — Retention-prune asyncio loop + main.py lifespan wiring (QUOTA-05)
 
 ### Phase 10: Feature Gating & Usage Visibility UI
 **Goal**: The dashboard makes it obvious what plan a user is on, what features are locked, and how close they are to their quota — with a clear upgrade path at every friction point.
@@ -128,7 +136,7 @@ phase_range: "6-10"
 | 6. Plan Limits Foundation | 3/3 | Complete | 2026-04-18 |
 | 7. Paddle Lifecycle Sync | 0/4 | Planned | — |
 | 8. Billing Self-Service | 12/12 | Complete | 2026-04-20 |
-| 9. Quota Tracking & Soft Enforcement | 0/0 | Not started | — |
+| 9. Quota Tracking & Soft Enforcement | 0/8 | Planned | — |
 | 10. Feature Gating & Usage Visibility UI | 0/0 | Not started | — |
 
 ## Coverage
