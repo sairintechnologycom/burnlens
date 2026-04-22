@@ -142,6 +142,23 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _api_key_cache: dict = {}
 
 
+def invalidate_api_key_cache(key_hash: str) -> None:
+    """Evict a single api_key_cache entry by hash.
+
+    Called by api_keys_api.revoke_api_key so that a revoked key stops
+    authenticating immediately rather than remaining valid for up to
+    api_key_cache_ttl seconds. Safe to call for a hash that is not in
+    the cache (dict.pop with default).
+
+    Note: this only invalidates the cache in the current process. In
+    multi-worker deployments (Railway may spawn multiple Uvicorn
+    workers), other workers still hold their own cache entries until
+    TTL expiry. Keep api_key_cache_ttl short when revocation must
+    propagate quickly across workers.
+    """
+    _api_key_cache.pop(key_hash, None)
+
+
 def generate_api_key() -> str:
     """Generate a new API key with 'bl_live_' prefix."""
     return f"bl_live_{secrets.token_hex(16)}"
