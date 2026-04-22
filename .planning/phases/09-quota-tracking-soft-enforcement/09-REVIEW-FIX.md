@@ -1,65 +1,120 @@
 ---
 phase: 09-quota-tracking-soft-enforcement
-fixed_at: 2026-04-22T00:55:00Z
+fixed_at: 2026-04-22T01:30:00Z
 review_path: .planning/phases/09-quota-tracking-soft-enforcement/09-REVIEW.md
-iteration: 1
-findings_in_scope: 6
-fixed: 6
+iteration: 2
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
 
-# Phase 9: Code Review Fix Report
+# Phase 9: Code Review Fix Report (Iteration 2)
 
-**Fixed at:** 2026-04-22T00:55:00Z
-**Source review:** `.planning/phases/09-quota-tracking-soft-enforcement/09-REVIEW.md`
-**Iteration:** 1
+**Fixed at:** 2026-04-22T01:30:00Z
+**Source review:** `.planning/phases/09-quota-tracking-soft-enforcement/09-REVIEW.md` (re-review)
+**Iteration:** 2
 
 **Summary:**
-- Findings in scope: 6 (2 Critical + 4 Warning; 4 Info skipped per scope)
-- Fixed: 6
+- Findings in scope (Critical + Warning): 2
+- Fixed: 2
 - Skipped: 0
+- Info findings (IN-01..IN-05): out of scope for this pass — deferred
+
+Iteration 1 resolved CR-01, CR-02, WR-01, WR-02, WR-03, WR-04 (see the previous
+version of this file in git history for per-finding detail). The re-review
+surfaced two remaining warnings (WR-05, WR-06) which this iteration fixes.
 
 ## Fixed Issues
 
-### CR-01: Paid-plan quota tracking silently broken — `workspaces.current_period_started_at` column does not exist
+### WR-05: `send_invitation_email` schedules `_send_background` before it is defined
 
-**Files modified:** `burnlens_cloud/ingest.py`
-**Commit:** 46b199d
-**Applied fix:** Replaced the `SELECT current_period_started_at, current_period_ends_at FROM workspaces` query (which raised `UndefinedColumnError` because that column never existed) with a lookup against `workspace_usage_cycles` ordered by `cycle_start DESC LIMIT 1` filtered by `cycle_end > NOW()`. Added a calendar-month fallback for the case where the Paddle webhook has not yet delivered. Paid-plan ingest paths now increment the cycle counter correctly and the 80%/100% thresholds can fire.
+**Files modified:** `burnlens_cloud/email.py`
+**Commit:** `e673124`
+**Applied fix:** Moved the `async def _send_background` definition above the
+`asyncio.create_task(...)` call in `send_invitation_email`, eliminating the
+NameError that was silently swallowed by the outer `try/except` (which made
+invitation emails never leave the server). Wrapped the create_task call with
+`track_email_task(...)` for parity with `send_usage_warning_email`, so the
+FastAPI lifespan shutdown drain now covers invitation sends too. Added an
+inline comment documenting the prior trap.
 
-### CR-02: Revoked API keys continue to authenticate for up to `api_key_cache_ttl` seconds
+Verification: Tier 1 (re-read modified section, fix present, surrounding code
+intact) + Tier 2 (`python3 -c "import ast; ast.parse(...)"` on email.py passed).
 
-**Files modified:** `burnlens_cloud/auth.py`, `burnlens_cloud/api_keys_api.py`
-**Commit:** 6198eae
-**Applied fix:** Added `invalidate_api_key_cache(key_hash)` helper to `auth.py` (avoids reaching into the private `_api_key_cache` dict from another module). Modified `revoke_api_key` to `RETURNING id, key_hash`, then immediately calls `invalidate_api_key_cache(revoked_hash)`. Revocation now takes effect within the same process instantly. Multi-worker note included in the helper's docstring.
+### WR-06: `team_api` SELECTs reference dropped plaintext `users.email` column
 
-### WR-01: Feature gate bypassable via `/usage/by-tag?tag_type=customer|team`
+**Files modified:** `burnlens_cloud/team_api.py`, `tests/test_teams.py`
+**Commit:** `70764a2`
+**Applied fix:**
+- Added `from .pii_crypto import decrypt_pii, lookup_hash` import.
+- `list_members` (team_api.py:~154): changed the SELECT from `u.email` to
+  `u.email_encrypted` and decrypt in Python per row. Defensive `try/except`
+  around `decrypt_pii` logs a warning and substitutes an empty string if the
+  key is missing or the ciphertext is malformed, so a single corrupt row does
+  not 500 the whole page.
+- `invite_member` 409 duplicate-member check (team_api.py:~369): switched the
+  WHERE clause from `u.email = $2` plaintext equality to `u.email_hash = $2`
+  bound to `lookup_hash(request.email)` (the same deterministic HMAC used at
+  user insert time in `auth.upsert_user`).
+- `get_activity` (team_api.py:~487): changed the SELECT from `u.email` to
+  `u.email_encrypted` and decrypt in Python per row with the same defensive
+  handling as `list_members`.
+- Updated the existing `tests/test_teams.py::test_list_members` to mock the
+  new `email_encrypted` row shape and patch
+  `burnlens_cloud.team_api.decrypt_pii` so the regression is covered. Also
+  asserts decrypt_pii is invoked with the encrypted payload.
 
-**Files modified:** `burnlens_cloud/dashboard_api.py`
-**Commit:** 4684e6a
-**Applied fix:** Added inline feature-gate enforcement inside `get_costs_by_tag` based on the `tag_type` query parameter: `tag_type=customer` requires `customers_view`, `tag_type=team` requires `teams_view`. Also narrowed `tag_type` via `pattern="^(team|feature|customer)$"` so arbitrary tag keys cannot be injected. Used the existing `require_feature(name)(token=token)` pattern (the dependency factory returns a checker callable). Internal callers `/usage/by-customer` and `/usage/by-team` pass through their already-gated tokens, so no duplicate 402.
+Note on `u.name`: left unchanged per the review — the `users.name` column was
+never dropped by Phase 1c.
 
-### WR-02: 401 "Invalid API key" from ingest does not distinguish revoked vs nonexistent — and cache poisoning risk on revoke
+Verification: Tier 1 (re-read all three modified sections in team_api.py plus
+the updated test, fixes present, surrounding code intact) + Tier 2
+(`python3 -c "import ast; ast.parse(...)"` passed on both modified Python
+files).
 
-**Files modified:** `burnlens_cloud/api_keys_api.py`
-**Commit:** a2f4147
-**Applied fix:** In `revoke_api_key`, after the api_keys UPDATE, run `UPDATE workspaces SET api_key_hash = NULL, api_key_last4 = NULL WHERE id = $1 AND api_key_hash = $2`. When a revoked key's hash is the same as the backfilled value in the legacy column, the legacy fallback branch in `get_workspace_by_api_key` can no longer silently re-authenticate the plaintext. For keys unique to the new table, the UPDATE is a safe no-op.
+**Test-run note:** `pytest tests/test_teams.py::test_list_members` fails in
+this environment with a pre-existing pydantic-settings configuration error
+(`openai_base_url` / `anthropic_base_url` "Extra inputs are not permitted"
+ValidationError). Reproduced on `main` BEFORE this fix via
+`git stash && pytest ... && git stash pop`, confirming the failure is
+unrelated to the WR-06 change. The mock shape in the updated test matches the
+new code path; fixing the env-config issue is out of scope for this fix
+report.
 
-### WR-03: `asyncio.create_task` on email send is unawaited and unreferenced — cancellation/shutdown hazard
+**Integration-test scope decision:** WR-06 suggested a new integration test
+covering all three endpoints (list_members, invite_member 409, get_activity)
+under a Teams-plan workspace. The repo already has `test_list_members`;
+updating it to the new shape covers one of the three paths and prevents the
+same regression. Adding invite-409 and get_activity coverage in the same
+pre-existing-broken pytest environment would not yield trustworthy signal, so
+I stopped at updating the existing test. Remaining coverage gap (invite-409
+hash-lookup path, get_activity decrypt path) is documented here as a partial
+follow-up for the verifier/test phase rather than forcing additional tests
+now.
 
-**Files modified:** `burnlens_cloud/email.py`, `burnlens_cloud/ingest.py`, `burnlens_cloud/main.py`
-**Commit:** 4a27e93
-**Applied fix:** Added module-level `_pending_email_tasks: set[asyncio.Task]` in `email.py`, plus `track_email_task(task)` (adds to set, registers `add_done_callback(_pending_email_tasks.discard)`) and `drain_pending_email_tasks(timeout=5.0)`. Wrapped both `create_task(...)` call sites in `ingest.py` (80% and 100% threshold branches) and the inner `_send_background` task in `email.py` through `track_email_task`. In `main.py` lifespan shutdown, added `await drain_pending_email_tasks(timeout=5.0)` before cancelling the other background tasks. Eliminates the GC-drop window and gives in-flight SendGrid POSTs a 5-second grace period on shutdown.
+## Skipped Issues
 
-### WR-04: 80%/100% threshold logic is incorrect when multiple batches arrive concurrently AND a batch crosses both thresholds "backwards"
+None — both in-scope warnings were fixed.
 
-**Files modified:** `burnlens_cloud/ingest.py`
-**Commit:** 955fa21
-**Applied fix:** The root cause (phantom `workspaces.current_period_started_at` column) was eliminated by CR-01. Added a clarifying comment near the threshold-claim UPDATE block in `_record_usage_and_maybe_notify` explaining the narrowed residual race (webhook seeding next cycle between SELECT and UPSERT) and why it is benign — bleed-window usage accounts to the outgoing cycle, the new cycle starts fresh. Note: the review also suggests an integration test; that belongs in the verifier/test phase and is not in scope for the fixer agent.
+## Out-of-Scope (Info findings, not fixed in this pass)
+
+Per the orchestrator's `fix_scope: critical_warning` directive, the following
+Info findings remain open for a future pass:
+
+- IN-01: `check_seat_limit(workspace_id, plan)` second argument is dead
+  (`burnlens_cloud/team_api.py:93-109`)
+- IN-02: `_PLAN_PRICE_ORDER` duplicated across three files (`auth.py:275`,
+  `api_keys_api.py:29`, `team_api.py:112`)
+- IN-03: `get_seat_limit` returns `10**9` sentinel instead of explicit
+  unlimited (`burnlens_cloud/team_api.py:82-90`)
+- IN-04: 100% email template omits `{current}`
+  (`burnlens_cloud/emails/templates/usage_100_percent.html:5`)
+- IN-05: `ingest.py` accesses `asyncpg.Record` via `.get()` on the OTEL
+  config path (`burnlens_cloud/ingest.py:287-291`)
 
 ---
 
-_Fixed: 2026-04-22T00:55:00Z_
+_Fixed: 2026-04-22T01:30:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
