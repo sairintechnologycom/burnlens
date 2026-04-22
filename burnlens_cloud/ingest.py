@@ -39,14 +39,34 @@ async def _record_usage_and_maybe_notify(
                 """
             )
         else:
+            # Read the current cycle bounds from workspace_usage_cycles, which the
+            # Paddle subscription webhooks (billing.py) seed on activation/update.
+            # The `workspaces.current_period_started_at` column does NOT exist in
+            # the schema (only current_period_ends_at is added), so we cannot
+            # reconstruct cycle bounds from the workspaces row. Source of truth
+            # for paid-plan cycles is workspace_usage_cycles.
             cycle_row = await execute_query(
                 """
-                SELECT current_period_started_at AS cycle_start,
-                       current_period_ends_at    AS cycle_end
-                FROM workspaces WHERE id = $1
+                SELECT cycle_start, cycle_end
+                FROM workspace_usage_cycles
+                WHERE workspace_id = $1 AND cycle_end > NOW()
+                ORDER BY cycle_start DESC
+                LIMIT 1
                 """,
                 workspace_id,
             )
+            if not cycle_row:
+                # Webhook lagged / not yet delivered — fall back to calendar month
+                # so we don't silently drop paid-plan usage tracking. The row will
+                # be reconciled once the billing webhook arrives (ON CONFLICT DO
+                # NOTHING preserves any running counter).
+                cycle_row = await execute_query(
+                    """
+                    SELECT
+                        date_trunc('month', now() AT TIME ZONE 'UTC') AS cycle_start,
+                        (date_trunc('month', now() AT TIME ZONE 'UTC') + INTERVAL '1 month') AS cycle_end
+                    """
+                )
         if (
             not cycle_row
             or cycle_row[0]["cycle_start"] is None
