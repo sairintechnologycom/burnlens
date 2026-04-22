@@ -21,6 +21,7 @@ from .deployment_api import router as deployment_router
 from .stubs_api import router as stubs_router
 from .deployment.status import get_status_checker
 from .compliance.purge import run_periodic_purge
+from .compliance.retention_prune import run_periodic_retention_prune
 
 # Configure logging
 logging.basicConfig(level=settings.log_level.upper())
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI):
     # Start background status checker if enabled
     status_checker_task = None
     pii_purge_task = None
+    retention_prune_task = None
     if settings.scheduler_enabled:
         logger.info("Starting background status checker...")
         status_checker_task = asyncio.create_task(_background_status_checker())
@@ -59,11 +61,17 @@ async def lifespan(app: FastAPI):
                 interval_s=settings.activity_pii_purge_interval_seconds,
             )
         )
+        logger.info("Starting background retention prune (daily 03:00 UTC)...")
+        retention_prune_task = asyncio.create_task(run_periodic_retention_prune())
 
     yield
 
     # Shutdown
-    for task, name in ((status_checker_task, "status checker"), (pii_purge_task, "activity-PII purge")):
+    for task, name in (
+        (status_checker_task, "status checker"),
+        (pii_purge_task, "activity-PII purge"),
+        (retention_prune_task, "retention prune"),
+    ):
         if task:
             logger.info("Stopping background %s...", name)
             task.cancel()
