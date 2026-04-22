@@ -33,6 +33,7 @@ from .models import (
     TeamActivityResponse,
 )
 from .email import send_invitation_email
+from .pii_crypto import decrypt_pii, lookup_hash
 
 logger = logging.getLogger(__name__)
 
@@ -148,11 +149,13 @@ async def _lowest_plan_with_seat_count(current: int) -> Optional[str]:
 async def list_members(token: TokenPayload = Depends(verify_token)):
     """List all members of workspace."""
     # Any authenticated workspace member can list members
+    # WR-06: Phase 1c dropped users.email; select email_encrypted and decrypt
+    # in Python. u.name was never dropped, so it stays plaintext.
     result = await execute_query(
         """
         SELECT
             wm.id, wm.user_id, wm.role, wm.joined_at, wm.invited_by,
-            u.email, u.name, u.last_login
+            u.email_encrypted, u.name, u.last_login
         FROM workspace_members wm
         JOIN users u ON wm.user_id = u.id
         WHERE wm.workspace_id = $1 AND wm.active = true
@@ -163,10 +166,22 @@ async def list_members(token: TokenPayload = Depends(verify_token)):
 
     members = []
     for row in result:
+        encrypted_email = row["email_encrypted"]
+        if encrypted_email:
+            try:
+                email_plain = decrypt_pii(encrypted_email)
+            except Exception as e:
+                logger.warning(
+                    "list_members: decrypt_pii failed for user_id=%s: %s",
+                    row["user_id"], e,
+                )
+                email_plain = ""
+        else:
+            email_plain = ""
         members.append(
             WorkspaceMemberResponse(
                 id=row["id"],
-                email=row["email"],
+                email=email_plain,
                 name=row["name"],
                 role=row["role"],
                 joined_at=row["joined_at"],
@@ -349,15 +364,16 @@ async def invite_member(
     # `Depends(require_feature("teams_view"))` on this route. Free/Cloud
     # workspaces hit 402 BEFORE this handler body runs (D-18).
 
-    # Check if email already a member
+    # Check if email already a member. WR-06: Phase 1c dropped users.email so
+    # we match against the deterministic email_hash computed by lookup_hash().
     existing = await execute_query(
         """
         SELECT user_id FROM workspace_members wm
         JOIN users u ON wm.user_id = u.id
-        WHERE wm.workspace_id = $1 AND u.email = $2 AND wm.active = true
+        WHERE wm.workspace_id = $1 AND u.email_hash = $2 AND wm.active = true
         """,
         str(token.workspace_id),
-        request.email,
+        lookup_hash(request.email),
     )
     if existing:
         raise HTTPException(
@@ -466,12 +482,13 @@ async def get_activity(
     )
     total = count_result[0]["count"] if count_result else 0
 
-    # Get activity entries
+    # Get activity entries. WR-06: Phase 1c dropped users.email; select
+    # email_encrypted and decrypt in Python.
     result = await execute_query(
         """
         SELECT
             wa.id, wa.action, wa.detail, wa.created_at,
-            u.id as user_id, u.email, u.name
+            u.id as user_id, u.email_encrypted, u.name
         FROM workspace_activity wa
         LEFT JOIN users u ON wa.user_id = u.id
         WHERE wa.workspace_id = $1
@@ -487,9 +504,21 @@ async def get_activity(
     for row in result:
         user = None
         if row["user_id"]:
+            encrypted_email = row["email_encrypted"]
+            if encrypted_email:
+                try:
+                    email_plain = decrypt_pii(encrypted_email)
+                except Exception as e:
+                    logger.warning(
+                        "get_activity: decrypt_pii failed for user_id=%s: %s",
+                        row["user_id"], e,
+                    )
+                    email_plain = ""
+            else:
+                email_plain = ""
             user = UserResponse(
                 id=row["user_id"],
-                email=row["email"],
+                email=email_plain,
                 name=row["name"],
             )
 
