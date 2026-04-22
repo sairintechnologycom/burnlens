@@ -175,47 +175,55 @@ async def test_seat_limit_enforcement(client):
 
 @pytest.mark.asyncio
 async def test_list_members(client):
-    """Test listing workspace members."""
+    """Test listing workspace members.
+
+    WR-06: After Phase 1c dropped users.email, list_members selects
+    u.email_encrypted and decrypts in Python. This test mocks decrypt_pii
+    so we do not need a real encryption key.
+    """
     workspace_id = str(uuid4())
     user_id = str(uuid4())
 
     with patch("burnlens_cloud.team_api.execute_query") as mock_query:
-        with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
-            # Mock members query
-            mock_query.return_value = [
-                {
-                    "id": str(uuid4()),
-                    "user_id": user_id,
-                    "role": "owner",
-                    "joined_at": datetime.now(),
-                    "last_login": datetime.now(),
-                    "invited_by": None,
-                    "email": "owner@example.com",
-                    "name": "Owner",
-                }
-            ]
+        with patch("burnlens_cloud.team_api.decrypt_pii") as mock_decrypt:
+            with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
+                # Mock members query — now returns email_encrypted instead of email
+                mock_query.return_value = [
+                    {
+                        "id": str(uuid4()),
+                        "user_id": user_id,
+                        "role": "owner",
+                        "joined_at": datetime.now(),
+                        "last_login": datetime.now(),
+                        "invited_by": None,
+                        "email_encrypted": "ENC::owner@example.com",
+                        "name": "Owner",
+                    }
+                ]
+                mock_decrypt.return_value = "owner@example.com"
 
-            token = TokenPayload(
-                workspace_id=workspace_id,
-                user_id=user_id,
-                role="owner",
-                plan="teams",
-                iat=int(datetime.now().timestamp()),
-                exp=int((datetime.now() + timedelta(hours=24)).timestamp()),
-            )
+                token = TokenPayload(
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    role="owner",
+                    plan="teams",
+                    iat=int(datetime.now().timestamp()),
+                    exp=int((datetime.now() + timedelta(hours=24)).timestamp()),
+                )
 
-            mock_decode.return_value = token
+                mock_decode.return_value = token
 
-            response = await client.get(
-                "/team/members",
-                headers={"Authorization": f"Bearer test-token"},
-            )
+                response = await client.get(
+                    "/team/members",
+                    headers={"Authorization": f"Bearer test-token"},
+                )
 
-            assert response.status_code == 200
-            data = response.json()
-            assert len(data) == 1
-            assert data[0]["email"] == "owner@example.com"
-            assert data[0]["role"] == "owner"
+                assert response.status_code == 200
+                data = response.json()
+                assert len(data) == 1
+                assert data[0]["email"] == "owner@example.com"
+                assert data[0]["role"] == "owner"
+                mock_decrypt.assert_called_once_with("ENC::owner@example.com")
 
 
 @pytest.mark.asyncio
