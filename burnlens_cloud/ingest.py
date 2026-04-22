@@ -119,6 +119,17 @@ async def _record_usage_and_maybe_notify(
 
         # 4) Threshold claims (D-06 atomic check-and-set). Race-safe: the UPDATE's
         # rowcount tells us whether we won; only the winner enqueues the email.
+        #
+        # WR-04: Cycle-rollover race. Now that cycle bounds are read from
+        # workspace_usage_cycles directly (CR-01), a webhook seeding the NEXT
+        # cycle while this ingest is mid-flight no longer targets a phantom
+        # old row on workspaces. The UPSERT above targets whichever cycle we
+        # selected at the top of this function: if the webhook seeded the new
+        # cycle AFTER our SELECT but BEFORE our UPSERT, we still increment the
+        # OLD cycle (which is now effectively closed). That is acceptable —
+        # usage from the bleed window is accounted to the outgoing cycle, and
+        # the new cycle starts from zero for the next ingest. Not an anomaly
+        # worth an extra round-trip to re-select.
         plan_label = limits.plan.capitalize() if limits.plan else plan.capitalize()
         cycle_end_date_str = (
             f"{cycle_end:%B} {cycle_end.day}, {cycle_end.year}" if cycle_end else ""
