@@ -22,6 +22,7 @@ from .stubs_api import router as stubs_router
 from .deployment.status import get_status_checker
 from .compliance.purge import run_periodic_purge
 from .compliance.retention_prune import run_periodic_retention_prune
+from .email import drain_pending_email_tasks
 
 # Configure logging
 logging.basicConfig(level=settings.log_level.upper())
@@ -67,6 +68,13 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    # WR-03: give outstanding fire-and-forget email tasks a brief grace
+    # period to complete their SendGrid POSTs before cancellation.
+    try:
+        await drain_pending_email_tasks(timeout=5.0)
+    except Exception as exc:
+        logger.warning("drain_pending_email_tasks failed: %s", exc)
+
     for task, name in (
         (status_checker_task, "status checker"),
         (pii_purge_task, "activity-PII purge"),
