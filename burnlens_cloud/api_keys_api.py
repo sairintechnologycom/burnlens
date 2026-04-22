@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .auth import verify_token, generate_api_key, hash_api_key
+from .auth import verify_token, generate_api_key, hash_api_key, invalidate_api_key_cache
 from .config import settings
 from .database import execute_query
 from .models import ApiKey, ApiKeyCreateRequest, ApiKeyCreateResponse, TokenPayload
@@ -136,12 +136,20 @@ async def revoke_api_key(
         UPDATE api_keys
         SET revoked_at = NOW()
         WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL
-        RETURNING id
+        RETURNING id, key_hash
         """,
         str(key_id),
         str(token.workspace_id),
     )
     if not result:
         raise HTTPException(status_code=404, detail={"error": "api_key_not_found"})
+
+    revoked_hash = result[0]["key_hash"]
+
+    # CR-02: evict the in-memory auth cache so the revoked key stops
+    # authenticating immediately rather than remaining valid for up to
+    # api_key_cache_ttl seconds.
+    invalidate_api_key_cache(revoked_hash)
+
     logger.info("api_key.revoked workspace=%s id=%s", token.workspace_id, key_id)
     return {"ok": True, "id": str(key_id)}
