@@ -151,5 +151,19 @@ async def revoke_api_key(
     # api_key_cache_ttl seconds.
     invalidate_api_key_cache(revoked_hash)
 
+    # WR-02: if this key's hash was backfilled from the legacy
+    # workspaces.api_key_hash column (dual-read transition), clear the
+    # legacy column so the fallback branch in get_workspace_by_api_key
+    # cannot silently re-authenticate the same plaintext after revoke.
+    await execute_query(
+        """
+        UPDATE workspaces
+        SET api_key_hash = NULL, api_key_last4 = NULL
+        WHERE id = $1 AND api_key_hash = $2
+        """,
+        str(token.workspace_id),
+        revoked_hash,
+    )
+
     logger.info("api_key.revoked workspace=%s id=%s", token.workspace_id, key_id)
     return {"ok": True, "id": str(key_id)}
