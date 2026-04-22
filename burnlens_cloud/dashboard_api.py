@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from dateutil import tz
 
-from .auth import verify_token, TokenPayload
+from .auth import verify_token, TokenPayload, require_feature
 from .config import settings
 from .database import execute_query
 from .models import (
@@ -181,21 +181,29 @@ async def get_costs_by_tag(
     ]
 
 
-@router.get("/usage/by-customer", response_model=List[CostByTag])
+@router.get(
+    "/usage/by-customer",
+    response_model=List[CostByTag],
+    dependencies=[Depends(require_feature("customers_view"))],
+)
 async def get_costs_by_customer(
     token: TokenPayload = Depends(verify_token),
     days: int = Query(7, description="Number of days to look back"),
 ):
-    """Get costs broken down by customer tag (viewer+ can access)."""
+    """Get costs broken down by customer tag (requires customers_view feature)."""
     return await get_costs_by_tag(token=token, tag_type="customer", days=days)
 
 
-@router.get("/usage/by-team", response_model=List[CostByTag])
+@router.get(
+    "/usage/by-team",
+    response_model=List[CostByTag],
+    dependencies=[Depends(require_feature("teams_view"))],
+)
 async def get_costs_by_team(
     token: TokenPayload = Depends(verify_token),
     days: int = Query(7, description="Number of days to look back"),
 ):
-    """Get costs broken down by team tag (viewer+ can access)."""
+    """Get costs broken down by team tag (requires teams_view feature)."""
     return await get_costs_by_tag(token=token, tag_type="team", days=days)
 
 
@@ -328,9 +336,13 @@ async def get_budget(token: TokenPayload = Depends(verify_token)):
     }
 
 
-@router.get("/customers", response_model=List[dict])
+@router.get(
+    "/customers",
+    response_model=List[dict],
+    dependencies=[Depends(require_feature("customers_view"))],
+)
 async def get_customers(token: TokenPayload = Depends(verify_token)):
-    """Get cost by customer (from tags)."""
+    """Get cost by customer (from tags) (requires customers_view feature)."""
     result = await execute_query(
         """
         SELECT
