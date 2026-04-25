@@ -15,6 +15,30 @@ import { useAuth } from "@/lib/hooks/useAuth";
 // `status: str`. Backend openness preserves forward-compat for new Paddle
 // states; runtime defensiveness (fallback to "active" on unknown) lives
 // inside refresh() below, not in the type system.
+
+// Phase 10 Plan 01 additions — mirror the additive fields shipped by the
+// backend (burnlens_cloud/models.py: UsageCurrentCycle / AvailablePlan /
+// ApiKeysSummary). All three are optional on BillingSummary so legacy
+// callers (Phase 7/8) keep type-checking. NOTE: the api_keys table is
+// scoped on workspace_id (not org_id) — see 10-01-SUMMARY.md decision #2.
+export interface UsageCurrentCycle {
+  start: string; // ISO-8601
+  end: string; // ISO-8601
+  request_count: number;
+  monthly_request_cap: number;
+}
+
+export interface AvailablePlan {
+  plan: string; // "cloud" | "teams" (Free excluded by backend)
+  price_cents: number;
+  currency: string; // "USD"
+}
+
+export interface ApiKeysSummary {
+  active_count: number;
+  limit: number | null; // null = unlimited
+}
+
 export interface BillingSummary {
   plan: string;
   price_cents: number | null;
@@ -23,6 +47,10 @@ export interface BillingSummary {
   trial_ends_at: string | null;
   current_period_ends_at: string | null;
   cancel_at_period_end: boolean;
+  // Phase 10 D-26 / Plan 01 additions — additive, optional.
+  usage?: { current_cycle: UsageCurrentCycle } | null;
+  available_plans?: AvailablePlan[];
+  api_keys?: ApiKeysSummary | null;
 }
 
 interface BillingContextValue {
@@ -43,8 +71,12 @@ const DEFAULT_VALUE: BillingContextValue = {
 
 const BillingContext = createContext<BillingContextValue>(DEFAULT_VALUE);
 
-// Phase 7 D-18 / UI-SPEC §Interaction Contract - locked values:
-const POLL_INTERVAL_MS = 30_000;
+// Phase 10 D-17: bumped from Phase 7 D-18's 30_000ms to 60_000ms.
+// Rationale: the sidebar usage meter is the most prominent live counter and
+// it just needs "freshish" — a 60s tick is plenty for a million-request-per-
+// month cap and halves the polling load. The visibility-gating below
+// (document.visibilityState === "visible") is unchanged.
+const POLL_INTERVAL_MS = 60_000;
 const REFRESH_ON_FOCUS_STALENESS_MS = 10_000;
 
 // W5 runtime guard: known Paddle states. Unknown values fall back to "active"
