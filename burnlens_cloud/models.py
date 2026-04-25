@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
@@ -149,6 +149,68 @@ class BillingPortalResponse(BaseModel):
     url: str
 
 
+# Phase 10 Plan 01: usage / available-plans / api-keys subobjects on /billing/summary,
+# plus the /billing/usage/daily response shape. See .planning/phases/10-feature-gating-
+# usage-visibility-ui/10-CONTEXT.md D-18 / D-20 / D-26.
+class UsageCurrentCycle(BaseModel):
+    """Current billing cycle counter + cap for the caller's workspace.
+
+    `start` / `end` are the cycle bounds (paid: workspaces.current_period_*; free:
+    calendar-month UTC). `request_count` mirrors workspace_usage_cycles.request_count.
+    `monthly_request_cap` is the resolved limit (per-workspace override merged over
+    plan default). The meter widget renders `request_count / monthly_request_cap`.
+    """
+    start: datetime
+    end: datetime
+    request_count: int
+    monthly_request_cap: int
+
+
+class AvailablePlan(BaseModel):
+    """One row in /billing/summary `available_plans` — drives the LockedPanel
+    upgrade CTA copy and PlanPickerModal price comparison.
+
+    `price_cents` is sourced from a module-level constant in `billing.py`
+    (paddle_product_spec.md is source of truth) — `plan_limits` does not yet
+    carry the column. v1.2 promotes this to a real DB column; see
+    .planning/followups/v1.2-price-cents-column.md.
+    """
+    plan: str
+    price_cents: int
+    currency: str = "USD"
+
+
+class ApiKeysSummary(BaseModel):
+    """Pre-emptive at-cap state for the API Keys card (D-26).
+
+    `active_count` is the count of non-revoked api_keys rows for the caller's
+    workspace. `limit` is the plan_limits.api_key_count value (None means
+    unlimited — no plan-level cap).
+    """
+    active_count: int
+    limit: Optional[int] = None  # None = unlimited
+
+
+class UsageDailyEntry(BaseModel):
+    """One row in /billing/usage/daily `daily[]` — a single day's request count."""
+    date: date
+    requests: int
+
+
+class UsageDailyResponse(BaseModel):
+    """Response shape for GET /billing/usage/daily (D-20).
+
+    Carries the cycle bounds + cap + current count alongside the daily series so
+    the Settings → Usage card renders the bar chart and the cap line in one
+    round-trip.
+    """
+    cycle_start: datetime
+    cycle_end: datetime
+    cap: int
+    current: int
+    daily: list[UsageDailyEntry]
+
+
 # Phase 7: billing summary response model — read-only view of workspaces-row cache
 # populated by the Paddle webhook. See .planning/phases/07-paddle-lifecycle-sync/07-CONTEXT.md D-16.
 class BillingSummary(BaseModel):
@@ -176,6 +238,13 @@ class BillingSummary(BaseModel):
     # current_period_ends_at).
     scheduled_plan: Optional[str] = None
     scheduled_change_at: Optional[datetime] = None
+    # Phase 10 Plan 01 (D-18 / D-26): additive subobjects for the sidebar usage
+    # meter, the LockedPanel upgrade CTA copy, and the ApiKeysCard pre-emptive
+    # at-cap detection. All three are Optional with safe defaults so existing
+    # Phase 7/8 callers (which never populated them) keep deserializing.
+    usage: Optional[UsageCurrentCycle] = None
+    available_plans: list[AvailablePlan] = Field(default_factory=list)
+    api_keys: Optional[ApiKeysSummary] = None
 
 
 # Teams models
