@@ -3,37 +3,37 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-04-21T16:19:32.686Z"
-last_activity: 2026-04-21
+stopped_at: Phase 10 Plan 01 complete
+last_updated: "2026-04-25T00:30:00.000Z"
+last_activity: 2026-04-25
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 27
-  completed_plans: 19
-  percent: 70
+  completed_phases: 4
+  total_plans: 31
+  completed_plans: 29
+  percent: 94
 ---
 
 # State
 
 ## Current Position
 
-Phase: 9 (quota-tracking-soft-enforcement) — EXECUTING
-Plan: 1 of 8
+Phase: 10 — Feature Gating & Usage Visibility UI — EXECUTING
+Plan: 2 of 4 (Plan 01 complete 2026-04-25)
 **Milestone:** v1.1 Billing & Quota
-**Phase:** 9 — Quota Tracking & Soft Enforcement (ready to plan)
-**Plan:** —
-**Status:** Executing Phase 9
-**Last activity:** 2026-04-21
+**Phase:** 10 — Feature Gating & Usage Visibility UI
+**Plan:** 10-01 ✓ complete; 10-02 next
+**Status:** Executing Phase 10
+**Last activity:** 2026-04-25
 
-Progress: [██████░░░░] 60% (3/5 phases complete)
+Progress: [█████████░] 94% (29/31 plans complete)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** Phase 9 — quota-tracking-soft-enforcement
+**Current focus:** Phase --phase — 10
 
 ## Phase Plan (v1.1)
 
@@ -62,6 +62,18 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 - `plan_limits` Postgres table is the single source of truth; per-workspace overrides live on the workspace row.
 - Paddle webhooks are authoritative for plan state — the app reads, never computes from checkout redirect.
 - Entitlement middleware on gated API routes is mandatory; UI gating alone is not sufficient.
+
+### Phase 10 Plan 01 Shipped (2026-04-25)
+
+- `burnlens_cloud/models.py`: 5 new Pydantic models (UsageCurrentCycle, AvailablePlan, ApiKeysSummary, UsageDailyEntry, UsageDailyResponse) + BillingSummary additively extended with `usage` / `available_plans` / `api_keys` (all Optional with safe defaults — Phase 7/8 callers unaffected)
+- `burnlens_cloud/billing.py`: GET /billing/summary now composes `usage.current_cycle` + `available_plans` + `api_keys` subobjects (D-18 / D-26); new GET /billing/usage/daily endpoint with workspace-scoped daily aggregation over `request_records` and `?cycle=previous` returning the documented 400 not_implemented stub (D-21)
+- `_resolve_current_cycle(workspace_id, plan)` helper in billing.py — single source of paid (workspace_usage_cycles cycle_end>NOW) vs free (calendar-month UTC) vs brand-new (calendar-month + count=0) cycle resolution; reused by both Plan 10-01 endpoints and available for Plans 02/03/04 to grep
+- `_PLAN_PRICE_CENTS` module-level constants (`{"cloud": 2900, "teams": 9900}`) — committed v1.0 source-of-truth for plan pricing on /billing/summary.available_plans; v1.2 followup tracks promotion to a real plan_limits column
+- Workspace-scoping invariant: every SELECT in both endpoints binds `$1` to `token.workspace_id` — `?workspace_id=...` query params silently ignored (T-10-01 / T-10-26 mitigations); `test_summary_api_keys_workspace_isolation` and `test_usage_daily_workspace_isolation` lock the invariant
+- Index `idx_request_records_workspace_ts` already existed at database.py:335 — no second-named-index added per plan instruction
+- Tests: 17 new in `tests/test_billing_usage.py` (model shapes + summary extension + daily endpoint + previous-cycle stub + workspace isolation + auth gate); 3 Phase 7 /billing/summary tests rewired to multi-SQL side_effect mocks (workspace-scoping invariant preserved); 52/52 billing-adjacent pytest pass
+- Deviation: Plan's `<interfaces>` block named the api_keys workspace column "org_id" but actual schema uses `workspace_id` — code uses `workspace_id` (matches Phase 9 D-12 callers)
+- Plans 02/03/04 awareness: `summary.usage` / `summary.available_plans` / `summary.api_keys` are now live for the frontend; `_load_billing_summary` (Phase 8 mutation responses) was NOT updated, so post-mutation responses serialize the new fields as `null/[]/null` — frontend BillingContext re-polls within 30s, acceptable per D-22 design
 
 ### Phase 8 Shipped (2026-04-20, human_needed)
 
@@ -125,8 +137,9 @@ None at this time.
 
 ## Session Continuity
 
-**To resume:** Run `/gsd-discuss-phase 9` or `/gsd-plan-phase 9` to begin Phase 9 (Quota Tracking & Soft Enforcement).
-**Stopped at:** Phase 9 context gathered
-**Next action:** `/gsd-discuss-phase 9` — gather context before planning Phase 9.
+**To resume:** Run `/gsd-execute-phase 10` to continue with Plan 10-02 (frontend BillingContext + UsageMeter sidebar widget).
+**Stopped at:** Phase 10 Plan 01 complete (2026-04-25)
+**Next action:** Execute Plan 10-02.
 
-**Planned Phase:** 09 (quota-tracking-soft-enforcement) — 8 plans — 2026-04-21T16:14:10.473Z
+**Planned Phase:** 10 (Feature Gating & Usage Visibility UI) — 4 plans — 2026-04-25T00:10:59.043Z
+**Phase 10 progress:** Plan 01 ✓; Plan 02/03/04 pending.

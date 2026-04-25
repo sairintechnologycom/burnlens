@@ -126,7 +126,11 @@ phase_range: "6-10"
 **Canonical refs**:
   - REQ-IDs: GATE-01, GATE-02, GATE-03, METER-01, METER-02, METER-03
   - Extend: `frontend/src/components/Sidebar.tsx` (usage meter), `frontend/src/components/UpgradePrompt.tsx` (gated panel shell), `frontend/src/components/DashboardLayout.tsx` (meter mount point), `frontend/src/app/settings/page.tsx` (Usage subsection), and Teams / Customers route pages (lock wrappers)
-**Plans**: TBD
+**Plans**: 4 plans
+- [x] 10-01-PLAN.md — Backend: /billing/summary usage+available_plans+api_keys extension + GET /billing/usage/daily + Pydantic models + idx_request_records_workspace_ts (METER-01, METER-02, METER-03) — completed 2026-04-25 (52/52 billing-adjacent pytest pass; backend partial — frontend in 10-02/03/04)
+- [ ] 10-02-PLAN.md — BillingContext type extension + planSatisfies helper + all Phase 10 CSS + UsageMeter component + Sidebar lockedForPlan affordance (METER-01, METER-02, GATE-01, GATE-02, GATE-03)
+- [ ] 10-03-PLAN.md — LockedPanel with dynamic 402-driven copy + Paddle overlay CTA + /teams and /customers migration + delete UpgradePrompt.tsx (GATE-01, GATE-02, GATE-03)
+- [ ] 10-04-PLAN.md — VerticalBar chart + UsageCard (#usage anchor) + ApiKeysCard with plaintext-once modal + typed-name revoke + cap-banner Paddle CTA + Settings wiring (METER-03)
 **UI hint**: yes
 
 ## Progress
@@ -137,7 +141,7 @@ phase_range: "6-10"
 | 7. Paddle Lifecycle Sync | 0/4 | Planned | — |
 | 8. Billing Self-Service | 12/12 | Complete | 2026-04-20 |
 | 9. Quota Tracking & Soft Enforcement | 0/8 | Planned | — |
-| 10. Feature Gating & Usage Visibility UI | 0/0 | Not started | — |
+| 10. Feature Gating & Usage Visibility UI | 0/4 | Planned | — |
 
 ## Coverage
 
