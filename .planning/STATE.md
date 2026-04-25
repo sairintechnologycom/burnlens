@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 10 Plan 01 complete
-last_updated: "2026-04-25T00:30:00.000Z"
+stopped_at: Phase 10 Plan 02 complete (2026-04-25)
+last_updated: "2026-04-25T00:50:00.000Z"
 last_activity: 2026-04-25
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 31
-  completed_plans: 29
-  percent: 94
+  completed_plans: 30
+  percent: 97
 ---
 
 # State
@@ -19,14 +19,14 @@ progress:
 ## Current Position
 
 Phase: 10 — Feature Gating & Usage Visibility UI — EXECUTING
-Plan: 2 of 4 (Plan 01 complete 2026-04-25)
+Plan: 3 of 4 (Plans 01, 02 complete 2026-04-25)
 **Milestone:** v1.1 Billing & Quota
 **Phase:** 10 — Feature Gating & Usage Visibility UI
-**Plan:** 10-01 ✓ complete; 10-02 next
+**Plan:** 10-01 ✓; 10-02 ✓; 10-03 next
 **Status:** Executing Phase 10
 **Last activity:** 2026-04-25
 
-Progress: [█████████░] 94% (29/31 plans complete)
+Progress: [█████████▓] 97% (30/31 plans complete)
 
 ## Project Reference
 
@@ -62,6 +62,19 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 - `plan_limits` Postgres table is the single source of truth; per-workspace overrides live on the workspace row.
 - Paddle webhooks are authoritative for plan state — the app reads, never computes from checkout redirect.
 - Entitlement middleware on gated API routes is mandatory; UI gating alone is not sufficient.
+
+### Phase 10 Plan 02 Shipped (2026-04-25)
+
+- `frontend/src/lib/hooks/usePlanSatisfies.ts` (new): `PLAN_ORDER` (free/cloud/teams), `planSatisfies(have, need)` rank helper, `LOCKED_NAV` map (/teams + /customers → "teams"), `nextPlanFor(current)` upsell helper — single source of plan-rank truth for Plans 02/03/04
+- `frontend/src/components/UsageMeter.tsx` (new): sidebar-footer widget, threshold coloring (cyan < 80%, amber 80–100%, red > 100%), bar width clamped at 100% per D-14 with overflow `(120%)` style numeric, ARIA progressbar attributes, polite live-region on amber/red, loading + empty-cycle states, click-to-`/settings#usage`
+- `frontend/src/components/Sidebar.tsx`: `SidebarItem.lockedForPlan` field; `/teams` and `/customers` annotated `lockedForPlan: "teams"` (D-09); lock glyph + plan subtitle render via `planSatisfies(currentPlan, item.lockedForPlan)`; locked items remain clickable per D-10; `<UsageMeter />` mounted at footer
+- `frontend/src/lib/contexts/BillingContext.tsx`: `BillingSummary` extended with optional `usage`, `available_plans`, `api_keys` (mirrors Plan 01 backend shape; `api_keys` is `workspace_id`-scoped, not `org_id`); `POLL_INTERVAL_MS` flipped from 30_000 to 60_000 (D-17 override of Phase 7 D-18 — visibility-gating preserved); the 30s value is removed (not commented out)
+- `frontend/src/app/globals.css`: appended complete Phase 10 CSS block at EOF (157 lines) — `.usage-meter*`, `.sidebar-item--locked`, `.locked-panel*`, `.usage-card-summary`, `.api-keys-*`, `.api-key-modal-*`, `prefers-reduced-motion` overrides — file-ownership boundary so Plans 03/04 do NOT touch CSS
+- T-10-07 (XSS via API-derived numerics): mitigated — `grep -ciE "(innerHTML|setInnerHTML)"` on UsageMeter.tsx and Sidebar.tsx both return 0
+- T-10-10 (DoS via tight poll loop): mitigated — UsageMeter consumes BillingContext rather than starting a second poller; the existing visibility-gated 60s poller is the only setInterval
+- TypeScript: `cd frontend && npx tsc --noEmit` exits clean (no errors)
+- Plans 03/04 awareness: import `planSatisfies / LOCKED_NAV / nextPlanFor` from `@/lib/hooks/usePlanSatisfies`; consume `useBilling()` for `billing.usage / .available_plans / .api_keys`; do NOT add a second poller; do NOT touch globals.css; Plan 04 owns the `/settings#usage` anchor target
+- Commits: `f993ec4` (types + helper + CSS), `ee8351b` (UsageMeter + Sidebar)
 
 ### Phase 10 Plan 01 Shipped (2026-04-25)
 
