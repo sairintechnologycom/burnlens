@@ -16,11 +16,40 @@ from pydantic import BaseModel
 from .auth import verify_token, TokenPayload
 from .config import settings
 from .database import execute_insert, execute_query
-from .models import BillingSummary, ChangePlanBody, CancelBody, Invoice, InvoicesResponse
+from .models import (
+    BillingSummary,
+    ChangePlanBody,
+    CancelBody,
+    Invoice,
+    InvoicesResponse,
+    UsageCurrentCycle,
+    AvailablePlan,
+    ApiKeysSummary,
+    UsageDailyEntry,
+    UsageDailyResponse,
+)
+from .plans import resolve_limits
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 Plan 01 (D-18): plan-price source-of-truth.
+#
+# `plan_limits` does NOT carry `price_cents` / `currency` columns in v1.0
+# (verified: the only `price_cents` reference in burnlens_cloud/database.py is
+# the `workspaces.price_cents` per-subscription snapshot column). The committed
+# v1.0 path is a module-level constants table sourced from
+# ~/.claude/projects/.../paddle_product_spec.md. v1.2 promotes this to a real
+# `plan_limits` column — see .planning/followups/v1.2-price-cents-column.md.
+#
+# Do NOT add a runtime branch ("if column exists ... else constant"). The
+# constants are the deterministic v1.0 path.
+# ---------------------------------------------------------------------------
+_PLAN_PRICE_CENTS: dict[str, int] = {"cloud": 2900, "teams": 9900}
+_PLAN_CURRENCY: str = "USD"
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +622,108 @@ async def billing_portal(token: TokenPayload = Depends(verify_token)):
 # Read-only billing summary — feeds Topbar + Settings via polling (D-16..D-18)
 # ---------------------------------------------------------------------------
 
+async def _resolve_current_cycle(
+    workspace_id: str, plan: str
+) -> tuple[datetime, datetime, int]:
+    """Resolve (cycle_start, cycle_end, request_count) for the caller's workspace.
+
+    Phase 10 Plan 01 — paid-vs-free branching mirrors Phase 9
+    `_record_usage_and_maybe_notify` in burnlens_cloud/ingest.py (D-02 / D-03):
+
+    - free plans: calendar-month UTC bounds, request_count comes from any
+      workspace_usage_cycles row whose cycle_start matches (else 0).
+    - paid plans: read the most-recent workspace_usage_cycles row whose
+      cycle_end > NOW(); fall back to calendar-month if the webhook hasn't
+      seeded a row yet (brand-new sub).
+
+    The brand-new-workspace path returns request_count=0 with valid bounds so
+    /billing/summary's `usage` subobject is never absent. The same helper is
+    reused by /billing/usage/daily — single source of paid-vs-free logic.
+    """
+    if plan == "free":
+        cycle_row = await execute_query(
+            """
+            SELECT cycle_start, cycle_end, request_count
+            FROM workspace_usage_cycles
+            WHERE workspace_id = $1
+              AND cycle_start = date_trunc('month', now() AT TIME ZONE 'UTC')
+            ORDER BY cycle_start DESC
+            LIMIT 1
+            """,
+            workspace_id,
+        )
+    else:
+        cycle_row = await execute_query(
+            """
+            SELECT cycle_start, cycle_end, request_count
+            FROM workspace_usage_cycles
+            WHERE workspace_id = $1 AND cycle_end > NOW()
+            ORDER BY cycle_start DESC
+            LIMIT 1
+            """,
+            workspace_id,
+        )
+
+    if cycle_row:
+        return (
+            cycle_row[0]["cycle_start"],
+            cycle_row[0]["cycle_end"],
+            int(cycle_row[0]["request_count"] or 0),
+        )
+
+    # Brand-new workspace OR webhook hasn't seeded yet → calendar-month UTC bounds,
+    # request_count=0 (matches the ingest.py free-plan fallback).
+    bounds = await execute_query(
+        """
+        SELECT
+            date_trunc('month', now() AT TIME ZONE 'UTC') AS cycle_start,
+            (date_trunc('month', now() AT TIME ZONE 'UTC') + INTERVAL '1 month') AS cycle_end
+        """
+    )
+    return bounds[0]["cycle_start"], bounds[0]["cycle_end"], 0
+
+
+async def _build_available_plans() -> list[AvailablePlan]:
+    """Build the `available_plans` list from `plan_limits` rows that have a
+    non-null Paddle price_id (Free is excluded by construction).
+
+    Pricing comes from the module-level `_PLAN_PRICE_CENTS` constants (D-18 /
+    v1.2 followup). A future seeded plan that isn't yet in the constants is
+    silently skipped so this query never raises.
+    """
+    rows = await execute_query(
+        """
+        SELECT plan, paddle_price_id
+        FROM plan_limits
+        WHERE paddle_price_id IS NOT NULL
+        ORDER BY plan ASC
+        """
+    )
+    return [
+        AvailablePlan(
+            plan=row["plan"],
+            price_cents=_PLAN_PRICE_CENTS[row["plan"]],
+            currency=_PLAN_CURRENCY,
+        )
+        for row in rows
+        # TODO(v1.2): drop the constants in favor of plan_limits.price_cents.
+        # See .planning/followups/v1.2-price-cents-column.md.
+        if row["plan"] in _PLAN_PRICE_CENTS
+    ]
+
+
+def token_workspace_uuid(workspace_id: str):
+    """Coerce a token-derived workspace_id (str|UUID) to UUID for resolve_limits.
+
+    `TokenPayload.workspace_id` is already a UUID; the JSON test-mocks send a
+    str. Both must work without a TypeError on `resolve_limits`.
+    """
+    from uuid import UUID
+    if isinstance(workspace_id, UUID):
+        return workspace_id
+    return UUID(str(workspace_id))
+
+
 @router.get("/summary", response_model=BillingSummary)
 async def billing_summary(token: TokenPayload = Depends(verify_token)):
     """Read the workspaces-row cache for the caller's workspace.
@@ -600,7 +731,15 @@ async def billing_summary(token: TokenPayload = Depends(verify_token)):
     Single indexed lookup; no Paddle API round-trip. Polled by the frontend
     every 30s (and on window focus) to satisfy the 60s freshness SLA (D-18).
     Workspace-scoped via verify_token (D-17) — cross-tenant reads are impossible.
+
+    Phase 10 Plan 01 extends the response with three additive subobjects:
+    `usage` (current-cycle counter + cap for the sidebar meter — D-18),
+    `available_plans` (Cloud/Teams pricing for LockedPanel upgrade copy — D-18),
+    and `api_keys` (active count + plan cap for ApiKeysCard pre-emptive at-cap
+    rendering — D-26). All three are Optional in the BillingSummary model so
+    callers using the original Phase 7/8 contract are unaffected.
     """
+    workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
         SELECT plan, price_cents, currency, subscription_status,
@@ -608,11 +747,46 @@ async def billing_summary(token: TokenPayload = Depends(verify_token)):
         FROM workspaces
         WHERE id = $1
         """,
-        str(token.workspace_id),
+        workspace_id,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Workspace not found")
     row = rows[0]
+
+    plan = row["plan"]
+
+    # D-18: usage.current_cycle subobject powers the sidebar meter.
+    cycle_start, cycle_end, request_count = await _resolve_current_cycle(
+        workspace_id, plan
+    )
+    resolved = await resolve_limits(token_workspace_uuid(workspace_id))
+    monthly_request_cap = (
+        resolved.monthly_request_cap if resolved and resolved.monthly_request_cap is not None else 0
+    )
+    usage = UsageCurrentCycle(
+        start=cycle_start,
+        end=cycle_end,
+        request_count=request_count,
+        monthly_request_cap=monthly_request_cap,
+    )
+
+    # D-18: available_plans drives LockedPanel upgrade CTA copy.
+    available_plans = await _build_available_plans()
+
+    # D-26: api_keys subobject — pre-emptive at-cap state for ApiKeysCard
+    # (mitigates T-10-26 via workspace-scoped query parameterized on
+    # token.workspace_id).
+    api_keys_count_rows = await execute_query(
+        "SELECT COUNT(*) AS n FROM api_keys "
+        "WHERE workspace_id = $1 AND revoked_at IS NULL",
+        workspace_id,
+    )
+    active_count = int(api_keys_count_rows[0]["n"]) if api_keys_count_rows else 0
+    api_keys_summary = ApiKeysSummary(
+        active_count=active_count,
+        limit=resolved.api_key_count if resolved is not None else None,
+    )
+
     return BillingSummary(
         plan=row["plan"],
         price_cents=row["price_cents"],
@@ -623,6 +797,85 @@ async def billing_summary(token: TokenPayload = Depends(verify_token)):
         cancel_at_period_end=bool(row["cancel_at_period_end"])
             if row["cancel_at_period_end"] is not None
             else False,
+        usage=usage,
+        available_plans=available_plans,
+        api_keys=api_keys_summary,
+    )
+
+
+@router.get("/usage/daily", response_model=UsageDailyResponse)
+async def get_usage_daily(
+    cycle: str = "current",
+    token: TokenPayload = Depends(verify_token),
+):
+    """Daily request-count breakdown for the caller's current cycle (D-20).
+
+    SECURITY (T-10-01): `workspace_id` is derived from `token.workspace_id`
+    via verify_token — NEVER from query/body/header. SQL parameter `$1` is
+    that token-derived id. Tested by `test_usage_daily_workspace_isolation`.
+
+    `?cycle=previous` returns HTTP 400 `not_implemented` per D-21 — the
+    historical drill-down is a v1.2 feature. Returning the stub without
+    touching the DB also closes T-10-06 (no timing oracle).
+    """
+    if cycle == "previous":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "not_implemented",
+                "message": "Previous cycle drill-down is a v1.2 feature.",
+            },
+        )
+    if cycle != "current":
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_cycle"},
+        )
+
+    workspace_id = str(token.workspace_id)
+
+    # Resolve plan + cycle bounds via the SAME helper /billing/summary uses.
+    plan_rows = await execute_query(
+        "SELECT plan FROM workspaces WHERE id = $1",
+        workspace_id,
+    )
+    if not plan_rows:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    plan = plan_rows[0]["plan"]
+
+    cycle_start, cycle_end, request_count = await _resolve_current_cycle(
+        workspace_id, plan
+    )
+    resolved = await resolve_limits(token_workspace_uuid(workspace_id))
+    cap = (
+        resolved.monthly_request_cap
+        if resolved and resolved.monthly_request_cap is not None
+        else 0
+    )
+
+    rows = await execute_query(
+        """
+        SELECT date_trunc('day', ts)::date AS date, count(*) AS requests
+        FROM request_records
+        WHERE workspace_id = $1 AND ts >= $2 AND ts < $3
+        GROUP BY date_trunc('day', ts)::date
+        ORDER BY date
+        """,
+        workspace_id,
+        cycle_start,
+        cycle_end,
+    )
+    daily = [
+        UsageDailyEntry(date=r["date"], requests=int(r["requests"]))
+        for r in rows
+    ]
+
+    return UsageDailyResponse(
+        cycle_start=cycle_start,
+        cycle_end=cycle_end,
+        cap=cap,
+        current=request_count,
+        daily=daily,
     )
 
 
