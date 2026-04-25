@@ -591,17 +591,47 @@ async def test_billing_summary_returns_workspace_data(app_client):
     trial_end = datetime(2026, 5, 26, tzinfo=timezone.utc)
     period_end = datetime(2026, 5, 19, tzinfo=timezone.utc)
 
-    mock_query = AsyncMock(return_value=[{
-        "plan": "cloud",
-        "price_cents": 2900,
-        "currency": "USD",
-        "subscription_status": "trialing",
-        "trial_ends_at": trial_end,
-        "current_period_ends_at": period_end,
-        "cancel_at_period_end": False,
-    }])
+    # Phase 10 Plan 01: /billing/summary now also reads workspace_usage_cycles,
+    # plan_limits, and api_keys to populate the additive `usage`/
+    # `available_plans`/`api_keys` subobjects (D-18 / D-26). Dispatch on SQL
+    # substring so the original Phase 7 fields keep getting validated.
+    cycle_start = datetime(2026, 4, 19, tzinfo=timezone.utc)
+    cycle_end = datetime(2026, 5, 19, tzinfo=timezone.utc)
 
-    with patch("burnlens_cloud.billing.execute_query", mock_query):
+    async def _query_side_effect(sql, *args):
+        s = " ".join(sql.split())
+        if "FROM workspaces" in s:
+            return [{
+                "plan": "cloud",
+                "price_cents": 2900,
+                "currency": "USD",
+                "subscription_status": "trialing",
+                "trial_ends_at": trial_end,
+                "current_period_ends_at": period_end,
+                "cancel_at_period_end": False,
+            }]
+        if "FROM workspace_usage_cycles" in s:
+            return [{"cycle_start": cycle_start, "cycle_end": cycle_end, "request_count": 0}]
+        if "FROM plan_limits" in s:
+            return [
+                {"plan": "cloud", "paddle_price_id": "pri_cloud"},
+                {"plan": "teams", "paddle_price_id": "pri_teams"},
+            ]
+        if "FROM api_keys" in s:
+            return [{"n": 0}]
+        return []
+
+    mock_query = AsyncMock(side_effect=_query_side_effect)
+    # Phase 10 Plan 01: the extended handler calls plans.resolve_limits to
+    # surface monthly_request_cap and api_key_count.
+    from burnlens_cloud.models import ResolvedLimits
+    mock_resolve = AsyncMock(return_value=ResolvedLimits(
+        plan="cloud", monthly_request_cap=1_000_000, seat_count=1,
+        retention_days=30, api_key_count=3, gated_features={},
+    ))
+
+    with patch("burnlens_cloud.billing.execute_query", mock_query), \
+         patch("burnlens_cloud.billing.resolve_limits", mock_resolve):
         async with await app_client() as ac:
             resp = await ac.get(
                 "/billing/summary",
@@ -638,17 +668,46 @@ async def test_billing_summary_rejects_unauth(app_client):
 async def test_billing_summary_scoped_to_caller(app_client):
     token_a = _encode_test_jwt(WS_A, "cloud")
 
-    mock_query = AsyncMock(return_value=[{
-        "plan": "cloud",
-        "price_cents": 2900,
-        "currency": "USD",
-        "subscription_status": "active",
-        "trial_ends_at": None,
-        "current_period_ends_at": None,
-        "cancel_at_period_end": False,
-    }])
+    # Phase 10 Plan 01: the extended handler now fires several SELECTs
+    # (workspaces / workspace_usage_cycles / plan_limits / api_keys). The
+    # workspace-scoping invariant is unchanged: every SELECT that takes a
+    # workspace param MUST bind only WS_A — never WS_B. This test still
+    # verifies the SQL+params surface but tolerates the larger query plan.
+    captured: list[tuple] = []
 
-    with patch("burnlens_cloud.billing.execute_query", mock_query):
+    cycle_start = datetime(2026, 4, 19, tzinfo=timezone.utc)
+    cycle_end = datetime(2026, 5, 19, tzinfo=timezone.utc)
+
+    async def _query_side_effect(sql, *args):
+        captured.append((sql, args))
+        s = " ".join(sql.split())
+        if "FROM workspaces" in s:
+            return [{
+                "plan": "cloud",
+                "price_cents": 2900,
+                "currency": "USD",
+                "subscription_status": "active",
+                "trial_ends_at": None,
+                "current_period_ends_at": None,
+                "cancel_at_period_end": False,
+            }]
+        if "FROM workspace_usage_cycles" in s:
+            return [{"cycle_start": cycle_start, "cycle_end": cycle_end, "request_count": 0}]
+        if "FROM plan_limits" in s:
+            return []
+        if "FROM api_keys" in s:
+            return [{"n": 0}]
+        return []
+
+    mock_query = AsyncMock(side_effect=_query_side_effect)
+    from burnlens_cloud.models import ResolvedLimits
+    mock_resolve = AsyncMock(return_value=ResolvedLimits(
+        plan="cloud", monthly_request_cap=1_000_000, seat_count=1,
+        retention_days=30, api_key_count=3, gated_features={},
+    ))
+
+    with patch("burnlens_cloud.billing.execute_query", mock_query), \
+         patch("burnlens_cloud.billing.resolve_limits", mock_resolve):
         async with await app_client() as ac:
             resp = await ac.get(
                 "/billing/summary",
@@ -656,15 +715,18 @@ async def test_billing_summary_scoped_to_caller(app_client):
             )
 
     assert resp.status_code == 200
-    # Exactly one SELECT, bound only to the caller's workspace_id. No WS_B lookup possible.
-    assert mock_query.call_count == 1
-    call = mock_query.call_args
-    sql = call.args[0]
-    params = call.args[1:]
-    assert "FROM workspaces" in sql
-    assert "WHERE id = $1" in sql
-    assert params == (WS_A,)
-    assert WS_B not in params
+    # The original workspaces SELECT is still present and still bound only to
+    # the caller's workspace_id (no WS_B leak through any path).
+    workspace_calls = [
+        c for c in captured if "FROM workspaces" in " ".join(c[0].split())
+    ]
+    assert len(workspace_calls) >= 1
+    ws_sql, ws_args = workspace_calls[0]
+    assert "WHERE id = $1" in ws_sql
+    assert ws_args == (WS_A,)
+    # No SQL call across the entire summary path may carry WS_B.
+    for _sql, args in captured:
+        assert WS_B not in args, f"unexpected WS_B in args of {_sql!r}: {args!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -675,17 +737,42 @@ async def test_billing_summary_scoped_to_caller(app_client):
 async def test_billing_summary_defaults_status_active_when_null(app_client):
     token = _encode_test_jwt(WS_A, "free")
 
-    mock_query = AsyncMock(return_value=[{
-        "plan": "free",
-        "price_cents": None,
-        "currency": None,
-        "subscription_status": None,      # legacy default path
-        "trial_ends_at": None,
-        "current_period_ends_at": None,
-        "cancel_at_period_end": False,
-    }])
+    # Phase 10 Plan 01: handler fires extra SELECTs for the additive subobjects.
+    # Status-defaulting behaviour for the workspaces row is unchanged.
+    cycle_start = datetime(2026, 4, 1, tzinfo=timezone.utc)
+    cycle_end = datetime(2026, 5, 1, tzinfo=timezone.utc)
 
-    with patch("burnlens_cloud.billing.execute_query", mock_query):
+    async def _query_side_effect(sql, *args):
+        s = " ".join(sql.split())
+        if "FROM workspaces" in s:
+            return [{
+                "plan": "free",
+                "price_cents": None,
+                "currency": None,
+                "subscription_status": None,      # legacy default path
+                "trial_ends_at": None,
+                "current_period_ends_at": None,
+                "cancel_at_period_end": False,
+            }]
+        if "FROM workspace_usage_cycles" in s:
+            return []  # brand-new free workspace
+        if "date_trunc('month'" in s and "FROM workspace_usage_cycles" not in s:
+            return [{"cycle_start": cycle_start, "cycle_end": cycle_end}]
+        if "FROM plan_limits" in s:
+            return []
+        if "FROM api_keys" in s:
+            return [{"n": 0}]
+        return []
+
+    mock_query = AsyncMock(side_effect=_query_side_effect)
+    from burnlens_cloud.models import ResolvedLimits
+    mock_resolve = AsyncMock(return_value=ResolvedLimits(
+        plan="free", monthly_request_cap=10_000, seat_count=1,
+        retention_days=7, api_key_count=1, gated_features={},
+    ))
+
+    with patch("burnlens_cloud.billing.execute_query", mock_query), \
+         patch("burnlens_cloud.billing.resolve_limits", mock_resolve):
         async with await app_client() as ac:
             resp = await ac.get(
                 "/billing/summary",
