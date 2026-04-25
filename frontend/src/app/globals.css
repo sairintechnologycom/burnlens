@@ -1696,3 +1696,163 @@ img, svg { display: block; }
   .dash-topbar-nav { display: none; }
   .lp-pricing-grid { grid-template-columns: 1fr; max-width: 360px; margin: 0 auto; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 10: Feature Gating & Usage Visibility UI (additive only)
+   File-ownership boundary — Plans 03 and 04 must NOT edit globals.css.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── LockedPanel ──────────────────────────────────────── */
+.locked-panel { position: relative; width: 100%; min-height: 400px; }
+.locked-panel-content { opacity: 0.55; filter: blur(6px) grayscale(0.3); pointer-events: none; user-select: none; }
+.locked-panel-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.locked-panel-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 32px;
+  max-width: 360px;
+  text-align: center;
+  animation: lp-fade 0.2s ease-out;
+}
+.locked-panel-lock { color: var(--muted); margin: 0 auto 16px; }
+.locked-panel-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.locked-panel-body { font-size: 14px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+@keyframes lp-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 640px) {
+  .locked-panel-content { filter: blur(4px) grayscale(0.3); opacity: 0.65; }
+  .locked-panel-card { padding: 24px; max-width: calc(100% - 32px); }
+}
+
+/* ── Sidebar lock affordance ──────────────────────────── */
+.sidebar-item--locked { opacity: 0.85; }
+.sidebar-item--locked .sidebar-item-label { opacity: 0.7; }
+.sidebar-item-lock-glyph { color: currentColor; opacity: 0.6; flex-shrink: 0; display: inline-block; vertical-align: middle; margin-right: 6px; }
+.sidebar-item-sublabel { font-size: 10px; color: var(--muted); margin-top: 2px; display: block; }
+.sidebar-item-text { display: flex; flex-direction: column; min-width: 0; }
+
+/* ── UsageMeter (sidebar footer) ───────────────────────── */
+.usage-meter {
+  display: block;
+  margin-top: auto;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  text-decoration: none;
+  transition: background 0.12s;
+  color: inherit;
+}
+.usage-meter:hover { background: var(--bg2); }
+.usage-meter-bar {
+  position: relative;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.usage-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.2s ease;
+}
+.usage-meter-fill--green { background: var(--cyan); }  /* "green band" uses cyan per UI-SPEC Color */
+.usage-meter-fill--amber { background: var(--amber); }
+.usage-meter-fill--red   { background: var(--red); }
+.usage-meter-numeric {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.usage-meter-numeric-over { color: var(--red); margin-left: 4px; }
+.usage-meter-reset {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── UsageCard (Settings) ──────────────────────────────── */
+.usage-card-summary {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.usage-card-summary-over { color: var(--red); }
+
+/* ── ApiKeysCard (Settings) ────────────────────────────── */
+.api-keys-table td { font-variant-numeric: tabular-nums; }
+.api-keys-cap-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--sev-h-bg);
+  border-left: 3px solid var(--amber);
+  font-size: 13px;
+  color: var(--text);
+}
+.api-keys-status-active {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(34,211,184,0.1);
+  color: var(--cyan);
+}
+.api-keys-status-revoked { color: var(--muted); font-size: 12px; }
+.api-keys-last4 { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.api-keys-revoke-form { display: flex; gap: 6px; align-items: center; }
+.api-keys-revoke-input { width: 160px; }
+
+/* ── NewApiKeyModal ────────────────────────────────────── */
+.api-key-modal-backdrop {
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  animation: lp-fade 0.18s ease-out;
+}
+.api-key-modal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  padding: 24px;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.api-key-modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+.api-key-plaintext {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--cyan);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  word-break: break-all;
+  margin-bottom: 12px;
+}
+.api-key-copy-btn { margin-bottom: 16px; }
+.api-key-warning { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 20px; }
+.api-key-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* prefers-reduced-motion — disable Phase 10 animations (additive, idempotent) */
+@media (prefers-reduced-motion: reduce) {
+  .locked-panel-card, .api-key-modal-backdrop { animation: none; }
+  .usage-meter-fill { transition: none; }
+}
