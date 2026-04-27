@@ -85,8 +85,8 @@ export default function LockedPanel({
           aria-describedby="lp-body"
           tabIndex={-1}
         >
-          {/* Inline lock SVG — same approach as the legacy UpgradePrompt
-              (D-11). Sized 32×32 for the larger frosted-overlay card. */}
+          {/* Inline lock SVG (D-11). Sized 32×32 for the larger frosted
+              overlay card. */}
           <svg
             className="locked-panel-lock"
             width="32"
