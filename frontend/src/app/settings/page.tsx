@@ -11,6 +11,7 @@ import { usePaddleCheckout } from "@/lib/hooks/usePaddleCheckout";
 import CancelSubscriptionModal from "@/components/CancelSubscriptionModal";
 import InvoicesCard from "@/components/InvoicesCard";
 import PlanPickerModal from "@/components/PlanPickerModal";
+import UsageCard from "@/components/UsageCard";
 
 function SettingsContent() {
   const { session, logout } = useAuth();
@@ -109,6 +110,9 @@ function SettingsContent() {
         </div>
       </div>
       {/* /Billing — Phase 7 */}
+
+      {/* Usage — Phase 10 Plan 04 (D-19, METER-03 anchor #usage) */}
+      <UsageCard />
 
       <InvoicesCard />
 
