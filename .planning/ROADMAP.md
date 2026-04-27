@@ -129,8 +129,8 @@ phase_range: "6-10"
 **Plans**: 4 plans
 - [x] 10-01-PLAN.md — Backend: /billing/summary usage+available_plans+api_keys extension + GET /billing/usage/daily + Pydantic models + idx_request_records_workspace_ts (METER-01, METER-02, METER-03) — completed 2026-04-25 (52/52 billing-adjacent pytest pass; backend partial — frontend in 10-02/03/04)
 - [x] 10-02-PLAN.md — BillingContext type extension + planSatisfies helper + all Phase 10 CSS + UsageMeter component + Sidebar lockedForPlan affordance (METER-01, METER-02, GATE-01, GATE-02, GATE-03) — completed 2026-04-25 (frontend `tsc --noEmit` clean; commits f993ec4, ee8351b)
-- [ ] 10-03-PLAN.md — LockedPanel with dynamic 402-driven copy + Paddle overlay CTA + /teams and /customers migration + delete UpgradePrompt.tsx (GATE-01, GATE-02, GATE-03)
-- [ ] 10-04-PLAN.md — VerticalBar chart + UsageCard (#usage anchor) + ApiKeysCard with plaintext-once modal + typed-name revoke + cap-banner Paddle CTA + Settings wiring (METER-03)
+- [x] 10-03-PLAN.md — LockedPanel with dynamic 402-driven copy + Paddle overlay CTA + /teams and /customers migration + delete UpgradePrompt.tsx (GATE-01, GATE-02, GATE-03) — completed 2026-04-27 (frontend `tsc --noEmit` clean; commits 0ba67e2, f2e2d16, e665bd0)
+- [x] 10-04-PLAN.md — VerticalBar chart + UsageCard (#usage anchor) + ApiKeysCard with plaintext-once modal + typed-name revoke + cap-banner Paddle CTA + Settings wiring (METER-03) — completed 2026-04-27 (frontend `tsc --noEmit` clean; commits 5d411ac, 642d1a7, d07d935)
 **UI hint**: yes
 
 ## Progress
@@ -141,7 +141,7 @@ phase_range: "6-10"
 | 7. Paddle Lifecycle Sync | 0/4 | Planned | — |
 | 8. Billing Self-Service | 12/12 | Complete | 2026-04-20 |
 | 9. Quota Tracking & Soft Enforcement | 0/8 | Planned | — |
-| 10. Feature Gating & Usage Visibility UI | 2/4 | Executing | — |
+| 10. Feature Gating & Usage Visibility UI | 4/4 | Executing | — |
 
 ## Coverage
 
