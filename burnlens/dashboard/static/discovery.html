@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BurnLens — AI Asset Discovery</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css?v=2" />
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="logo"><img src="burnlens_icon_32.png" alt="" width="24" height="24" style="vertical-align: middle; margin-right: 6px;">BurnLens</span>
+    <span class="tagline">LLM API cost tracker</span>
+  </div>
+  <div class="header-right">
+    <a href="/ui/" class="nav-link">Dashboard</a>
+    <a href="/ui/discovery" class="nav-link nav-link-active">Discovery</a>
+    <span class="refresh-indicator" id="refresh-indicator" title="Auto-refreshes every 30s">&#x25cf;</span>
+  </div>
+</header>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="overview">Overview</button>
+</nav>
+
+<main>
+
+<!-- ========== Overview tab ========== -->
+<div class="tab-pane active" id="tab-overview">
+
+  <!-- KPI cards -->
+  <section class="discovery-kpi-grid" id="discovery-kpi-grid">
+    <div class="card">
+      <div class="card-label">Total Assets</div>
+      <div class="card-value" id="kpi-total-assets">—</div>
+      <div class="card-sub" id="kpi-total-assets-sub">AI models detected</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Active This Month</div>
+      <div class="card-value" id="kpi-active-month">—</div>
+      <div class="card-sub" id="kpi-active-month-sub">approved + active</div>
+    </div>
+    <div class="card kpi-shadow">
+      <div class="card-label">Shadow Detected</div>
+      <div class="card-value" id="kpi-shadow">—</div>
+      <div class="card-sub" id="kpi-shadow-sub">needs review</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Unassigned</div>
+      <div class="card-value" id="kpi-unassigned">—</div>
+      <div class="card-sub" id="kpi-unassigned-sub">no team assigned</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Monthly Spend</div>
+      <div class="card-value" id="kpi-monthly-spend">—</div>
+      <div class="card-sub" id="kpi-monthly-spend-sub">page total</div>
+    </div>
+  </section>
+
+  <!-- Charts row -->
+  <section class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Provider Breakdown</h2>
+      </div>
+      <canvas id="provider-chart"></canvas>
+    </div>
+    <div class="chart-card" id="new-this-week-panel">
+      <div class="chart-header">
+        <h2>New This Week</h2>
+        <span class="chart-note" id="new-this-week-count"></span>
+      </div>
+      <div id="new-this-week-list">
+        <div class="loading-text">Loading…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Asset table section -->
+  <section class="table-card">
+    <div class="chart-header">
+      <h2>Asset Inventory</h2>
+      <span class="chart-note" id="asset-count-note"></span>
+    </div>
+
+    <!-- Global search bar -->
+    <div class="global-search-wrap">
+      <input type="search" id="global-search" placeholder="Search by model, provider, team, URL, or tag..." autocomplete="off" />
+    </div>
+
+    <!-- Saved Views bar -->
+    <div class="save-view-bar" id="save-view-bar">
+      <select id="saved-views-select" title="Load a saved filter view">
+        <option value="">-- Saved Views --</option>
+      </select>
+      <button id="delete-view-btn" class="btn-delete-view" style="display:none;" title="Delete this saved view">Delete</button>
+      <button id="save-view-btn" class="btn-save-view" title="Save current filters as a named view">Save View</button>
+    </div>
+
+    <!-- Save View inline form (initially hidden) -->
+    <div class="save-view-form" id="save-view-form" style="display:none;">
+      <input type="text" id="view-name-input" placeholder="View name..." maxlength="60" autocomplete="off" />
+      <button id="confirm-save-view" class="btn-save-view">Save</button>
+      <button id="cancel-save-view" class="btn-cancel-view">Cancel</button>
+      <span class="save-view-error" id="save-view-error"></span>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="asset-filters" id="asset-filters">
+      <select id="filter-provider" title="Filter by provider">
+        <option value="">All Providers</option>
+      </select>
+      <select id="filter-status" title="Filter by status">
+        <option value="">All Statuses</option>
+      </select>
+      <select id="filter-risk" title="Filter by risk tier">
+        <option value="">All Risk Tiers</option>
+      </select>
+      <select id="filter-team" title="Filter by team">
+        <option value="">All Teams</option>
+      </select>
+      <input type="date" id="filter-date-since" title="Assets first seen since" placeholder="First seen since" />
+    </div>
+
+    <!-- Asset table -->
+    <div class="table-scroll">
+      <table id="asset-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="model_name">Model</th>
+            <th class="sortable" data-col="provider">Provider</th>
+            <th class="sortable" data-col="owner_team">Team</th>
+            <th class="sortable" data-col="status">Status</th>
+            <th class="sortable" data-col="risk_tier">Risk Tier</th>
+            <th class="sortable" data-col="monthly_spend_usd">Spend</th>
+            <th class="sortable" data-col="first_seen_at">First Seen</th>
+            <th class="sortable" data-col="last_active_at">Last Active</th>
+          </tr>
+        </thead>
+        <tbody id="asset-table-body">
+          <tr><td colspan="8" class="loading-text">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-controls" id="asset-pagination">
+      <button id="btn-prev" class="pagination-btn" disabled>Previous</button>
+      <span class="pagination-info" id="pagination-info">—</span>
+      <button id="btn-next" class="pagination-btn" disabled>Next</button>
+    </div>
+  </section>
+
+  <!-- Shadow AI Alert Panel -->
+  <section class="table-card" id="shadow-panel-section">
+    <div class="chart-header">
+      <h2>Shadow AI Alerts</h2>
+      <span class="chart-note">
+        <span id="shadow-panel-count" class="shadow-count-badge">0</span> assets need review
+      </span>
+    </div>
+    <div class="shadow-panel" id="shadow-panel">
+      <div class="loading-text">Loading…</div>
+    </div>
+  </section>
+
+  <!-- Discovery Event Timeline -->
+  <section class="table-card" id="timeline-section">
+    <div class="chart-header">
+      <h2>Discovery Timeline</h2>
+    </div>
+    <div class="timeline-panel" id="timeline-panel">
+      <div class="loading-text">Loading…</div>
+    </div>
+  </section>
+
+</div><!-- end tab-overview -->
+
+</main>
+
+<script src="discovery.js"></script>
+</body>
+</html>

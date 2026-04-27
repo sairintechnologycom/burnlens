@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BurnLens — LLM Cost Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css?v=2" />
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <span class="logo"><img src="burnlens_icon_32.png" alt="" width="24" height="24" style="vertical-align: middle; margin-right: 6px;">BurnLens</span>
+    <span class="tagline">LLM API cost tracker</span>
+  </div>
+  <div class="header-right">
+    <a href="/ui/discovery" class="nav-link">Discovery</a>
+    <select id="period-select" title="Time period">
+      <option value="1d">Last 24h</option>
+      <option value="7d" selected>Last 7 days</option>
+      <option value="30d">Last 30 days</option>
+      <option value="90d">Last 90 days</option>
+    </select>
+    <button class="export-btn" id="export-btn" title="Export data as CSV">Export CSV</button>
+    <span class="refresh-indicator" id="refresh-indicator" title="Auto-refreshes every 10s">&#x25cf;</span>
+  </div>
+</header>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="customers">Customers</button>
+</nav>
+
+<main>
+
+<!-- ========== Dashboard tab ========== -->
+<div class="tab-pane active" id="tab-dashboard">
+
+  <!-- KPI cards -->
+  <section class="kpi-grid">
+    <div class="card">
+      <div class="card-label">Total Spend</div>
+      <div class="card-value" id="kpi-cost">—</div>
+      <div class="card-sub" id="kpi-cost-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Requests</div>
+      <div class="card-value" id="kpi-requests">—</div>
+      <div class="card-sub" id="kpi-requests-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Avg Cost / Request</div>
+      <div class="card-value" id="kpi-avg">—</div>
+      <div class="card-sub" id="kpi-avg-sub"></div>
+    </div>
+    <div class="card" id="budget-card">
+      <div class="card-label">Budget Used</div>
+      <div class="card-value" id="kpi-budget">—</div>
+      <div class="card-sub" id="kpi-budget-sub"></div>
+      <div class="budget-bar-wrap" id="budget-bar-wrap" style="display:none">
+        <div class="budget-bar" id="budget-bar"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Charts row -->
+  <section class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost Timeline</h2>
+      </div>
+      <canvas id="timeline-chart"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost by Model</h2>
+      </div>
+      <canvas id="model-chart"></canvas>
+    </div>
+  </section>
+
+  <section class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost by Feature</h2>
+        <span class="chart-note">tagged with <code>X-BurnLens-Tag-Feature</code></span>
+      </div>
+      <canvas id="feature-chart"></canvas>
+    </div>
+    <div class="chart-card waste-card">
+      <div class="chart-header">
+        <h2>Waste Alerts</h2>
+      </div>
+      <div id="waste-panel">
+        <div class="loading-text">Analyzing…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Team Budgets (card with progress bars) -->
+  <section class="chart-card" id="team-budgets-section">
+    <div class="chart-header">
+      <h2>Team Budgets</h2>
+      <span class="chart-note">monthly spend caps from <code>budgets.teams</code></span>
+    </div>
+    <div id="team-budgets-panel">
+      <div class="loading-text">Loading…</div>
+    </div>
+  </section>
+
+  <!-- Recommendations -->
+  <section class="table-card" id="recommendations-section">
+    <div class="chart-header">
+      <h2>Recommendations</h2>
+      <span class="chart-note">model switch suggestions based on usage patterns</span>
+    </div>
+    <div id="recommendations-panel"></div>
+  </section>
+
+  <!-- Recent requests table -->
+  <section class="table-card">
+    <div class="chart-header">
+      <h2>Recent Requests</h2>
+      <span class="chart-note" id="requests-count"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th>Feature</th>
+            <th>Tokens In</th>
+            <th>Tokens Out</th>
+            <th>Cost</th>
+            <th>Latency</th>
+          </tr>
+        </thead>
+        <tbody id="requests-body">
+          <tr><td colspan="8" class="loading-text">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div><!-- end tab-dashboard -->
+
+<!-- ========== Customers tab ========== -->
+<div class="tab-pane" id="tab-customers">
+  <section class="table-card" id="customers-section">
+    <div class="chart-header">
+      <h2>Customers</h2>
+      <span class="chart-note">per-customer spend caps from <code>customer_budgets</code></span>
+    </div>
+    <div class="table-scroll">
+      <table id="customers-table">
+        <thead>
+          <tr>
+            <th class="sortable" data-col="customer">Customer</th>
+            <th class="sortable" data-col="request_count">Requests</th>
+            <th class="sortable" data-col="input_tokens">Tokens In</th>
+            <th class="sortable" data-col="output_tokens">Tokens Out</th>
+            <th class="sortable active-sort desc" data-col="total_cost">Total Cost</th>
+            <th class="sortable" data-col="budget">Budget</th>
+            <th class="sortable" data-col="pct_used">% Used</th>
+            <th class="sortable" data-col="status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="customers-body">
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div><!-- end tab-customers -->
+
+</main>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>
