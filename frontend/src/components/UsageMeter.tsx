@@ -22,7 +22,8 @@ function formatResetDate(iso: string): string {
 
 export default function UsageMeter() {
   const { billing } = useBilling();
-  const cycle = billing?.usage?.current_cycle ?? null;
+  // Backend returns the cycle fields flat on `usage` — see BillingContext.tsx.
+  const cycle = billing?.usage ?? null;
 
   // Loading state — no billing payload yet.
   if (!cycle) {

@@ -83,9 +83,9 @@ export default function UsageCard() {
   // BillingContext usage subobject so the row never renders dashes when the
   // /billing/summary poll has data but /usage/daily is mid-flight.
   const current =
-    data?.current ?? billing?.usage?.current_cycle?.request_count ?? 0;
+    data?.current ?? billing?.usage?.request_count ?? 0;
   const capDisplay =
-    data?.cap ?? billing?.usage?.current_cycle?.monthly_request_cap ?? 0;
+    data?.cap ?? billing?.usage?.monthly_request_cap ?? 0;
   const resetDate = data?.cycle_end
     ? new Date(data.cycle_end).toLocaleDateString("en-US", {
         month: "short",
