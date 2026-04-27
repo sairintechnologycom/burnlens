@@ -20,7 +20,7 @@ phase_range: "6-10"
 - [x] **Phase 7: Paddle Lifecycle Sync** — Webhook handlers drive plan/subscription state and the read-only Billing summary (completed 2026-04-19)
 - [x] **Phase 8: Billing Self-Service** — Checkout, invoice history, cancel, and reactivate flows in Settings → Billing (completed 2026-04-20)
 - [ ] **Phase 9: Quota Tracking & Soft Enforcement** — Monthly counters, seat/API-key 402s, retention pruning, backend entitlement middleware
-- [ ] **Phase 10: Feature Gating & Usage Visibility UI** — Plan-gated UI, upgrade CTAs, and the sidebar usage meter
+- [x] **Phase 10: Feature Gating & Usage Visibility UI** — Plan-gated UI, upgrade CTAs, and the sidebar usage meter (completed 2026-04-27)
 
 ## Phase Details
 
@@ -141,7 +141,7 @@ phase_range: "6-10"
 | 7. Paddle Lifecycle Sync | 0/4 | Planned | — |
 | 8. Billing Self-Service | 12/12 | Complete | 2026-04-20 |
 | 9. Quota Tracking & Soft Enforcement | 0/8 | Planned | — |
-| 10. Feature Gating & Usage Visibility UI | 4/4 | Executing | — |
+| 10. Feature Gating & Usage Visibility UI | 4/4 | Complete    | 2026-04-27 |
 
 ## Coverage
 
