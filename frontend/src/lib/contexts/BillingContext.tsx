@@ -48,7 +48,10 @@ export interface BillingSummary {
   current_period_ends_at: string | null;
   cancel_at_period_end: boolean;
   // Phase 10 D-26 / Plan 01 additions — additive, optional.
-  usage?: { current_cycle: UsageCurrentCycle } | null;
+  // Backend (burnlens_cloud/billing.py) returns the cycle fields flat on
+  // `usage` (start, end, request_count, monthly_request_cap) — see
+  // tests/test_billing_usage.py asserting body["usage"]["request_count"].
+  usage?: UsageCurrentCycle | null;
   available_plans?: AvailablePlan[];
   api_keys?: ApiKeysSummary | null;
 }
