@@ -25,6 +25,12 @@ app = typer.Typer(
     help="See where your LLM money goes.",
     add_completion=False,
 )
+key_app = typer.Typer(
+    name="key",
+    help="Register API keys for per-key daily caps (CODE-2).",
+    add_completion=False,
+)
+app.add_typer(key_app, name="key")
 console = Console()
 
 _SEVERITY_COLORS = {"high": "red", "medium": "yellow", "low": "dim"}
@@ -985,6 +991,118 @@ def repos(
 
         rows = await get_cost_by_repo(cfg.db_path, days=days, limit=20)
         _print_grouped_table(rows, group_label="repos", group_key="repo")
+
+    asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# CODE-2: `burnlens key` subcommands
+# ---------------------------------------------------------------------------
+
+
+@key_app.command("register")
+def key_register(
+    label: str = typer.Option(..., "--label", "-l", help="Friendly name for the key"),
+    provider: str = typer.Option(..., "--provider", "-p", help="anthropic / openai / google / ..."),
+    key: Optional[str] = typer.Option(
+        None,
+        "--key",
+        "-k",
+        help="Raw API key. If omitted, you will be prompted (hidden input).",
+    ),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Register an API key by label so daily caps can target it."""
+    from burnlens.keys import KeyAlreadyExists, register_key
+    from burnlens.storage.database import init_db
+
+    raw_key = key
+    if not raw_key:
+        raw_key = typer.prompt(
+            f"API key for '{label}' ({provider})",
+            hide_input=True,
+            confirmation_prompt=False,
+        )
+    raw_key = (raw_key or "").strip()
+    if not raw_key:
+        console.print("[red]Empty key — aborted.[/red]")
+        raise typer.Exit(code=1)
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        try:
+            row = await register_key(cfg.db_path, label, provider, raw_key)
+        except KeyAlreadyExists as exc:
+            console.print(f"[red]{exc}[/red] — pick a different --label or remove first.")
+            raise typer.Exit(code=1) from exc
+
+        console.print(
+            f"[green]Registered[/green] [bold]{row['label']}[/bold] "
+            f"({row['provider']}) — prefix [dim]{row['key_prefix']}…[/dim]"
+        )
+
+    asyncio.run(_run())
+
+
+@key_app.command("list")
+def key_list(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """List all registered API keys (raw keys are never shown)."""
+    from burnlens.keys import list_keys
+    from burnlens.storage.database import init_db
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        rows = await list_keys(cfg.db_path)
+
+        if not rows:
+            console.print("[dim]No API keys registered. Run [bold]burnlens key register[/bold].[/dim]")
+            return
+
+        table = Table(title="[bold]Registered API Keys[/bold]", expand=True)
+        table.add_column("Label", style="cyan")
+        table.add_column("Provider")
+        table.add_column("Prefix", style="dim")
+        table.add_column("Created")
+        table.add_column("Last Used", style="dim")
+
+        for row in rows:
+            table.add_row(
+                row["label"],
+                row["provider"],
+                f"{row['key_prefix']}…",
+                row["created_at"],
+                row["last_used_at"] or "—",
+            )
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@key_app.command("remove")
+def key_remove(
+    label: str = typer.Option(..., "--label", "-l", help="Label to delete"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Remove a registered key by label."""
+    from burnlens.keys import remove_key
+    from burnlens.storage.database import init_db
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        removed = await remove_key(cfg.db_path, label)
+        if removed:
+            console.print(f"[green]Removed[/green] [bold]{label}[/bold].")
+        else:
+            console.print(f"[yellow]No key registered with label '{label}'.[/yellow]")
+            raise typer.Exit(code=1)
 
     asyncio.run(_run())
 
