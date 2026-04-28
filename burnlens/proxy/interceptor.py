@@ -146,14 +146,40 @@ _STRIP_REQUEST_HEADERS = frozenset(
 _STRIP_RESPONSE_HEADERS = _STRIP_REQUEST_HEADERS | frozenset(["content-encoding"])
 
 
+_ENV_TAG_FALLBACKS: tuple[str, ...] = (
+    "feature",
+    "team",
+    "customer",
+    "repo",
+    "dev",
+    "pr",
+    "branch",
+)
+
+
 def _extract_tags(headers: dict[str, str]) -> dict[str, str]:
-    """Pull X-BurnLens-Tag-* headers into a plain dict."""
+    """Pull X-BurnLens-Tag-* headers into a plain dict.
+
+    For the tag keys in :data:`_ENV_TAG_FALLBACKS`, fall back to
+    ``BURNLENS_TAG_<KEY>`` env vars when the header is absent. Env vars
+    are read per-request (not cached at startup) so multiple concurrent
+    ``burnlens run`` sessions in different shells route correctly.
+    """
+    import os
+
     prefix = "x-burnlens-tag-"
-    return {
+    tags: dict[str, str] = {
         key[len(prefix):]: value
         for key, value in headers.items()
         if key.lower().startswith(prefix)
     }
+    for tag in _ENV_TAG_FALLBACKS:
+        if tag in tags:
+            continue
+        env_value = os.environ.get(f"BURNLENS_TAG_{tag.upper()}")
+        if env_value:
+            tags[tag] = env_value
+    return tags
 
 
 def _clean_request_headers(headers: dict[str, str]) -> dict[str, str]:

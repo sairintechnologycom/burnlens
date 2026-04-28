@@ -392,6 +392,31 @@ def export(
     asyncio.run(_run())
 
 
+@app.command(
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def run(
+    ctx: typer.Context,
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    feature: Optional[str] = typer.Option(None, "--feature"),
+    team: Optional[str] = typer.Option(None, "--team"),
+    customer: Optional[str] = typer.Option(None, "--customer"),
+) -> None:
+    """Run a child command with auto-tagged git context.
+
+    Example: ``burnlens run -- claude``
+    """
+    from burnlens.cli_wrapper import run_command
+
+    run_command(
+        command=list(ctx.args),
+        config=config,
+        feature=feature,
+        team=team,
+        customer=customer,
+    )
+
+
 @app.command()
 def budgets(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
@@ -864,6 +889,104 @@ def ui(
     url = f"http://{cfg.host}:{cfg.port}/ui"
     console.print(f"Opening [underline]{url}[/underline]")
     webbrowser.open(url)
+
+
+# ---------------------------------------------------------------------------
+# CODE-1: git-aware aggregation commands
+# ---------------------------------------------------------------------------
+
+
+def _print_grouped_table(
+    rows: list[dict[str, Any]],
+    *,
+    group_label: str,
+    group_key: str,
+    extra_columns: list[tuple[str, str]] | None = None,
+) -> None:
+    """Render a top-N cost table grouped by a single tag column.
+
+    ``extra_columns`` is a list of ``(header, row_key)`` tuples appended
+    after the grouping column.
+    """
+    if not rows:
+        console.print(f"[yellow]No tagged {group_label} traffic found.[/yellow]")
+        return
+
+    table = Table(title=f"Top {group_label} by cost")
+    table.add_column(group_label.rstrip("s").capitalize())
+    for header, _ in extra_columns or []:
+        table.add_column(header)
+    table.add_column("Requests", justify="right")
+    table.add_column("Total cost", justify="right")
+    table.add_column("Last seen")
+
+    for row in rows:
+        cells = [str(row.get(group_key) or "")]
+        for _, key in extra_columns or []:
+            cells.append(str(row.get(key) or ""))
+        cells.append(str(row.get("requests", 0)))
+        cells.append(_fmt_cost(row.get("total_cost") or 0.0))
+        cells.append(str(row.get("last_seen") or ""))
+        table.add_row(*cells)
+
+    console.print(table)
+
+
+@app.command()
+def prs(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(7, "--days", "-d", help="Lookback window"),
+    repo: Optional[str] = typer.Option(None, "--repo", help="Filter to a single repo"),
+) -> None:
+    """Show top 20 PRs by cost over the lookback window."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.queries import get_cost_by_pr
+
+        rows = await get_cost_by_pr(cfg.db_path, days=days, repo=repo, limit=20)
+        _print_grouped_table(
+            rows,
+            group_label="PRs",
+            group_key="pr",
+            extra_columns=[("Repo", "repo"), ("Dev", "dev"), ("Branch", "branch")],
+        )
+
+    asyncio.run(_run())
+
+
+@app.command()
+def devs(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(7, "--days", "-d", help="Lookback window"),
+) -> None:
+    """Show top 20 developers by cost over the lookback window."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.queries import get_cost_by_dev
+
+        rows = await get_cost_by_dev(cfg.db_path, days=days, limit=20)
+        _print_grouped_table(rows, group_label="devs", group_key="dev")
+
+    asyncio.run(_run())
+
+
+@app.command()
+def repos(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(7, "--days", "-d", help="Lookback window"),
+) -> None:
+    """Show top 20 repos by cost over the lookback window."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.queries import get_cost_by_repo
+
+        rows = await get_cost_by_repo(cfg.db_path, days=days, limit=20)
+        _print_grouped_table(rows, group_label="repos", group_key="repo")
+
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":

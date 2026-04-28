@@ -229,7 +229,44 @@ async def init_db(db_path: str) -> None:
     from burnlens.cloud.sync import migrate_add_synced_at
     await migrate_add_synced_at(db_path)
 
+    # CODE-1: git-aware tag columns
+    await migrate_add_git_tags(db_path)
+
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_add_git_tags(db_path: str) -> None:
+    """Add ``tag_repo / tag_dev / tag_pr / tag_branch`` columns + indices.
+
+    Safe to call multiple times — uses ``PRAGMA table_info`` to detect
+    existing columns. Indices use ``CREATE INDEX IF NOT EXISTS``.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        added = []
+        for col in ("tag_repo", "tag_dev", "tag_pr", "tag_branch"):
+            if col not in columns:
+                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} TEXT")
+                added.append(col)
+
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_requests_tag_repo ON requests(tag_repo)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_requests_tag_dev ON requests(tag_dev)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_requests_tag_pr ON requests(tag_pr)"
+        )
+        await db.commit()
+
+        if added:
+            logger.info(
+                "Migration: added git tag columns to requests table: %s",
+                ", ".join(added),
+            )
 
 
 async def get_requests_for_export(
@@ -686,6 +723,7 @@ async def archive_old_discovery_events(db_path: str, retention_days: int = 90) -
 
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id."""
+    tags = record.tags or {}
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
             """
@@ -694,8 +732,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 input_tokens, output_tokens, reasoning_tokens,
                 cache_read_tokens, cache_write_tokens,
                 cost_usd, duration_ms, status_code,
-                tags, system_prompt_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tags, system_prompt_hash,
+                tag_repo, tag_dev, tag_pr, tag_branch
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -712,6 +751,10 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.status_code,
                 json.dumps(record.tags),
                 record.system_prompt_hash,
+                tags.get("repo") or None,
+                tags.get("dev") or None,
+                tags.get("pr") or None,
+                tags.get("branch") or None,
             ),
         )
         await db.commit()

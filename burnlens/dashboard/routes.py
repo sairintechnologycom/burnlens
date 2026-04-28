@@ -7,11 +7,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 from dataclasses import asdict
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
 from burnlens.storage.queries import (
+    get_cost_by_pr,
     get_daily_cost,
     get_recent_requests,
     get_requests_for_analysis,
@@ -103,6 +105,31 @@ async def costs_by_model(
             "total_input_tokens": r.total_input_tokens,
             "total_output_tokens": r.total_output_tokens,
             "total_cost_usd": round(r.total_cost_usd, 6),
+        }
+        for r in rows
+    ]
+
+
+# ----------------------------------------------------------- /api/cost-by-pr
+
+@router.get("/cost-by-pr")
+async def cost_by_pr(
+    request: Request,
+    days: int = Query(default=7, ge=1, le=365),
+    repo: Optional[str] = Query(default=None),
+) -> list:
+    """Top PRs by cost over the lookback window — drives the dashboard panel."""
+    db = _db_path(request)
+    rows = await get_cost_by_pr(db, days=days, repo=repo, limit=20)
+    return [
+        {
+            "pr": r.get("pr"),
+            "repo": r.get("repo"),
+            "dev": r.get("dev"),
+            "branch": r.get("branch"),
+            "requests": r.get("requests", 0),
+            "total_cost_usd": round(r.get("total_cost") or 0.0, 6),
+            "last_seen": r.get("last_seen"),
         }
         for r in rows
     ]
