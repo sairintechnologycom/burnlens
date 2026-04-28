@@ -61,3 +61,22 @@ async def authed_client(client):
     }
 
     return ac, mock_conn, token, ws_id
+
+
+# ---------------------------------------------------------------------------
+# OSS proxy fixtures (used by tests/test_export.py, tests/test_storage.py, etc.)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def tmp_db(tmp_path):
+    """Return a path to a fresh temporary SQLite database."""
+    return str(tmp_path / "test.db")
+
+
+@pytest_asyncio.fixture
+async def initialized_db(tmp_db: str) -> str:
+    """Initialize a fresh OSS SQLite database and return its path."""
+    from burnlens.storage.database import init_db
+    await init_db(tmp_db)
+    return tmp_db

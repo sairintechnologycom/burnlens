@@ -359,6 +359,9 @@ def export(
     ),
     team: Optional[str] = typer.Option(None, "--team", help="Filter by tag_team"),
     feature: Optional[str] = typer.Option(None, "--feature", help="Filter by tag_feature"),
+    repo: Optional[str] = typer.Option(None, "--repo", help="Filter by tag_repo"),
+    dev: Optional[str] = typer.Option(None, "--dev", help="Filter by tag_dev"),
+    pr: Optional[str] = typer.Option(None, "--pr", help="Filter by tag_pr"),
 ) -> None:
     """Export request data to CSV."""
     cfg = load_config(config)
@@ -368,7 +371,13 @@ def export(
         from burnlens.storage.database import get_requests_for_export
 
         rows = await get_requests_for_export(
-            cfg.db_path, days=days, team=team, feature=feature
+            cfg.db_path,
+            days=days,
+            team=team,
+            feature=feature,
+            repo=repo,
+            dev=dev,
+            pr=pr,
         )
 
         if not rows:
