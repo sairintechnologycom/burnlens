@@ -780,8 +780,8 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 cache_read_tokens, cache_write_tokens,
                 cost_usd, duration_ms, status_code,
                 tags, system_prompt_hash,
-                tag_repo, tag_dev, tag_pr, tag_branch
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tag_repo, tag_dev, tag_pr, tag_branch, tag_key_label
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -802,6 +802,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 tags.get("dev") or None,
                 tags.get("pr") or None,
                 tags.get("branch") or None,
+                tags.get("key_label") or None,
             ),
         )
         await db.commit()

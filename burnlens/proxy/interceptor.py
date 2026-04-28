@@ -291,10 +291,11 @@ async def _log_record(db_path: str, record: RequestRecord) -> None:
 
 
 def _extract_api_key_hash(headers: dict[str, str]) -> str | None:
-    """Return SHA-256 hash of the API key from Authorization or x-api-key header.
+    """Return SHA-256 hash of the API key from a known auth header.
 
-    Extracts the token from "Bearer <token>" or uses the raw value of x-api-key.
-    Returns None if no auth header is present.
+    Supports OpenAI-style ``Authorization: Bearer <token>``, Anthropic-style
+    ``x-api-key: <token>``, and Google-style ``x-goog-api-key: <token>``.
+    Returns None if no recognised auth header is present.
 
     Args:
         headers: Request headers (keys may be mixed-case).
@@ -307,9 +308,10 @@ def _extract_api_key_hash(headers: dict[str, str]) -> str | None:
         if token:
             return hashlib.sha256(token.encode()).hexdigest()
 
-    api_key = lower_headers.get("x-api-key")
-    if api_key and api_key.strip():
-        return hashlib.sha256(api_key.strip().encode()).hexdigest()
+    for header_name in ("x-api-key", "x-goog-api-key"):
+        api_key = lower_headers.get(header_name)
+        if api_key and api_key.strip():
+            return hashlib.sha256(api_key.strip().encode()).hexdigest()
 
     return None
 
@@ -362,6 +364,22 @@ async def handle_request(
         upstream_path = f"{upstream_path}?{query_string}"
 
     tags = _extract_tags(headers)
+
+    # --- CODE-2: resolve the API-key label for this request ---
+    # SHA-256 the auth header, look up the matching label in api_keys, and
+    # write it to tags["key_label"]. Stored as tag_key_label on the request
+    # row so the dashboard and `burnlens keys today` can group by label.
+    api_key_hash = _extract_api_key_hash(headers)
+    if api_key_hash:
+        try:
+            from burnlens.keys import get_label_by_hash, touch_last_used
+            label = await get_label_by_hash(db_path, api_key_hash)
+            if label:
+                tags["key_label"] = label
+                # Fire-and-forget so we don't add latency to the proxy.
+                asyncio.create_task(touch_last_used(db_path, label))
+        except Exception as exc:  # fail-open: never break the proxy
+            logger.debug("API key label lookup failed: %s", exc)
 
     # --- Customer budget enforcement (BEFORE forwarding) ---
     customer = tags.get("customer")
