@@ -512,12 +512,64 @@ async function fetchTeamBudgets() {
 
 // -------------------------------------------------------- Requests table
 
+// Top PRs panel — module-scoped active filter for click-to-drill-down
+let activePRFilter = null;
+
+async function fetchTopPRs() {
+  const period = currentPeriod();
+  const days = parseInt((period || '7d').replace('d', ''), 10) || 7;
+  setText('top-prs-window', `(last ${days} day${days === 1 ? '' : 's'})`);
+
+  const rows = await apiFetch(`/cost-by-pr?days=${days}`);
+  const tbody = $('top-prs-body');
+  tbody.replaceChildren();
+
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 7;
+    td.className = 'loading-text';
+    td.textContent = 'No PR-tagged traffic yet. Run `burnlens run -- <agent>` from a git repo to populate this.';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    if (activePRFilter && activePRFilter === row.pr) {
+      tr.classList.add('row-active');
+    }
+    tr.addEventListener('click', () => setPRFilter(row.pr));
+
+    tr.appendChild(makeTd(row.pr || '—'));
+    tr.appendChild(makeTd(row.repo || '—', 'td-muted'));
+    tr.appendChild(makeTd(row.dev || '—', 'td-muted'));
+    tr.appendChild(makeTd(row.branch || '—', 'td-muted'));
+    tr.appendChild(makeTd(fmtNum(row.requests || 0)));
+    tr.appendChild(makeTd(fmtCost(row.total_cost_usd || 0), 'td-cost'));
+    tr.appendChild(makeTd(fmtTime(row.last_seen), 'td-muted'));
+
+    tbody.appendChild(tr);
+  }
+}
+
+function setPRFilter(pr) {
+  activePRFilter = activePRFilter === pr ? null : pr;
+  fetchTopPRs();
+  fetchRequests();
+}
+
 async function fetchRequests() {
-  const rows = await apiFetch('/requests?limit=50');
+  const params = new URLSearchParams({ limit: '50' });
+  if (activePRFilter) params.set('pr', activePRFilter);
+  const rows = await apiFetch(`/requests?${params.toString()}`);
   const tbody = $('requests-body');
   tbody.replaceChildren();
 
-  setText('requests-count', rows.length ? rows.length + ' recent' : '');
+  const filterNote = activePRFilter ? ` (filtered to PR ${activePRFilter} — click row again to clear)` : '';
+  setText('requests-count', (rows.length ? rows.length + ' recent' : '') + filterNote);
 
   if (!rows.length) {
     const tr = document.createElement('tr');
@@ -572,6 +624,7 @@ async function refresh() {
     fetchRecommendations(),
     fetchCustomers(),
     fetchTeamBudgets(),
+    fetchTopPRs(),
     fetchRequests(),
   ]);
 }

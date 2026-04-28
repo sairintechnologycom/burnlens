@@ -1047,3 +1047,13 @@ th.sortable.active-sort.desc::after { content: '\2193'; }
   font-size: 0.68rem;
   color: var(--text-muted);
 }
+
+/* CODE-1: Top PRs panel — clickable rows + active state */
+#top-prs-section tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#top-prs-section tbody tr.row-active {
+  background: rgba(120, 200, 255, 0.10);
+  outline: 1px solid rgba(120, 200, 255, 0.35);
+}
