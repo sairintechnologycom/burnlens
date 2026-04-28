@@ -237,8 +237,15 @@ async def get_requests_for_export(
     days: int = 7,
     team: str | None = None,
     feature: str | None = None,
+    repo: str | None = None,
+    dev: str | None = None,
+    pr: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch requests for CSV export, optionally filtered by team/feature tag."""
+    """Fetch requests for CSV export, optionally filtered by tag values.
+
+    Supported filters: team, feature, repo, dev, pr — each maps to a key
+    inside the JSON ``tags`` column.
+    """
     from datetime import datetime, timedelta, timezone
 
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
@@ -252,6 +259,18 @@ async def get_requests_for_export(
     if feature:
         query += " AND json_extract(tags, '$.feature') = ?"
         params.append(feature)
+
+    if repo:
+        query += " AND json_extract(tags, '$.repo') = ?"
+        params.append(repo)
+
+    if dev:
+        query += " AND json_extract(tags, '$.dev') = ?"
+        params.append(dev)
+
+    if pr:
+        query += " AND json_extract(tags, '$.pr') = ?"
+        params.append(pr)
 
     query += " ORDER BY timestamp ASC"
 

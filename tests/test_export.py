@@ -120,3 +120,76 @@ async def test_export_empty_result_no_crash(initialized_db: str, tmp_path: Path)
         reader = csv.DictReader(f)
         assert reader.fieldnames == CSV_COLUMNS
         assert list(reader) == []
+
+
+@pytest.mark.asyncio
+async def test_export_filter_by_repo(initialized_db: str, tmp_path: Path) -> None:
+    """Filtering by repo returns only matching rows."""
+    await insert_request(initialized_db, _record(tags={"repo": "burnlens"}))
+    await insert_request(initialized_db, _record(tags={"repo": "other-app"}))
+    await insert_request(initialized_db, _record(tags={}))
+
+    rows = await get_requests_for_export(initialized_db, days=7, repo="burnlens")
+
+    assert len(rows) == 1
+    out = tmp_path / "out.csv"
+    export_to_csv(rows, out)
+
+    with open(out) as f:
+        data = list(csv.DictReader(f))
+        assert len(data) == 1
+        assert data[0]["repo"] == "burnlens"
+
+
+@pytest.mark.asyncio
+async def test_export_filter_by_dev(initialized_db: str, tmp_path: Path) -> None:
+    """Filtering by dev returns only matching rows."""
+    await insert_request(initialized_db, _record(tags={"dev": "alice@co.com"}))
+    await insert_request(initialized_db, _record(tags={"dev": "bob@co.com"}))
+
+    rows = await get_requests_for_export(initialized_db, days=7, dev="alice@co.com")
+
+    assert len(rows) == 1
+    out = tmp_path / "out.csv"
+    export_to_csv(rows, out)
+
+    with open(out) as f:
+        data = list(csv.DictReader(f))
+        assert len(data) == 1
+        assert data[0]["dev"] == "alice@co.com"
+
+
+@pytest.mark.asyncio
+async def test_export_filter_by_pr(initialized_db: str, tmp_path: Path) -> None:
+    """Filtering by PR returns only matching rows."""
+    await insert_request(initialized_db, _record(tags={"pr": "1247"}))
+    await insert_request(initialized_db, _record(tags={"pr": "1248"}))
+
+    rows = await get_requests_for_export(initialized_db, days=7, pr="1247")
+
+    assert len(rows) == 1
+    out = tmp_path / "out.csv"
+    export_to_csv(rows, out)
+
+    with open(out) as f:
+        data = list(csv.DictReader(f))
+        assert len(data) == 1
+        assert data[0]["pr"] == "1247"
+
+
+@pytest.mark.asyncio
+async def test_export_cost_formatted_as_decimal_not_scientific(
+    initialized_db: str, tmp_path: Path
+) -> None:
+    """A tiny cost like 5.12e-05 must render as a fixed-point decimal in CSV."""
+    await insert_request(initialized_db, _record(cost_usd=0.0000512))
+    rows = await get_requests_for_export(initialized_db, days=7)
+
+    out = tmp_path / "out.csv"
+    export_to_csv(rows, out)
+
+    with open(out) as f:
+        data = list(csv.DictReader(f))
+        cost_str = data[0]["cost_usd"]
+        assert "e" not in cost_str.lower(), f"cost {cost_str!r} used scientific notation"
+        assert cost_str == "0.00005120"
