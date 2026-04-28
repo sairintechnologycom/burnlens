@@ -892,3 +892,108 @@ async def get_requests_for_analysis(
         d["tags"] = json.loads(d.get("tags", "{}"))
         result.append(d)
     return result
+
+
+# ---------------------------------------------------------------------------
+# CODE-1: git-aware aggregation queries
+# ---------------------------------------------------------------------------
+
+
+async def _aggregate_by_tag(
+    db_path: str,
+    *,
+    group_col: str,
+    days: int,
+    limit: int,
+    extra_cols: list[str] | None = None,
+    repo: str | None = None,
+) -> list[dict[str, Any]]:
+    """Group ``requests`` rows by a single ``tag_*`` column, ordered by cost desc.
+
+    Returns: ``[{<group_col>, requests, total_cost, last_seen, *extra_cols}, ...]``
+    """
+    from datetime import timedelta
+
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    where = [f"{group_col} IS NOT NULL", "timestamp >= ?"]
+    params: list[Any] = [since]
+
+    if repo:
+        where.append("tag_repo = ?")
+        params.append(repo)
+
+    select_cols = [group_col]
+    for col in extra_cols or []:
+        select_cols.append(f"MAX({col}) AS {col.removeprefix('tag_')}")
+
+    query = f"""
+        SELECT
+            {', '.join(select_cols)},
+            COUNT(*) AS requests,
+            SUM(cost_usd) AS total_cost,
+            MAX(timestamp) AS last_seen
+        FROM requests
+        WHERE {' AND '.join(where)}
+        GROUP BY {group_col}
+        ORDER BY total_cost DESC
+        LIMIT ?
+    """
+    params.append(limit)
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(query, params)
+        rows = await cursor.fetchall()
+
+    result = []
+    for row in rows:
+        d = dict(row)
+        if group_col.startswith("tag_") and group_col in d:
+            d[group_col.removeprefix("tag_")] = d.pop(group_col)
+        result.append(d)
+    return result
+
+
+async def get_cost_by_pr(
+    db_path: str,
+    days: int = 7,
+    repo: str | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Return top PRs by total cost over the lookback window."""
+    return await _aggregate_by_tag(
+        db_path,
+        group_col="tag_pr",
+        days=days,
+        limit=limit,
+        extra_cols=["tag_repo", "tag_dev", "tag_branch"],
+        repo=repo,
+    )
+
+
+async def get_cost_by_dev(
+    db_path: str,
+    days: int = 7,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Return top developers by total cost over the lookback window."""
+    return await _aggregate_by_tag(
+        db_path,
+        group_col="tag_dev",
+        days=days,
+        limit=limit,
+    )
+
+
+async def get_cost_by_repo(
+    db_path: str,
+    days: int = 7,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Return top repos by total cost over the lookback window."""
+    return await _aggregate_by_tag(
+        db_path,
+        group_col="tag_repo",
+        days=days,
+        limit=limit,
+    )
