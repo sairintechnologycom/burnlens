@@ -82,6 +82,17 @@ def next_midnight_in_tz(tz: Any, now: datetime | None = None) -> datetime:
     return end_utc
 
 
+def month_start_utc(tz: Any, now: datetime | None = None) -> datetime:
+    """Return the first instant of the current month in ``tz``, expressed in UTC."""
+    if now is None:
+        now = datetime.now(timezone.utc)
+    local_now = now.astimezone(tz)
+    local_month_start = local_now.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    return local_month_start.astimezone(timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # 30-second spend cache
 # ---------------------------------------------------------------------------

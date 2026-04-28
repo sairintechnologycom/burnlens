@@ -14,6 +14,7 @@ from burnlens.config import ApiKeyBudgetsConfig, KeyBudgetEntry
 from burnlens.key_budget import (
     SpendCache,
     enforce_daily_cap,
+    month_start_utc,
     next_midnight_in_tz,
     resolve_timezone,
     spend_cache as global_spend_cache,
@@ -23,6 +24,8 @@ from burnlens.keys import register_key
 from burnlens.proxy.interceptor import handle_request
 from burnlens.proxy.providers import get_provider_for_path
 from burnlens.storage.database import (
+    get_all_keys_today_spend,
+    get_spend_by_key_label_this_month,
     get_spend_by_key_label_today,
     insert_request,
 )
@@ -174,6 +177,160 @@ async def test_spend_query_returns_zero_for_unknown_label(initialized_db: str) -
     tz = resolve_timezone("UTC")
     spent = await get_spend_by_key_label_today(initialized_db, "ghost", tz)
     assert spent == 0.0
+
+
+# ---------------------------------------------------------------------------
+# get_spend_by_key_label_this_month
+# ---------------------------------------------------------------------------
+
+
+def test_month_start_aligns_to_local_first_of_month() -> None:
+    tz = resolve_timezone("Asia/Kolkata")
+    # Mid-month UTC instant; local IST is also mid-month → month start is 1st 00:00 IST
+    fake_now = datetime(2026, 4, 15, 19, 0, tzinfo=timezone.utc)
+    start = month_start_utc(tz, now=fake_now)
+    # 2026-04-01 00:00 IST → 2026-03-31 18:30 UTC
+    assert start == datetime(2026, 3, 31, 18, 30, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_month_spend_includes_earlier_in_month_excludes_prior(
+    initialized_db: str,
+) -> None:
+    tz = resolve_timezone("UTC")
+    now = datetime.now(timezone.utc)
+    last_month = (now.replace(day=1) - timedelta(days=1)).replace(hour=12)
+
+    # Last month — must NOT count.
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/v1/chat",
+            timestamp=last_month,
+            input_tokens=0, output_tokens=0, reasoning_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=99.0, duration_ms=0, status_code=200,
+            tags={"key_label": "k"},
+        ),
+    )
+    # Earlier this month (1st of current month) — must count.
+    earlier_this_month = now.replace(day=1, hour=1, minute=0, second=0, microsecond=0)
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/v1/chat",
+            timestamp=earlier_this_month,
+            input_tokens=0, output_tokens=0, reasoning_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=3.0, duration_ms=0, status_code=200,
+            tags={"key_label": "k"},
+        ),
+    )
+    # Now — must count.
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/v1/chat",
+            timestamp=now,
+            input_tokens=0, output_tokens=0, reasoning_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=4.5, duration_ms=0, status_code=200,
+            tags={"key_label": "k"},
+        ),
+    )
+
+    spent = await get_spend_by_key_label_this_month(initialized_db, "k", tz)
+    assert spent == pytest.approx(7.5)
+
+
+@pytest.mark.asyncio
+async def test_month_spend_zero_for_unknown_label(initialized_db: str) -> None:
+    spent = await get_spend_by_key_label_this_month(
+        initialized_db, "ghost", resolve_timezone("UTC")
+    )
+    assert spent == 0.0
+
+
+# ---------------------------------------------------------------------------
+# get_all_keys_today_spend
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_all_keys_today_groups_by_label(initialized_db: str) -> None:
+    tz = resolve_timezone("UTC")
+    now = datetime.now(timezone.utc)
+
+    for label, cost in [("alpha", 1.25), ("alpha", 0.75), ("beta", 4.00)]:
+        await insert_request(
+            initialized_db,
+            RequestRecord(
+                provider="openai", model="gpt-4o", request_path="/v1/chat",
+                timestamp=now,
+                input_tokens=0, output_tokens=0, reasoning_tokens=0,
+                cache_read_tokens=0, cache_write_tokens=0,
+                cost_usd=cost, duration_ms=0, status_code=200,
+                tags={"key_label": label},
+            ),
+        )
+
+    spend = await get_all_keys_today_spend(initialized_db, tz)
+    assert spend == {"alpha": pytest.approx(2.00), "beta": pytest.approx(4.00)}
+
+
+@pytest.mark.asyncio
+async def test_all_keys_today_excludes_unlabelled_and_prior_days(
+    initialized_db: str,
+) -> None:
+    tz = resolve_timezone("UTC")
+    now = datetime.now(timezone.utc)
+    yesterday = now - timedelta(days=2)
+
+    # Unlabelled today — must be excluded.
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/v1/chat",
+            timestamp=now,
+            input_tokens=0, output_tokens=0, reasoning_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=10.0, duration_ms=0, status_code=200,
+            tags={},
+        ),
+    )
+    # Labelled yesterday — must be excluded.
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/v1/chat",
+            timestamp=yesterday,
+            input_tokens=0, output_tokens=0, reasoning_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=10.0, duration_ms=0, status_code=200,
+            tags={"key_label": "stale"},
+        ),
+    )
+    # Labelled today — must be the only entry.
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/v1/chat",
+            timestamp=now,
+            input_tokens=0, output_tokens=0, reasoning_tokens=0,
+            cache_read_tokens=0, cache_write_tokens=0,
+            cost_usd=2.5, duration_ms=0, status_code=200,
+            tags={"key_label": "fresh"},
+        ),
+    )
+
+    spend = await get_all_keys_today_spend(initialized_db, tz)
+    assert spend == {"fresh": pytest.approx(2.5)}
+
+
+@pytest.mark.asyncio
+async def test_all_keys_today_empty_for_empty_db(initialized_db: str) -> None:
+    spend = await get_all_keys_today_spend(initialized_db, resolve_timezone("UTC"))
+    assert spend == {}
 
 
 # ---------------------------------------------------------------------------
