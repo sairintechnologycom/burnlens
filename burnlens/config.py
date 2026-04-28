@@ -45,6 +45,44 @@ class CustomerBudgetsConfig:
 
 
 @dataclass
+class KeyBudgetEntry:
+    """Per-API-key budget thresholds.
+
+    ``daily_usd`` is hard-enforced (HTTP 429). ``monthly_usd`` is a soft
+    warning only — used for alerts but not for blocking.
+    """
+
+    daily_usd: float | None = None
+    monthly_usd: float | None = None
+
+
+@dataclass
+class ApiKeyBudgetsConfig:
+    """Per-API-key daily hard caps (CODE-2).
+
+    ``keys`` maps a registered label → its budget. ``default`` applies to
+    registered labels that don't have an explicit override. ``reset_timezone``
+    is an IANA name (e.g. ``"Asia/Kolkata"``); invalid values fall back to
+    UTC at startup with a logged warning.
+    """
+
+    keys: dict[str, KeyBudgetEntry] = field(default_factory=dict)
+    default: KeyBudgetEntry | None = None
+    reset_timezone: str = "UTC"
+
+    def daily_cap_for(self, label: str | None) -> float | None:
+        """Return the daily USD cap for a label, falling back to ``default``."""
+        if not label:
+            return None
+        entry = self.keys.get(label)
+        if entry and entry.daily_usd is not None:
+            return entry.daily_usd
+        if self.default and self.default.daily_usd is not None:
+            return self.default.daily_usd
+        return None
+
+
+@dataclass
 class GoogleBillingConfig:
     """Google Cloud Billing API configuration for Shadow AI discovery."""
 
@@ -88,6 +126,7 @@ class AlertsConfig:
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     budgets: TeamBudgetsConfig = field(default_factory=TeamBudgetsConfig)
     customer_budgets: CustomerBudgetsConfig = field(default_factory=CustomerBudgetsConfig)
+    api_key_budgets: ApiKeyBudgetsConfig = field(default_factory=ApiKeyBudgetsConfig)
     alert_recipients: list[str] = field(default_factory=list)
 
 
@@ -201,6 +240,32 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         else:
             customer_budgets = CustomerBudgetsConfig()
 
+        api_key_data = alerts_data.get("api_key_budgets")
+        if api_key_data:
+            reset_tz = str(api_key_data.get("reset_timezone", "UTC"))
+            entries: dict[str, KeyBudgetEntry] = {}
+            default_entry: KeyBudgetEntry | None = None
+            for label, raw in api_key_data.items():
+                if label == "reset_timezone":
+                    continue
+                if not isinstance(raw, dict):
+                    continue
+                entry = KeyBudgetEntry(
+                    daily_usd=_optional_float(raw.get("daily_usd")),
+                    monthly_usd=_optional_float(raw.get("monthly_usd")),
+                )
+                if label == "default":
+                    default_entry = entry
+                else:
+                    entries[str(label)] = entry
+            api_key_budgets = ApiKeyBudgetsConfig(
+                keys=entries,
+                default=default_entry,
+                reset_timezone=reset_tz,
+            )
+        else:
+            api_key_budgets = ApiKeyBudgetsConfig()
+
         raw_recipients = alerts_data.get("alert_recipients", [])
         alert_recipients = [str(r) for r in raw_recipients]
 
@@ -212,6 +277,7 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             budget=budget,
             budgets=team_budgets,
             customer_budgets=customer_budgets,
+            api_key_budgets=api_key_budgets,
             alert_recipients=alert_recipients,
         )
         kwargs["alerts"] = alerts
