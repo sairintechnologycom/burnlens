@@ -793,6 +793,48 @@ async def get_spend_by_key_label_today(
     return float(row[0] or 0.0)
 
 
+async def get_spend_by_key_label_this_month(
+    db_path: str,
+    key_label: str,
+    tz: Any,
+) -> float:
+    """Sum ``cost_usd`` for ``tag_key_label`` since the first of this month in ``tz``."""
+    from burnlens.key_budget import month_start_utc
+
+    start_utc = month_start_utc(tz)
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0.0) FROM requests "
+            "WHERE tag_key_label = ? AND timestamp >= ?",
+            (key_label, start_utc.isoformat()),
+        )
+        row = await cursor.fetchone()
+    return float(row[0] or 0.0)
+
+
+async def get_all_keys_today_spend(
+    db_path: str,
+    tz: Any,
+) -> dict[str, float]:
+    """Return ``{key_label: spent_usd}`` for every label with traffic today in ``tz``.
+
+    Rows with a NULL ``tag_key_label`` (unregistered keys) are skipped — only
+    labelled traffic shows up in the dashboard / ``burnlens keys`` output.
+    """
+    from burnlens.key_budget import today_window_utc
+
+    start_utc, _ = today_window_utc(tz)
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT tag_key_label, COALESCE(SUM(cost_usd), 0.0) FROM requests "
+            "WHERE tag_key_label IS NOT NULL AND timestamp >= ? "
+            "GROUP BY tag_key_label",
+            (start_utc.isoformat(),),
+        )
+        rows = await cursor.fetchall()
+    return {label: float(spent or 0.0) for label, spent in rows}
+
+
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id."""
     tags = record.tags or {}
