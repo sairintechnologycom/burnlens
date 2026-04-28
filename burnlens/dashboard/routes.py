@@ -194,10 +194,11 @@ async def costs_timeline(
 async def recent_requests(
     request: Request,
     limit: int = Query(default=50, le=500),
+    pr: Optional[str] = Query(default=None),
 ) -> list:
-    """Most recent N requests."""
+    """Most recent N requests, optionally filtered to one PR."""
     db = _db_path(request)
-    return await get_recent_requests(db, limit=limit)
+    return await get_recent_requests(db, limit=limit, pr=pr)
 
 
 # --------------------------------------------------------------- /api/waste

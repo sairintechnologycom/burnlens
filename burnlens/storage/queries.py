@@ -565,17 +565,30 @@ async def get_usage_by_model(
 async def get_recent_requests(
     db_path: str,
     limit: int = 50,
+    pr: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Return the most recent N requests as plain dicts."""
+    """Return the most recent N requests as plain dicts.
+
+    When ``pr`` is given, only rows with matching ``tag_pr`` are returned —
+    used by the dashboard's PR-row drill-down.
+    """
+    where = ""
+    params: list[Any] = []
+    if pr:
+        where = "WHERE tag_pr = ?"
+        params.append(pr)
+    params.append(limit)
+
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            """
+            f"""
             SELECT * FROM requests
+            {where}
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            (limit,),
+            params,
         )
         rows = await cursor.fetchall()
 

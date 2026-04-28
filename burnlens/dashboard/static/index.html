@@ -118,6 +118,32 @@
     <div id="recommendations-panel"></div>
   </section>
 
+  <!-- Top PRs by cost (last N days) -->
+  <section class="table-card" id="top-prs-section">
+    <div class="chart-header">
+      <h2>Top PRs by cost <span class="chart-note" id="top-prs-window">(last 7 days)</span></h2>
+      <span class="chart-note">click a row to filter Recent Requests</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>PR</th>
+            <th>Repo</th>
+            <th>Dev</th>
+            <th>Branch</th>
+            <th class="num">Requests</th>
+            <th class="num">Total cost</th>
+            <th>Last seen</th>
+          </tr>
+        </thead>
+        <tbody id="top-prs-body">
+          <tr><td colspan="7" class="loading-text">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <!-- Recent requests table -->
   <section class="table-card">
     <div class="chart-header">
