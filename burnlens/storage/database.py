@@ -232,6 +232,9 @@ async def init_db(db_path: str) -> None:
     # CODE-1: git-aware tag columns
     await migrate_add_git_tags(db_path)
 
+    # CODE-2: per-API-key daily caps
+    await migrate_add_key_label(db_path)
+
     logger.debug("Database initialized at %s", db_path)
 
 
@@ -266,6 +269,50 @@ async def migrate_add_git_tags(db_path: str) -> None:
             logger.info(
                 "Migration: added git tag columns to requests table: %s",
                 ", ".join(added),
+            )
+
+
+async def migrate_add_key_label(db_path: str) -> None:
+    """Add ``tag_key_label`` column to requests + create ``api_keys`` table.
+
+    Safe to call multiple times — uses ``PRAGMA table_info`` to detect the
+    existing column, and ``CREATE TABLE / INDEX IF NOT EXISTS`` for the rest.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        added_column = False
+        if "tag_key_label" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN tag_key_label TEXT")
+            added_column = True
+
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_requests_tag_key_label "
+            "ON requests(tag_key_label)"
+        )
+
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_keys (
+                label         TEXT PRIMARY KEY,
+                provider      TEXT NOT NULL,
+                key_hash      TEXT NOT NULL,
+                key_prefix    TEXT NOT NULL,
+                created_at    TEXT NOT NULL,
+                last_used_at  TEXT
+            )
+            """
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)"
+        )
+
+        await db.commit()
+
+        if added_column:
+            logger.info(
+                "Migration: added tag_key_label column + api_keys table"
             )
 
 
