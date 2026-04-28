@@ -25,7 +25,7 @@ from burnlens.storage.models import RequestRecord
 
 if TYPE_CHECKING:
     from burnlens.alerts.engine import AlertEngine
-    from burnlens.config import CustomerBudgetsConfig
+    from burnlens.config import ApiKeyBudgetsConfig, CustomerBudgetsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +281,17 @@ async def _log_record(db_path: str, record: RequestRecord) -> None:
         await insert_request(db_path, record)
     except Exception as exc:
         logger.error("Failed to log request: %s", exc)
+        return
+
+    # CODE-2: every fresh row for a registered key invalidates the cached
+    # daily-spend so the next request re-queries SQLite. Cheap, idempotent.
+    label = (record.tags or {}).get("key_label")
+    if label:
+        try:
+            from burnlens.key_budget import spend_cache
+            spend_cache.invalidate(label)
+        except Exception as exc:
+            logger.debug("Spend cache invalidate failed: %s", exc)
 
     # Emit OTEL span (no-op if telemetry is not initialised)
     try:
@@ -350,6 +361,7 @@ async def handle_request(
     db_path: str,
     alert_engine: "AlertEngine | None" = None,
     customer_budgets: "CustomerBudgetsConfig | None" = None,
+    api_key_budgets: "ApiKeyBudgetsConfig | None" = None,
 ) -> tuple[int, dict[str, str], bytes | None, AsyncIterator[bytes] | None]:
     """Forward a request upstream and return (status, headers, body, stream).
 
@@ -370,6 +382,7 @@ async def handle_request(
     # write it to tags["key_label"]. Stored as tag_key_label on the request
     # row so the dashboard and `burnlens keys today` can group by label.
     api_key_hash = _extract_api_key_hash(headers)
+    label: str | None = None
     if api_key_hash:
         try:
             from burnlens.keys import get_label_by_hash, touch_last_used
@@ -380,6 +393,25 @@ async def handle_request(
                 asyncio.create_task(touch_last_used(db_path, label))
         except Exception as exc:  # fail-open: never break the proxy
             logger.debug("API key label lookup failed: %s", exc)
+
+    # --- CODE-2: per-API-key daily hard cap (BEFORE forwarding) ---
+    if label and api_key_budgets is not None:
+        try:
+            from burnlens.key_budget import enforce_daily_cap
+            breach = await enforce_daily_cap(label, db_path, api_key_budgets)
+        except Exception as exc:  # fail-open
+            logger.debug("Daily cap check failed: %s", exc)
+            breach = None
+        if breach is not None:
+            spent_today, daily_limit, resets_at = breach
+            reject_body = json.dumps({
+                "error": "daily_budget_exceeded",
+                "key": label,
+                "spent_today": round(spent_today, 4),
+                "daily_limit": round(daily_limit, 4),
+                "resets_at": resets_at.isoformat(),
+            }).encode()
+            return 429, {"content-type": "application/json"}, reject_body, None
 
     # --- Customer budget enforcement (BEFORE forwarding) ---
     customer = tags.get("customer")
