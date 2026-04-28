@@ -2,7 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.1] — 2026-04-15
+This file documents both the OSS PyPI package (`burnlens`) and the
+internal cloud service (`burnlens-cloud`, deployed only). Each entry is
+qualified with the package it covers.
+
+## [PyPI `burnlens` 1.0.1] — 2026-04-28
+
+### Fixed
+- **CRITICAL**: 1.0.0 published a broken wheel that omitted
+  `burnlens/cost/`, `burnlens/proxy/`, `burnlens/cli.py`, and
+  `burnlens/__main__.py` — every install was non-functional and any
+  `burnlens` console-script invocation failed with `ModuleNotFoundError`.
+  1.0.1 ships the complete OSS package: proxy server, request
+  interceptor, SSE streaming handler, cost calculator, pricing data,
+  CLI, dashboard static assets, telemetry, and reports.
+- **I-1**: Google and Anthropic streaming responses no longer log
+  `0 tokens / $0.00`. Root causes addressed: `_is_streaming()` now
+  detects Google's `:streamGenerateContent` URL scheme; `accept-encoding`
+  is stripped from forwarded requests so SSE bytes aren't gzipped;
+  Google `_extract_google_stream` parses both SSE `data: {…}` lines and
+  raw NDJSON; SSE buffer is reassembled on `\n\n` boundaries before
+  extraction so TCP-fragmented usage events aren't dropped.
+
+### Added
+- **I-2**: `burnlens export` CSV command gains `--repo / --dev / --pr`
+  filters and matching `repo / dev / pr / branch` columns. Cost cells
+  now format as `f"{cost:.8f}"` instead of scientific notation
+  (e.g. `0.00005120` instead of `5.12e-05`).
+- **CODE-1**: Git-aware auto-tagging — every proxied request can now
+  be attributed to a PR / repo / dev / branch with zero manual headers:
+    - `burnlens run -- <cmd>` wraps any command, reading
+      `read_git_context(cwd)` and exposing `BURNLENS_TAG_REPO/DEV/PR/BRANCH`
+      env vars + `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` to the child.
+    - The proxy's `_extract_tags` falls back to those env vars
+      per-request when the corresponding `X-BurnLens-Tag-*` header is
+      absent.
+    - Schema migration adds `tag_repo / tag_dev / tag_pr / tag_branch`
+      columns + `idx_requests_tag_{repo,dev,pr}` indices to the
+      `requests` table (idempotent via `PRAGMA table_info`).
+    - New CLI groupers: `burnlens prs --days N --repo X`,
+      `burnlens devs`, `burnlens repos` — top-20 cost tables.
+    - New JSON endpoint `GET /api/cost-by-pr?days=7&repo=X`.
+    - New dashboard panel "Top PRs by cost" with click-to-filter
+      Recent Requests via the indexed `tag_pr` column.
+
+### Tests
+- 197 OSS tests pass on this release: streaming (39), cost (44),
+  storage (44), export (9), git_context (16), cli_wrapper (6),
+  proxy_env_fallback (5), and integration suites.
+
+## [burnlens-cloud 1.0.1] — 2026-04-15
 
 ### Fixed
 - Alert deduplication now persists across restarts (was in-memory only)

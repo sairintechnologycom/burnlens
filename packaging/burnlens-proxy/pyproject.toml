@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "burnlens"
-version = "1.0.0"
+version = "1.0.1"
 description = "Open-source LLM FinOps proxy — track OpenAI, Anthropic (Claude), and Google Gemini API costs by feature, team, and customer. Zero code changes."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -91,3 +91,7 @@ Changelog = "https://github.com/sairintechnologycom/burnlens/blob/main/CHANGELOG
 [tool.setuptools.packages.find]
 include = ["burnlens*"]
 exclude = ["burnlens_cloud*", "tests*"]
+
+[tool.setuptools.package-data]
+"burnlens.cost" = ["pricing_data/*.json"]
+"burnlens.dashboard" = ["static/*", "static/**/*"]
