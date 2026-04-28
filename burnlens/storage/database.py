@@ -768,6 +768,31 @@ async def archive_old_discovery_events(db_path: str, retention_days: int = 90) -
         return 0
 
 
+async def get_spend_by_key_label_today(
+    db_path: str,
+    key_label: str,
+    tz: Any,
+) -> float:
+    """Sum ``cost_usd`` for ``tag_key_label`` rows since local midnight in ``tz``.
+
+    Compares against UTC-ISO strings since that is how ``requests.timestamp``
+    is persisted. ``tz`` is a ``ZoneInfo`` (or ``timezone.utc``) — see
+    ``burnlens.key_budget.resolve_timezone``.
+    """
+    # Lazy import to avoid an import cycle — key_budget imports from us.
+    from burnlens.key_budget import today_window_utc
+
+    start_utc, _ = today_window_utc(tz)
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0.0) FROM requests "
+            "WHERE tag_key_label = ? AND timestamp >= ?",
+            (key_label, start_utc.isoformat()),
+        )
+        row = await cursor.fetchone()
+    return float(row[0] or 0.0)
+
+
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id."""
     tags = record.tags or {}
