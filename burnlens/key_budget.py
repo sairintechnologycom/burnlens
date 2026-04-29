@@ -172,3 +172,79 @@ async def enforce_daily_cap(
     if spent >= daily_cap:
         return spent, daily_cap, next_midnight_in_tz(tz)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Today's spend roll-up — shared by /api/keys-today and `burnlens keys` CLI
+# ---------------------------------------------------------------------------
+
+
+async def compute_keys_today(
+    db_path: str,
+    api_key_budgets: Any | None,
+) -> list[dict[str, Any]]:
+    """Return per-label rows of today's spend, cap, % used, and status.
+
+    Merges three sources so a fresh registration, a config-only label, and
+    surprise traffic all show up:
+      - labels in the ``api_keys`` table (``burnlens key register``)
+      - labels with explicit caps in ``api_key_budgets.keys``
+      - labels with traffic today
+
+    Status: ``OK`` (<80%), ``WARNING`` (80-99%), ``CRITICAL`` (>=100%),
+    ``NO_CAP`` when no daily cap applies. Sort: capped by pct desc, then
+    uncapped by spend desc, ties broken by label.
+    """
+    # Lazy imports avoid a circular dependency with storage.database / keys.
+    from burnlens.storage.database import get_all_keys_today_spend
+    from burnlens.keys import list_keys
+
+    tz_name = api_key_budgets.reset_timezone if api_key_budgets else "UTC"
+    tz = resolve_timezone(tz_name)
+
+    spent_today = await get_all_keys_today_spend(db_path, tz)
+
+    labels: set[str] = set(spent_today.keys())
+    if api_key_budgets:
+        labels.update(api_key_budgets.keys.keys())
+    try:
+        registered = await list_keys(db_path)
+        labels.update(row["label"] for row in registered if row.get("label"))
+    except Exception as exc:  # fail open — never break the caller
+        logger.warning("compute_keys_today: list_keys failed (%s); continuing", exc)
+
+    rows: list[dict[str, Any]] = []
+    for label in labels:
+        spent = spent_today.get(label, 0.0)
+        cap = api_key_budgets.daily_cap_for(label) if api_key_budgets else None
+
+        if cap is None:
+            pct: float | None = None
+            status = "NO_CAP"
+        else:
+            pct = (spent / cap * 100.0) if cap > 0 else 0.0
+            if pct >= 100:
+                status = "CRITICAL"
+            elif pct >= 80:
+                status = "WARNING"
+            else:
+                status = "OK"
+
+        rows.append({
+            "label": label,
+            "spent_usd": round(spent, 6),
+            "daily_cap": cap,
+            "pct_used": round(pct, 1) if pct is not None else None,
+            "status": status,
+            "reset_timezone": tz_name,
+        })
+
+    rows.sort(
+        key=lambda r: (
+            0 if r["pct_used"] is not None else 1,
+            -(r["pct_used"] or 0.0),
+            -r["spent_usd"],
+            r["label"],
+        )
+    )
+    return rows

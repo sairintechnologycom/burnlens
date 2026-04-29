@@ -1107,5 +1107,68 @@ def key_remove(
     asyncio.run(_run())
 
 
+@app.command()
+def keys(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON instead of a Rich table"),
+) -> None:
+    """Show today's spend per API-key label against its daily cap (CODE-2)."""
+    import json as _json
+
+    from burnlens.key_budget import compute_keys_today
+    from burnlens.storage.database import init_db
+
+    cfg = load_config(config)
+    api_key_budgets = cfg.alerts.api_key_budgets if cfg.alerts else None
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        rows = await compute_keys_today(cfg.db_path, api_key_budgets)
+
+        if json_out:
+            console.print_json(_json.dumps(rows))
+            return
+
+        if not rows:
+            console.print(
+                "[dim]No registered keys, no caps configured, and no labelled traffic today.\n"
+                "Run [bold]burnlens key register[/bold] and add caps under "
+                "[bold]alerts.api_key_budgets[/bold] in burnlens.yaml.[/dim]"
+            )
+            return
+
+        tz_label = rows[0]["reset_timezone"]
+        table = Table(
+            title=f"[bold]API Keys — today's spend[/bold] [dim]({tz_label})[/dim]",
+            expand=True,
+        )
+        table.add_column("Label", style="cyan")
+        table.add_column("Spent", justify="right")
+        table.add_column("Daily cap", justify="right")
+        table.add_column("Used", justify="right")
+        table.add_column("Status")
+
+        for row in rows:
+            spent = _fmt_cost(row["spent_usd"])
+            cap = _fmt_cost(row["daily_cap"]) if row["daily_cap"] is not None else "—"
+            pct = f"{row['pct_used']:.1f}%" if row["pct_used"] is not None else "—"
+
+            status = row["status"]
+            if status == "CRITICAL":
+                badge = "[bold red]CRITICAL[/bold red]"
+            elif status == "WARNING":
+                badge = "[bold yellow]WARNING[/bold yellow]"
+            elif status == "OK":
+                badge = "[green]OK[/green]"
+            else:
+                badge = "[dim]NO CAP[/dim]"
+
+            table.add_row(row["label"], spent, cap, pct, badge)
+
+        console.print(table)
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()
