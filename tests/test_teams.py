@@ -1,5 +1,30 @@
 """Tests for Teams functionality."""
 
+import os
+import pathlib
+
+# Test-safe env: prevent the project-root .env (OSS-proxy oriented) from
+# being loaded by pydantic-settings during burnlens_cloud import. Mirrors
+# tests/test_billing_webhook_phase7.py — required so `Settings()` doesn't
+# reject OPENAI_BASE_URL / ANTHROPIC_BASE_URL as extra fields.
+os.environ.setdefault("DATABASE_URL", "postgresql://localhost:5432/burnlens_test")
+os.environ.setdefault("JWT_SECRET", "test-secret-key-for-unit-tests")
+os.environ.setdefault("ENVIRONMENT", "test")
+
+_FAKE_ENV = pathlib.Path(__file__).parent / "_phase7_billing_test.env"
+if not _FAKE_ENV.exists():
+    _FAKE_ENV.write_text("")
+os.environ["BURNLENS_CLOUD_ENV_FILE_OVERRIDE"] = str(_FAKE_ENV)
+
+import pydantic_settings.sources as _ps_sources  # noqa: E402
+
+
+def _empty_dotenv_values(*args, **kwargs):
+    return {}
+
+
+_ps_sources.dotenv_values = _empty_dotenv_values
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -12,17 +37,22 @@ from burnlens_cloud.models import TokenPayload
 
 @pytest_asyncio.fixture
 async def client():
-    """Create test client with mocked database."""
+    """Create test client with mocked database.
+
+    GAP-06 update: switch from the legacy `AsyncClient(app=app, ...)` constructor
+    (removed in modern httpx) to `ASGITransport(app=app)` per current httpx
+    contract. Required so the two seat-limit/feature-gate assertions can run.
+    """
+    from httpx import ASGITransport
     from burnlens_cloud.main import get_app
 
-    app = get_app()
-
-    with patch("burnlens_cloud.database.init_db") as mock_init:
-        with patch("burnlens_cloud.database.close_db") as mock_close:
-            mock_init.return_value = None
-            mock_close.return_value = None
-
-            async with AsyncClient(app=app, base_url="http://test") as ac:
+    # Bypass lifespan startup (init_db / scheduler tasks) by patching the
+    # database hooks before the app is built.
+    with patch("burnlens_cloud.database.init_db", new_callable=AsyncMock):
+        with patch("burnlens_cloud.database.close_db", new_callable=AsyncMock):
+            app = get_app()
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 yield ac
 
 
@@ -104,73 +134,154 @@ async def test_invite_requires_admin_role(client):
         assert data["detail"]["current"] == "viewer"
 
 
+def _mock_resolve_limits_pool(plan: str, gated_features: dict, seat_count=1, api_key_count=1):
+    """Install a mock asyncpg pool on burnlens_cloud.plans so resolve_limits()
+    returns synthetic data without hitting Postgres.
+
+    `require_feature` lazy-imports `resolve_limits` and captures it in a closure
+    at FastAPI dependency-registration time, so patching the function reference
+    is too late. Patching `burnlens_cloud.plans.pool` makes the captured
+    function find a working (mocked) pool when it runs.
+    """
+    mock_conn = MagicMock()
+    mock_conn.fetchrow = AsyncMock(return_value={
+        "plan": plan,
+        "monthly_request_cap": 1000,
+        "seat_count": seat_count,
+        "retention_days": 7,
+        "api_key_count": api_key_count,
+        "gated_features": gated_features,
+    })
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+    return mock_pool
+
+
 @pytest.mark.asyncio
 async def test_invite_team_plan_only(client):
-    """Test that invite requires teams plan."""
+    """Phase 9 D-16/D-17: Free-plan invite is now blocked by the
+    require_feature("teams_view") FastAPI dependency, returning 402
+    feature_not_in_plan instead of the legacy 422 plan_does_not_support_teams.
+
+    GAP-06: updated in-place per gsd-nyquist-auditor request — assertions now
+    match the production 402 contract.
+    """
     workspace_id = str(uuid4())
     admin_id = str(uuid4())
 
-    with patch("burnlens_cloud.team_api.execute_query") as mock_query:
-        with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
-            # Mock workspace query returning free plan
-            mock_query.return_value = [{"plan": "free", "name": "Free Workspace"}]
+    mock_pool = _mock_resolve_limits_pool(
+        plan="free",
+        gated_features={"teams_view": False, "customers_view": False},
+    )
 
-            token = TokenPayload(
-                workspace_id=workspace_id,
-                user_id=admin_id,
-                role="admin",
-                plan="free",
-                iat=int(datetime.now().timestamp()),
-                exp=int((datetime.now() + timedelta(hours=24)).timestamp()),
-            )
+    async def _q(sql, *args):
+        s = " ".join(sql.split())
+        if "FROM plan_limits" in s and "gated_features" in s:
+            return [{"plan": "teams", "gated_features": {"teams_view": True}}]
+        return [{"plan": "free", "name": "Free Workspace"}]
 
-            mock_decode.return_value = token
+    with patch("burnlens_cloud.team_api.execute_query", side_effect=_q):
+        with patch("burnlens_cloud.auth.execute_query", side_effect=_q):
+            with patch("burnlens_cloud.plans.pool", mock_pool):
+                with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
+                    token = TokenPayload(
+                        workspace_id=workspace_id,
+                        user_id=admin_id,
+                        role="admin",
+                        plan="free",
+                        iat=int(datetime.now().timestamp()),
+                        exp=int((datetime.now() + timedelta(hours=24)).timestamp()),
+                    )
+                    mock_decode.return_value = token
 
-            response = await client.post(
-                "/team/invite",
-                json={"email": "new@example.com", "role": "viewer"},
-                headers={"Authorization": f"Bearer test-token"},
-            )
+                    response = await client.post(
+                        "/team/invite",
+                        json={"email": "new@example.com", "role": "viewer"},
+                        headers={"Authorization": f"Bearer test-token"},
+                    )
 
-            assert response.status_code == 422
-            data = response.json()
-            assert data["detail"]["error"] == "plan_does_not_support_teams"
+                    assert response.status_code == 402, response.text
+                    data = response.json()
+                    assert data["detail"]["error"] == "feature_not_in_plan"
+                    assert data["detail"]["required_feature"] == "teams_view"
+                    assert data["detail"]["required_plan"] == "teams"
+                    assert "upgrade_url" in data["detail"]
 
 
 @pytest.mark.asyncio
 async def test_seat_limit_enforcement(client):
-    """Test that seat limit is enforced."""
+    """Phase 9 D-14/D-16: seat-limit response converted from 422 to 402 with the
+    standardized D-14 body shape: {error, limit, current, required_plan, upgrade_url}.
+
+    GAP-06: updated in-place per gsd-nyquist-auditor request — assertions now
+    match the production 402 contract.
+    """
     workspace_id = str(uuid4())
     admin_id = str(uuid4())
 
-    with patch("burnlens_cloud.team_api.execute_query") as mock_query:
-        with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
-            # Mock workspace query
-            mock_query.side_effect = [
-                [{"plan": "free", "name": "Free Workspace"}],  # Workspace info
-                [{"count": 1}],  # Seat count = seat limit (1 >= 1)
-            ]
+    # Teams plan: teams_view feature ON (so the feature gate passes through).
+    # The seat cap is enforced at the handler level: seat_count=1, current=1.
+    mock_pool = _mock_resolve_limits_pool(
+        plan="teams",
+        gated_features={"teams_view": True, "customers_view": True},
+        seat_count=1,
+    )
 
-            token = TokenPayload(
-                workspace_id=workspace_id,
-                user_id=admin_id,
-                role="admin",
-                plan="free",
-                iat=int(datetime.now().timestamp()),
-                exp=int((datetime.now() + timedelta(hours=24)).timestamp()),
-            )
+    # team_api.execute_query side_effect order matches the invite_member call
+    # sequence post-feature-gate:
+    # 1) SELECT plan, name FROM workspaces
+    # 2) Existing-member check (returns [])
+    # 3) check_seat_limit COUNT (returns 1 → at cap)
+    # 4) _current_seat_count COUNT (returns 1)
+    # 5) _lowest_plan_with_seat_count plan_limits SELECT ([])
+    team_query_responses = [
+        [{"plan": "teams", "name": "Teams Workspace"}],
+        [],
+        [{"count": 1}],
+        [{"c": 1}],
+        [],
+    ]
+    team_query_iter = iter(team_query_responses)
 
-            mock_decode.return_value = token
+    async def _team_q(sql, *args):
+        try:
+            return next(team_query_iter)
+        except StopIteration:
+            return []
 
-            response = await client.post(
-                "/team/invite",
-                json={"email": "new@example.com", "role": "viewer"},
-                headers={"Authorization": f"Bearer test-token"},
-            )
+    async def _auth_q(sql, *args):
+        return []
 
-            assert response.status_code == 422
-            data = response.json()
-            assert data["detail"]["error"] == "seat_limit_reached"
+    with patch("burnlens_cloud.team_api.execute_query", side_effect=_team_q):
+        with patch("burnlens_cloud.auth.execute_query", side_effect=_auth_q):
+            with patch("burnlens_cloud.plans.pool", mock_pool):
+                with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
+                    token = TokenPayload(
+                        workspace_id=workspace_id,
+                        user_id=admin_id,
+                        role="admin",
+                        plan="teams",
+                        iat=int(datetime.now().timestamp()),
+                        exp=int((datetime.now() + timedelta(hours=24)).timestamp()),
+                    )
+                    mock_decode.return_value = token
+
+                    response = await client.post(
+                        "/team/invite",
+                        json={"email": "new@example.com", "role": "viewer"},
+                        headers={"Authorization": f"Bearer test-token"},
+                    )
+
+                    assert response.status_code == 402, response.text
+                    data = response.json()
+                    detail = data["detail"]
+                    assert detail["error"] == "seat_limit_reached"
+                    assert detail["limit"] == 1
+                    assert detail["current"] == 1
+                    assert "required_plan" in detail
+                    assert "upgrade_url" in detail
+                    assert "/settings#billing" in detail["upgrade_url"]
 
 
 @pytest.mark.asyncio
