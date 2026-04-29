@@ -510,6 +510,77 @@ async function fetchTeamBudgets() {
   }
 }
 
+// -------------------------------------------------------- API keys today (CODE-2)
+
+async function fetchKeysToday() {
+  const rows = await apiFetch('/keys-today');
+  const panel = $('keys-today-panel');
+  panel.replaceChildren();
+
+  if (rows.length && rows[0].reset_timezone) {
+    setText('keys-today-tz', '(' + rows[0].reset_timezone + ')');
+  }
+
+  if (!rows.length) {
+    var hint = document.createElement('div');
+    hint.className = 'empty-state-hint';
+    hint.appendChild(document.createTextNode('Register a key with '));
+    var code = document.createElement('code');
+    code.textContent = 'burnlens key register';
+    hint.appendChild(code);
+    hint.appendChild(document.createTextNode(' and add a daily cap under '));
+    var code2 = document.createElement('code');
+    code2.textContent = 'alerts.api_key_budgets';
+    hint.appendChild(code2);
+    hint.appendChild(document.createTextNode(' in burnlens.yaml.'));
+    panel.appendChild(hint);
+    return;
+  }
+
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var row = document.createElement('div');
+    row.className = 'team-row';
+
+    var name = document.createElement('div');
+    name.className = 'team-name';
+    name.textContent = r.label;
+
+    var barWrap = document.createElement('div');
+    barWrap.className = 'team-bar-wrap';
+    var bar = document.createElement('div');
+    var pct = r.pct_used == null ? 0 : Math.min(r.pct_used, 100);
+    bar.style.width = pct + '%';
+    var barClass = 'team-bar';
+    if (r.status === 'CRITICAL') barClass += ' critical';
+    else if (r.status === 'WARNING') barClass += ' warning';
+    else barClass += ' ok';
+    bar.className = barClass;
+    barWrap.appendChild(bar);
+
+    var spend = document.createElement('div');
+    spend.className = 'team-spend';
+    if (r.daily_cap != null) {
+      spend.textContent = fmtCost(r.spent_usd) + ' / ' + fmtCost(r.daily_cap);
+    } else {
+      spend.textContent = fmtCost(r.spent_usd) + ' / no cap';
+    }
+
+    var statusDiv = document.createElement('div');
+    statusDiv.className = 'team-status';
+    var badge = document.createElement('span');
+    badge.className = 'status-badge status-' + r.status.toLowerCase().replace('_', '-');
+    badge.textContent = r.status.replace('_', ' ');
+    statusDiv.appendChild(badge);
+
+    row.appendChild(name);
+    row.appendChild(barWrap);
+    row.appendChild(spend);
+    row.appendChild(statusDiv);
+    panel.appendChild(row);
+  }
+}
+
 // -------------------------------------------------------- Requests table
 
 // Top PRs panel — module-scoped active filter for click-to-drill-down
@@ -624,6 +695,7 @@ async function refresh() {
     fetchRecommendations(),
     fetchCustomers(),
     fetchTeamBudgets(),
+    fetchKeysToday(),
     fetchTopPRs(),
     fetchRequests(),
   ]);

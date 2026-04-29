@@ -427,6 +427,7 @@ tbody tr:last-child td { border-bottom: none; }
 .status-badge.status-critical { background: rgba(248,113,113,0.15); color: var(--red); }
 .status-badge.status-exceeded { background: rgba(248,113,113,0.15); color: var(--red); }
 .status-badge.status-no_limit { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+.status-badge.status-no-cap { background: rgba(100,116,139,0.15); color: var(--text-muted); }
 
 .row-exceeded { background: rgba(248,113,113,0.08); }
 
