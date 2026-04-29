@@ -21,13 +21,8 @@ from burnlens.storage.queries import (
     get_usage_by_model,
     get_usage_by_tag,
 )
-from burnlens.storage.database import (
-    get_all_keys_today_spend,
-    get_spend_by_team_this_month,
-    get_top_customers_by_cost,
-)
-from burnlens.keys import list_keys
-from burnlens.key_budget import resolve_timezone
+from burnlens.storage.database import get_spend_by_team_this_month, get_top_customers_by_cost
+from burnlens.key_budget import compute_keys_today
 from burnlens.analysis.waste import run_all_detectors
 from burnlens.analysis.budget import compute_budget_status
 from burnlens.analysis.recommender import analyse_model_fit
@@ -338,74 +333,14 @@ async def customers(request: Request) -> list:
 async def keys_today(request: Request) -> list:
     """Per-API-key daily-cap progress for today (CODE-2 step 8).
 
-    Combines three sources so the panel shows everything a developer cares about:
-      - labels registered in the ``api_keys`` table (``burnlens key register``)
-      - labels with an explicit override in ``alerts.api_key_budgets.keys``
-      - labels with traffic today (catches fresh registrations + default-cap traffic)
-
-    Each row carries ``label``, ``spent_usd``, ``daily_cap`` (nullable),
-    ``pct_used`` (nullable when no cap), and a status of
-    ``OK`` / ``WARNING`` / ``CRITICAL`` / ``NO_CAP``. Sorted by ``pct_used`` desc
-    so the most exhausted keys surface first; uncapped labels sink to the bottom
-    ordered by spend.
+    Thin wrapper around :func:`burnlens.key_budget.compute_keys_today` —
+    shared with the ``burnlens keys`` CLI so the dashboard and terminal
+    always agree.
     """
     db = _db_path(request)
     config = getattr(request.app.state, "config", None)
-
-    api_key_budgets = None
-    if config and config.alerts:
-        api_key_budgets = config.alerts.api_key_budgets
-
-    tz_name = api_key_budgets.reset_timezone if api_key_budgets else "UTC"
-    tz = resolve_timezone(tz_name)
-
-    spent_today = await get_all_keys_today_spend(db, tz)
-
-    labels: set[str] = set(spent_today.keys())
-    if api_key_budgets:
-        labels.update(api_key_budgets.keys.keys())
-    try:
-        registered = await list_keys(db)
-        labels.update(row["label"] for row in registered if row.get("label"))
-    except Exception as exc:  # fail open — panel must never break the dashboard
-        logger.warning("keys-today: list_keys failed (%s); continuing", exc)
-
-    rows = []
-    for label in labels:
-        spent = spent_today.get(label, 0.0)
-        cap = api_key_budgets.daily_cap_for(label) if api_key_budgets else None
-
-        if cap is None:
-            pct = None
-            status = "NO_CAP"
-        else:
-            pct = (spent / cap * 100.0) if cap > 0 else 0.0
-            if pct >= 100:
-                status = "CRITICAL"
-            elif pct >= 80:
-                status = "WARNING"
-            else:
-                status = "OK"
-
-        rows.append({
-            "label": label,
-            "spent_usd": round(spent, 6),
-            "daily_cap": cap,
-            "pct_used": round(pct, 1) if pct is not None else None,
-            "status": status,
-            "reset_timezone": tz_name,
-        })
-
-    # Sort: capped labels by pct desc, then uncapped by spend desc.
-    rows.sort(
-        key=lambda r: (
-            0 if r["pct_used"] is not None else 1,
-            -(r["pct_used"] or 0.0),
-            -r["spent_usd"],
-            r["label"],
-        )
-    )
-    return rows
+    api_key_budgets = config.alerts.api_key_budgets if config and config.alerts else None
+    return await compute_keys_today(db, api_key_budgets)
 
 
 # -------------------------------------------------------- /api/recommendations
