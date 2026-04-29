@@ -537,6 +537,7 @@ async def _handle_non_streaming(
 
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
+        asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())
 
     # Pass through response headers, stripping hop-by-hop and encoding headers
     # (httpx auto-decompresses, so content-encoding must not be forwarded).
@@ -673,3 +674,4 @@ async def _log_streaming_usage(
     await _log_record(db_path, record)
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
+        asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())

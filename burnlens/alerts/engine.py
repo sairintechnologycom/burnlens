@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,9 +13,19 @@ from dataclasses import dataclass
 from burnlens.analysis.budget import BudgetAlert, BudgetTracker, DEFAULT_THRESHOLDS
 from burnlens.alerts.slack import SlackWebhookAlert
 from burnlens.alerts.terminal import TerminalAlert
-from burnlens.storage.database import get_spend_by_customer_this_month, get_spend_by_team_this_month
+from burnlens.keys import list_keys
+from burnlens.key_budget import resolve_timezone, today_window_utc, next_midnight_in_tz
+from burnlens.storage.database import (
+    get_all_keys_today_spend,
+    get_spend_by_customer_this_month,
+    get_spend_by_team_this_month,
+)
 from burnlens.storage.queries import get_usage_by_model
 from burnlens.config import BurnLensConfig
+
+
+# CODE-2 STEP 7: per-API-key daily-cap warning thresholds.
+KEY_BUDGET_THRESHOLDS: tuple[int, ...] = (50, 80, 100)
 
 
 @dataclass
@@ -36,6 +47,21 @@ class CustomerBudgetAlert:
     limit: float
     pct: float
     severity: str
+
+
+@dataclass
+class KeyBudgetAlert:
+    """Per-API-key daily-cap alert at the 50% / 80% / 100% threshold."""
+
+    key_label: str
+    provider: str
+    spent_today: float
+    daily_budget: float
+    pct: float
+    threshold: int      # 50, 80, or 100 — used for dedup
+    severity: str       # WARNING (50, 80) | CRITICAL (100)
+    resets_at: datetime
+    resets_tz: str
 
 
 logger = logging.getLogger(__name__)
@@ -156,6 +182,60 @@ class AlertEngine:
         if self._slack:
             await self._slack.send(alert, top_model)
 
+    async def check_and_dispatch_key_budgets(self) -> None:
+        """Check per-API-key daily caps and fire 50/80/100% alerts.
+
+        Safe to call with asyncio.create_task -- all errors are caught.
+        """
+        try:
+            await self._run_key_checks()
+        except Exception as exc:
+            logger.error("Key budget check error: %s", exc)
+
+    async def _run_key_checks(self) -> None:
+        alerts = await check_key_budgets(self._config, self._db_path)
+        if not alerts:
+            return
+
+        new_alerts: list[KeyBudgetAlert] = []
+        for alert in alerts:
+            day_iso = today_window_utc(
+                resolve_timezone(self._config.alerts.api_key_budgets.reset_timezone)
+            )[0].date().isoformat()
+            key = ("key_budget", alert.key_label, alert.threshold, day_iso)
+            if key in self._fired:
+                continue
+            self._fired.add(key)
+            new_alerts.append(alert)
+
+        for alert in new_alerts:
+            logger.warning(
+                "Key budget %s: %s (%s) spent $%.4f / $%.2f (%.1f%%)",
+                alert.severity,
+                alert.key_label,
+                alert.provider,
+                alert.spent_today,
+                alert.daily_budget,
+                alert.pct,
+            )
+
+        if self._config.alerts.terminal:
+            from rich.console import Console
+
+            _console = Console(stderr=True)
+            for alert in new_alerts:
+                color = "red" if alert.severity == "CRITICAL" else "yellow"
+                _console.print(
+                    f"[{color}][{alert.severity}][/{color}]"
+                    f" Key '{alert.key_label}' ({alert.provider}):"
+                    f" ${alert.spent_today:.4f} / ${alert.daily_budget:.2f}"
+                    f" ({alert.pct:.1f}%) — resets 00:00 {alert.resets_tz}"
+                )
+
+        if self._slack:
+            for alert in new_alerts:
+                await self._slack.send_key_budget(alert)
+
     async def check_and_dispatch_customer_budgets(self) -> None:
         """Check per-customer budgets and dispatch any alerts.
 
@@ -242,6 +322,64 @@ async def check_customer_budgets(
                 pct=pct,
                 severity="WARNING",
             ))
+
+    return alerts
+
+
+async def check_key_budgets(
+    config: BurnLensConfig,
+    db_path: str,
+) -> list[KeyBudgetAlert]:
+    """Per-API-key daily-cap thresholds at 50% / 80% / 100%.
+
+    Returns a list of ``KeyBudgetAlert`` for every label that has crossed
+    a threshold today, where "today" is measured in the configured
+    ``reset_timezone``. The 100% case is a CRITICAL alert that complements
+    (but does not replace) the inline 429 enforcement in the interceptor.
+    """
+    api_key_budgets = config.alerts.api_key_budgets
+    has_caps = bool(api_key_budgets.keys) or (
+        api_key_budgets.default and api_key_budgets.default.daily_usd is not None
+    )
+    if not has_caps:
+        return []
+
+    tz = resolve_timezone(api_key_budgets.reset_timezone)
+    spend_by_label = await get_all_keys_today_spend(db_path, tz)
+    if not spend_by_label:
+        return []
+
+    providers = {row["label"]: row["provider"] for row in await list_keys(db_path)}
+    resets_at = next_midnight_in_tz(tz)
+    tz_name = api_key_budgets.reset_timezone or "UTC"
+
+    alerts: list[KeyBudgetAlert] = []
+    for label, spent in spend_by_label.items():
+        cap = api_key_budgets.daily_cap_for(label)
+        if cap is None or cap <= 0:
+            continue
+
+        pct = spent / cap * 100
+        # Pick the highest crossed threshold for this label.
+        threshold: int | None = None
+        for t in KEY_BUDGET_THRESHOLDS:
+            if pct >= t:
+                threshold = t
+        if threshold is None:
+            continue
+
+        severity = "CRITICAL" if threshold == 100 else "WARNING"
+        alerts.append(KeyBudgetAlert(
+            key_label=label,
+            provider=providers.get(label, "unknown"),
+            spent_today=spent,
+            daily_budget=cap,
+            pct=pct,
+            threshold=threshold,
+            severity=severity,
+            resets_at=resets_at,
+            resets_tz=tz_name,
+        ))
 
     return alerts
 

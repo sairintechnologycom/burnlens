@@ -9,6 +9,7 @@ import httpx
 
 if TYPE_CHECKING:
     from burnlens.analysis.budget import BudgetAlert
+    from burnlens.alerts.engine import KeyBudgetAlert
     from burnlens.alerts.types import DiscoveryAlert, SpendSpikeAlert
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,38 @@ def _build_new_provider_payload(alert: DiscoveryAlert) -> dict:
     }
 
 
+def _build_key_budget_payload(alert: KeyBudgetAlert) -> dict:
+    """Build a Slack blocks payload for a per-API-key daily-cap threshold alert.
+
+    Format matches the CODE-2 spec example, e.g.::
+
+        :warning: BurnLens daily cap 80% — key `cursor-main` (anthropic) spent
+        $40.12 of $50.00 today. Resets 00:00 Asia/Kolkata.
+    """
+    if alert.threshold >= 100:
+        emoji = ":red_circle:"
+    elif alert.threshold >= 80:
+        emoji = ":warning:"
+    else:
+        emoji = ":large_blue_circle:"
+
+    text = (
+        f"{emoji} BurnLens daily cap {alert.threshold}% — "
+        f"key `{alert.key_label}` ({alert.provider}) "
+        f"spent ${alert.spent_today:.2f} of ${alert.daily_budget:.2f} today. "
+        f"Resets 00:00 {alert.resets_tz}."
+    )
+
+    return {
+        "blocks": [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": text},
+            }
+        ]
+    }
+
+
 def _build_spend_spike_payload(alert: SpendSpikeAlert) -> dict:
     """Build a Slack blocks payload for a spend spike alert.
 
@@ -198,6 +231,25 @@ class SlackWebhookAlert:
                     )
         except Exception as exc:
             logger.warning("Slack discovery alert failed: %s", exc)
+
+    async def send_key_budget(self, alert: KeyBudgetAlert) -> None:
+        """POST a per-API-key daily-cap threshold alert to Slack."""
+        payload = _build_key_budget_payload(alert)
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    self._webhook_url,
+                    content=json.dumps(payload),
+                    headers={"Content-Type": "application/json"},
+                )
+                if resp.status_code != 200:
+                    logger.warning(
+                        "Slack key-budget webhook returned %s: %s",
+                        resp.status_code,
+                        resp.text,
+                    )
+        except Exception as exc:
+            logger.warning("Slack key-budget alert failed: %s", exc)
 
     async def send_spend_spike(self, alert: SpendSpikeAlert) -> None:
         """POST a spend spike alert to Slack.
