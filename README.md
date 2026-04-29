@@ -84,12 +84,40 @@ Reasoning tokens, cached tokens, and vision tokens are all tracked separately.
 ## CLI
 
 ```bash
-burnlens start         # proxy + dashboard on :8420
-burnlens top           # live cost by model (htop-style)
-burnlens report        # weekly cost summary
-burnlens analyze       # waste detection report
-burnlens export        # CSV of last 7 days
+burnlens start                  # proxy + dashboard on :8420
+burnlens top                    # live cost by model (htop-style)
+burnlens report                 # weekly cost summary
+burnlens analyze                # waste detection report
+burnlens export                 # CSV of last 7 days
+burnlens run -- python app.py   # auto-tag a process with repo / dev / pr / branch
+burnlens key register <name>    # label an API key + set a daily cap
+burnlens key list               # list registered keys with caps
+burnlens keys                   # today's spend per registered key
 ```
+
+---
+
+## Per-API-key daily kill-switch
+
+Stop a leaked or runaway API key before it burns the month's budget.
+
+```bash
+# Register your provider key with a label and a $25/day hard cap
+burnlens key register prod-openai --provider openai --cap 25.00
+
+# Use the key normally — the proxy resolves it to its label, tracks
+# today's spend, fires 50/80/100% alerts, and returns HTTP 429 at 100%
+export OPENAI_API_KEY=sk-...
+export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai/v1
+
+# Inspect today's per-key roll-up
+burnlens keys
+```
+
+- Keys are stored as SHA-256 hashes — never in plaintext.
+- TZ-aware daily reset (UTC midnight by default, configurable).
+- 100% breach returns `429 {"error": "burnlens_daily_cap_exceeded"}` until reset.
+- Dashboard panel "API keys today" shows live status at `:8420/ui`.
 
 ---
 

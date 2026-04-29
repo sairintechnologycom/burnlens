@@ -314,27 +314,31 @@ export default function LandingPage() {
 
         {/* WHAT'S NEW */}
         <section className="lp-whats-new">
-          <h2 className="lp-wn-title">What&apos;s new in v1.0.1</h2>
+          <h2 className="lp-wn-title">What&apos;s new in v0.2.0</h2>
           <div className="lp-wn-list">
             <div className="lp-wn-item">
-              <span className="lp-wn-tag fix">Fixed</span>
-              <span>Alert deduplication now persists across proxy restarts</span>
+              <span className="lp-wn-tag new">New</span>
+              <span>Per-API-key daily hard cap — 50/80/100% alerts, HTTP 429 kill-switch at 100%, TZ-aware reset</span>
             </div>
             <div className="lp-wn-item">
               <span className="lp-wn-tag new">New</span>
-              <span>Google Cloud Billing API integration — Vertex AI + Gemini asset discovery</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag fix">Fixed</span>
-              <span>Server-side asset sorting — global sort across all pages</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag fix">Fixed</span>
-              <span>Monthly spend KPI now aggregates all assets, not just current page</span>
+              <span><code>burnlens key register/list/remove</code> — label keys, set caps, store as SHA-256 hashes</span>
             </div>
             <div className="lp-wn-item">
               <span className="lp-wn-tag new">New</span>
-              <span>90-day discovery events archival with nightly cleanup</span>
+              <span><code>burnlens keys</code> CLI + &ldquo;API keys today&rdquo; dashboard panel for live per-key spend</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Git-aware auto-tagging — <code>burnlens run -- &lt;cmd&gt;</code> attributes every call to repo / dev / PR / branch</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Top PRs by cost dashboard panel + <code>burnlens prs / devs / repos</code> CLI groupers</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag fix">Fixed</span>
+              <span>Google &amp; Anthropic streaming responses now log accurate token counts (no more 0-token rows)</span>
             </div>
           </div>
         </section>

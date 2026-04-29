@@ -6,6 +6,37 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Unreleased — PyPI `burnlens`] — milestone 0.2.0
+
+### Added
+- **CODE-2**: Per-API-key daily hard cap — stop a leaked or runaway
+  API key before it burns the month's budget:
+    - New `api_keys` table stores SHA-256-hashed keys with a human label
+      and optional `daily_cap_usd`. Keys are never stored in plaintext.
+    - `burnlens key register|list|remove` CLI manages labels and caps;
+      the proxy interceptor resolves the inbound `Authorization:` key to
+      its label and stamps `tag_key_label` on every logged request.
+    - TZ-aware daily reset (UTC midnight by default, configurable via
+      `api_key_budgets.reset_tz` in `burnlens.yaml`). Per-key spend is
+      cached in-process and invalidated on each new log write.
+    - 50 % / 80 % / 100 % alerts fire to terminal (and Slack if
+      configured) with one alert per key per threshold per day.
+    - At 100 %, the proxy returns HTTP 429 with a JSON
+      `{"error": "burnlens_daily_cap_exceeded", ...}` body until the
+      next reset — fail-closed for spend, fail-open for everything else.
+    - New `GET /api/keys-today` endpoint + dashboard panel "API keys
+      today" shows today's spend and cap status per key.
+    - New `burnlens keys` CLI prints today's per-key roll-up.
+    - End-to-end demo: `bash docs/demo_killswitch.sh` registers a key,
+      sets a 1-cent cap, makes a real request, and demonstrates the
+      kill-switch tripping.
+
+### Tests
+- 91 new tests across 8 files cover key store, CLI, label
+  interceptor, label migration, daily-cap enforcement, alerts,
+  `/api/keys-today` endpoint, and the demo script. Combined with
+  CODE-1's 30 tests, the v0.2.0 milestone adds 121 passing tests.
+
 ## [PyPI `burnlens` 1.0.1] — 2026-04-28
 
 ### Fixed
