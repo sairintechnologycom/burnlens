@@ -3,14 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: account-security-notifications
 status: planning
-last_updated: "2026-04-30"
-last_activity: 2026-04-30
+last_updated: "2026-04-30T15:18:01.899Z"
+last_activity: 2026-04-30 — v1.2 roadmap created (3 phases, 19 requirements mapped)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
-  percent: 0
 ---
 
 # State
