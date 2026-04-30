@@ -1,31 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: billing-and-quota
-status: milestone_complete
+milestone: v1.2
+milestone_name: account-security-notifications
+status: planning
 last_updated: "2026-04-30"
 last_activity: 2026-04-30
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 31
-  completed_plans: 31
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State
 
 ## Current Position
 
-**Milestone:** v1.1 Billing & Quota — ✅ COMPLETE (2026-04-30)
-**Status:** Milestone archived. Ready for `/gsd-new-milestone` to start v1.2.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-30 — Milestone v1.2 started
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-30 after v1.1 milestone)
+See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** Planning next milestone (v1.2 Account Security & Notifications)
+**Current focus:** v1.2 Account Security & Notifications
 
 ## v1.1 Phase Summary
 
@@ -63,5 +65,5 @@ Known deferred items at close: 25+ (see above)
 
 ## Session Continuity
 
-**Next action:** Run `/gsd-new-milestone` to define v1.2 Account Security & Notifications
-**Last phase:** 10 (Feature Gating & Usage Visibility UI) — all 4 plans complete
+**Next action:** Run `/gsd-discuss-phase 11` or `/gsd-plan-phase 11` to begin Phase 11 (Auth Essentials)
+**Last milestone:** v1.1 ended at Phase 10 — v1.2 begins at Phase 11

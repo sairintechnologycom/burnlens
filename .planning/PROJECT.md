@@ -8,6 +8,20 @@ BurnLens is an open-source LLM FinOps tool — a transparent proxy + CLI + dashb
 
 Complete visibility into AI API spending with zero code changes — if you can't see it, you can't control it.
 
+## Current Milestone: v1.2 Account Security & Notifications
+
+**Goal:** Close the auth-UX gaps and add server-side alerting so cloud users can recover accounts, verify email ownership, and get notified when spend crosses thresholds — without needing the local proxy running.
+
+**Target features:**
+- Auth Essentials — password reset flow, email verification (soft-gate/banner for MVP), transactional email system (welcome, password-changed, receipt, verify templates) on SendGrid
+- Cloud Alerting — alert_rules + alert_events schema, hourly Railway cron evaluator, email/Slack dispatch, /alerts management UI
+
+**Key context:**
+- Auth Essentials ships before Cloud Alerting (no point alerting unverified addresses)
+- Existing users (`email_verified_at = NULL`) grandfathered as verified
+- Railway cron infra: TBD at plan time — Phase B includes setup if not already wired
+- Continues phase numbering from v1.1 → Phase 11 onward
+
 ## Requirements
 
 ### Validated
