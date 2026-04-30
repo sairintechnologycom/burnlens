@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-04-30"
 last_activity: 2026-04-30
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-30 — Milestone v1.2 started
+Status: Roadmap created — ready to plan Phase 11
+Last activity: 2026-04-30 — v1.2 roadmap created (3 phases, 19 requirements mapped)
 
 ## Project Reference
 
@@ -28,6 +28,14 @@ See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
 **Current focus:** v1.2 Account Security & Notifications
+
+## v1.2 Phase Summary
+
+| # | Phase | Requirements | Status |
+|---|-------|-------------|--------|
+| 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | Not started |
+| 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | Not started |
+| 13 | Alert Management UI | ALERT-08–09 (2 reqs) | Not started |
 
 ## v1.1 Phase Summary
 
@@ -65,5 +73,6 @@ Known deferred items at close: 25+ (see above)
 
 ## Session Continuity
 
-**Next action:** Run `/gsd-discuss-phase 11` or `/gsd-plan-phase 11` to begin Phase 11 (Auth Essentials)
+**Next action:** Run `/gsd-plan-phase 11` to begin Phase 11 (Auth Essentials)
 **Last milestone:** v1.1 ended at Phase 10 — v1.2 begins at Phase 11
+**Roadmap:** 3 phases (11–13), 19 requirements, all mapped

@@ -66,13 +66,25 @@
 
 ## Traceability
 
-_Filled by roadmapper after roadmap creation._
-
 | REQ-ID | Phase | Phase Name |
 |--------|-------|------------|
-| AUTH-01–AUTH-03 | — | — |
-| AUTH-04–AUTH-07 | — | — |
-| EMAIL-01–EMAIL-04 | — | — |
-| ALERT-01–ALERT-02 | — | — |
-| ALERT-03–ALERT-07 | — | — |
-| ALERT-08–ALERT-09 | — | — |
+| AUTH-01 | 11 | Auth Essentials |
+| AUTH-02 | 11 | Auth Essentials |
+| AUTH-03 | 11 | Auth Essentials |
+| AUTH-04 | 11 | Auth Essentials |
+| AUTH-05 | 11 | Auth Essentials |
+| AUTH-06 | 11 | Auth Essentials |
+| AUTH-07 | 11 | Auth Essentials |
+| EMAIL-01 | 11 | Auth Essentials |
+| EMAIL-02 | 11 | Auth Essentials |
+| EMAIL-03 | 11 | Auth Essentials |
+| EMAIL-04 | 11 | Auth Essentials |
+| ALERT-01 | 12 | Cloud Alert Engine |
+| ALERT-02 | 12 | Cloud Alert Engine |
+| ALERT-03 | 12 | Cloud Alert Engine |
+| ALERT-04 | 12 | Cloud Alert Engine |
+| ALERT-05 | 12 | Cloud Alert Engine |
+| ALERT-06 | 12 | Cloud Alert Engine |
+| ALERT-07 | 12 | Cloud Alert Engine |
+| ALERT-08 | 13 | Alert Management UI |
+| ALERT-09 | 13 | Alert Management UI |
