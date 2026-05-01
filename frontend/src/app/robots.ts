@@ -25,8 +25,6 @@ export default function robots(): MetadataRoute.Robots {
           "/teams",
           "/waste",
           "/auth/",
-          "/dashboard.html",
-          "/signup.html",
           "/team.html",
         ],
       },
