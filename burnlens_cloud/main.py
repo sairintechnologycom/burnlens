@@ -115,6 +115,10 @@ def get_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+        # Shrink browser preflight cache from Starlette's 600s default to 60s so
+        # CORS-related deploys don't leave active sessions with stale preflights
+        # for ~10 min. See project_billing_summary_cors_regression.md.
+        max_age=60,
     )
 
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):
