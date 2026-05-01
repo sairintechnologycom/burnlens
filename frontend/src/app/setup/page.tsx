@@ -35,7 +35,13 @@ function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "1";
-  const [mode, setMode] = useState<"login" | "register">("login");
+  // /signup, /register, and "Start free trial" CTAs land here with
+  // ?intent=register so the form opens on the workspace-creation tab
+  // instead of Sign In. /login lands without a query string and stays
+  // on Sign In.
+  const initialMode: "login" | "register" =
+    searchParams.get("intent") === "register" ? "register" : "login";
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
