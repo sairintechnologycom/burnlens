@@ -13,6 +13,11 @@
     { "source": "/apple-touch-icon.png", "destination": "/icon.svg" },
     { "source": "/apple-touch-icon-precomposed.png", "destination": "/icon.svg" }
   ],
+  "redirects": [
+    { "source": "/signup", "destination": "/setup", "permanent": false },
+    { "source": "/signup.html", "destination": "/setup", "permanent": false },
+    { "source": "/dashboard.html", "destination": "/dashboard", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)",
