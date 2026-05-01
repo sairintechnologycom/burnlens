@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from .database import pool
+from .database import execute_query
 from .models import ResolvedLimits
 
 
@@ -37,17 +37,16 @@ async def resolve_limits(workspace_id: UUID) -> Optional[ResolvedLimits]:
     (the retention-prune loop skips the workspace entirely). Zero is
     sentinel-for-unlimited; null means "use plan default." Per D-23.
     """
-    if pool is None:
-        raise RuntimeError("Database pool not initialized — call init_db() first")
-
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM resolve_limits($1)",
-            workspace_id,
-        )
-
-    if row is None:
+    # Route through execute_query, NOT a direct `from .database import pool`.
+    # The latter captures the value of `pool` at module-import time (None,
+    # before init_db() runs in the lifespan handler). Subsequent reassignment
+    # of `database.pool` doesn't propagate to this module's local reference,
+    # so /billing/summary + /billing/usage/daily 500'd in prod for newly-
+    # signed-up users until this fix.
+    rows = await execute_query("SELECT * FROM resolve_limits($1)", workspace_id)
+    if not rows:
         return None
+    row = rows[0]
 
     # asyncpg returns JSONB as str by default; cast to dict if needed.
     gated = row["gated_features"]
