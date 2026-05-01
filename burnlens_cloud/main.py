@@ -115,6 +115,10 @@ def get_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+        # Shrink browser preflight cache from Starlette's 600s default to 60s so
+        # CORS-related deploys don't leave active sessions with stale preflights
+        # for ~10 min. See project_billing_summary_cors_regression.md.
+        max_age=60,
     )
 
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -133,6 +137,32 @@ def get_app() -> FastAPI:
 
     # Rate limit auth + ingest paths (per-IP sliding window, in-process).
     app.add_middleware(RateLimitMiddleware, rules=DEFAULT_RULES)
+
+    # Global exception handler — Starlette's outermost ServerErrorMiddleware
+    # produces a plain-text 500 that bypasses CORSMiddleware on its way back
+    # to the client, leaving the response with NO Access-Control-Allow-Origin.
+    # Browsers then surface the real 500 as a misleading CORS error, masking
+    # the actual exception. We catch via FastAPI's exception_handler AND set
+    # CORS headers explicitly here, because Starlette's middleware stack does
+    # not reliably re-wrap exception-handler responses with CORS.
+    from fastapi.responses import JSONResponse
+
+    _cors_origin_set = set(_allowed_origins)
+
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled exception in %s %s", request.method, request.url.path)
+        headers: dict[str, str] = {}
+        origin = request.headers.get("origin")
+        if origin and origin in _cors_origin_set:
+            headers["access-control-allow-origin"] = origin
+            headers["access-control-allow-credentials"] = "true"
+            headers["vary"] = "Origin"
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
+            headers=headers,
+        )
 
     # Health check endpoint (outside /api prefix)
     @app.get("/health")
