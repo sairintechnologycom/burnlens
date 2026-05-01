@@ -14,8 +14,12 @@
     { "source": "/apple-touch-icon-precomposed.png", "destination": "/icon.svg" }
   ],
   "redirects": [
-    { "source": "/signup", "destination": "/setup", "permanent": false },
-    { "source": "/signup.html", "destination": "/setup", "permanent": false },
+    { "source": "/signup", "destination": "/setup?intent=register", "permanent": false },
+    { "source": "/signup.html", "destination": "/setup?intent=register", "permanent": false },
+    { "source": "/login", "destination": "/setup", "permanent": false },
+    { "source": "/login.html", "destination": "/setup", "permanent": false },
+    { "source": "/register", "destination": "/setup?intent=register", "permanent": false },
+    { "source": "/pricing", "destination": "/#pricing", "permanent": false },
     { "source": "/dashboard.html", "destination": "/dashboard", "permanent": false }
   ],
   "headers": [
