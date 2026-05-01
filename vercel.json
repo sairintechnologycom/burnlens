@@ -8,7 +8,10 @@
       "source": "/:path*",
       "has": [{ "type": "host", "value": "api.burnlens.app" }],
       "destination": "https://burnlens-proxy-production.up.railway.app/:path*"
-    }
+    },
+    { "source": "/favicon.ico", "destination": "/icon.svg" },
+    { "source": "/apple-touch-icon.png", "destination": "/icon.svg" },
+    { "source": "/apple-touch-icon-precomposed.png", "destination": "/icon.svg" }
   ],
   "headers": [
     {
@@ -21,8 +24,15 @@
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com https://*.paddle.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.burnlens.app https://*.paddle.com https://burnlens-proxy-production.up.railway.app; frame-src https://*.paddle.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.paddle.com https://*.paddle.com https://*.profitwell.com; style-src 'self' 'unsafe-inline' https://cdn.paddle.com; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.burnlens.app https://*.paddle.com https://*.profitwell.com https://burnlens-proxy-production.up.railway.app; frame-src https://*.paddle.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "api.burnlens.app" }],
+      "headers": [
+        { "key": "Cache-Control", "value": "private, no-store" }
       ]
     },
     {
