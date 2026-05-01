@@ -166,7 +166,7 @@ export default function LandingPage() {
             <a href="#pricing">Pricing</a>
             <a href="https://github.com/sairintechnologycom/burnlens#readme">Docs</a>
             <Link href="/dashboard" className="outline">Dashboard</Link>
-            <Link href="/setup" className="primary">Get Started</Link>
+            <Link href="/setup?intent=register" className="primary">Get Started</Link>
           </div>
         </nav>
 
@@ -283,7 +283,7 @@ export default function LandingPage() {
                 <li>Up to 3 seats</li>
                 <li>Email alerts</li>
               </ul>
-              <Link href="/setup" className="lp-plan-cta primary">Start free trial</Link>
+              <Link href="/setup?intent=register" className="lp-plan-cta primary">Start free trial</Link>
             </div>
             <div className="lp-plan">
               <div className="lp-plan-name">Teams</div>
@@ -361,7 +361,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="lp-install-cta">
-            <Link href="/setup" className="lp-btn-go">Get Started</Link>
+            <Link href="/setup?intent=register" className="lp-btn-go">Get Started</Link>
             <a href="https://github.com/sairintechnologycom/burnlens" className="lp-btn-gh">View on GitHub</a>
           </div>
         </section>
