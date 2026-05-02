@@ -876,6 +876,58 @@ async def init_db():
             ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ
         """)
 
+        # Phase 12: alert rules — configurable per-workspace budget threshold rules.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS alert_rules (
+                id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                workspace_id      UUID        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                threshold_pct     INT         NOT NULL CHECK (threshold_pct IN (80, 100)),
+                channel           TEXT        NOT NULL DEFAULT 'email'
+                                              CHECK (channel IN ('email', 'slack', 'both')),
+                enabled           BOOLEAN     NOT NULL DEFAULT TRUE,
+                slack_webhook_url TEXT,
+                extra_emails      TEXT[]      NOT NULL DEFAULT '{}',
+                created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_alert_rules_workspace
+            ON alert_rules(workspace_id) WHERE enabled = TRUE
+        """)
+
+        # Phase 12: alert events — deduplication + audit log of every fired alert.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS alert_events (
+                id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                rule_id         UUID        NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+                workspace_id    UUID        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                threshold_pct   INT         NOT NULL,
+                channel         TEXT        NOT NULL,
+                recipient       TEXT        NOT NULL,
+                fired_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                status          TEXT        NOT NULL DEFAULT 'sent'
+                                            CHECK (status IN ('sent', 'failed'))
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_alert_events_rule_fired
+            ON alert_events(rule_id, fired_at DESC)
+        """)
+
+        # Phase 12: seed default alert rules for existing cloud/teams workspaces.
+        # Idempotent: INSERT only when the workspace has no alert_rules yet.
+        await conn.execute("""
+            INSERT INTO alert_rules (workspace_id, threshold_pct, channel)
+            SELECT w.id, t.threshold_pct, 'email'
+            FROM workspaces w
+            CROSS JOIN (VALUES (80), (100)) AS t(threshold_pct)
+            WHERE w.plan IN ('cloud', 'teams')
+              AND NOT EXISTS (
+                  SELECT 1 FROM alert_rules ar WHERE ar.workspace_id = w.id
+              )
+        """)
+
         # Phase 9 (D-19): seed supplement — add teams_view / customers_view flags
         # to plan_limits.gated_features per plan. JSONB `||` is an additive merge:
         # Phase 6 keys (custom_signatures, team_seats, otel_export) are preserved.
