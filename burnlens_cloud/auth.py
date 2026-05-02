@@ -1043,26 +1043,27 @@ async def confirm_password_reset(request: ResetPasswordConfirmRequest):
     return {"message": "Password updated successfully."}
 
 
-@router.get("/verify-email", status_code=200)
-async def verify_email(token: str):
-    """Claim email verification token and mark email as verified."""
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
+class VerifyEmailBody(BaseModel):
+    token: str
 
-    result = await execute_insert(
+
+@router.post("/verify-email", status_code=200)
+async def verify_email(body: VerifyEmailBody):
+    """Claim email verification token and mark email as verified."""
+    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+
+    # Atomic single-use claim via RETURNING — eliminates TOCTOU window and
+    # keeps the token out of URL query strings (CR-03).
+    row = await execute_query(
         """
         UPDATE auth_tokens SET used_at = now()
         WHERE token_hash = $1
           AND type = 'email_verification'
           AND used_at IS NULL
           AND expires_at > now()
+        RETURNING user_id
         """,
         token_hash,
-    )
-    if not result or result == "UPDATE 0":
-        raise HTTPException(status_code=400, detail="Verification link is invalid or has expired.")
-
-    row = await execute_query(
-        "SELECT user_id FROM auth_tokens WHERE token_hash = $1", token_hash
     )
     if not row:
         raise HTTPException(status_code=400, detail="Verification link is invalid or has expired.")

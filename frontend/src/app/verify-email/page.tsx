@@ -20,7 +20,11 @@ function VerifyEmailContent() {
       setMessage("This verification link is invalid. Try resending the email from your dashboard.");
       return;
     }
-    fetch(`${API_BASE}/auth/verify-email?token=${encodeURIComponent(token)}`)
+    fetch(`${API_BASE}/auth/verify-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    })
       .then(async (res) => {
         if (res.ok) {
           localStorage.setItem("burnlens_email_verified", "true");
