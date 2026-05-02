@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Account Security & Notifications
-status: planned
-last_updated: "2026-05-02T10:50:00.000Z"
-last_activity: 2026-05-02 — Phase 11 (Auth Essentials) planning complete — 7 execute plans created
+status: executing
+last_updated: "2026-05-02T05:28:33.166Z"
+last_activity: 2026-05-02 -- Phase 11 execution started
 progress:
   total_phases: 3
   completed_phases: 0
@@ -16,17 +16,17 @@ progress:
 
 ## Current Position
 
-Phase: 11 — Auth Essentials (planned, not yet executed)
-Plan: —
-Status: Phase 11 planning complete — 7 execute plans ready (01, 02, 03a, 03b, 04, 05a, 05b)
-Last activity: 2026-05-02 — Phase 11 plans written and verified
+Phase: 11 (Auth Essentials) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 11
+Last activity: 2026-05-02 -- Phase 11 execution started
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** v1.2 Account Security & Notifications
+**Current focus:** Phase 11 — Auth Essentials
 
 ## v1.2 Phase Summary
 
@@ -79,14 +79,17 @@ Known deferred items at close: 25+ (see above)
 ## Phase 11 Execution Plan
 
 Wave 1 (parallel):
+
 - `11-PLAN-01` → database.py: auth_tokens table + email_verified_at column
 - `11-PLAN-02` → email.py: TemplateSpec registry + 5 transactional send functions + HTML templates
 
 Wave 2:
+
 - `11-PLAN-03a` (after 01+02) → models.py + rate_limit.py + encode_jwt email_verified field
 - `11-PLAN-03b` (after 03a) → 4 auth route handlers + signup email wiring
 - `11-PLAN-04` (after 01+02, parallel with 03a) → billing.py: transaction.completed webhook handler
 
 Wave 3:
+
 - `11-PLAN-05a` (after 03b) → useAuth.ts emailVerified + setup/page.tsx forgot-password flow
 - `11-PLAN-05b` (after 05a) → /reset-password page + /verify-email page + BillingStatusBanner
