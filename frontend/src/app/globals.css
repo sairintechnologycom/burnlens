@@ -1686,8 +1686,41 @@ img, svg { display: block; }
 .lp-wn-tag.fix { background: rgba(34,201,138,0.12); color: #22c98a; }
 .lp-wn-tag.new { background: rgba(0,229,200,0.12); color: var(--cyan); }
 
+/* ── Landing page mobile hamburger (lp- prefix avoids collision with DashboardLayout) ── */
+.lp-mobile-menu-btn {
+  display: none;
+  background: none; border: none; cursor: pointer;
+  color: var(--l-text); padding: 6px; border-radius: 6px;
+  line-height: 0;
+}
+.lp-mobile-menu-btn:hover { background: var(--bg2); }
+
+.lp-mobile-overlay {
+  position: fixed; inset: 0; z-index: 98;
+  background: rgba(0,0,0,0.5);
+}
+
+.lp-mobile-drawer {
+  position: fixed; top: 56px; left: 0; right: 0; z-index: 99;
+  background: var(--bg1); border-bottom: 1px solid var(--border2);
+  display: flex; flex-direction: column; padding: 12px 16px 20px;
+  gap: 4px;
+}
+.lp-mobile-drawer a {
+  font-size: var(--fs-15); color: var(--l-text); text-decoration: none;
+  padding: 10px 12px; border-radius: 6px;
+}
+.lp-mobile-drawer a:hover { background: var(--bg2); }
+.lp-mobile-drawer .lp-mobile-cta {
+  margin-top: 8px; background: var(--cyan); color: #080c10;
+  font-weight: 600; text-align: center; padding: 10px 16px;
+}
+.lp-mobile-drawer .lp-mobile-cta:hover { background: var(--cyan-dim); }
+
 @media (max-width: 768px) {
   .lp-nav { padding: 0 16px; }
+  .lp-nav-right { display: none; }
+  .lp-mobile-menu-btn { display: flex; }
   .lp-ed-section { grid-template-columns: 1fr; gap: 8px; }
   .dash-body { grid-template-columns: 1fr; }
   .dash-models-section { border-top: 1px solid var(--border); }
