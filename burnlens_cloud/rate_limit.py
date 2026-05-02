@@ -39,11 +39,13 @@ class SlidingWindowLimiter:
 
 
 def _client_ip(request: Request) -> str:
-    # Railway sits behind a proxy; trust the first X-Forwarded-For hop. If the
-    # header is absent (direct connection) fall back to the socket peer.
+    # Railway appends a trusted hop to X-Forwarded-For rather than overwriting
+    # it, so the rightmost entry is the closest trusted-proxy view of the real
+    # client IP. Taking the first entry lets an attacker spoof their bucket by
+    # sending a forged XFF header, effectively bypassing the rate limiter.
     xff = request.headers.get("x-forwarded-for", "")
     if xff:
-        return xff.split(",")[0].strip()
+        return xff.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 
