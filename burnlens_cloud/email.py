@@ -49,6 +49,11 @@ TEMPLATE_REGISTRY: dict[str, TemplateSpec] = {
         "template_file": "payment_receipt.html",
         "required_vars": ["workspace_name", "amount_str", "plan_name"],
     },
+    "invitation": {
+        "subject": "You've been invited to {{workspace_name}} on BurnLens",
+        "template_file": "invitation.html",
+        "required_vars": ["workspace_name", "invited_by_intro", "invite_url"],
+    },
 }
 
 # WR-03: Module-level registry for outstanding fire-and-forget email tasks.
@@ -112,48 +117,31 @@ async def send_invitation_email(
         return False
 
     try:
-        # HTML-escape user-supplied values before interpolation to prevent
-        # stored-XSS payloads in workspace_name or invited_by_name from
-        # executing in recipients' email clients (CR-04).
+        # HTML-escape user-supplied values and render via the template system
+        # (WR-05 / CR-04) so invitation emails are consistent with other senders
+        # and XSS payloads in user-supplied fields are neutralised before
+        # reaching the HTML body.
         safe_workspace = _html.escape(workspace_name)
         safe_inviter = _html.escape(invited_by_name) if invited_by_name else None
-        # Build invitation link using the raw token (URL-safe by construction
-        # from secrets.token_urlsafe). Quote for safety in href context.
+        invited_by_intro = (
+            f"<strong>{safe_inviter}</strong> has invited you to join"
+            if safe_inviter
+            else "You've been invited to join"
+        )
+        # Build invitation link; quote for safety in href context.
         raw_invite_url = f"{settings.burnlens_frontend_url}/invite/{invitation_token}"
         safe_url = urllib.parse.quote(raw_invite_url, safe=":/?=&")
 
-        # Build email content
-        subject = f"You've been invited to {safe_workspace} on BurnLens"
-
-        html_content = f"""
-        <html>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <h2>You've been invited to BurnLens</h2>
-
-                    <p>
-                        {f"<strong>{safe_inviter}</strong> has invited you to join" if safe_inviter else "You've been invited to join"}
-                        the <strong>{safe_workspace}</strong> workspace on BurnLens.
-                    </p>
-
-                    <p>
-                        <a href="{safe_url}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: 500;">
-                            Accept Invitation
-                        </a>
-                    </p>
-
-                    <p style="color: #666; font-size: 14px;">
-                        Or copy this link into your browser:<br>
-                        <code style="background-color: #f3f4f6; padding: 2px 4px; border-radius: 2px;">{safe_url}</code>
-                    </p>
-
-                    <p style="color: #999; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
-                        This invitation will expire in 48 hours.
-                    </p>
-                </div>
-            </body>
-        </html>
-        """
+        spec = TEMPLATE_REGISTRY["invitation"]
+        template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+        html_content = (
+            template
+            .replace("{{workspace_name}}", safe_workspace)
+            .replace("{{invited_by_intro}}", invited_by_intro)
+            .replace("{{invite_url}}", safe_url)
+        )
+        # Resolve dynamic subject (spec subject also uses a placeholder).
+        subject = spec["subject"].replace("{{workspace_name}}", safe_workspace)
 
         # Create email
         message = Mail(
@@ -174,16 +162,12 @@ async def send_invitation_email(
                 logger.error(f"Failed to send invitation email to {recipient_email}: {e}")
                 return False
 
-        # WR-05: Define background wrapper BEFORE scheduling — the previous
-        # ordering referenced `_send_background` before its definition, raising
-        # NameError on every call (silently swallowed by the outer except).
         async def _send_background():
             """Send email in background."""
             await asyncio.to_thread(_send)
 
         # Run in background task (non-blocking). Register with track_email_task
-        # for parity with send_usage_warning_email so the lifespan shutdown
-        # drain covers invitation sends too.
+        # so the lifespan shutdown drain covers invitation sends too.
         track_email_task(asyncio.create_task(_send_background()))
 
         return True
