@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Mail } from "lucide-react";
 import { useBilling } from "@/lib/contexts/BillingContext";
 import type { AuthSession } from "@/lib/hooks/useAuth";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
 
 /**
  * Billing and email-verification status banners.
@@ -24,6 +27,23 @@ interface Props {
 export function BillingStatusBanner({ billing, session }: Props) {
   const showPastDue = billing?.status === "past_due";
   const showVerify = session?.emailVerified === false && session?.isLocal === false;
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  async function handleResend() {
+    if (resendStatus !== "idle") return;
+    setResendStatus("sending");
+    try {
+      await fetch(`${API_BASE}/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: session?.ownerEmail ?? "" }),
+        credentials: "include",
+      });
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("error");
+    }
+  }
 
   if (!showPastDue && !showVerify) return null;
 
@@ -79,16 +99,26 @@ export function BillingStatusBanner({ billing, session }: Props) {
           <Mail size={14} color="var(--amber)" aria-hidden="true" />
           <p style={{ margin: 0, fontSize: 12, lineHeight: 1.4, color: "var(--text)" }}>
             Verify your email to secure your account —{" "}
-            <a
-              href="/setup"
-              style={{
-                color: "var(--amber)",
-                fontWeight: 600,
-                textDecoration: "none",
-              }}
-            >
-              resend verification email
-            </a>
+            {resendStatus === "sent" ? (
+              <span style={{ color: "var(--amber)", fontWeight: 600 }}>email sent!</span>
+            ) : (
+              <button
+                onClick={handleResend}
+                disabled={resendStatus !== "idle"}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  color: "var(--amber)",
+                  fontWeight: 600,
+                  fontSize: "inherit",
+                  cursor: resendStatus === "idle" ? "pointer" : "default",
+                  textDecoration: "none",
+                }}
+              >
+                {resendStatus === "sending" ? "sending…" : resendStatus === "error" ? "try again" : "resend verification email"}
+              </button>
+            )}
           </p>
         </div>
       )}

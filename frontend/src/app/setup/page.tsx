@@ -17,7 +17,7 @@ function isLocalBackend(): boolean {
 
 function storeSession(data: {
   token: string;
-  workspace: { id: string; name: string; plan: string; api_key: string };
+  workspace: { id: string; name: string; plan: string; api_key: string; owner_email?: string };
   email_verified?: boolean;
 }) {
   // C-3: the JWT is set by the backend as the `burnlens_session` HttpOnly
@@ -28,6 +28,10 @@ function storeSession(data: {
   localStorage.setItem("burnlens_workspace_name", data.workspace.name);
   localStorage.setItem("burnlens_plan", data.workspace.plan);
   localStorage.setItem("burnlens_api_key", data.workspace.api_key);
+  // owner_email is needed by BillingStatusBanner to call /auth/resend-verification.
+  if (data.workspace.owner_email) {
+    localStorage.setItem("burnlens_owner_email", data.workspace.owner_email);
+  }
   localStorage.setItem("burnlens_email_verified", String(data.email_verified ?? true));
   // Clean up legacy JWT if a previous (pre-C-3) session left one behind.
   localStorage.removeItem("burnlens_token");
