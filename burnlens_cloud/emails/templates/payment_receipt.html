@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
+<div style="max-width:600px;margin:40px auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:40px;">
+  <h1 style="font-size:20px;font-weight:600;margin:0 0 16px;">Payment receipt</h1>
+  <p style="color:#374151;line-height:1.6;margin:0 0 16px;">Thank you for your payment. Here is your receipt for the <strong>{{plan_name}}</strong> plan.</p>
+  <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+    <tr style="border-bottom:1px solid #e5e7eb;">
+      <td style="padding:12px 0;color:#374151;">Workspace</td>
+      <td style="padding:12px 0;text-align:right;font-weight:500;">{{workspace_name}}</td>
+    </tr>
+    <tr style="border-bottom:1px solid #e5e7eb;">
+      <td style="padding:12px 0;color:#374151;">Plan</td>
+      <td style="padding:12px 0;text-align:right;font-weight:500;">{{plan_name}}</td>
+    </tr>
+    <tr>
+      <td style="padding:12px 0;color:#374151;font-weight:600;">Amount charged</td>
+      <td style="padding:12px 0;text-align:right;font-weight:600;">{{amount_str}}</td>
+    </tr>
+  </table>
+  <p style="color:#6b7280;font-size:13px;margin:0;">Questions? Reply to this email or visit burnlens.app.</p>
+</div>
+</body>
+</html>
