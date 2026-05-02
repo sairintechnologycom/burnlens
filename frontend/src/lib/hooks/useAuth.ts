@@ -15,6 +15,8 @@ export interface AuthSession {
   apiKey: string;
   isLocal: boolean;
   emailVerified: boolean;
+  /** Owner email stored at login time; used by resend-verification flow. */
+  ownerEmail: string;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
@@ -37,6 +39,7 @@ const LOCAL_SESSION: AuthSession = {
   apiKey: "local",
   isLocal: true,
   emailVerified: true,
+  ownerEmail: "",
 };
 
 export function useAuth() {
@@ -57,6 +60,7 @@ export function useAuth() {
     const workspaceName = localStorage.getItem("burnlens_workspace_name");
     const plan = localStorage.getItem("burnlens_plan");
     const apiKey = localStorage.getItem("burnlens_api_key");
+    const ownerEmail = localStorage.getItem("burnlens_owner_email") || "";
     const emailVerifiedRaw = localStorage.getItem("burnlens_email_verified");
     // Treat missing (null) as false — localStorage is a convenience hint only.
     // Defaulting to false means tampered/missing values show the verification
@@ -83,6 +87,7 @@ export function useAuth() {
       apiKey: apiKey || "",
       isLocal: false,
       emailVerified,
+      ownerEmail,
     });
     setLoading(false);
   }, [router]);
@@ -100,6 +105,7 @@ export function useAuth() {
     localStorage.removeItem("burnlens_workspace_name");
     localStorage.removeItem("burnlens_plan");
     localStorage.removeItem("burnlens_api_key");
+    localStorage.removeItem("burnlens_owner_email");
     localStorage.removeItem("burnlens_email_verified");
     setSession(null);
     if (isLocalBackend()) {
