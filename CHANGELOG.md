@@ -6,6 +6,58 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Cloud `burnlens-cloud` v1.2.0] — 2026-05-02
+
+### Added
+- **Phase 11 — Auth Essentials**: Full email-verified auth flow for the cloud dashboard.
+  - `auth_tokens` table for password-reset and email-verification tokens; `email_verified_at`
+    column on `users` tracks first confirmation.
+  - 4 new auth endpoints: `POST /auth/reset-password`, `POST /auth/reset-password/confirm`,
+    `POST /auth/verify-email`, `POST /auth/resend-verification`.
+  - `email_verified` claim in every JWT; login and signup responses surface the flag.
+  - Rate-limit rules for reset-password (3/900s) and resend-verification (3/900s).
+  - 6 transactional email templates (welcome, verify-email, reset-password, password-changed,
+    invitation, payment-receipt) wired to SendGrid via a typed `TEMPLATE_REGISTRY`.
+  - `send_invitation_email` migrated from inline HTML to the file-based template system.
+- **Phase 11 — Frontend Auth Pages**: Zero-JavaScript-dependency auth UX shipped into the Next.js app.
+  - `/verify-email` page — calls the backend on mount, sets `emailVerified` in localStorage on success.
+  - `/reset-password` page — token-based password reset form with full validation.
+  - Forgot-password flow integrated into `/setup` tab switcher.
+  - `emailVerified` surfaced in `useAuth` + `AuthSession` for downstream gating.
+  - `BillingStatusBanner` shows a persistent email-verification nudge with a "Resend" button
+    for users who have not confirmed their address.
+- **Phase 12 — Cloud Alert Engine**: Hourly spend-alert evaluation for non-free workspaces.
+  - `alert_rules` and `alert_events` tables with default 80% monthly-cap rule seeded on workspace creation.
+  - `alert_engine.py`: evaluates all active rules, dispatches via email and/or Slack, records outcome
+    in `alert_events`, and deduplicates within a 24-hour window per rule.
+  - SSRF-safe Slack dispatch: validates `hooks.slack.com` hostname via `urlparse` (not `startswith`).
+  - `POST /cron/evaluate-alerts`: bearer-auth cron endpoint with HMAC-wrapped constant-time secret
+    comparison; fail-open — always returns `{"evaluated": N, "fired": M}`.
+  - `PUT /settings/slack-webhook`: owner-only endpoint to configure per-workspace Slack alerts;
+    sets `channel = 'both'` when a URL is provided, reverts to `'email'` when cleared.
+  - GitHub Actions workflow triggers the cron endpoint hourly from Railway.
+
+### Fixed
+- **Frontend**: Removed dead `public/signup.html` and `public/dashboard.html` static auth pages.
+- **Frontend**: Mobile hamburger nav with `lp-` CSS-prefixed classes to avoid dashboard collision.
+- **Frontend**: Register form disables submit until name/email filled and password ≥ 8 chars.
+- **Frontend**: Branded `/not-found` 404 page; `/login` and `/pricing` redirect correctly.
+- **Frontend**: OG/Twitter descriptions tightened for solo-use positioning.
+- **Cloud**: `/billing/summary` 500 for fresh workspaces — fixed pool-import binding.
+- **Cloud**: CORS headers now emitted on unhandled 500s; preflight `max_age` capped at 60s.
+- **Security**: HTML-escape all user-supplied variables in `send_welcome_email` and
+  `send_payment_receipt_email` (XSS fix — matched existing pattern in `send_invitation_email`).
+- **Security**: Slack webhook URL no longer stored in `alert_events.recipient` audit column.
+- **bcrypt**: Bumped from 4.1.3 → 5.0.0 to match `uv.lock`.
+
+### Tests
+- `tests/test_phase11_auth.py`: 729-line suite covering all 7 new auth endpoints and JWT claims.
+- `tests/test_phase12_alerts.py`: 13 tests covering alert engine, cron auth, and Slack SSRF guard.
+- `tests/test_cors_preflight.py` and `tests/test_cors_on_500.py`: regression tests for CORS hardening.
+- `tests/test_plans_pool_binding.py`: regression test for the billing-summary pool-import fix.
+- `frontend/tests/e2e/phase11_auth.spec.ts`: Playwright E2E for signup, login, forgot-password,
+  and email-verification flows.
+
 ## [Unreleased — PyPI `burnlens`] — milestone 0.2.0
 
 ### Added
