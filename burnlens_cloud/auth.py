@@ -101,6 +101,7 @@ def _safe_redirect(target: Optional[str]) -> Optional[str]:
     ):
         return target
     return None
+from pydantic import BaseModel
 from .database import execute_query, execute_insert
 
 
@@ -920,3 +921,180 @@ async def logout(response: Response):
     """Clear the session cookie. Idempotent; no auth required."""
     _clear_session_cookie(response)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Phase 11: Password reset and email verification endpoints
+# ---------------------------------------------------------------------------
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+
+
+@router.post("/reset-password", status_code=200)
+async def request_password_reset(request: ResetPasswordRequest):
+    """Request a password reset email. Always returns 200 to prevent user enumeration."""
+    from .pii_crypto import lookup_hash as _lh
+    email_norm = request.email.strip().lower()
+    email_h = _lh(email_norm)
+
+    rows = await execute_query(
+        "SELECT id, email_encrypted FROM users WHERE email_hash = $1", email_h
+    )
+    if not rows:
+        return {"message": "If an account with that email exists, a reset link has been sent."}
+
+    user_id = str(rows[0]["id"])
+    from .pii_crypto import decrypt_pii as _dec
+    recipient_email = _dec(rows[0]["email_encrypted"])
+
+    # Invalidate any existing unused password_reset tokens for this user.
+    await execute_insert(
+        "UPDATE auth_tokens SET used_at = now() WHERE user_id = $1 AND type = 'password_reset' AND used_at IS NULL",
+        user_id,
+    )
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    from datetime import timezone
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    await execute_insert(
+        """
+        INSERT INTO auth_tokens (user_id, type, token_hash, expires_at)
+        VALUES ($1, 'password_reset', $2, $3)
+        """,
+        user_id, token_hash, expires_at,
+    )
+
+    reset_url = f"{settings.burnlens_frontend_url}/reset-password?token={raw_token}"
+    from .email import send_reset_password_email
+    await send_reset_password_email(recipient_email, reset_url)
+    return {"message": "If an account with that email exists, a reset link has been sent."}
+
+
+class ResetPasswordConfirmRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password/confirm", status_code=200)
+async def confirm_password_reset(request: ResetPasswordConfirmRequest):
+    """Validate reset token and set new password. Token is single-use."""
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if len(request.new_password) > 128:
+        raise HTTPException(status_code=400, detail="Password too long (max 128 chars)")
+
+    token_hash = hashlib.sha256(request.token.encode()).hexdigest()
+
+    # Atomic single-use claim: rowcount 1 = claimed, 0 = already used or expired.
+    result = await execute_insert(
+        """
+        UPDATE auth_tokens SET used_at = now()
+        WHERE token_hash = $1
+          AND type = 'password_reset'
+          AND used_at IS NULL
+          AND expires_at > now()
+        """,
+        token_hash,
+    )
+    if not result or result == "UPDATE 0":
+        raise HTTPException(status_code=400, detail="Reset link is invalid or has expired.")
+
+    row = await execute_query(
+        "SELECT user_id FROM auth_tokens WHERE token_hash = $1", token_hash
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or has expired.")
+
+    user_id = str(row[0]["user_id"])
+    import bcrypt
+    hashed = bcrypt.hashpw(request.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    await execute_insert(
+        "UPDATE users SET password_hash = $1 WHERE id = $2", hashed, user_id
+    )
+
+    # Send password-changed confirmation email (fail-open).
+    user_email_row = await execute_query(
+        "SELECT email_encrypted FROM users WHERE id = $1", user_id
+    )
+    if user_email_row and user_email_row[0].get("email_encrypted"):
+        from .pii_crypto import decrypt_pii as _dec
+        from .email import send_password_changed_email
+        recipient = _dec(user_email_row[0]["email_encrypted"])
+        await send_password_changed_email(recipient)
+
+    return {"message": "Password updated successfully."}
+
+
+@router.get("/verify-email", status_code=200)
+async def verify_email(token: str):
+    """Claim email verification token and mark email as verified."""
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    result = await execute_insert(
+        """
+        UPDATE auth_tokens SET used_at = now()
+        WHERE token_hash = $1
+          AND type = 'email_verification'
+          AND used_at IS NULL
+          AND expires_at > now()
+        """,
+        token_hash,
+    )
+    if not result or result == "UPDATE 0":
+        raise HTTPException(status_code=400, detail="Verification link is invalid or has expired.")
+
+    row = await execute_query(
+        "SELECT user_id FROM auth_tokens WHERE token_hash = $1", token_hash
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="Verification link is invalid or has expired.")
+
+    user_id = str(row[0]["user_id"])
+    await execute_insert(
+        "UPDATE users SET email_verified_at = now() WHERE id = $1", user_id
+    )
+    return {"message": "Email verified successfully."}
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
+@router.post("/resend-verification", status_code=200)
+async def resend_verification(request: ResendVerificationRequest):
+    """Resend email verification link. Always returns 200."""
+    from .pii_crypto import lookup_hash as _lh, decrypt_pii as _dec
+    email_norm = request.email.strip().lower()
+    rows = await execute_query(
+        "SELECT id, email_encrypted, email_verified_at FROM users WHERE email_hash = $1",
+        _lh(email_norm),
+    )
+    if not rows or rows[0].get("email_verified_at") is not None:
+        return {"message": "If applicable, a verification email has been sent."}
+
+    user_id = str(rows[0]["id"])
+    recipient_email = _dec(rows[0]["email_encrypted"])
+
+    # Invalidate existing unused tokens.
+    await execute_insert(
+        "UPDATE auth_tokens SET used_at = now() WHERE user_id = $1 AND type = 'email_verification' AND used_at IS NULL",
+        user_id,
+    )
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    from datetime import timezone
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    await execute_insert(
+        "INSERT INTO auth_tokens (user_id, type, token_hash, expires_at) VALUES ($1, 'email_verification', $2, $3)",
+        user_id, token_hash, expires_at,
+    )
+
+    verify_url = f"{settings.burnlens_frontend_url}/verify-email?token={raw_token}"
+    from .email import send_verify_email
+    await send_verify_email(recipient_email, verify_url)
+    return {"message": "If applicable, a verification email has been sent."}
