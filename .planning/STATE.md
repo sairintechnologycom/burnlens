@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.2
-milestone_name: account-security-notifications
-status: planning
-last_updated: "2026-04-30T15:18:01.899Z"
-last_activity: 2026-04-30 — v1.2 roadmap created (3 phases, 19 requirements mapped)
+milestone_name: Account Security & Notifications
+status: planned
+last_updated: "2026-05-02T10:50:00.000Z"
+last_activity: 2026-05-02 — Phase 11 (Auth Essentials) planning complete — 7 execute plans created
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 7
   completed_plans: 0
 ---
 
@@ -16,10 +16,10 @@ progress:
 
 ## Current Position
 
-Phase: Not started
+Phase: 11 — Auth Essentials (planned, not yet executed)
 Plan: —
-Status: Roadmap created — ready to plan Phase 11
-Last activity: 2026-04-30 — v1.2 roadmap created (3 phases, 19 requirements mapped)
+Status: Phase 11 planning complete — 7 execute plans ready (01, 02, 03a, 03b, 04, 05a, 05b)
+Last activity: 2026-05-02 — Phase 11 plans written and verified
 
 ## Project Reference
 
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 
 | # | Phase | Requirements | Status |
 |---|-------|-------------|--------|
-| 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | Not started |
+| 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | Planned — 7 plans ready |
 | 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | Not started |
 | 13 | Alert Management UI | ALERT-08–09 (2 reqs) | Not started |
 
@@ -72,6 +72,21 @@ Known deferred items at close: 25+ (see above)
 
 ## Session Continuity
 
-**Next action:** Run `/gsd-plan-phase 11` to begin Phase 11 (Auth Essentials)
+**Next action:** Execute Phase 11 plans — Wave 1 (01+02 parallel), Wave 2 (03a→03b, 04 parallel with 03a), Wave 3 (05a→05b)
 **Last milestone:** v1.1 ended at Phase 10 — v1.2 begins at Phase 11
 **Roadmap:** 3 phases (11–13), 19 requirements, all mapped
+
+## Phase 11 Execution Plan
+
+Wave 1 (parallel):
+- `11-PLAN-01` → database.py: auth_tokens table + email_verified_at column
+- `11-PLAN-02` → email.py: TemplateSpec registry + 5 transactional send functions + HTML templates
+
+Wave 2:
+- `11-PLAN-03a` (after 01+02) → models.py + rate_limit.py + encode_jwt email_verified field
+- `11-PLAN-03b` (after 03a) → 4 auth route handlers + signup email wiring
+- `11-PLAN-04` (after 01+02, parallel with 03a) → billing.py: transaction.completed webhook handler
+
+Wave 3:
+- `11-PLAN-05a` (after 03b) → useAuth.ts emailVerified + setup/page.tsx forgot-password flow
+- `11-PLAN-05b` (after 05a) → /reset-password page + /verify-email page + BillingStatusBanner
