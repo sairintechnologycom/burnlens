@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from urllib.parse import urlparse
 
 from .auth import verify_token, require_role
@@ -281,3 +282,60 @@ async def update_pricing(
     except Exception as e:
         logger.error(f"Failed to update pricing: {e}")
         raise HTTPException(status_code=500, detail="Failed to update pricing")
+
+
+# Phase 12: Slack webhook configuration for alert rules.
+class SlackWebhookRequest(BaseModel):
+    webhook_url: Optional[str] = None  # None to clear
+
+
+@router.put("/slack-webhook")
+async def update_slack_webhook(
+    body: SlackWebhookRequest,
+    request: Request,
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """
+    Owner-only. Set or clear the Slack webhook URL for this workspace's alert rules.
+
+    - webhook_url must start with https://hooks.slack.com/ (or be null to clear).
+    - Updates all alert_rules for the workspace:
+        - If URL provided: sets slack_webhook_url + channel = 'both'
+        - If URL is null: clears slack_webhook_url + channel = 'email'
+    """
+    require_role("owner", token)
+
+    url = body.webhook_url
+    if url is not None and not url.startswith("https://hooks.slack.com/"):
+        raise HTTPException(
+            status_code=422,
+            detail="webhook_url must start with https://hooks.slack.com/",
+        )
+
+    async with request.app.state.db_pool.acquire() as conn:
+        if url is not None:
+            result = await conn.execute(
+                """
+                UPDATE alert_rules
+                SET slack_webhook_url = $1,
+                    channel = 'both',
+                    updated_at = NOW()
+                WHERE workspace_id = $2
+                """,
+                url,
+                token.workspace_id,
+            )
+        else:
+            result = await conn.execute(
+                """
+                UPDATE alert_rules
+                SET slack_webhook_url = NULL,
+                    channel = 'email',
+                    updated_at = NOW()
+                WHERE workspace_id = $1
+                """,
+                token.workspace_id,
+            )
+
+    updated_count = int(result.split()[-1]) if result else 0
+    return {"updated_rules": updated_count}

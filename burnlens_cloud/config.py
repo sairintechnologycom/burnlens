@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     # Email Configuration
     sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
     sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@burnlens.app")
+    cron_secret: str = os.getenv("CRON_SECRET", "")
     burnlens_frontend_url: str = os.getenv("BURNLENS_FRONTEND_URL", "https://burnlens.app")
 
     # Company / Legal
