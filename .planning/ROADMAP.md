@@ -70,7 +70,11 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full details.
   3. Org owners who configure a Slack webhook receive threshold notifications in Slack in addition to email
   4. Alert evaluation runs automatically on an hourly schedule via Railway cron; evaluation failures are logged but never interrupt the cron job
   5. Every fired alert is recorded in an audit log table with the rule, timestamp, and recipient
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 12-01-PLAN.md — Schema: alert_rules + alert_events tables + default seeding migration
+- [ ] 12-02-PLAN.md — Alert engine: burnlens_cloud/alert_engine.py + 24h dedup + email + Slack dispatch
+- [ ] 12-03-PLAN.md — Cron endpoint + Slack webhook settings + config + test suite
 
 ### Phase 13: Alert Management UI
 **Goal**: Org owners can view, enable/disable, and edit their workspace alert rules from the cloud dashboard without needing API access
@@ -97,7 +101,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full details.
 | 9. Quota Tracking & Soft Enforcement | v1.1 | 8/8 | Complete | 2026-04-29 |
 | 10. Feature Gating & Usage Visibility UI | v1.1 | 4/4 | Complete | 2026-04-27 |
 | 11. Auth Essentials | v1.2 | 0/? | Not started | — |
-| 12. Cloud Alert Engine | v1.2 | 0/? | Not started | — |
+| 12. Cloud Alert Engine | v1.2 | 0/3 | Not started | — |
 | 13. Alert Management UI | v1.2 | 0/? | Not started | — |
 
 ---
