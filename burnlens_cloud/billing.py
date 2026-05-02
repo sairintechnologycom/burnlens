@@ -294,7 +294,15 @@ async def create_checkout(
 # ---------------------------------------------------------------------------
 
 def _verify_signature(header: str, raw_body: bytes, secret: str, tolerance: int = 60) -> bool:
-    """Verify Paddle-Signature header (`ts=...;h1=...`) via HMAC-SHA256."""
+    """Verify Paddle-Signature header (`ts=...;h1=...`) via HMAC-SHA256.
+
+    `tolerance` must be between 1 and 300 seconds. Values outside this range
+    indicate configuration drift and would either disable replay protection
+    (tolerance=0) or create an impractically long replay window (>300 s).
+    """
+    assert 0 < tolerance <= 300, (
+        f"tolerance must be between 1 and 300 seconds, got {tolerance}"
+    )
     if not header:
         return False
     try:
