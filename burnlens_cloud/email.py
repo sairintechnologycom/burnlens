@@ -3,7 +3,7 @@
 import logging
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
 from .config import settings
@@ -13,6 +13,41 @@ from .pii_crypto import decrypt_pii
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_DIR = Path(__file__).parent / "emails" / "templates"
+
+
+class TemplateSpec(TypedDict):
+    subject: str
+    template_file: str
+    required_vars: list[str]
+
+
+TEMPLATE_REGISTRY: dict[str, TemplateSpec] = {
+    "welcome": {
+        "subject": "Welcome to BurnLens",
+        "template_file": "welcome.html",
+        "required_vars": ["workspace_name"],
+    },
+    "verify_email": {
+        "subject": "Verify your BurnLens email address",
+        "template_file": "verify_email.html",
+        "required_vars": ["verify_url"],
+    },
+    "password_changed": {
+        "subject": "Your BurnLens password has been changed",
+        "template_file": "password_changed.html",
+        "required_vars": [],
+    },
+    "reset_password": {
+        "subject": "Reset your BurnLens password",
+        "template_file": "reset_password.html",
+        "required_vars": ["reset_url"],
+    },
+    "payment_receipt": {
+        "subject": "BurnLens payment receipt",
+        "template_file": "payment_receipt.html",
+        "required_vars": ["workspace_name", "amount_str", "plan_name"],
+    },
+}
 
 # WR-03: Module-level registry for outstanding fire-and-forget email tasks.
 # asyncio.create_task returns a reference the event loop holds weakly; without
