@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -19,7 +20,7 @@ from .config import settings
 
 log = logging.getLogger(__name__)
 
-_SLACK_HOST_PREFIX = "https://hooks.slack.com/"
+_SLACK_VALID_HOST = "hooks.slack.com"
 
 
 async def _should_fire(conn: Any, rule_id: str, now: datetime) -> bool:
@@ -74,11 +75,11 @@ async def _dispatch_slack(
     Returns True on 2xx, False on any error. Never raises.
     NOTE: webhook_url is not logged — it is a secret.
     """
-    if not webhook_url or not webhook_url.startswith(_SLACK_HOST_PREFIX):
+    parsed = urlparse(webhook_url) if webhook_url else None
+    if not parsed or parsed.scheme != "https" or parsed.hostname != _SLACK_VALID_HOST:
         log.warning(
-            "alert_engine: invalid Slack webhook URL for workspace %s (must start with %s)",
+            "alert_engine: invalid Slack webhook URL for workspace %s (must be https://hooks.slack.com/...)",
             workspace_id,
-            _SLACK_HOST_PREFIX,
         )
         return False
 
@@ -167,7 +168,7 @@ async def evaluate_workspace(
                     current=current_count,
                     limit=monthly_cap,
                 )
-                recipient = slack_webhook_url if channel == "slack" else recipient
+                recipient = "slack" if channel == "slack" else recipient
 
             # Record in audit log (even on dispatch failure — status reflects outcome).
             dispatched_ok = email_ok or slack_ok
