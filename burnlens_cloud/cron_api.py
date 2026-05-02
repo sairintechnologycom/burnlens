@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .alert_engine import evaluate_all_workspaces
 from .config import settings
+from .database import get_pool
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -37,7 +37,6 @@ def _verify_cron_secret(credentials: HTTPAuthorizationCredentials | None) -> Non
 
 @router.post("/evaluate-alerts")
 async def evaluate_alerts(
-    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict:
     """
@@ -47,9 +46,8 @@ async def evaluate_alerts(
     Returns {"evaluated": N, "fired": M} always — fail-open.
     """
     _verify_cron_secret(credentials)
-    db_pool: Any = request.app.state.db_pool
     try:
-        result = await evaluate_all_workspaces(db_pool)
+        result = await evaluate_all_workspaces(get_pool())
         log.info("cron/evaluate-alerts: %s", result)
         return result
     except Exception as exc:

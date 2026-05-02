@@ -996,6 +996,13 @@ async def close_db():
         logger.info("Database pool closed")
 
 
+def get_pool() -> asyncpg.Pool:
+    """Return the module-level connection pool (initialized by init_db)."""
+    if pool is None:
+        raise RuntimeError("Database pool not initialized")
+    return pool
+
+
 async def get_db():
     """Get a connection from the pool."""
     if not pool:
