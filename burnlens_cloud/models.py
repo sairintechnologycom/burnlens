@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 class WorkspaceBase(BaseModel):
     """Base workspace schema."""
     name: str
-    owner_email: str
+    owner_email: Optional[str] = None
 
 
 class WorkspaceCreate(WorkspaceBase):
