@@ -1,0 +1,26 @@
+# TODOS
+
+## After Phase 11 ships — upgrade hero copy to team-visibility pitch
+
+**What:** Update burnlens.app landing page hero to team-focused copy.
+**Why:** Design doc validated team-visibility as the core value prop for tech leads managing multi-provider LLM spend. Solo-use copy is live now to avoid advertising features that don't exist yet (team invitations). Once Phase 11 ships team invitations, flip the copy.
+**Pros:** Speaks directly to the paying ICP (3-10 person team, $500+/mo LLM spend). The concierge outreach pitch will reference team visibility — landing page should match.
+**Cons:** One more PR to coordinate with Phase 11 launch.
+**Context:** Use this copy:
+```
+h1: See your whole team's LLM spend in one dashboard
+subline: Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.
+```
+Also update layout.tsx OG/Twitter title and description to match.
+**Depends on:** Phase 11 team invitations live (`.planning/phases/11/`).
+
+---
+
+## Clean up team.html legacy auth (dead code)
+
+**What:** Delete `frontend/public/team.html`. It uses old `bl_token` localStorage auth, redirects to `/signup` (which double-redirects to `/setup?intent=register`), and conflicts with the current HttpOnly-cookie auth model.
+**Why:** Dead code that will confuse anyone landing on it and misrepresents the current auth model. The double-redirect chain is also sloppy.
+**Pros:** Removes confusion, simplifies auth surface.
+**Cons:** None — nobody should be landing on team.html in the current flow.
+**Context:** The file is at `frontend/public/team.html`. Check `vercel.json` for any remaining rewrites referencing it before deleting.
+**Depends on:** Nothing — standalone cleanup.
