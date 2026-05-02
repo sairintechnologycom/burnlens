@@ -33,9 +33,9 @@ class BudgetStatus:
         return self.budget_usd is not None
 
     @property
-    def pct_used(self) -> float:
+    def pct_used(self) -> float | None:
         if not self.has_budget or self.budget_usd == 0:
-            return 0
+            return None
         return self.spent_usd / self.budget_usd * 100.0
 
     @property
