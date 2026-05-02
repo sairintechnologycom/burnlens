@@ -331,3 +331,137 @@ async def send_usage_warning_email(
             e,
         )
         return False
+
+
+async def send_welcome_email(recipient_email: str, workspace_name: str) -> None:
+    """Send welcome email to new user. Fail-open — never raises."""
+    if not settings.sendgrid_api_key:
+        logger.warning("send_welcome_email: SendGrid not configured, skipping")
+        return
+
+    async def _send_background() -> None:
+        try:
+            spec = TEMPLATE_REGISTRY["welcome"]
+            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+            html_body = template.replace("{{workspace_name}}", workspace_name)
+            message = Mail(
+                from_email=Email(settings.sendgrid_from_email),
+                to_emails=[To(recipient_email)],
+                subject=spec["subject"],
+                html_content=Content("text/html", html_body),
+            )
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+        except Exception:
+            logger.exception("send_welcome_email: failed for %s", recipient_email)
+
+    track_email_task(asyncio.create_task(_send_background()))
+
+
+async def send_verify_email(recipient_email: str, verify_url: str) -> None:
+    """Send email-verification link. Fail-open — never raises."""
+    if not settings.sendgrid_api_key:
+        logger.warning("send_verify_email: SendGrid not configured, skipping")
+        return
+
+    async def _send_background() -> None:
+        try:
+            spec = TEMPLATE_REGISTRY["verify_email"]
+            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+            html_body = template.replace("{{verify_url}}", verify_url)
+            message = Mail(
+                from_email=Email(settings.sendgrid_from_email),
+                to_emails=[To(recipient_email)],
+                subject=spec["subject"],
+                html_content=Content("text/html", html_body),
+            )
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+        except Exception:
+            logger.exception("send_verify_email: failed for %s", recipient_email)
+
+    track_email_task(asyncio.create_task(_send_background()))
+
+
+async def send_password_changed_email(recipient_email: str) -> None:
+    """Notify user their password was changed. Fail-open — never raises."""
+    if not settings.sendgrid_api_key:
+        logger.warning("send_password_changed_email: SendGrid not configured, skipping")
+        return
+
+    async def _send_background() -> None:
+        try:
+            spec = TEMPLATE_REGISTRY["password_changed"]
+            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+            message = Mail(
+                from_email=Email(settings.sendgrid_from_email),
+                to_emails=[To(recipient_email)],
+                subject=spec["subject"],
+                html_content=Content("text/html", template),
+            )
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+        except Exception:
+            logger.exception("send_password_changed_email: failed for %s", recipient_email)
+
+    track_email_task(asyncio.create_task(_send_background()))
+
+
+async def send_reset_password_email(recipient_email: str, reset_url: str) -> None:
+    """Send password-reset link email. Fail-open — never raises."""
+    if not settings.sendgrid_api_key:
+        logger.warning("send_reset_password_email: SendGrid not configured, skipping")
+        return
+
+    async def _send_background() -> None:
+        try:
+            spec = TEMPLATE_REGISTRY["reset_password"]
+            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+            html_body = template.replace("{{reset_url}}", reset_url)
+            message = Mail(
+                from_email=Email(settings.sendgrid_from_email),
+                to_emails=[To(recipient_email)],
+                subject=spec["subject"],
+                html_content=Content("text/html", html_body),
+            )
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+        except Exception:
+            logger.exception("send_reset_password_email: failed for %s", recipient_email)
+
+    track_email_task(asyncio.create_task(_send_background()))
+
+
+async def send_payment_receipt_email(
+    recipient_email: str,
+    workspace_name: str,
+    amount_str: str,
+    plan_name: str,
+) -> None:
+    """Send payment receipt after successful Paddle transaction. Fail-open — never raises."""
+    if not settings.sendgrid_api_key:
+        logger.warning("send_payment_receipt_email: SendGrid not configured, skipping")
+        return
+
+    async def _send_background() -> None:
+        try:
+            spec = TEMPLATE_REGISTRY["payment_receipt"]
+            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+            html_body = (
+                template
+                .replace("{{workspace_name}}", workspace_name)
+                .replace("{{amount_str}}", amount_str)
+                .replace("{{plan_name}}", plan_name)
+            )
+            message = Mail(
+                from_email=Email(settings.sendgrid_from_email),
+                to_emails=[To(recipient_email)],
+                subject=spec["subject"],
+                html_content=Content("text/html", html_body),
+            )
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+        except Exception:
+            logger.exception("send_payment_receipt_email: failed for %s", recipient_email)
+
+    track_email_task(asyncio.create_task(_send_background()))
