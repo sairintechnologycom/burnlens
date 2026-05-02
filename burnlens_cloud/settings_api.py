@@ -292,7 +292,6 @@ class SlackWebhookRequest(BaseModel):
 @router.put("/slack-webhook")
 async def update_slack_webhook(
     body: SlackWebhookRequest,
-    request: Request,
     token: TokenPayload = Depends(verify_token),
 ) -> dict:
     """
@@ -312,30 +311,29 @@ async def update_slack_webhook(
             detail="webhook_url must start with https://hooks.slack.com/",
         )
 
-    async with request.app.state.db_pool.acquire() as conn:
-        if url is not None:
-            result = await conn.execute(
-                """
-                UPDATE alert_rules
-                SET slack_webhook_url = $1,
-                    channel = 'both',
-                    updated_at = NOW()
-                WHERE workspace_id = $2
-                """,
-                url,
-                token.workspace_id,
-            )
-        else:
-            result = await conn.execute(
-                """
-                UPDATE alert_rules
-                SET slack_webhook_url = NULL,
-                    channel = 'email',
-                    updated_at = NOW()
-                WHERE workspace_id = $1
-                """,
-                token.workspace_id,
-            )
+    if url is not None:
+        result = await execute_insert(
+            """
+            UPDATE alert_rules
+            SET slack_webhook_url = $1,
+                channel = 'both',
+                updated_at = NOW()
+            WHERE workspace_id = $2
+            """,
+            url,
+            token.workspace_id,
+        )
+    else:
+        result = await execute_insert(
+            """
+            UPDATE alert_rules
+            SET slack_webhook_url = NULL,
+                channel = 'email',
+                updated_at = NOW()
+            WHERE workspace_id = $1
+            """,
+            token.workspace_id,
+        )
 
     updated_count = int(result.split()[-1]) if result else 0
     return {"updated_rules": updated_count}

@@ -287,6 +287,7 @@ def test_cron_endpoint_401_wrong_secret():
 def test_cron_endpoint_200_with_correct_secret():
     from fastapi.testclient import TestClient
     with patch.object(config_mod.settings, "cron_secret", "test-cron-secret"), \
+         patch("burnlens_cloud.cron_api.get_pool", return_value=MagicMock()), \
          patch(
              "burnlens_cloud.cron_api.evaluate_all_workspaces",
              new=AsyncMock(return_value={"evaluated": 3, "fired": 1}),
