@@ -58,8 +58,11 @@ export function useAuth() {
     const plan = localStorage.getItem("burnlens_plan");
     const apiKey = localStorage.getItem("burnlens_api_key");
     const emailVerifiedRaw = localStorage.getItem("burnlens_email_verified");
-    // Treat missing (null) as true — grandfathered users have no stored value.
-    const emailVerified = emailVerifiedRaw === null ? true : emailVerifiedRaw === "true";
+    // Treat missing (null) as false — localStorage is a convenience hint only.
+    // Defaulting to false means tampered/missing values show the verification
+    // banner rather than suppress it (safe direction). Verified users have the
+    // value set to "true" by the verify-email page on successful verification.
+    const emailVerified = emailVerifiedRaw === "true";
 
     // One-time cleanup: purge any legacy JWT still sitting in localStorage
     // from pre-C-3 sessions so an XSS landing later cannot read it.
