@@ -369,6 +369,8 @@ async def paddle_webhook(request: Request):
             await _handle_subscription_canceled(data)
         elif event_type == "transaction.payment_failed":
             await _handle_payment_failed(data)
+        elif event_type == "transaction.completed":
+            await _handle_transaction_completed(data)
         else:
             logger.debug("Unhandled Paddle event: %s", event_type)
         await execute_insert(
@@ -569,6 +571,85 @@ async def _handle_payment_failed(data: dict) -> None:
         _sub_id_hash(subscription_id),
     )
     logger.warning("Subscription %s flipped to past_due", subscription_id)
+
+
+async def _handle_transaction_completed(data: dict) -> None:
+    """Handle Paddle transaction.completed — fire payment receipt email.
+
+    Fires on initial payment and every renewal charge. Closes PDL-02.
+    Fail-open: email delivery failure must never block the webhook 200 response.
+    """
+    subscription_id = data.get("subscription_id")
+    workspace_id_raw = (data.get("custom_data") or {}).get("workspace_id")
+
+    # Resolve workspace: prefer custom_data.workspace_id, fall back to subscription lookup.
+    workspace_row = None
+    if workspace_id_raw:
+        rows = await execute_query(
+            "SELECT id, name, owner_email_encrypted, plan FROM workspaces WHERE id = $1",
+            workspace_id_raw,
+        )
+        workspace_row = rows[0] if rows else None
+
+    if workspace_row is None and subscription_id:
+        sub_hash = _sub_id_hash(subscription_id)
+        rows = await execute_query(
+            """
+            SELECT id, name, owner_email_encrypted, plan
+            FROM workspaces
+            WHERE paddle_subscription_id_hash = $1
+            """,
+            sub_hash,
+        )
+        workspace_row = rows[0] if rows else None
+
+    if workspace_row is None:
+        logger.warning(
+            "_handle_transaction_completed: could not resolve workspace for sub=%s ws=%s",
+            subscription_id, workspace_id_raw,
+        )
+        return
+
+    if not workspace_row.get("owner_email_encrypted"):
+        logger.warning(
+            "_handle_transaction_completed: workspace %s has no owner_email_encrypted",
+            workspace_row["id"],
+        )
+        return
+
+    try:
+        from .pii_crypto import decrypt_pii
+        recipient_email = decrypt_pii(workspace_row["owner_email_encrypted"])
+    except Exception:
+        logger.exception(
+            "_handle_transaction_completed: decrypt failed for workspace %s", workspace_row["id"]
+        )
+        return
+
+    # Build human-readable amount string from Paddle totals.
+    try:
+        totals = (data.get("details") or {}).get("totals") or {}
+        grand_total_cents = int(totals.get("grand_total", 0))
+        currency = data.get("currency_code", "USD").upper()
+        amount_str = f"{currency} {grand_total_cents / 100:.2f}"
+    except Exception:
+        amount_str = "—"
+
+    workspace_name = workspace_row.get("name", "Your workspace")
+    plan_name = (workspace_row.get("plan") or "free").capitalize()
+
+    try:
+        from .email import send_payment_receipt_email
+        await send_payment_receipt_email(recipient_email, workspace_name, amount_str, plan_name)
+        logger.info(
+            "_handle_transaction_completed: receipt queued for workspace=%s plan=%s amount=%s",
+            workspace_row["id"], plan_name, amount_str,
+        )
+    except Exception:
+        logger.exception(
+            "_handle_transaction_completed: send_payment_receipt_email failed for workspace %s",
+            workspace_row["id"],
+        )
 
 
 # ---------------------------------------------------------------------------
