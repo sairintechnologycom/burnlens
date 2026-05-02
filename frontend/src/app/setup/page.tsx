@@ -18,6 +18,7 @@ function isLocalBackend(): boolean {
 function storeSession(data: {
   token: string;
   workspace: { id: string; name: string; plan: string; api_key: string };
+  email_verified?: boolean;
 }) {
   // C-3: the JWT is set by the backend as the `burnlens_session` HttpOnly
   // cookie — we intentionally DO NOT persist `data.token` client-side.
@@ -27,6 +28,7 @@ function storeSession(data: {
   localStorage.setItem("burnlens_workspace_name", data.workspace.name);
   localStorage.setItem("burnlens_plan", data.workspace.plan);
   localStorage.setItem("burnlens_api_key", data.workspace.api_key);
+  localStorage.setItem("burnlens_email_verified", String(data.email_verified ?? true));
   // Clean up legacy JWT if a previous (pre-C-3) session left one behind.
   localStorage.removeItem("burnlens_token");
 }
@@ -44,6 +46,12 @@ function SetupContent() {
   const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Forgot password flow
+  const [showForgotPw, setShowForgotPw] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotMsg, setForgotMsg] = useState<string | null>(null);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   // Login fields
   const [email, setEmail] = useState("");
@@ -83,6 +91,23 @@ function SetupContent() {
       setLoading(false);
     }
   }, [email, password, router]);
+
+  async function handleForgotSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await fetch(`${BASE_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      setForgotMsg("If that email is registered, a reset link is on its way. Check your inbox.");
+    } catch {
+      setForgotMsg("Something went wrong. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  }
 
   const handleRegister = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -368,6 +393,42 @@ function SetupContent() {
                   >
                     {loading ? "Signing in..." : "Sign in"}
                   </button>
+
+                  {!showForgotPw ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPw(true)}
+                      style={{ background: "none", border: "none", color: "var(--s-muted)", cursor: "pointer", fontSize: "var(--fs-13)", padding: 0, marginTop: 8 }}
+                    >
+                      Forgot password?
+                    </button>
+                  ) : (
+                    <form onSubmit={handleForgotSubmit} style={{ marginTop: 16 }}>
+                      <p style={{ fontSize: "var(--fs-13)", color: "var(--s-muted)", marginBottom: 8 }}>
+                        Enter your email and we'll send a reset link.
+                      </p>
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={e => setForgotEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        required
+                        className="sp-input"
+                        style={{ marginBottom: 8 }}
+                      />
+                      <button type="submit" className="sp-btn-primary" disabled={forgotLoading}>
+                        {forgotLoading ? "Sending…" : "Send reset link"}
+                      </button>
+                      {forgotMsg && <p style={{ fontSize: "var(--fs-13)", marginTop: 8, color: "var(--s-muted)" }}>{forgotMsg}</p>}
+                      <button
+                        type="button"
+                        onClick={() => { setShowForgotPw(false); setForgotMsg(null); }}
+                        style={{ background: "none", border: "none", color: "var(--s-muted)", cursor: "pointer", fontSize: "var(--fs-12)", marginTop: 4 }}
+                      >
+                        ← Back to sign in
+                      </button>
+                    </form>
+                  )}
                 </>
               ) : (
                 <form onSubmit={handleRegister}>
