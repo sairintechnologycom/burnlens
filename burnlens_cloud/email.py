@@ -1,7 +1,9 @@
 """Email utilities for BurnLens Cloud."""
 
+import html as _html
 import logging
 import asyncio
+import urllib.parse
 from pathlib import Path
 from typing import Optional, TypedDict
 from sendgrid import SendGridAPIClient
@@ -110,11 +112,18 @@ async def send_invitation_email(
         return False
 
     try:
-        # Build invitation link
-        invite_url = f"{settings.burnlens_frontend_url}/invite/{invitation_token}"
+        # HTML-escape user-supplied values before interpolation to prevent
+        # stored-XSS payloads in workspace_name or invited_by_name from
+        # executing in recipients' email clients (CR-04).
+        safe_workspace = _html.escape(workspace_name)
+        safe_inviter = _html.escape(invited_by_name) if invited_by_name else None
+        # Build invitation link using the raw token (URL-safe by construction
+        # from secrets.token_urlsafe). Quote for safety in href context.
+        raw_invite_url = f"{settings.burnlens_frontend_url}/invite/{invitation_token}"
+        safe_url = urllib.parse.quote(raw_invite_url, safe=":/?=&")
 
         # Build email content
-        subject = f"You've been invited to {workspace_name} on BurnLens"
+        subject = f"You've been invited to {safe_workspace} on BurnLens"
 
         html_content = f"""
         <html>
@@ -123,19 +132,19 @@ async def send_invitation_email(
                     <h2>You've been invited to BurnLens</h2>
 
                     <p>
-                        {f"<strong>{invited_by_name}</strong> has invited you to join" if invited_by_name else "You've been invited to join"}
-                        the <strong>{workspace_name}</strong> workspace on BurnLens.
+                        {f"<strong>{safe_inviter}</strong> has invited you to join" if safe_inviter else "You've been invited to join"}
+                        the <strong>{safe_workspace}</strong> workspace on BurnLens.
                     </p>
 
                     <p>
-                        <a href="{invite_url}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: 500;">
+                        <a href="{safe_url}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: 500;">
                             Accept Invitation
                         </a>
                     </p>
 
                     <p style="color: #666; font-size: 14px;">
                         Or copy this link into your browser:<br>
-                        <code style="background-color: #f3f4f6; padding: 2px 4px; border-radius: 2px;">{invite_url}</code>
+                        <code style="background-color: #f3f4f6; padding: 2px 4px; border-radius: 2px;">{safe_url}</code>
                     </p>
 
                     <p style="color: #999; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
