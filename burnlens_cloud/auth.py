@@ -777,6 +777,24 @@ async def signup(request: SignupRequest, response: Response):
 
         logger.info(f"New workspace created: {workspace_id} with user {user_id}")
 
+        # Phase 11: send welcome + verification emails (fail-open via background tasks).
+        raw_verify_token = secrets.token_urlsafe(32)
+        verify_token_hash = hashlib.sha256(raw_verify_token.encode()).hexdigest()
+        from datetime import timezone as _tz
+        verify_expires = datetime.now(_tz.utc) + timedelta(hours=24)
+        try:
+            await execute_insert(
+                "INSERT INTO auth_tokens (user_id, type, token_hash, expires_at) VALUES ($1, 'email_verification', $2, $3)",
+                user_id, verify_token_hash, verify_expires,
+            )
+        except Exception:
+            logger.exception("signup: failed to create email verification token for user %s", user_id)
+
+        from .email import send_welcome_email, send_verify_email as _send_verify
+        verify_url = f"{settings.burnlens_frontend_url}/verify-email?token={raw_verify_token}"
+        await send_welcome_email(email_norm, request.workspace_name)
+        await _send_verify(email_norm, verify_url)
+
         # Generate JWT so user is logged in immediately
         token = encode_jwt(workspace_id, user_id, "owner", "free", email_verified=False)
         _set_session_cookie(response, token)
@@ -798,6 +816,7 @@ async def signup(request: SignupRequest, response: Response):
             expires_in=settings.jwt_expiration_seconds,
             workspace=workspace,
             message="Workspace created successfully.",
+            email_verified=False,
         )
     except HTTPException:
         raise
