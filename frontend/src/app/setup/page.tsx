@@ -409,7 +409,7 @@ function SetupContent() {
                   <button
                     type="submit"
                     className="sp-btn-primary"
-                    disabled={loading}
+                    disabled={loading || !regName.trim() || !regEmail.trim() || regPassword.length < 8}
                   >
                     {loading ? "Creating..." : "Create Workspace"}
                   </button>
