@@ -79,6 +79,7 @@ class LoginResponse(BaseModel):
     token: str
     expires_in: int
     workspace: WorkspaceResponse
+    email_verified: bool = True
 
 
 class SignupRequest(BaseModel):
@@ -96,6 +97,7 @@ class SignupResponse(BaseModel):
     expires_in: int
     workspace: WorkspaceResponse
     message: str = "Workspace created successfully."
+    email_verified: bool = False
 
 
 class TokenPayload(BaseModel):
@@ -106,6 +108,7 @@ class TokenPayload(BaseModel):
     plan: str
     iat: int
     exp: int
+    email_verified: bool = True
 
 
 class StatsSummary(BaseModel):
