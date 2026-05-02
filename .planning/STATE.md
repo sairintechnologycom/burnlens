@@ -3,23 +3,29 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Account Security & Notifications
 status: executing
-last_updated: "2026-05-02T12:19:02.313Z"
+last_updated: "2026-05-02T12:24:00.000Z"
 last_activity: 2026-05-02
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 0
-  completed_plans: 8
+  completed_plans: 13
 ---
 
 # State
 
 ## Current Position
 
-Phase: 11 (Auth Essentials) — EXECUTING
-Plan: 2 of 7
-Status: Ready to execute
+Phase: 12 (Cloud Alert Engine) — EXECUTING
+Plan: 4 of 7
+Status: Plan 03 complete — ready to execute Plan 04
 Last activity: 2026-05-02
+
+## Key Decisions (Phase 12 Plan 03)
+
+- Used `secrets.compare_digest` for constant-time cron secret comparison (timing-safe)
+- Cron endpoint fail-open: exceptions from `evaluate_all_workspaces` return `{evaluated:0, fired:0}`
+- Cron endpoint tests use minimal FastAPI app without lifespan to avoid DB dependency in unit tests
 
 ## Project Reference
 
