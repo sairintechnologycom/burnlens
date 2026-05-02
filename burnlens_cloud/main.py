@@ -19,6 +19,7 @@ from .settings_api import router as settings_router
 from .compliance.audit import router as audit_router
 from .deployment_api import router as deployment_router
 from .stubs_api import router as stubs_router
+from .cron_api import router as cron_router
 from .deployment.status import get_status_checker
 from .compliance.purge import run_periodic_purge
 from .compliance.retention_prune import run_periodic_retention_prune
@@ -185,6 +186,7 @@ def get_app() -> FastAPI:
     app.include_router(deployment_router) # /status, /api/status
     app.include_router(stubs_router)     # stub endpoints — see burnlens_cloud/stubs_api.py
     app.include_router(api_keys_router)  # /api-keys CRUD (Phase 9 GATE-04)
+    app.include_router(cron_router)     # /cron/evaluate-alerts (Phase 12)
 
     return app
 
