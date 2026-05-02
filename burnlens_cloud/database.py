@@ -854,6 +854,28 @@ async def init_db():
               AND NOT EXISTS (SELECT 1 FROM api_keys ak WHERE ak.key_hash = w.api_key_hash)
         """)
 
+        # Phase 11: auth tokens for password-reset and email-verification flows.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth_tokens (
+                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                type        TEXT        NOT NULL CHECK (type IN ('password_reset', 'email_verification')),
+                token_hash  TEXT        NOT NULL UNIQUE,
+                expires_at  TIMESTAMPTZ NOT NULL,
+                used_at     TIMESTAMPTZ,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_active
+            ON auth_tokens(user_id, type) WHERE used_at IS NULL
+        """)
+        # Phase 11: email verification timestamp on users.
+        # NULL = grandfathered-verified for pre-v1.2 users (no backfill needed).
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ
+        """)
+
         # Phase 9 (D-19): seed supplement — add teams_view / customers_view flags
         # to plan_limits.gated_features per plan. JSONB `||` is an additive merge:
         # Phase 6 keys (custom_signatures, team_seats, otel_export) are preserved.
