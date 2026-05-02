@@ -14,6 +14,7 @@ export interface AuthSession {
   plan: string;
   apiKey: string;
   isLocal: boolean;
+  emailVerified: boolean;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
@@ -35,6 +36,7 @@ const LOCAL_SESSION: AuthSession = {
   plan: "free",
   apiKey: "local",
   isLocal: true,
+  emailVerified: true,
 };
 
 export function useAuth() {
@@ -55,6 +57,9 @@ export function useAuth() {
     const workspaceName = localStorage.getItem("burnlens_workspace_name");
     const plan = localStorage.getItem("burnlens_plan");
     const apiKey = localStorage.getItem("burnlens_api_key");
+    const emailVerifiedRaw = localStorage.getItem("burnlens_email_verified");
+    // Treat missing (null) as true — grandfathered users have no stored value.
+    const emailVerified = emailVerifiedRaw === null ? true : emailVerifiedRaw === "true";
 
     // One-time cleanup: purge any legacy JWT still sitting in localStorage
     // from pre-C-3 sessions so an XSS landing later cannot read it.
@@ -74,6 +79,7 @@ export function useAuth() {
       plan: plan || "free",
       apiKey: apiKey || "",
       isLocal: false,
+      emailVerified,
     });
     setLoading(false);
   }, [router]);
@@ -91,6 +97,7 @@ export function useAuth() {
     localStorage.removeItem("burnlens_workspace_name");
     localStorage.removeItem("burnlens_plan");
     localStorage.removeItem("burnlens_api_key");
+    localStorage.removeItem("burnlens_email_verified");
     setSession(null);
     if (isLocalBackend()) {
       router.push("/");
