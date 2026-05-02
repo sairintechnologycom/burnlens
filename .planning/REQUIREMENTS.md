@@ -29,8 +29,8 @@
 
 ## Alert — Schema & Seeding
 
-- [ ] **ALERT-01**: Cloud plan workspaces have default budget alert rules auto-seeded at 80% and 100% of their plan's monthly allowance
-- [ ] **ALERT-02**: Alert events table records a deduplication + audit log of every alert that fired (what rule, when, to whom)
+- [x] **ALERT-01**: Cloud plan workspaces have default budget alert rules auto-seeded at 80% and 100% of their plan's monthly allowance
+- [x] **ALERT-02**: Alert events table records a deduplication + audit log of every alert that fired (what rule, when, to whom)
 
 ## Alert — Cron & Dispatch
 
