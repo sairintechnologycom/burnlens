@@ -676,13 +676,21 @@ async def login(request: LoginRequest, response: Response):
     else:
         raise HTTPException(status_code=400, detail="Provide email+password or api_key")
 
-    # Determine email_verified: True if email_verified_at is set, or if user has
-    # no pending verification token (pre-v1.2 grandfathered users have no token).
+    # Determine email_verified by querying the users table explicitly.
+    # Neither the email+password branch nor the api_key branch includes
+    # email_verified_at in their SELECT, so row.get("email_verified_at") was
+    # always None (WR-04). Fetch it directly from users.
+    verified_row = await execute_query(
+        "SELECT email_verified_at FROM users WHERE id = $1", user_id
+    )
+    is_verified_by_timestamp = bool(
+        verified_row and verified_row[0]["email_verified_at"]
+    )
     has_pending_token = await execute_query(
         "SELECT 1 FROM auth_tokens WHERE user_id=$1 AND type='email_verification' AND used_at IS NULL AND expires_at > now()",
         user_id,
     )
-    email_verified = bool(row.get("email_verified_at")) or not bool(has_pending_token)
+    email_verified = is_verified_by_timestamp or not bool(has_pending_token)
 
     token = encode_jwt(workspace_id, user_id, role, row["plan"], email_verified=email_verified)
     _set_session_cookie(response, token)
