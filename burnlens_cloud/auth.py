@@ -176,7 +176,7 @@ def hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
-def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str) -> str:
+def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str, email_verified: bool = True) -> str:
     """Encode JWT token."""
     now = int(time.time())
     exp = now + settings.jwt_expiration_seconds
@@ -186,6 +186,7 @@ def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str) -> str:
         user_id=user_id,
         role=role,
         plan=plan,
+        email_verified=email_verified,
         iat=now,
         exp=exp,
     )
@@ -674,7 +675,15 @@ async def login(request: LoginRequest, response: Response):
     else:
         raise HTTPException(status_code=400, detail="Provide email+password or api_key")
 
-    token = encode_jwt(workspace_id, user_id, role, row["plan"])
+    # Determine email_verified: True if email_verified_at is set, or if user has
+    # no pending verification token (pre-v1.2 grandfathered users have no token).
+    has_pending_token = await execute_query(
+        "SELECT 1 FROM auth_tokens WHERE user_id=$1 AND type='email_verification' AND used_at IS NULL AND expires_at > now()",
+        user_id,
+    )
+    email_verified = bool(row.get("email_verified_at")) or not bool(has_pending_token)
+
+    token = encode_jwt(workspace_id, user_id, role, row["plan"], email_verified=email_verified)
     _set_session_cookie(response, token)
 
     # Never echo the full plaintext API key on login — the user received it
@@ -696,6 +705,7 @@ async def login(request: LoginRequest, response: Response):
         token=token,
         expires_in=settings.jwt_expiration_seconds,
         workspace=workspace,
+        email_verified=email_verified,
     )
 
 
@@ -767,7 +777,7 @@ async def signup(request: SignupRequest, response: Response):
         logger.info(f"New workspace created: {workspace_id} with user {user_id}")
 
         # Generate JWT so user is logged in immediately
-        token = encode_jwt(workspace_id, user_id, "owner", "free")
+        token = encode_jwt(workspace_id, user_id, "owner", "free", email_verified=False)
         _set_session_cookie(response, token)
 
         workspace = WorkspaceResponse(
