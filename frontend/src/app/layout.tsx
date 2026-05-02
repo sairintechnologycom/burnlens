@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "BurnLens — See exactly what your AI API calls cost",
-    description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy that shows developers where their AI API money goes.",
+    description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy — see every AI API call's real cost across OpenAI, Anthropic & Google.",
     url: "https://burnlens.app",
     siteName: "BurnLens",
     type: "website",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "BurnLens — See exactly what your AI API calls cost",
-    description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps for Anthropic, OpenAI & Google AI.",
+    description: "One command. Zero code changes. Every dollar tracked. Free, open-source, local-first — no data leaves your machine.",
   },
 };
 
