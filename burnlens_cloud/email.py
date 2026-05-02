@@ -336,7 +336,7 @@ async def send_welcome_email(recipient_email: str, workspace_name: str) -> None:
         try:
             spec = TEMPLATE_REGISTRY["welcome"]
             template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
-            html_body = template.replace("{{workspace_name}}", workspace_name)
+            html_body = template.replace("{{workspace_name}}", _html.escape(workspace_name))
             message = Mail(
                 from_email=Email(settings.sendgrid_from_email),
                 to_emails=[To(recipient_email)],
@@ -442,9 +442,9 @@ async def send_payment_receipt_email(
             template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
             html_body = (
                 template
-                .replace("{{workspace_name}}", workspace_name)
-                .replace("{{amount_str}}", amount_str)
-                .replace("{{plan_name}}", plan_name)
+                .replace("{{workspace_name}}", _html.escape(workspace_name))
+                .replace("{{amount_str}}", _html.escape(amount_str))
+                .replace("{{plan_name}}", _html.escape(plan_name))
             )
             message = Mail(
                 from_email=Email(settings.sendgrid_from_email),
