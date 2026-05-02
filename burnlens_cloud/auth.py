@@ -1007,22 +1007,18 @@ async def confirm_password_reset(request: ResetPasswordConfirmRequest):
 
     token_hash = hashlib.sha256(request.token.encode()).hexdigest()
 
-    # Atomic single-use claim: rowcount 1 = claimed, 0 = already used or expired.
-    result = await execute_insert(
+    # Atomic single-use claim: use RETURNING so user_id and the consumed-flag
+    # come from one round-trip with no TOCTOU window.
+    row = await execute_query(
         """
         UPDATE auth_tokens SET used_at = now()
         WHERE token_hash = $1
           AND type = 'password_reset'
           AND used_at IS NULL
           AND expires_at > now()
+        RETURNING user_id
         """,
         token_hash,
-    )
-    if not result or result == "UPDATE 0":
-        raise HTTPException(status_code=400, detail="Reset link is invalid or has expired.")
-
-    row = await execute_query(
-        "SELECT user_id FROM auth_tokens WHERE token_hash = $1", token_hash
     )
     if not row:
         raise HTTPException(status_code=400, detail="Reset link is invalid or has expired.")
