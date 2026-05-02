@@ -1,0 +1,27 @@
+name: Hourly alert evaluation
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # top of every hour UTC
+  workflow_dispatch:        # allow manual trigger from Actions UI
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST /cron/evaluate-alerts
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://api.burnlens.app/cron/evaluate-alerts \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json")
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "status=$status body=$body"
+          if [ "$status" != "200" ]; then
+            echo "::error::Cron endpoint returned HTTP $status"
+            exit 1
+          fi
