@@ -88,5 +88,6 @@ DEFAULT_RULES: tuple[tuple[str, int, int], ...] = (
     ("/auth/signup", 5, 60),
     ("/auth/invite", 20, 60),
     ("/auth/reset-password", 3, 900),
+    ("/auth/resend-verification", 3, 900),  # same budget as reset-password
     ("/v1/ingest", 600, 60),
 )
