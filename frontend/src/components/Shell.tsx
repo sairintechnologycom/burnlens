@@ -32,7 +32,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <BillingProvider>
         <div className="shell">
           <Topbar />
-          <BillingStatusBanner />
+          <BillingStatusBanner session={session} />
           <div className="shell-main">
             <Sidebar />
             <main className="shell-content">
