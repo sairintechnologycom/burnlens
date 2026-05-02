@@ -144,6 +144,7 @@ function MiniDashboard() {
 
 export default function LandingPage() {
   const [termDone, setTermDone] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <>
@@ -168,7 +169,37 @@ export default function LandingPage() {
             <Link href="/dashboard" className="outline">Dashboard</Link>
             <Link href="/setup" className="primary">Get Started</Link>
           </div>
+          <button
+            className="lp-mobile-menu-btn"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            {menuOpen ? (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M4 4L16 16M16 4L4 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            )}
+          </button>
         </nav>
+
+        {/* MOBILE DRAWER */}
+        {menuOpen && (
+          <>
+            <div className="lp-mobile-overlay" onClick={() => setMenuOpen(false)} />
+            <div className="lp-mobile-drawer">
+              <a href="#how" onClick={() => setMenuOpen(false)}>How it works</a>
+              <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
+              <a href="https://github.com/sairintechnologycom/burnlens#readme" onClick={() => setMenuOpen(false)}>Docs</a>
+              <Link href="/dashboard" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+              <Link href="/setup" className="lp-mobile-cta" onClick={() => setMenuOpen(false)}>Get Started</Link>
+            </div>
+          </>
+        )}
 
         {/* HERO: tagline + terminal */}
         <section className="lp-hero">
