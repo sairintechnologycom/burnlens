@@ -31,6 +31,12 @@ from burnlens.scan.codex import (
     codex_sessions_dir,
     scan_codex,
 )
+from burnlens.scan.gemini_cli import (
+    GeminiScanResult,
+    GeminiSession,
+    gemini_sessions_dir,
+    scan_gemini_cli,
+)
 
 # Provider dispatch table consumed by the CLI. Values are async coroutine
 # functions taking ``(db_path, since=, dry_run=, **provider_specific)``.
@@ -38,6 +44,7 @@ PROVIDERS = {
     "claude": scan_claude_code,
     "cursor": scan_cursor,
     "codex": scan_codex,
+    "gemini": scan_gemini_cli,
 }
 
 __all__ = [
@@ -47,6 +54,8 @@ __all__ = [
     "CodexSession",
     "CursorBubble",
     "CursorScanResult",
+    "GeminiScanResult",
+    "GeminiSession",
     "PROVIDERS",
     "ScanResult",
     "bubble_to_record",
@@ -54,10 +63,12 @@ __all__ = [
     "cursor_db_path",
     "decode_project_path",
     "discover_sessions",
+    "gemini_sessions_dir",
     "parse_session",
     "read_bubbles",
     "resolve_dev_identity",
     "scan_claude_code",
     "scan_codex",
     "scan_cursor",
+    "scan_gemini_cli",
 ]

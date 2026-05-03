@@ -1,0 +1,53 @@
+{
+  "sessionId": "a1b2c3d4-0000-0000-0000-000000000001",
+  "projectHash": "aabbcc1100000000000000000000000000000000000000000000000000000000",
+  "startTime": "2026-01-09T10:00:00.000Z",
+  "lastUpdated": "2026-01-09T10:05:00.000Z",
+  "kind": "main",
+  "messages": [
+    {
+      "id": "user-msg-001",
+      "timestamp": "2026-01-09T10:00:10.000Z",
+      "type": "user",
+      "content": [{"text": "What is the capital of France?"}]
+    },
+    {
+      "id": "gemini-msg-001",
+      "timestamp": "2026-01-09T10:00:20.000Z",
+      "type": "gemini",
+      "content": "The capital of France is Paris.",
+      "thoughts": [],
+      "model": "gemini-2.5-flash",
+      "tokens": {
+        "input": 1000,
+        "output": 50,
+        "cached": 0,
+        "thoughts": 0,
+        "tool": 0,
+        "total": 1050
+      }
+    },
+    {
+      "id": "user-msg-002",
+      "timestamp": "2026-01-09T10:01:00.000Z",
+      "type": "user",
+      "content": [{"text": "What about Germany?"}]
+    },
+    {
+      "id": "gemini-msg-002",
+      "timestamp": "2026-01-09T10:01:15.000Z",
+      "type": "gemini",
+      "content": "The capital of Germany is Berlin.",
+      "thoughts": [],
+      "model": "gemini-2.5-flash",
+      "tokens": {
+        "input": 1200,
+        "output": 40,
+        "cached": 500,
+        "thoughts": 0,
+        "tool": 0,
+        "total": 1240
+      }
+    }
+  ]
+}
