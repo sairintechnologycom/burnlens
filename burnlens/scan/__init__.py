@@ -25,22 +25,32 @@ from burnlens.scan.cursor import (
     read_bubbles,
     scan_cursor,
 )
+from burnlens.scan.codex import (
+    CodexScanResult,
+    CodexSession,
+    codex_sessions_dir,
+    scan_codex,
+)
 
 # Provider dispatch table consumed by the CLI. Values are async coroutine
 # functions taking ``(db_path, since=, dry_run=, **provider_specific)``.
 PROVIDERS = {
     "claude": scan_claude_code,
     "cursor": scan_cursor,
+    "codex": scan_codex,
 }
 
 __all__ = [
     "AUTO_MODEL_LABEL",
     "ClaudeSession",
+    "CodexScanResult",
+    "CodexSession",
     "CursorBubble",
     "CursorScanResult",
     "PROVIDERS",
     "ScanResult",
     "bubble_to_record",
+    "codex_sessions_dir",
     "cursor_db_path",
     "decode_project_path",
     "discover_sessions",
@@ -48,5 +58,6 @@ __all__ = [
     "read_bubbles",
     "resolve_dev_identity",
     "scan_claude_code",
+    "scan_codex",
     "scan_cursor",
 ]

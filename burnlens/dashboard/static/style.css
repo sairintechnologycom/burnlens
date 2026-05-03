@@ -411,6 +411,23 @@ tbody tr:last-child td { border-bottom: none; }
   font-weight: 600;
 }
 
+/* -------------------------------------------------------- Source badges (scan origin) */
+
+.src-badge {
+  display: inline-block;
+  margin-left: 0.4em;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  vertical-align: middle;
+}
+.src-badge.src-claude  { background: rgba(239,182,72,0.15);  color: #d97706; }
+.src-badge.src-cursor  { background: rgba(167,139,250,0.15); color: #8b5cf6; }
+.src-badge.src-codex   { background: rgba(74,222,128,0.15);  color: #16a34a; }
+
 /* -------------------------------------------------------- Status badges */
 
 .status-badge {
