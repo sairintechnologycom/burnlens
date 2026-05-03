@@ -235,7 +235,49 @@ async def init_db(db_path: str) -> None:
     # CODE-2: per-API-key daily caps
     await migrate_add_key_label(db_path)
 
+    # SCAN-1: scan provenance + dedup
+    await migrate_add_source_column(db_path)
+
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_add_source_column(db_path: str) -> None:
+    """Add ``source`` + ``request_id`` columns to requests + scan dedup index.
+
+    Existing rows get ``source='proxy'`` via column default. Scan-imported
+    rows use ``source='scan_<provider>'`` (e.g. ``scan_claude``) and a
+    populated ``request_id`` so the partial unique index prevents duplicates
+    on re-scan. Safe to call multiple times.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        added: list[str] = []
+        if "source" not in columns:
+            await db.execute(
+                "ALTER TABLE requests ADD COLUMN source TEXT NOT NULL DEFAULT 'proxy'"
+            )
+            added.append("source")
+        if "request_id" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN request_id TEXT")
+            added.append("request_id")
+
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_scan_dedup "
+            "ON requests(source, request_id) "
+            "WHERE source LIKE 'scan_%' AND request_id IS NOT NULL"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_requests_source ON requests(source)"
+        )
+        await db.commit()
+
+        if added:
+            logger.info(
+                "Migration: added scan columns to requests table: %s",
+                ", ".join(added),
+            )
 
 
 async def migrate_add_git_tags(db_path: str) -> None:
@@ -836,19 +878,27 @@ async def get_all_keys_today_spend(
 
 
 async def insert_request(db_path: str, record: RequestRecord) -> int:
-    """Insert a RequestRecord and return its new row id."""
+    """Insert a RequestRecord and return its new row id.
+
+    Uses ``INSERT OR IGNORE`` so re-runs of scan importers (which set
+    ``source='scan_*'`` + ``request_id``) are silently deduped via the
+    partial unique index ``idx_scan_dedup``. For proxy records
+    (``request_id IS NULL``) the partial index doesn't apply, so behavior
+    is unchanged. Returns 0 if the row was ignored as a duplicate.
+    """
     tags = record.tags or {}
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
             """
-            INSERT INTO requests (
+            INSERT OR IGNORE INTO requests (
                 timestamp, provider, model, request_path,
                 input_tokens, output_tokens, reasoning_tokens,
                 cache_read_tokens, cache_write_tokens,
                 cost_usd, duration_ms, status_code,
                 tags, system_prompt_hash,
-                tag_repo, tag_dev, tag_pr, tag_branch, tag_key_label
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tag_repo, tag_dev, tag_pr, tag_branch, tag_key_label,
+                source, request_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -870,9 +920,11 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 tags.get("pr") or None,
                 tags.get("branch") or None,
                 tags.get("key_label") or None,
+                record.source,
+                record.request_id,
             ),
         )
         await db.commit()
-        row_id = cursor.lastrowid
+        row_id = cursor.lastrowid if cursor.rowcount > 0 else 0
 
     return row_id

@@ -398,6 +398,111 @@ def export(
     asyncio.run(_run())
 
 
+@app.command()
+def scan(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    provider: str = typer.Option(
+        "claude",
+        "--provider",
+        help="Coding-agent provider to scan. Currently only 'claude'.",
+    ),
+    since: Optional[str] = typer.Option(
+        None,
+        "--since",
+        help="Only sessions modified at/after this date (YYYY-MM-DD or ISO 8601).",
+    ),
+    project: Optional[str] = typer.Option(
+        None, "--project", help="Substring filter on project basename."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Parse but do not insert; print counts only."
+    ),
+) -> None:
+    """Import coding-agent session costs from disk into the requests DB.
+
+    Reads ``~/.claude/projects/<project>/<session>.jsonl`` files written by
+    Claude Code, calculates cost from each assistant message's usage block,
+    and inserts the records with ``source='scan_claude'``. Re-runs are
+    idempotent — already-imported messages are silently skipped.
+    """
+    if provider != "claude":
+        console.print(
+            f"[red]Unknown provider '{provider}'. Only 'claude' is supported.[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    cfg = load_config(config)
+
+    since_dt: Optional[datetime] = None
+    if since:
+        try:
+            normalized = since
+            if len(normalized) == 10:  # bare YYYY-MM-DD
+                normalized = f"{normalized}T00:00:00+00:00"
+            elif normalized.endswith("Z"):
+                normalized = normalized[:-1] + "+00:00"
+            since_dt = datetime.fromisoformat(normalized)
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            console.print(
+                f"[red]Could not parse --since value '{since}'. "
+                "Use YYYY-MM-DD or ISO 8601.[/red]"
+            )
+            raise typer.Exit(code=2)
+
+    async def _run() -> None:
+        from burnlens.scan import scan_claude_code
+        from burnlens.storage.database import init_db
+
+        await init_db(cfg.db_path)
+
+        console.print("[cyan]Scanning Claude Code sessions...[/cyan]")
+        result = await scan_claude_code(
+            cfg.db_path,
+            since=since_dt,
+            project_filter=project,
+            dry_run=dry_run,
+        )
+
+        projects_count = len(result.cost_by_project)
+        console.print(
+            f"Found [bold]{result.sessions_found}[/bold] session files "
+            f"across [bold]{projects_count}[/bold] projects."
+        )
+        console.print(
+            f"Parsed [bold]{result.messages_parsed:,}[/bold] assistant messages."
+        )
+        if dry_run:
+            console.print(
+                f"[yellow]Dry run — no records inserted.[/yellow] "
+                f"Would insert up to {result.messages_parsed:,} records."
+            )
+        else:
+            console.print(
+                f"Inserted [green]{result.records_inserted:,}[/green] new records "
+                f"([dim]{result.records_skipped:,} already imported[/dim])."
+            )
+        console.print(
+            f"Total cost imported: [bold green]${result.total_cost_usd:,.2f}[/bold green]"
+        )
+
+        if result.cost_by_project:
+            top_table = Table(title="Top projects by cost", show_header=True)
+            top_table.add_column("Project")
+            top_table.add_column("Cost", justify="right")
+            top_table.add_column("Messages", justify="right")
+            top = sorted(
+                result.cost_by_project.items(), key=lambda kv: kv[1], reverse=True
+            )[:10]
+            for proj, cost in top:
+                msgs = result.messages_by_project.get(proj, 0)
+                top_table.add_row(proj, f"${cost:,.2f}", f"{msgs:,}")
+            console.print(top_table)
+
+    asyncio.run(_run())
+
+
 @app.command(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
