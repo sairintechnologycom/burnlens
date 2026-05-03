@@ -6,6 +6,27 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [PyPI `burnlens` 1.1.0] — 2026-05-03
+
+### Added
+- **Offline session scanners** — four new `burnlens scan <provider>` commands import
+  coding-agent session costs from disk without replaying any traffic. Re-runs are
+  idempotent (partial unique index on `source` + `request_id`). Scanned rows appear
+  alongside live-proxy traffic in the dashboard, `burnlens top`, and exports.
+  - `burnlens scan claude` — reads Claude Code JSONL session files from
+    `~/.claude/projects/` and attributes cost by project, session, and model.
+  - `burnlens scan cursor` — reads the Cursor IDE SQLite bubble database from
+    `~/.cursor/` and maps composer/chat turns to cost records.
+  - `burnlens scan codex` — reads OpenAI Codex JSONL session files from
+    `~/.codex/sessions/` (703 sessions, 88k events in testing).
+  - `burnlens scan gemini` — reads Gemini CLI JSON/JSONL chat files from
+    `~/.gemini/tmp/<project>/chats/` (64 sessions, 5806 turns in testing).
+- **Pricing: gpt-5-codex** — `$1.25 / $10.00` per million in/out tokens.
+- **Pricing: gemini-3-flash-preview** — `$0.50 / $3.00` per million in/out tokens.
+- **Pricing: gemini-3.1-pro-preview** — `$2.00 / $12.00` per million in/out tokens.
+
+---
+
 ## [Cloud `burnlens-cloud` v1.2.0] — 2026-05-02
 
 ### Added

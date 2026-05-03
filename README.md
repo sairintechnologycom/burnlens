@@ -93,6 +93,10 @@ burnlens run -- python app.py   # auto-tag a process with repo / dev / pr / bran
 burnlens key register <name>    # label an API key + set a daily cap
 burnlens key list               # list registered keys with caps
 burnlens keys                   # today's spend per registered key
+burnlens scan claude            # import Claude Code session costs from disk
+burnlens scan cursor            # import Cursor IDE session costs from disk
+burnlens scan codex             # import OpenAI Codex session costs from disk
+burnlens scan gemini            # import Gemini CLI session costs from disk
 ```
 
 ---
@@ -118,6 +122,21 @@ burnlens keys
 - TZ-aware daily reset (UTC midnight by default, configurable).
 - 100% breach returns `429 {"error": "burnlens_daily_cap_exceeded"}` until reset.
 - Dashboard panel "API keys today" shows live status at `:8420/ui`.
+
+---
+
+## Offline scan — coding agent sessions
+
+Already spent money in Claude Code, Cursor, Codex, or Gemini CLI? Import those session logs into the same dashboard without replaying any traffic:
+
+```bash
+burnlens scan claude    # ~/.claude/projects/ — JSONL session files
+burnlens scan cursor    # ~/.cursor/ — SQLite bubble DB
+burnlens scan codex     # ~/.codex/sessions/ — JSONL session files
+burnlens scan gemini    # ~/.gemini/tmp/<project>/chats/ — JSON/JSONL
+```
+
+All four commands are idempotent — re-running them won't create duplicate rows. Imported records appear alongside live-proxy traffic in `burnlens top`, the dashboard, and exports.
 
 ---
 
