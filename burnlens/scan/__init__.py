@@ -7,20 +7,46 @@ scanners parse session log files written to disk by coding agents
 ``source='scan_<provider>'`` and a populated ``request_id``; a partial
 unique index makes re-runs idempotent.
 """
+from burnlens.scan._common import resolve_dev_identity
 from burnlens.scan.claude_code import (
     ClaudeSession,
+    ScanResult,
     decode_project_path,
     discover_sessions,
     parse_session,
-    resolve_dev_identity,
     scan_claude_code,
 )
+from burnlens.scan.cursor import (
+    AUTO_MODEL_LABEL,
+    CursorBubble,
+    CursorScanResult,
+    bubble_to_record,
+    cursor_db_path,
+    read_bubbles,
+    scan_cursor,
+)
+
+# Provider dispatch table consumed by the CLI. Values are async coroutine
+# functions taking ``(db_path, since=, dry_run=, **provider_specific)``.
+PROVIDERS = {
+    "claude": scan_claude_code,
+    "cursor": scan_cursor,
+}
 
 __all__ = [
+    "AUTO_MODEL_LABEL",
     "ClaudeSession",
+    "CursorBubble",
+    "CursorScanResult",
+    "PROVIDERS",
+    "ScanResult",
+    "bubble_to_record",
+    "cursor_db_path",
     "decode_project_path",
     "discover_sessions",
     "parse_session",
+    "read_bubbles",
     "resolve_dev_identity",
     "scan_claude_code",
+    "scan_cursor",
 ]

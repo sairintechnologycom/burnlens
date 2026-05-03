@@ -20,11 +20,47 @@ class TokenUsage:
     cache_write_tokens: int = 0    # Anthropic cache-write tokens
 
 
+# Current Sonnet model used to estimate cost for Cursor's 'Auto' mode, which
+# hides the underlying model from the user. Anthropic Sonnet pricing has held
+# flat across point releases, so the exact dated id matters less than the
+# tier — picking the latest dated 4-x sonnet keeps the estimate honest.
+_CURSOR_AUTO_UNDERLYING = "claude-sonnet-4-6"
+
+
+def _cursor_underlying(model: str) -> tuple[str, str] | None:
+    """Map a Cursor-reported model name to (provider, underlying_model).
+
+    Returns ``None`` if the model can't be mapped. Cursor's 'Auto' mode is
+    relabeled by the scanner as ``cursor-auto-sonnet-est`` upstream of this
+    function — we just route it to the current Sonnet pricing entry.
+    """
+    if model == "cursor-auto-sonnet-est":
+        return ("anthropic", _CURSOR_AUTO_UNDERLYING)
+    if model.startswith("claude"):
+        return ("anthropic", model)
+    if model.startswith(("gpt", "o1", "o3", "o4")):
+        return ("openai", model)
+    return None
+
+
 def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
     """Return total cost in USD for the given token usage.
 
     Returns 0.0 if model is not in the pricing DB (logs a warning).
+
+    For ``provider='cursor'`` the model is routed to the underlying provider's
+    pricing (Anthropic for Claude/Auto, OpenAI for GPT/o-series). Cursor is
+    a coding-tool surface, not an LLM provider — its bills are pass-through.
     """
+    if provider == "cursor":
+        underlying = _cursor_underlying(model)
+        if underlying is None:
+            logger.warning(
+                "Unknown Cursor model %r — cannot route to underlying pricing", model
+            )
+            return 0.0
+        return calculate_cost(underlying[0], underlying[1], usage)
+
     pricing = get_model_pricing(provider, model)
     if pricing is None:
         return 0.0
