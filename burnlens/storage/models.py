@@ -23,6 +23,8 @@ class RequestRecord:
     status_code: int = 200
     tags: dict[str, str] = field(default_factory=dict)
     system_prompt_hash: str | None = None
+    source: str = "proxy"
+    request_id: str | None = None
     id: int | None = None
 
 
