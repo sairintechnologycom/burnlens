@@ -33,6 +33,14 @@
     "gemini-1.0-pro": {
       "input_per_million": 0.50,
       "output_per_million": 1.50
+    },
+    "gemini-3-flash-preview": {
+      "input_per_million": 0.50,
+      "output_per_million": 3.00
+    },
+    "gemini-3.1-pro-preview": {
+      "input_per_million": 2.00,
+      "output_per_million": 12.00
     }
   }
 }
