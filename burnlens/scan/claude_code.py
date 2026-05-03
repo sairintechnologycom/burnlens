@@ -18,16 +18,29 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import shutil
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
 from burnlens.cost.calculator import TokenUsage, calculate_cost
+from burnlens.scan._common import (
+    _reset_dev_identity_cache,
+    resolve_dev_identity,
+)
 from burnlens.storage.models import RequestRecord
+
+# Re-exported for the existing public API and for tests that import these
+# names directly from ``burnlens.scan.claude_code``.
+__all__ = [
+    "ClaudeSession",
+    "ScanResult",
+    "decode_project_path",
+    "discover_sessions",
+    "parse_session",
+    "resolve_dev_identity",
+    "scan_claude_code",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -106,46 +119,6 @@ def discover_sessions(
                 )
             )
     return sessions
-
-
-_DEV_IDENTITY_CACHE: dict[str, str] = {}
-
-
-def _git_user_email(project_path: str) -> str | None:
-    """Best-effort git config user.email lookup. Returns None on any failure."""
-    if not shutil.which("git"):
-        return None
-    if not Path(project_path).exists():
-        return None
-    try:
-        result = subprocess.run(
-            ["git", "-C", project_path, "config", "user.email"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
-        return None
-    email = result.stdout.strip()
-    return email or None
-
-
-def resolve_dev_identity(project_path: str) -> str:
-    """Resolve the developer identity for a project. Cached per scan run."""
-    if project_path in _DEV_IDENTITY_CACHE:
-        return _DEV_IDENTITY_CACHE[project_path]
-
-    identity = _git_user_email(project_path) or os.environ.get("USER") or "unknown"
-    _DEV_IDENTITY_CACHE[project_path] = identity
-    return identity
-
-
-def _reset_dev_identity_cache() -> None:
-    """Clear the per-run dev-identity cache. Test helper."""
-    _DEV_IDENTITY_CACHE.clear()
 
 
 def _parse_timestamp(raw: str | None) -> datetime:

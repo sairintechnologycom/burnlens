@@ -398,13 +398,166 @@ def export(
     asyncio.run(_run())
 
 
+_SCAN_PROVIDERS = ("claude", "cursor")
+
+
+def _humanize_age(seconds: float) -> str:
+    if seconds < 60:
+        return f"{int(seconds)}s ago"
+    if seconds < 3600:
+        return f"{int(seconds / 60)}m ago"
+    if seconds < 86400:
+        return f"{int(seconds / 3600)}h ago"
+    return f"{int(seconds / 86400)}d ago"
+
+
+def _humanize_size(num_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{num_bytes} B"
+
+
+def _parse_since(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value
+    if len(normalized) == 10:  # bare YYYY-MM-DD
+        normalized = f"{normalized}T00:00:00+00:00"
+    elif normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(
+            f"Could not parse --since value '{value}'. Use YYYY-MM-DD or ISO 8601."
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+async def _run_claude_scan(
+    db_path: str,
+    *,
+    since: datetime | None,
+    project_filter: str | None,
+    dry_run: bool,
+) -> None:
+    from burnlens.scan import scan_claude_code
+
+    console.print("[cyan]Scanning Claude Code sessions...[/cyan]")
+    result = await scan_claude_code(
+        db_path,
+        since=since,
+        project_filter=project_filter,
+        dry_run=dry_run,
+    )
+
+    projects_count = len(result.cost_by_project)
+    console.print(
+        f"Found [bold]{result.sessions_found}[/bold] session files "
+        f"across [bold]{projects_count}[/bold] projects."
+    )
+    console.print(
+        f"Parsed [bold]{result.messages_parsed:,}[/bold] assistant messages."
+    )
+    if dry_run:
+        console.print(
+            f"[yellow]Dry run — no records inserted.[/yellow] "
+            f"Would insert up to {result.messages_parsed:,} records."
+        )
+    else:
+        console.print(
+            f"Inserted [green]{result.records_inserted:,}[/green] new records "
+            f"([dim]{result.records_skipped:,} already imported[/dim])."
+        )
+    console.print(
+        f"Total Claude cost imported: "
+        f"[bold green]${result.total_cost_usd:,.2f}[/bold green]"
+    )
+
+    if result.cost_by_project:
+        top_table = Table(title="Top projects by cost", show_header=True)
+        top_table.add_column("Project")
+        top_table.add_column("Cost", justify="right")
+        top_table.add_column("Messages", justify="right")
+        top = sorted(
+            result.cost_by_project.items(), key=lambda kv: kv[1], reverse=True
+        )[:10]
+        for proj, cost in top:
+            msgs = result.messages_by_project.get(proj, 0)
+            top_table.add_row(proj, f"${cost:,.2f}", f"{msgs:,}")
+        console.print(top_table)
+
+
+async def _run_cursor_scan(
+    db_path: str,
+    *,
+    since: datetime | None,
+    dry_run: bool,
+) -> None:
+    from burnlens.scan import cursor_db_path, scan_cursor
+
+    src = cursor_db_path()
+    if src is None:
+        console.print(
+            "[dim]No Cursor DB found at "
+            "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb "
+            "(or platform equivalent). Skipping Cursor scan.[/dim]"
+        )
+        return
+
+    console.print("[cyan]Scanning Cursor sessions...[/cyan]")
+    result = await scan_cursor(db_path, since=since, dry_run=dry_run)
+
+    if result.db_path is not None:
+        age = time.time() - result.db_mtime
+        console.print(
+            f"DB found: [bold]{_humanize_size(result.db_size_bytes)}[/bold], "
+            f"last modified {_humanize_age(age)}"
+        )
+
+    if result.skipped_due_to_cache:
+        console.print("[dim]Cursor DB unchanged since last scan, skipped.[/dim]")
+        return
+
+    console.print(
+        f"Parsed [bold]{result.bubbles_parsed:,}[/bold] bubbles across "
+        f"[bold]{result.conversations_seen:,}[/bold] conversations."
+    )
+    if dry_run:
+        console.print(
+            f"[yellow]Dry run — no records inserted.[/yellow] "
+            f"Would insert up to {result.bubbles_parsed:,} records."
+        )
+    else:
+        console.print(
+            f"Inserted [green]{result.records_inserted:,}[/green] new records "
+            f"([dim]{result.records_skipped:,} already imported[/dim])."
+        )
+    console.print(
+        f"Total Cursor cost imported: "
+        f"[bold green]${result.total_cost_usd:,.2f}[/bold green]"
+    )
+    if result.auto_mode_bubbles:
+        console.print(
+            f"[dim]Note: {result.auto_mode_bubbles:,} 'Auto' mode bubble(s) "
+            "costed using Sonnet pricing as estimate.[/dim]"
+        )
+
+
 @app.command()
 def scan(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
     provider: str = typer.Option(
-        "claude",
+        "all",
         "--provider",
-        help="Coding-agent provider to scan. Currently only 'claude'.",
+        help="Coding-agent provider to scan: 'all', 'claude', 'cursor', "
+        "or a comma-separated subset (e.g. 'claude,cursor').",
     ),
     since: Optional[str] = typer.Option(
         None,
@@ -412,7 +565,9 @@ def scan(
         help="Only sessions modified at/after this date (YYYY-MM-DD or ISO 8601).",
     ),
     project: Optional[str] = typer.Option(
-        None, "--project", help="Substring filter on project basename."
+        None,
+        "--project",
+        help="Substring filter on project basename (Claude Code only).",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Parse but do not insert; print counts only."
@@ -420,85 +575,53 @@ def scan(
 ) -> None:
     """Import coding-agent session costs from disk into the requests DB.
 
-    Reads ``~/.claude/projects/<project>/<session>.jsonl`` files written by
-    Claude Code, calculates cost from each assistant message's usage block,
-    and inserts the records with ``source='scan_claude'``. Re-runs are
-    idempotent — already-imported messages are silently skipped.
+    Currently supported providers:
+    \b
+      claude  — reads ~/.claude/projects/<project>/<session>.jsonl
+      cursor  — reads ~/Library/Application Support/Cursor/.../state.vscdb
+
+    Re-runs are idempotent: already-imported records are silently skipped via
+    the partial unique index on (source, request_id).
     """
-    if provider != "claude":
+    raw = (provider or "all").strip().lower()
+    if raw in ("", "all"):
+        selected = list(_SCAN_PROVIDERS)
+    else:
+        selected = [p.strip() for p in raw.split(",") if p.strip()]
+
+    unknown = [p for p in selected if p not in _SCAN_PROVIDERS]
+    if unknown:
         console.print(
-            f"[red]Unknown provider '{provider}'. Only 'claude' is supported.[/red]"
+            f"[red]Unknown provider(s): {', '.join(unknown)}. "
+            f"Supported: {', '.join(_SCAN_PROVIDERS)}.[/red]"
         )
         raise typer.Exit(code=2)
 
     cfg = load_config(config)
 
-    since_dt: Optional[datetime] = None
-    if since:
-        try:
-            normalized = since
-            if len(normalized) == 10:  # bare YYYY-MM-DD
-                normalized = f"{normalized}T00:00:00+00:00"
-            elif normalized.endswith("Z"):
-                normalized = normalized[:-1] + "+00:00"
-            since_dt = datetime.fromisoformat(normalized)
-            if since_dt.tzinfo is None:
-                since_dt = since_dt.replace(tzinfo=timezone.utc)
-        except ValueError:
-            console.print(
-                f"[red]Could not parse --since value '{since}'. "
-                "Use YYYY-MM-DD or ISO 8601.[/red]"
-            )
-            raise typer.Exit(code=2)
+    try:
+        since_dt = _parse_since(since)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     async def _run() -> None:
-        from burnlens.scan import scan_claude_code
         from burnlens.storage.database import init_db
 
         await init_db(cfg.db_path)
 
-        console.print("[cyan]Scanning Claude Code sessions...[/cyan]")
-        result = await scan_claude_code(
-            cfg.db_path,
-            since=since_dt,
-            project_filter=project,
-            dry_run=dry_run,
-        )
-
-        projects_count = len(result.cost_by_project)
-        console.print(
-            f"Found [bold]{result.sessions_found}[/bold] session files "
-            f"across [bold]{projects_count}[/bold] projects."
-        )
-        console.print(
-            f"Parsed [bold]{result.messages_parsed:,}[/bold] assistant messages."
-        )
-        if dry_run:
-            console.print(
-                f"[yellow]Dry run — no records inserted.[/yellow] "
-                f"Would insert up to {result.messages_parsed:,} records."
-            )
-        else:
-            console.print(
-                f"Inserted [green]{result.records_inserted:,}[/green] new records "
-                f"([dim]{result.records_skipped:,} already imported[/dim])."
-            )
-        console.print(
-            f"Total cost imported: [bold green]${result.total_cost_usd:,.2f}[/bold green]"
-        )
-
-        if result.cost_by_project:
-            top_table = Table(title="Top projects by cost", show_header=True)
-            top_table.add_column("Project")
-            top_table.add_column("Cost", justify="right")
-            top_table.add_column("Messages", justify="right")
-            top = sorted(
-                result.cost_by_project.items(), key=lambda kv: kv[1], reverse=True
-            )[:10]
-            for proj, cost in top:
-                msgs = result.messages_by_project.get(proj, 0)
-                top_table.add_row(proj, f"${cost:,.2f}", f"{msgs:,}")
-            console.print(top_table)
+        for prov in selected:
+            if prov == "claude":
+                await _run_claude_scan(
+                    cfg.db_path,
+                    since=since_dt,
+                    project_filter=project,
+                    dry_run=dry_run,
+                )
+            elif prov == "cursor":
+                await _run_cursor_scan(
+                    cfg.db_path, since=since_dt, dry_run=dry_run
+                )
 
     asyncio.run(_run())
 
