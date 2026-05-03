@@ -398,7 +398,7 @@ def export(
     asyncio.run(_run())
 
 
-_SCAN_PROVIDERS = ("claude", "cursor", "codex")
+_SCAN_PROVIDERS = ("claude", "cursor", "codex", "gemini")
 
 
 def _humanize_age(seconds: float) -> str:
@@ -604,6 +604,60 @@ async def _run_codex_scan(
         console.print(top_table)
 
 
+async def _run_gemini_scan(
+    db_path: str,
+    *,
+    since: datetime | None,
+    dry_run: bool,
+) -> None:
+    from burnlens.scan import gemini_sessions_dir, scan_gemini_cli
+
+    base_dir = gemini_sessions_dir()
+    if base_dir is None:
+        console.print(
+            "[dim]No Gemini CLI sessions found at any known location.\n"
+            "Skipping. (If you have Gemini CLI installed, please file an issue "
+            "with the output of: ls -la ~/.gemini/)[/dim]"
+        )
+        return
+
+    console.print("[cyan]Scanning Gemini CLI sessions...[/cyan]")
+    console.print(f"Sessions dir: [dim]{base_dir / 'tmp'}[/dim]")
+    result = await scan_gemini_cli(db_path, since=since, dry_run=dry_run)
+
+    console.print(f"Found [bold]{result.sessions_found}[/bold] session files.")
+    console.print(
+        f"Parsed [bold]{result.turns_parsed:,}[/bold] turns with usage metadata."
+    )
+    if dry_run:
+        console.print(
+            f"[yellow]Dry run — no records inserted.[/yellow] "
+            f"Would insert up to {result.turns_parsed:,} records."
+        )
+    else:
+        console.print(
+            f"Inserted [green]{result.records_inserted:,}[/green] new records "
+            f"([dim]{result.records_skipped:,} already imported[/dim])."
+        )
+    console.print(
+        f"Total Gemini cost imported: "
+        f"[bold green]${result.total_cost_usd:,.2f}[/bold green]"
+    )
+
+    if result.cost_by_model:
+        top_table = Table(title="Top models by cost", show_header=True)
+        top_table.add_column("Model")
+        top_table.add_column("Cost", justify="right")
+        top_table.add_column("Turns", justify="right")
+        top = sorted(
+            result.cost_by_model.items(), key=lambda kv: kv[1], reverse=True
+        )[:10]
+        for model, cost in top:
+            turns = result.turns_by_model.get(model, 0)
+            top_table.add_row(model, f"${cost:,.2f}", f"{turns:,}")
+        console.print(top_table)
+
+
 @app.command()
 def scan(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
@@ -634,6 +688,7 @@ def scan(
       claude  — reads ~/.claude/projects/<project>/<session>.jsonl
       cursor  — reads ~/Library/Application Support/Cursor/.../state.vscdb
       codex   — reads ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+      gemini  — reads ~/.gemini/tmp/<project>/chats/session-*.{json,jsonl}
 
     Re-runs are idempotent: already-imported records are silently skipped via
     the partial unique index on (source, request_id).
@@ -679,6 +734,10 @@ def scan(
                 )
             elif prov == "codex":
                 await _run_codex_scan(
+                    cfg.db_path, since=since_dt, dry_run=dry_run
+                )
+            elif prov == "gemini":
+                await _run_gemini_scan(
                     cfg.db_path, since=since_dt, dry_run=dry_run
                 )
 

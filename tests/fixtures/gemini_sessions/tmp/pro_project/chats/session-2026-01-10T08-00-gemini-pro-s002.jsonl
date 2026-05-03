@@ -1,0 +1,9 @@
+{"sessionId": "e5f6g7h8-0000-0000-0000-000000000002", "projectHash": "ddeeff2200000000000000000000000000000000000000000000000000000000", "startTime": "2026-01-10T08:00:00.000Z", "lastUpdated": "2026-01-10T08:00:00.000Z", "kind": "main"}
+{"id": "user-pro-001", "timestamp": "2026-01-10T08:00:10.000Z", "type": "user", "content": [{"text": "Review my code architecture."}]}
+{"$set": {"lastUpdated": "2026-01-10T08:00:10.001Z"}}
+{"id": "gemini-pro-001", "timestamp": "2026-01-10T08:01:00.000Z", "type": "gemini", "content": "Your architecture looks solid. Let me analyze...", "thoughts": [{"subject": "Analyzing architecture", "description": "Reviewing the codebase structure.", "timestamp": "2026-01-10T08:00:55.000Z"}], "model": "gemini-2.5-pro", "tokens": {"input": 5000, "output": 200, "cached": 0, "thoughts": 300, "tool": 0, "total": 5500}}
+{"$set": {"lastUpdated": "2026-01-10T08:01:00.001Z"}}
+{"id": "user-pro-002", "timestamp": "2026-01-10T08:02:00.000Z", "type": "user", "content": [{"text": "What about the database layer?"}]}
+{"id": "gemini-pro-002", "timestamp": "2026-01-10T08:02:45.000Z", "type": "gemini", "content": "The database layer uses SQLite which is appropriate for your use case.", "thoughts": [{"subject": "Database analysis", "description": "Reviewing DB layer design.", "timestamp": "2026-01-10T08:02:40.000Z"}], "model": "gemini-2.5-pro", "tokens": {"input": 6000, "output": 150, "cached": 2000, "thoughts": 250, "tool": 0, "total": 6400}}
+{"$set": {"lastUpdated": "2026-01-10T08:02:45.001Z"}}
+{"id": "gemini-pro-no-tokens", "timestamp": "2026-01-10T08:03:00.000Z", "type": "gemini", "content": "Summary complete.", "model": "gemini-2.5-pro"}
