@@ -398,7 +398,7 @@ def export(
     asyncio.run(_run())
 
 
-_SCAN_PROVIDERS = ("claude", "cursor")
+_SCAN_PROVIDERS = ("claude", "cursor", "codex")
 
 
 def _humanize_age(seconds: float) -> str:
@@ -550,14 +550,68 @@ async def _run_cursor_scan(
         )
 
 
+async def _run_codex_scan(
+    db_path: str,
+    *,
+    since: datetime | None,
+    dry_run: bool,
+) -> None:
+    from burnlens.scan import codex_sessions_dir, scan_codex
+
+    sessions_root = codex_sessions_dir()
+    if not sessions_root.exists():
+        console.print(
+            "[dim]No Codex sessions found at "
+            f"{sessions_root}. Skipping Codex scan.[/dim]"
+        )
+        return
+
+    console.print("[cyan]Scanning Codex sessions...[/cyan]")
+    result = await scan_codex(db_path, since=since, dry_run=dry_run)
+
+    console.print(
+        f"Found [bold]{result.sessions_found}[/bold] session files."
+    )
+    console.print(
+        f"Parsed [bold]{result.events_parsed:,}[/bold] token_count events."
+    )
+    if dry_run:
+        console.print(
+            f"[yellow]Dry run — no records inserted.[/yellow] "
+            f"Would insert up to {result.events_parsed:,} records."
+        )
+    else:
+        console.print(
+            f"Inserted [green]{result.records_inserted:,}[/green] new records "
+            f"([dim]{result.records_skipped:,} already imported[/dim])."
+        )
+    console.print(
+        f"Total Codex cost imported: "
+        f"[bold green]${result.total_cost_usd:,.2f}[/bold green]"
+    )
+
+    if result.cost_by_model:
+        top_table = Table(title="Top models by cost", show_header=True)
+        top_table.add_column("Model")
+        top_table.add_column("Cost", justify="right")
+        top_table.add_column("Events", justify="right")
+        top = sorted(
+            result.cost_by_model.items(), key=lambda kv: kv[1], reverse=True
+        )[:10]
+        for model, cost in top:
+            events = result.events_by_model.get(model, 0)
+            top_table.add_row(model, f"${cost:,.2f}", f"{events:,}")
+        console.print(top_table)
+
+
 @app.command()
 def scan(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
     provider: str = typer.Option(
         "all",
         "--provider",
-        help="Coding-agent provider to scan: 'all', 'claude', 'cursor', "
-        "or a comma-separated subset (e.g. 'claude,cursor').",
+        help="Coding-agent provider to scan: 'all', 'claude', 'cursor', 'codex', "
+        "or a comma-separated subset (e.g. 'claude,codex').",
     ),
     since: Optional[str] = typer.Option(
         None,
@@ -579,6 +633,7 @@ def scan(
     \b
       claude  — reads ~/.claude/projects/<project>/<session>.jsonl
       cursor  — reads ~/Library/Application Support/Cursor/.../state.vscdb
+      codex   — reads ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 
     Re-runs are idempotent: already-imported records are silently skipped via
     the partial unique index on (source, request_id).
@@ -620,6 +675,10 @@ def scan(
                 )
             elif prov == "cursor":
                 await _run_cursor_scan(
+                    cfg.db_path, since=since_dt, dry_run=dry_run
+                )
+            elif prov == "codex":
+                await _run_codex_scan(
                     cfg.db_path, since=since_dt, dry_run=dry_run
                 )
 
