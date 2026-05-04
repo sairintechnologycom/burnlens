@@ -64,6 +64,29 @@ async def authed_client(client):
 
 
 # ---------------------------------------------------------------------------
+# Cloud backend fixture (used by test_settings_api.py, test_custom_pricing.py, etc.)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def cloud_client():
+    """(AsyncClient, FastAPI app) for cloud settings tests.
+
+    Tests unpack as `ac, app = cloud_client` then set
+    `app.dependency_overrides[verify_token] = lambda: token` to inject auth.
+    """
+    from fastapi import FastAPI
+    from burnlens_cloud.settings_api import router as settings_router
+
+    app = FastAPI()
+    app.include_router(settings_router)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        yield ac, app
+
+
+# ---------------------------------------------------------------------------
 # OSS proxy fixtures (used by tests/test_export.py, tests/test_storage.py, etc.)
 # ---------------------------------------------------------------------------
 
