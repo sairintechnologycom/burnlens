@@ -10,8 +10,9 @@ POST /cron/evaluate-alerts
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
-import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -29,9 +30,13 @@ def _verify_cron_secret(credentials: HTTPAuthorizationCredentials | None) -> Non
     """Raise 401 if the bearer token does not match CRON_SECRET."""
     if not settings.cron_secret:
         raise HTTPException(status_code=401, detail="CRON_SECRET not configured")
-    if credentials is None or not secrets.compare_digest(
-        credentials.credentials, settings.cron_secret
-    ):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Invalid cron secret")
+    # HMAC-wrap both sides so compare_digest is constant-time regardless of length.
+    _key = b"burnlens-cron"
+    given = hmac.new(_key, credentials.credentials.encode(), hashlib.sha256).digest()
+    expected = hmac.new(_key, settings.cron_secret.encode(), hashlib.sha256).digest()
+    if not hmac.compare_digest(given, expected):
         raise HTTPException(status_code=401, detail="Invalid cron secret")
 
 

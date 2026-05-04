@@ -658,7 +658,20 @@ async function fetchRequests() {
     const feature = (row.tags && row.tags.feature) ? row.tags.feature : null;
 
     tr.appendChild(makeTd(fmtTime(row.timestamp), 'td-muted'));
-    tr.appendChild(makeTd(row.provider || '\u2014', 'td-muted'));
+
+    // Provider cell \u2014 append a source badge for scan-imported rows
+    const provTd = document.createElement('td');
+    provTd.className = 'td-muted';
+    provTd.textContent = row.provider || '\u2014';
+    const src = row.source || 'proxy';
+    if (src !== 'proxy') {
+      const srcBadge = document.createElement('span');
+      srcBadge.className = 'src-badge src-' + src.replace('scan_', '');
+      srcBadge.textContent = src.replace('scan_', '');
+      provTd.appendChild(srcBadge);
+    }
+    tr.appendChild(provTd);
+
     tr.appendChild(makeTd(row.model || '\u2014', 'td-model'));
 
     // Feature tag cell — text only, styled via class
