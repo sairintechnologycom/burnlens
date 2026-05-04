@@ -39,7 +39,7 @@ async def update_otel_config(
     Auth: owner only
     Validates endpoint is reachable before storing.
     """
-    require_role("owner", token)
+    await require_role("owner", token)
 
     # Validate endpoint is HTTPS
     parsed = urlparse(body.endpoint)
@@ -98,7 +98,7 @@ async def get_otel_config(
     token: TokenPayload = Depends(verify_token),
 ) -> OtelConfigResponse:
     """Get current OTEL configuration (with masked API key)."""
-    require_role("admin", token)
+    await require_role("admin", token)
 
     try:
         result = await execute_query(
@@ -142,7 +142,7 @@ async def test_otel_endpoint(
     token: TokenPayload = Depends(verify_token),
 ) -> OtelTestResponse:
     """Test OTEL endpoint connectivity."""
-    require_role("admin", token)
+    await require_role("admin", token)
 
     # Fetch current config
     try:
@@ -195,7 +195,7 @@ async def get_pricing(
     token: TokenPayload = Depends(verify_token),
 ) -> PricingResponse:
     """Get current pricing (default or custom override)."""
-    require_role("admin", token)
+    await require_role("admin", token)
 
     try:
         # Fetch custom pricing if set
@@ -227,7 +227,7 @@ async def update_pricing(
 
     Body: {"model_name": {"input_per_1m": X.XX, "output_per_1m": Y.YY}}
     """
-    require_role("admin", token)
+    await require_role("admin", token)
 
     # Check if enterprise plan
     if token.plan != "enterprise":
@@ -302,7 +302,7 @@ async def update_slack_webhook(
         - If URL provided: sets slack_webhook_url + channel = 'both'
         - If URL is null: clears slack_webhook_url + channel = 'email'
     """
-    require_role("owner", token)
+    await require_role("owner", token)
 
     url = body.webhook_url
     if url is not None:
