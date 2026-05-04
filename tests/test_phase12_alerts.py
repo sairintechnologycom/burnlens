@@ -305,3 +305,20 @@ def test_cron_endpoint_200_with_correct_secret():
     assert "fired" in data
     assert data["evaluated"] == 3
     assert data["fired"] == 1
+
+
+# --- ALERT-01: seeding migration regression guard ---
+
+def test_alert_rules_seeding_sql_present():
+    """ALERT-01: Verify default-seeding migration is present in database.py (regression guard).
+
+    The actual INSERT runs against a live Postgres DB at deploy time and cannot be
+    unit-tested without a real DB. This static check ensures the migration is never
+    accidentally removed during refactors.
+    """
+    import pathlib
+    src = pathlib.Path("burnlens_cloud/database.py").read_text()
+    assert "INSERT INTO alert_rules (workspace_id, threshold_pct, channel)" in src
+    assert "CROSS JOIN (VALUES (80), (100)) AS t(threshold_pct)" in src
+    assert "WHERE w.plan IN ('cloud', 'teams')" in src
+    assert "AND NOT EXISTS" in src, "Idempotent NOT EXISTS guard must be present"
