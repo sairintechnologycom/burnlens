@@ -1,66 +1,42 @@
-"""Provider routing config — maps proxy path prefixes to upstream URLs."""
+"""Compatibility shim — re-exports provider symbols from burnlens.providers.
+
+Deprecated: import from burnlens.providers directly.
+Will be removed in v0.4.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+# Trigger provider registration before any symbol is used.
+import burnlens.providers as _pkg
+
+from burnlens.providers.base import Provider, ProviderConfig  # noqa: F401
+from burnlens.providers.registry import get_by_proxy_path
+
+# Backward-compat list — items are Provider instances, but they expose
+# .name, .proxy_prefix, .upstream_base, and .env_var as properties so
+# existing code (and tests) that accessed ProviderConfig fields directly
+# continues to work without modification.
+DEFAULT_PROVIDERS: list[Provider] = list(_pkg.all_providers().values())
 
 
-@dataclass(frozen=True)
-class ProviderConfig:
-    """Routing and extraction config for one AI provider."""
-
-    name: str               # openai | anthropic | google
-    proxy_prefix: str       # path prefix as seen by clients, e.g. /proxy/openai
-    upstream_base: str      # upstream base URL (no trailing slash)
-    env_var: str            # SDK env var to set, e.g. OPENAI_BASE_URL
+def get_provider_for_path(path: str) -> Provider | None:
+    """Return the matching provider for a request path, or None."""
+    return get_by_proxy_path(path)
 
 
-# Default provider table — overridden at runtime by BurnLensConfig upstreams
-DEFAULT_PROVIDERS: list[ProviderConfig] = [
-    ProviderConfig(
-        name="openai",
-        proxy_prefix="/proxy/openai",
-        upstream_base="https://api.openai.com",
-        env_var="OPENAI_BASE_URL",
-    ),
-    ProviderConfig(
-        name="anthropic",
-        proxy_prefix="/proxy/anthropic",
-        upstream_base="https://api.anthropic.com",
-        env_var="ANTHROPIC_BASE_URL",
-    ),
-    ProviderConfig(
-        name="google",
-        proxy_prefix="/proxy/google",
-        upstream_base="https://generativelanguage.googleapis.com",
-        env_var="",  # Google SDK doesn't support a base URL env var; use burnlens.patch
-    ),
-]
-
-
-def get_provider_for_path(path: str) -> ProviderConfig | None:
-    """Return the matching ProviderConfig for a request path, or None."""
-    for provider in DEFAULT_PROVIDERS:
-        if path.startswith(provider.proxy_prefix):
-            return provider
-    return None
-
-
-def strip_proxy_prefix(path: str, provider: ProviderConfig) -> str:
+def strip_proxy_prefix(path: str, provider: Provider) -> str:
     """Remove the proxy prefix from a path to get the upstream path.
 
-    Example: ``/proxy/openai/v1/chat/completions`` → ``/v1/chat/completions``
+    Works with both the old ProviderConfig (via .proxy_prefix) and new
+    Provider instances (which expose .proxy_prefix as a property alias).
     """
     return path[len(provider.proxy_prefix):]
 
 
 def build_env_exports(host: str, port: int) -> dict[str, str]:
-    """Return a dict of env var → proxy URL for providers that use env vars.
-
-    Google is excluded — it requires ``burnlens.patch.patch_google()`` instead.
-    """
+    """Return env-var → proxy-URL mapping for providers that use env vars."""
     base = f"http://{host}:{port}"
     return {
         p.env_var: f"{base}{p.proxy_prefix}"
         for p in DEFAULT_PROVIDERS
-        if p.env_var  # skip providers without env var support
+        if p.env_var
     }
