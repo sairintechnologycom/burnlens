@@ -401,7 +401,7 @@ function SetupContent() {
                   {!showForgotPw ? (
                     <button
                       type="button"
-                      onClick={() => setShowForgotPw(true)}
+                      onClick={() => { setShowForgotPw(true); setError(""); }}
                       style={{ background: "none", border: "none", color: "var(--s-muted)", cursor: "pointer", fontSize: "var(--fs-13)", padding: 0, marginTop: 8 }}
                     >
                       Forgot password?
