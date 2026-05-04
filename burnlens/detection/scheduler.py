@@ -119,13 +119,14 @@ def register_alert_jobs(
     config: BurnLensConfig,
     discovery_engine: DiscoveryAlertEngine,
 ) -> None:
-    """Register the three recurring alert jobs on the given scheduler.
+    """Register the five recurring alert jobs on the given scheduler.
 
     Jobs registered:
-      - discovery_alerts_hourly: calls DiscoveryAlertEngine.run_all_checks()
-        every hour (first run deferred 1 hour, consistent with detection_hourly)
+      - discovery_alerts_hourly: calls DiscoveryAlertEngine.run_all_checks() every hour
       - daily_digest: sends model-change digest email at 8 AM UTC daily
       - weekly_digest: sends inactive-asset digest email at 8 AM UTC on Mondays
+      - purge_fired_alerts: purges old fired alert records at 3 AM UTC daily
+      - discovery_events_archival: archives old discovery events at 2 AM UTC daily
 
     All jobs are fail-open: wrapper functions catch and log exceptions so
     that a failure in one job never crashes the scheduler or proxy.
