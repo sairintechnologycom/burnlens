@@ -169,6 +169,7 @@ async def fetch_google_usage(
     Returns:
         Always returns empty list.
     """
+    logger.info("fetch_google_usage: proxy-only mode — use GoogleBillingParser for Google billing API detection")
     return []
 
 

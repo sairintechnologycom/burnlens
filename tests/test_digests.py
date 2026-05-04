@@ -239,8 +239,8 @@ async def test_weekly_digest_sends_email_with_inactive_assets(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_register_alert_jobs_adds_three_jobs():
-    """register_alert_jobs registers exactly 3 jobs with the expected IDs."""
+def test_register_alert_jobs_adds_five_jobs():
+    """register_alert_jobs registers exactly 5 jobs with the expected IDs."""
     reset_scheduler()
     scheduler = get_scheduler()
     config = BurnLensConfig()
@@ -252,7 +252,9 @@ def test_register_alert_jobs_adds_three_jobs():
     assert "discovery_alerts_hourly" in job_ids
     assert "daily_digest" in job_ids
     assert "weekly_digest" in job_ids
-    assert len(job_ids) == 3  # only alert jobs registered (no detection_hourly)
+    assert "purge_fired_alerts" in job_ids
+    assert "discovery_events_archival" in job_ids
+    assert len(job_ids) == 5  # 3 alert jobs + 2 maintenance jobs (no detection_hourly)
 
     # Cleanup
     reset_scheduler()
