@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` — bugfix] — 2026-05-04
+
+### Fixed
+- **Asset API routing** — `/api/v1/assets` router was double-prefixed (absolute paths
+  in router + prefix on include), causing all asset endpoints to return 404. Fixed by
+  using relative paths; added missing `GET /{id}`, `PATCH /{id}`, and
+  `POST /{id}/approve` endpoints, renamed `"assets"` response key to `"items"` to
+  match the API contract, and wired `date_since` filter through to the query layer.
+- **date_since validation** — `GET /api/v1/assets?date_since=` now rejects non-ISO
+  date strings with a 422 rather than silently returning wrong results.
+
+---
+
 ## [PyPI `burnlens` 1.1.0] — 2026-05-03
 
 ### Added
