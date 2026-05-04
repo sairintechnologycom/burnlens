@@ -18,22 +18,22 @@ const interTight = Inter_Tight({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnlens.app"),
-  title: "BurnLens — See exactly what your AI API calls cost",
-  description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy for Anthropic, OpenAI & Google AI.",
+  title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
+  description: "The open-source FinOps proxy for AI spend. Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Azure, AWS Bedrock, and Groq. Hard-cap budgets before the API call — not after the bill arrives.",
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "BurnLens — See exactly what your AI API calls cost",
-    description: "One command. Zero code changes. Every dollar tracked. Open-source LLM FinOps proxy — see every AI API call's real cost across OpenAI, Anthropic & Google.",
+    title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
+    description: "The open-source FinOps proxy for AI spend. Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Azure, AWS Bedrock, and Groq.",
     url: "https://burnlens.app",
     siteName: "BurnLens",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "BurnLens — See exactly what your AI API calls cost",
-    description: "One command. Zero code changes. Every dollar tracked. Free, open-source, local-first — no data leaves your machine.",
+    title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
+    description: "The open-source FinOps proxy for AI spend. Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Azure, AWS Bedrock, and Groq. Hard-cap budgets before the API call.",
   },
 };
 

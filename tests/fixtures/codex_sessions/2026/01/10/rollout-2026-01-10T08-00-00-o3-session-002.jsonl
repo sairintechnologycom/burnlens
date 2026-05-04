@@ -1,0 +1,7 @@
+{"timestamp": "2026-01-10T08:00:00.000Z", "type": "session_meta", "payload": {"id": "o3-session-002", "cwd": "/Users/test/projects/webapp", "originator": "codex_cli", "cli_version": "0.102.0"}}
+{"timestamp": "2026-01-10T08:00:00.001Z", "type": "turn_context", "payload": {"model": "o3", "cwd": "/Users/test/projects/webapp", "approval_policy": "never"}}
+{"timestamp": "2026-01-10T08:00:05.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 2000, "cached_input_tokens": 0, "output_tokens": 400, "reasoning_output_tokens": 1500, "total_tokens": 2400}, "total_token_usage": {"input_tokens": 2000, "cached_input_tokens": 0, "output_tokens": 400, "reasoning_output_tokens": 1500, "total_tokens": 2400}}, "rate_limits": {}}}
+{"timestamp": "2026-01-10T08:00:06.000Z", "type": "event_msg", "payload": {"type": "user_message", "message": "continue"}}
+{"timestamp": "2026-01-10T08:00:07.000Z", "type": "MALFORMED_LINE"}
+not valid json at all
+{"timestamp": "2026-01-10T08:00:10.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": 3000, "cached_input_tokens": 500, "output_tokens": 600, "reasoning_output_tokens": 2000, "total_tokens": 3600}, "total_token_usage": {}}, "rate_limits": {}}}

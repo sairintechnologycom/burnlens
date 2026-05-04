@@ -305,11 +305,14 @@ async def update_slack_webhook(
     require_role("owner", token)
 
     url = body.webhook_url
-    if url is not None and not url.startswith("https://hooks.slack.com/"):
-        raise HTTPException(
-            status_code=422,
-            detail="webhook_url must start with https://hooks.slack.com/",
-        )
+    if url is not None:
+        from urllib.parse import urlparse as _urlparse
+        _p = _urlparse(url)
+        if _p.scheme != "https" or _p.hostname != "hooks.slack.com":
+            raise HTTPException(
+                status_code=422,
+                detail="webhook_url must be an https://hooks.slack.com/ URL",
+            )
 
     if url is not None:
         result = await execute_insert(

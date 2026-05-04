@@ -51,6 +51,10 @@ def split_sse_events(raw_buffer: str) -> list[str]:
 def extract_usage_from_stream(provider_name: str, usage_chunks: list[str]) -> TokenUsage:
     """Parse token usage from buffered streaming chunks for a given provider.
 
+    Dispatches to the registered Provider plugin for the given name.
+    Falls back to the built-in private extractors if the provider is not
+    in the registry (e.g. in tests that don't trigger registration).
+
     Args:
         provider_name: "openai", "anthropic", or "google"
         usage_chunks: complete SSE event strings (reassembled from raw chunks)
@@ -58,13 +62,29 @@ def extract_usage_from_stream(provider_name: str, usage_chunks: list[str]) -> To
     Returns:
         TokenUsage with whatever counts could be extracted (zeros if none found)
     """
-    if provider_name == "openai":
-        return _extract_openai_stream(usage_chunks)
-    if provider_name == "anthropic":
-        return _extract_anthropic_stream(usage_chunks)
-    if provider_name == "google":
-        return _extract_google_stream(usage_chunks)
-    return TokenUsage()
+    from burnlens.providers.registry import get as _get_provider
+    try:
+        provider = _get_provider(provider_name)
+    except KeyError:
+        # Registry not populated — fall back to built-in extractors
+        if provider_name == "openai":
+            return _extract_openai_stream(usage_chunks)
+        if provider_name == "anthropic":
+            return _extract_anthropic_stream(usage_chunks)
+        if provider_name == "google":
+            return _extract_google_stream(usage_chunks)
+        return TokenUsage()
+
+    acc: dict = {}
+    for chunk_str in usage_chunks:
+        provider.extract_usage_from_stream_chunk(chunk_str.encode("utf-8"), acc)
+    return TokenUsage(
+        input_tokens=acc.get("input_tokens", 0),
+        output_tokens=acc.get("output_tokens", 0),
+        reasoning_tokens=acc.get("reasoning_tokens", 0),
+        cache_read_tokens=acc.get("cache_read_tokens", 0),
+        cache_write_tokens=acc.get("cache_write_tokens", 0),
+    )
 
 
 def _extract_openai_stream(chunks: list[str]) -> TokenUsage:

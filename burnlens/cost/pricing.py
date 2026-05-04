@@ -55,3 +55,14 @@ def get_model_pricing(provider: str, model: str) -> dict[str, Any] | None:
 
     logger.warning("No pricing found for provider=%r model=%r — cost will be $0", provider, model)
     return None
+
+
+def get_pricing(pricing_key: str, model_name: str) -> dict[str, Any] | None:
+    """Look up pricing by pricing_key (Provider.config.pricing_key) and model name.
+
+    Thin alias for get_model_pricing — the pricing_key corresponds to the
+    JSON file name in pricing_data/ and is the same as the provider name for
+    the three built-in providers.  New providers (e.g. azure-openai) can use
+    a distinct pricing_key that maps to their own pricing_data/{key}.json.
+    """
+    return get_model_pricing(pricing_key, model_name)

@@ -203,13 +203,20 @@ export default function LandingPage() {
 
         {/* HERO: tagline + terminal */}
         <section className="lp-hero">
-          <p className="lp-tagline">LLM FinOps · Open Source</p>
+          <p className="lp-tagline">FinOps · Open Source · Multi-Provider</p>
           <h1 className="lp-headline">
-            See exactly what your <span className="acc">AI API calls</span> cost
+            The open-source <span className="acc">FinOps proxy</span> for AI spend
           </h1>
           <p className="lp-subline">
-            One command. Zero code changes. Every dollar tracked.
+            Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Azure, AWS Bedrock, and Groq.
+            Hard-cap budgets before the API call — not after the bill arrives.
           </p>
+          <div className="lp-provider-strip">
+            {["OpenAI", "Anthropic", "Google", "Azure", "AWS Bedrock", "Groq", "Mistral", "Together"].map((p) => (
+              <span key={p} className="lp-provider-chip">{p}</span>
+            ))}
+            <span className="lp-provider-more">+ more</span>
+          </div>
           <TerminalAnimation onComplete={() => setTermDone(true)} />
         </section>
 
@@ -235,56 +242,183 @@ export default function LandingPage() {
           </>
         )}
 
-        {/* EDITORIAL: how it works */}
+        {/* THE PROBLEM */}
+        <section className="lp-problem">
+          <div className="lp-problem-grid">
+            <div className="lp-problem-card">
+              <div className="lp-problem-label">The bill</div>
+              <h3>Bills tell you the model, not the why.</h3>
+              <p>
+                Your invoice says <code>gpt-4o: $4,287</code>. It doesn&apos;t say
+                which feature, team, or customer burned it. By the time you trace
+                the spike, it&apos;s already on next month&apos;s card.
+              </p>
+            </div>
+            <div className="lp-problem-card">
+              <div className="lp-problem-label">The damage</div>
+              <h3>Alerts arrive after the damage.</h3>
+              <p>
+                A bad deploy, a runaway agent, or one abusive customer can trigger
+                thousands of API calls before any dashboard turns red. You find out
+                when you open the bill.
+              </p>
+            </div>
+            <div className="lp-problem-card">
+              <div className="lp-problem-label">The silos</div>
+              <h3>Every provider is a different silo.</h3>
+              <p>
+                OpenAI&apos;s usage page. Anthropic&apos;s console. Azure Cost Management.
+                Bedrock CloudWatch. No unified view, no way to ask which feature
+                is your biggest AI spend across all providers.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* HOW IT WORKS */}
         <div className="lp-editorial" id="how">
           <div className="lp-ed-section">
-            <div className="lp-ed-label">Intercept</div>
+            <div className="lp-ed-label">01 · Drop-in proxy</div>
             <div className="lp-ed-content">
               <h3>Set one env var. Done.</h3>
               <p>
-                BurnLens runs a local proxy on <code>:8420</code>.
-                Set <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code> and
-                your existing SDK code routes through BurnLens automatically.
-                Less than 20ms overhead. Streaming passthrough.
+                BurnLens runs a local proxy on <code>:8420</code>. Set{" "}
+                <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code> and
+                your existing SDK code routes through automatically.
+                Less than 20ms overhead. Full streaming passthrough.
               </p>
             </div>
           </div>
 
           <div className="lp-ed-section">
-            <div className="lp-ed-label">Attribute</div>
+            <div className="lp-ed-label">02 · Tag what matters</div>
             <div className="lp-ed-content">
-              <h3>Tag calls to features, teams, customers.</h3>
+              <h3>Attribute any call to any dimension.</h3>
               <p>
-                Add <code>X-BurnLens-Tag-Feature: search</code> headers to your requests.
-                See cost per feature, per team, per customer. Know whether your
-                summarizer costs more than your chatbot.
+                Three request headers — <code>X-BurnLens-Tag-Feature</code>,{" "}
+                <code>-Team</code>, <code>-Customer</code> — attribute cost to any
+                dimension you care about. Tags are stripped before reaching the AI
+                provider. They never leave your machine.
               </p>
             </div>
           </div>
 
           <div className="lp-ed-section">
-            <div className="lp-ed-label">Optimize</div>
+            <div className="lp-ed-label">03 · Cap before you call</div>
             <div className="lp-ed-content">
-              <h3>5 rules find 40–60% waste automatically.</h3>
+              <h3>429 before the upstream request, not after the bill.</h3>
               <p>
-                Model right-sizing, duplicate prompt detection, prompt caching
-                opportunities, batch API candidates, and provider arbitrage.
-                Each recommendation shows exact dollar savings.
+                Register an API key with a daily dollar limit. At 100%, BurnLens
+                returns <code>429</code> before the call is forwarded upstream.
+                50% and 80% thresholds fire Slack or email alerts.
               </p>
             </div>
           </div>
 
           <div className="lp-ed-section">
-            <div className="lp-ed-label">Alert</div>
+            <div className="lp-ed-label">04 · One dashboard</div>
             <div className="lp-ed-content">
-              <h3>Budget caps with teeth.</h3>
+              <h3>Every provider, unified.</h3>
               <p>
-                Per-team and per-customer monthly spend limits. Warning at 80%,
-                hard 429 block at 100%. Slack webhooks or email — your call.
+                OpenAI, Anthropic, Google, Azure, Bedrock, and Groq spend in
+                one view. Model breakdowns, waste detection, and budget tracking
+                — all reconciled to the provider bill.
               </p>
             </div>
           </div>
         </div>
+
+        {/* USE CASES */}
+        <section className="lp-usecases">
+          <h2>Built for every AI use case</h2>
+          <div className="lp-usecases-grid">
+            <div className="lp-usecase-card">
+              <div className="lp-usecase-label">Coding agents</div>
+              <h3>Per-PR, per-dev attribution</h3>
+              <p>
+                Cursor, Claude Code, Cline, Windsurf — see cost per repo, developer,
+                or PR. Hard daily caps per API key stop one runaway agent from
+                burning the team&apos;s monthly budget overnight.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <div className="lp-usecase-label">Customer-facing AI</div>
+              <h3>Per-customer spend with 429 enforcement</h3>
+              <p>
+                Tag each request with a customer ID. See which customers drive the
+                most cost. Enforce per-customer monthly spend limits — BurnLens
+                returns 429 before the call is forwarded.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <div className="lp-usecase-label">RAG and agents</div>
+              <h3>See what justifies the cost</h3>
+              <p>
+                Tag retrieval calls, tool calls, and generation separately. See
+                whether your vector search or synthesis step is the cost driver —
+                and whether it justifies the output quality.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <div className="lp-usecase-label">Internal tools</div>
+              <h3>Per-team budgets that reconcile to the bill</h3>
+              <p>
+                Set per-team monthly budgets, get Slack alerts at 80% and 100%,
+                and export monthly reports that reconcile line-by-line to the
+                actual provider invoice.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* WHY BURNLENS */}
+        <section className="lp-compare">
+          <h2>Why BurnLens</h2>
+          <div className="lp-compare-wrap">
+            <table className="lp-compare-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>BurnLens</th>
+                  <th>Helicone / Langfuse</th>
+                  <th>Vantage / CloudZero</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Open source</td>
+                  <td className="yes">✓</td>
+                  <td className="partial">Partial</td>
+                  <td className="no">✗</td>
+                </tr>
+                <tr>
+                  <td>Local-first (prompts stay local)</td>
+                  <td className="yes">✓</td>
+                  <td className="no">✗</td>
+                  <td className="no">✗</td>
+                </tr>
+                <tr>
+                  <td>Hard caps before API call</td>
+                  <td className="yes">✓</td>
+                  <td className="no">✗</td>
+                  <td className="no">✗</td>
+                </tr>
+                <tr>
+                  <td>Per-customer attribution</td>
+                  <td className="yes">✓</td>
+                  <td className="yes">✓</td>
+                  <td className="no">✗</td>
+                </tr>
+                <tr>
+                  <td>Multi-cloud (Azure / AWS / GCP)</td>
+                  <td className="yes">✓</td>
+                  <td className="partial">Partial</td>
+                  <td className="yes">✓</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {/* PRICING */}
         <section className="lp-pricing" id="pricing">
