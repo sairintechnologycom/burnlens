@@ -2,30 +2,31 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Account Security & Notifications
-status: completed
-last_updated: "2026-05-04T13:10:00.000Z"
-last_activity: 2026-05-04
+status: in_progress
+last_updated: "2026-05-05T00:00:00.000Z"
+last_activity: 2026-05-05
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 10
+  completed_phases: 2
+  total_plans: 13
+  completed_plans: 13
 ---
 
 # State
 
 ## Current Position
 
-Phase: 12 (Cloud Alert Engine) — EXECUTING
-Plan: 4 of 7
-Status: Plan 03 complete — ready to execute Plan 04
-Last activity: 2026-05-02
+Phase: 13 (Alert Management UI) — READY TO PLAN
+Plan: 0 of TBD
+Status: Phases 11 + 12 complete — Phase 13 not started
+Last activity: 2026-05-05
 
-## Key Decisions (Phase 12 Plan 03)
+## Key Decisions (Phase 12)
 
 - Used `secrets.compare_digest` for constant-time cron secret comparison (timing-safe)
 - Cron endpoint fail-open: exceptions from `evaluate_all_workspaces` return `{evaluated:0, fired:0}`
 - Cron endpoint tests use minimal FastAPI app without lifespan to avoid DB dependency in unit tests
+- SSRF guard on Slack webhook: rejects any URL not starting with `https://hooks.slack.com/`
 
 ## Project Reference
 
@@ -38,8 +39,8 @@ See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 
 | # | Phase | Requirements | Status |
 |---|-------|-------------|--------|
-| 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | Planned — 7 plans ready |
-| 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | Not started |
+| 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | ✓ Complete (2026-05-02) |
+| 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | ✓ Complete (2026-05-02) |
 | 13 | Alert Management UI | ALERT-08–09 (2 reqs) | Not started |
 
 ## v1.1 Phase Summary
@@ -78,9 +79,9 @@ Known deferred items at close: 25+ (see above)
 
 ## Session Continuity
 
-**Next action:** Execute Phase 11 plans — Wave 1 (01+02 parallel), Wave 2 (03a→03b, 04 parallel with 03a), Wave 3 (05a→05b)
-**Last milestone:** v1.1 ended at Phase 10 — v1.2 begins at Phase 11
-**Roadmap:** 3 phases (11–13), 19 requirements, all mapped
+**Next action:** Plan Phase 13 — Alert Management UI (ALERT-08, ALERT-09)
+**Last milestone:** v1.1 ended at Phase 10; Phase 11 (Auth Essentials) and Phase 12 (Cloud Alert Engine) are complete
+**Roadmap:** 3 phases (11–13), 19 requirements; 2 of 3 phases done
 
 ## Phase 11 Execution Plan
 
