@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -54,13 +55,18 @@ async def list_assets_endpoint(
     risk_tier: str | None = Query(default=None),
     owner_team: str | None = Query(default=None),
     search: str | None = Query(default=None),
-    date_since: str | None = Query(default=None),
+    date_since: str | None = Query(default=None, description="ISO date filter, e.g. 2026-01-01"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort_by: str = Query(default="first_seen_at"),
     sort_dir: str = Query(default="desc"),
 ) -> dict:
     """List AI assets with filtering, sorting, and pagination."""
+    if date_since is not None:
+        try:
+            date.fromisoformat(date_since)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="date_since must be an ISO date (YYYY-MM-DD)")
     assets = await get_assets(
         db_path,
         provider=provider,
