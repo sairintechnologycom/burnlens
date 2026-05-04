@@ -261,3 +261,65 @@ class TestCustomPricingEndpoints:
             assert response.status_code == 200
             assert "gpt-4o" in response.json()["pricing"]
             assert response.json()["pricing"]["gpt-4o"]["input_per_1m"] == 4.50
+
+
+class TestSlackWebhookEndpoints:
+    """Tests for PUT /settings/slack-webhook (ALERT-07)."""
+
+    @pytest.mark.asyncio
+    async def test_put_slack_webhook_valid_url(self, cloud_client, owner_token):
+        """Valid https://hooks.slack.com/ URL updates alert_rules channel to 'both'."""
+        ac, app = cloud_client
+        _auth(app, owner_token)
+
+        with patch("burnlens_cloud.settings_api.execute_insert", AsyncMock(return_value="UPDATE 2")):
+            response = await ac.put(
+                "/settings/slack-webhook",
+                json={"webhook_url": "https://hooks.slack.com/services/T000/B000/xxx"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["updated_rules"] == 2
+
+    @pytest.mark.asyncio
+    async def test_put_slack_webhook_clear_url(self, cloud_client, owner_token):
+        """null webhook_url clears Slack config and resets channel to 'email'."""
+        ac, app = cloud_client
+        _auth(app, owner_token)
+
+        with patch("burnlens_cloud.settings_api.execute_insert", AsyncMock(return_value="UPDATE 2")):
+            response = await ac.put(
+                "/settings/slack-webhook",
+                json={"webhook_url": None},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["updated_rules"] == 2
+
+    @pytest.mark.asyncio
+    async def test_put_slack_webhook_invalid_url_returns_422(self, cloud_client, owner_token):
+        """Non-hooks.slack.com URL is rejected with 422 before any DB call."""
+        ac, app = cloud_client
+        _auth(app, owner_token)
+
+        with patch("burnlens_cloud.settings_api.execute_insert", AsyncMock()) as mock_insert:
+            response = await ac.put(
+                "/settings/slack-webhook",
+                json={"webhook_url": "https://evil.com/hook"},
+            )
+
+        assert response.status_code == 422
+        mock_insert.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_put_slack_webhook_requires_owner_role(self, cloud_client, admin_token):
+        """Non-owner role (admin) is rejected with 403."""
+        ac, app = cloud_client
+        _auth(app, admin_token)
+
+        response = await ac.put(
+            "/settings/slack-webhook",
+            json={"webhook_url": "https://hooks.slack.com/services/T000/B000/xxx"},
+        )
+
+        assert response.status_code == 403

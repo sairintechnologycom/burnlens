@@ -34,11 +34,11 @@
 
 ## Alert — Cron & Dispatch
 
-- [ ] **ALERT-03**: An hourly Railway cron job evaluates all active alert rules against per-workspace spend
-- [ ] **ALERT-04**: Triggered alerts are deduplicated — the same rule does not re-notify within a 24-hour window
-- [ ] **ALERT-05**: Alert evaluation failures are logged but never block the cron (fail-open)
-- [ ] **ALERT-06**: Org owner receives an email notification (via SendGrid) when a budget threshold is crossed
-- [ ] **ALERT-07**: Org owner can optionally configure a per-workspace Slack webhook to receive threshold notifications
+- [x] **ALERT-03**: An hourly Railway cron job evaluates all active alert rules against per-workspace spend
+- [x] **ALERT-04**: Triggered alerts are deduplicated — the same rule does not re-notify within a 24-hour window
+- [x] **ALERT-05**: Alert evaluation failures are logged but never block the cron (fail-open)
+- [x] **ALERT-06**: Org owner receives an email notification (via SendGrid) when a budget threshold is crossed
+- [x] **ALERT-07**: Org owner can optionally configure a per-workspace Slack webhook to receive threshold notifications
 
 ## Alert — Management UI
 
