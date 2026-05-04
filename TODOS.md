@@ -27,6 +27,16 @@ Also update layout.tsx OG/Twitter title and description to match.
 
 ---
 
+## Pre-existing test failure — GET /api/v1/assets returns 404
+
+**What:** `tests/test_api.py::TestAssetAPI::test_list_assets_returns_paginated_response` fails with 404 instead of 200.
+**Why:** The `/api/v1/assets` route appears unregistered or the test is targeting a route that no longer exists. Not caused by this branch — pre-dates fix/dead-static-signup-pages.
+**Priority:** P0 — known broken test in the test suite.
+**File:** `tests/test_api.py:450`, cross-check `burnlens/proxy/server.py` for the asset route registration.
+**Noticed on:** fix/dead-static-signup-pages during /ship (2026-05-04)
+
+---
+
 ## Coverage gap — PUT /settings/slack-webhook (Phase 12)
 
 **What:** Add 4 missing test cases for the Slack webhook settings endpoint.
