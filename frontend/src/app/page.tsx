@@ -479,27 +479,35 @@ export default function LandingPage() {
 
         {/* WHAT'S NEW */}
         <section className="lp-whats-new">
-          <h2 className="lp-wn-title">What&apos;s new in v0.2.0</h2>
+          <h2 className="lp-wn-title">What&apos;s new in v1.2.0</h2>
           <div className="lp-wn-list">
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span><code>burnlens scan</code> — reads Claude Code, Cursor, Codex, and Gemini CLI local logs; imports cost history without a proxy</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Claude Code reader — parses <code>~/.claude/projects/</code> JSONL, deduplicates turns, attributes cost per session</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Cursor reader — imports spend from Cursor&apos;s local bubble DB with provider/model cost routing</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Codex reader — parses 700+ session SQLite DB; handles event_msg wrapper and turn_context model fields</span>
+            </div>
+            <div className="lp-wn-item">
+              <span className="lp-wn-tag new">New</span>
+              <span>Gemini CLI reader — supports both JSON and JSONL chat formats from <code>~/.gemini/tmp/</code></span>
+            </div>
             <div className="lp-wn-item">
               <span className="lp-wn-tag new">New</span>
               <span>Per-API-key daily hard cap — 50/80/100% alerts, HTTP 429 kill-switch at 100%, TZ-aware reset</span>
             </div>
             <div className="lp-wn-item">
               <span className="lp-wn-tag new">New</span>
-              <span><code>burnlens key register/list/remove</code> — label keys, set caps, store as SHA-256 hashes</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span><code>burnlens keys</code> CLI + &ldquo;API keys today&rdquo; dashboard panel for live per-key spend</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
               <span>Git-aware auto-tagging — <code>burnlens run -- &lt;cmd&gt;</code> attributes every call to repo / dev / PR / branch</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Top PRs by cost dashboard panel + <code>burnlens prs / devs / repos</code> CLI groupers</span>
             </div>
             <div className="lp-wn-item">
               <span className="lp-wn-tag fix">Fixed</span>
