@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "burnlens"
 version = "1.1.0"
-description = "Open-source LLM FinOps proxy — track OpenAI, Anthropic (Claude), and Google Gemini API costs by feature, team, and customer. Zero code changes."
+description = "The open-source FinOps proxy for AI spend — track cost by feature, team, and customer across OpenAI, Anthropic, Google, Azure, Bedrock, and Groq."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -20,11 +20,16 @@ keywords = [
   "claude",
   "gpt",
   "gemini",
+  "google-ai",
+  "azure-openai",
+  "aws-bedrock",
+  "groq",
   "proxy",
   "cost",
   "cost-tracking",
   "ai-cost",
   "ai-finops",
+  "ai-governance",
   "token-counting",
   "spend-tracking",
   "llm-observability",
@@ -38,6 +43,7 @@ classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "Intended Audience :: System Administrators",
+  "Intended Audience :: Information Technology",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Topic :: System :: Monitoring",
   "Topic :: Office/Business :: Financial",
