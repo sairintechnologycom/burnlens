@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "burnlens"
-version = "1.1.0"
+version = "1.2.0"
 description = "The open-source FinOps proxy for AI spend — track cost by feature, team, and customer across OpenAI, Anthropic, Google, Azure, Bedrock, and Groq."
 readme = "README.md"
 requires-python = ">=3.10"
