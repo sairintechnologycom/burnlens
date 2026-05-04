@@ -14,11 +14,9 @@ import httpx
 from burnlens.cost.calculator import (
     TokenUsage,
     calculate_cost,
-    extract_usage_anthropic,
-    extract_usage_google,
-    extract_usage_openai,
 )
-from burnlens.proxy.providers import ProviderConfig, strip_proxy_prefix
+from burnlens.providers.base import Provider
+from burnlens.proxy.providers import strip_proxy_prefix
 from burnlens.proxy.streaming import extract_usage_from_stream, split_sse_events
 from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
@@ -266,13 +264,12 @@ def _is_streaming(body_bytes: bytes, upstream_path: str = "") -> bool:
 def _extract_usage_for_provider(
     provider_name: str, response_json: dict[str, Any]
 ) -> TokenUsage:
-    if provider_name == "openai":
-        return extract_usage_openai(response_json)
-    if provider_name == "anthropic":
-        return extract_usage_anthropic(response_json)
-    if provider_name == "google":
-        return extract_usage_google(response_json)
-    return TokenUsage()
+    """Kept for backward compat; new call sites use provider.extract_usage()."""
+    from burnlens.providers.registry import get as _get_provider
+    try:
+        return _get_provider(provider_name).extract_usage(response_json)
+    except KeyError:
+        return TokenUsage()
 
 
 async def _log_record(db_path: str, record: RequestRecord) -> None:
@@ -352,7 +349,7 @@ async def _upsert_asset(
 
 async def handle_request(
     client: httpx.AsyncClient,
-    provider: ProviderConfig,
+    provider: Provider,
     path: str,
     method: str,
     headers: dict[str, str],
@@ -480,7 +477,7 @@ async def _handle_non_streaming(
     method: str,
     headers: dict[str, str],
     body_bytes: bytes,
-    provider: ProviderConfig,
+    provider: Provider,
     model: str,
     tags: dict[str, str],
     system_hash: str | None,
@@ -556,7 +553,7 @@ async def _handle_streaming(
     method: str,
     headers: dict[str, str],
     body_bytes: bytes,
-    provider: ProviderConfig,
+    provider: Provider,
     model: str,
     tags: dict[str, str],
     system_hash: str | None,
@@ -640,7 +637,7 @@ async def _handle_streaming(
 
 async def _log_streaming_usage(
     usage_chunks: list[str],
-    provider: ProviderConfig,
+    provider: Provider,
     model: str,
     tags: dict[str, str],
     system_hash: str | None,

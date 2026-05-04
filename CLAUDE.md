@@ -156,11 +156,20 @@ burnlens/
 
 ## Provider Routing
 
+Providers are a plugin architecture. Each provider is a single file in
+`burnlens/providers/` that subclasses `Provider`. Adding a new provider
+requires one new file there and one new `pricing_data/{key}.json` — no
+core changes. See `docs/PROVIDERS.md` for the full guide.
+
+Built-in providers:
+
 | Provider | Upstream URL | Env Var | Proxy Path |
 |----------|-------------|---------|------------|
 | OpenAI | https://api.openai.com | OPENAI_BASE_URL | /proxy/openai |
 | Anthropic | https://api.anthropic.com | ANTHROPIC_BASE_URL | /proxy/anthropic |
-| Google | https://generativelanguage.googleapis.com | `burnlens.patch.patch_google()` | /proxy/google |
+| Google | https://generativelanguage.googleapis.com | *(use burnlens.patch)* | /proxy/google |
+
+**Adding a provider = one new file in `burnlens/providers/` + one new pricing JSON. No core changes required.**
 
 ## Request Flow (Critical Path)
 
