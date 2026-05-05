@@ -90,6 +90,9 @@ def create_app(
                 query_string=query_string,
                 db_path=config.db_path,
                 alert_engine=alert_engine,
+                customer_budgets=config.alerts.customer_budgets,
+                api_key_budgets=config.alerts.api_key_budgets,
+                config=config,
             )
         except httpx.RequestError as exc:
             logger.error("Upstream request failed: %s", exc)
