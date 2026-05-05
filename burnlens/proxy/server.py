@@ -157,6 +157,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
                 alert_engine=_alert_engine,
                 customer_budgets=_config.alerts.customer_budgets,
                 api_key_budgets=_config.alerts.api_key_budgets,
+                config=_config,
             )
         except httpx.RequestError as exc:
             logger.error("Upstream request failed: %s", exc)
