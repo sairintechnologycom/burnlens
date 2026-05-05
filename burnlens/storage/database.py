@@ -238,6 +238,9 @@ async def init_db(db_path: str) -> None:
     # SCAN-1: scan provenance + dedup
     await migrate_add_source_column(db_path)
 
+    # ROUTE-05: budget-aware routing decision columns
+    await migrate_add_routing_columns(db_path)
+
     logger.debug("Database initialized at %s", db_path)
 
 
@@ -278,6 +281,27 @@ async def migrate_add_source_column(db_path: str) -> None:
                 "Migration: added scan columns to requests table: %s",
                 ", ".join(added),
             )
+
+
+async def migrate_add_routing_columns(db_path: str) -> None:
+    """Add routing decision columns to the requests table.
+
+    Adds routed_model, downgrade_reason, budget_remaining_usd, and
+    budget_remaining_pct columns used by the budget-aware model downgrade router.
+    Safe to call multiple times — uses PRAGMA table_info to detect existing columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "routed_model" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN routed_model TEXT")
+        if "downgrade_reason" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN downgrade_reason TEXT")
+        if "budget_remaining_usd" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN budget_remaining_usd REAL")
+        if "budget_remaining_pct" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN budget_remaining_pct REAL")
+        await db.commit()
 
 
 async def migrate_add_git_tags(db_path: str) -> None:
@@ -897,8 +921,10 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 cost_usd, duration_ms, status_code,
                 tags, system_prompt_hash,
                 tag_repo, tag_dev, tag_pr, tag_branch, tag_key_label,
-                source, request_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source, request_id,
+                routed_model, downgrade_reason,
+                budget_remaining_usd, budget_remaining_pct
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -922,6 +948,10 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 tags.get("key_label") or None,
                 record.source,
                 record.request_id,
+                record.routed_model,
+                record.downgrade_reason,
+                record.budget_remaining_usd,
+                record.budget_remaining_pct,
             ),
         )
         await db.commit()
