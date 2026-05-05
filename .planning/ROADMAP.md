@@ -86,6 +86,27 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 
+### Phase 14: Budget-Aware Model Downgrade Routing
+**Goal**: When a caller's remaining budget drops below a configurable threshold, BurnLens silently routes to a cheaper model tier instead of blocking with 429 — zero code change for the user
+**Depends on**: Phase 13
+**Requirements**: ROUTE-01, ROUTE-02, ROUTE-03, ROUTE-04, ROUTE-05, ROUTE-06, ROUTE-07
+**Success Criteria** (what must be TRUE):
+  1. A gpt-4o request tagged to a team with <20% budget remaining is transparently forwarded as gpt-4o-mini; the caller receives a valid gpt-4o-mini response with no error
+  2. If the routing logic fails for any reason (DB error, config error), the original model request passes through unmodified — proxy never blocks due to routing
+  3. The `requests` table records `routed_model` and `downgrade_reason` for every request; downgraded rows have non-NULL `downgrade_reason`
+  4. The dashboard "Downgrades Today" stat card shows correct counts and estimated savings pulled from `/api/routing-stats`
+  5. `burnlens routing` CLI command shows a table of all downgrade events with timestamp, original model, routed model, reason, and budget left
+**Plans**: 7 plans
+Plans:
+- [ ] 14-01-PLAN.md — Provider downgrade map (downgrade.py) + RoutingConfig (config.py)
+- [ ] 14-02-PLAN.md — RequestRecord extension + DB migration + insert_request update
+- [ ] 14-03-PLAN.md — burnlens/proxy/router.py: RouteDecision + decide_route()
+- [ ] 14-04-PLAN.md — handle_request() integration + server.py config pass-through
+- [ ] 14-05-PLAN.md — Dashboard /api/routing-stats endpoint + Downgrades Today UI
+- [ ] 14-06-PLAN.md — CLI routing command (--today, --json)
+- [ ] 14-07-PLAN.md — tests/test_router.py (12 test cases)
+**Stream**: OSS proxy (`burnlens/`)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -103,6 +124,7 @@ Plans:
 | 11. Auth Essentials | v1.2 | 0/? | Not started | — |
 | 12. Cloud Alert Engine | v1.2 | 0/3 | Not started | — |
 | 13. Alert Management UI | v1.2 | 0/? | Not started | — |
+| 14. Budget-Aware Model Downgrade Routing | OSS | 0/7 | Planned | — |
 
 ---
 *v1.1 archived 2026-04-30. See `.planning/milestones/v1.1-ROADMAP.md` for full phase details.*
