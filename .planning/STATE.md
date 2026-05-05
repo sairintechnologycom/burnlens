@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Account Security & Notifications
-status: in_progress
-last_updated: "2026-05-05T00:00:00.000Z"
+status: completed
+last_updated: "2026-05-05T19:00:00.000Z"
 last_activity: 2026-05-05
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 4
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 23
+  percent: 100
 ---
 
 # State
@@ -17,8 +18,8 @@ progress:
 ## Current Position
 
 Phase: 13 (Alert Management UI) — READY TO PLAN
-Phase: 14 (Budget-Aware Model Downgrade Routing) — READY TO EXECUTE (7 plans)
-Status: Phases 11 + 12 complete — Phase 13 not started — Phase 14 planned 2026-05-05
+Phase: 14 (Budget-Aware Model Downgrade Routing) — COMPLETE (2026-05-05)
+Status: Phases 11, 12 + 14 complete — Phase 13 not started
 Last activity: 2026-05-05
 
 ## Key Decisions (Phase 12)
@@ -42,7 +43,7 @@ See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 | 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | ✓ Complete (2026-05-02) |
 | 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | ✓ Complete (2026-05-02) |
 | 13 | Alert Management UI | ALERT-08–09 (2 reqs) | Not started |
-| 14 | Budget-Aware Model Downgrade Routing | ROUTE-01–07 (7 reqs) | Planned (7 plans, 2026-05-05) |
+| 14 | Budget-Aware Model Downgrade Routing | ROUTE-01–07 (7 reqs) | ✓ Complete (2026-05-05) |
 
 ## v1.1 Phase Summary
 
@@ -78,11 +79,20 @@ Known deferred items at close: 25+ (see above)
 - Entitlement middleware is mandatory on gated routes; UI gating alone is insufficient
 - Local proxy stays unmetered — only cloud workspaces have quotas
 
+## Key Decisions (Phase 14)
+
+- `decide_route()` never raises — any exception returns fail-open `RouteDecision(reason="error")`
+- Budget priority: customer > team > global_usd > budget_limit_usd (per D-03)
+- Pct threshold check runs before USD check; when both trigger, reason = "budget_pct"
+- Team spend cached 60 seconds per team (`_team_spend_cache` dict) to avoid per-request DB reads
+- Deferred imports inside `_resolve_budget()` to break circular dependency between router ↔ database
+- Body rewrite is JSON-decode + field replace + re-encode; Google URL-path routing is a known limitation
+
 ## Session Continuity
 
 **Next action:** Plan Phase 13 — Alert Management UI (ALERT-08, ALERT-09)
-**Last milestone:** v1.1 ended at Phase 10; Phase 11 (Auth Essentials) and Phase 12 (Cloud Alert Engine) are complete
-**Roadmap:** 3 phases (11–13), 19 requirements; 2 of 3 phases done
+**Last milestone:** v1.1 ended at Phase 10; Phases 11, 12, and 14 are complete; Phase 13 not started
+**Roadmap:** 4 phases (11–14), 26 requirements; 3 of 4 phases done
 
 ## Phase 11 Execution Plan
 
