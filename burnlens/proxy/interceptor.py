@@ -23,7 +23,8 @@ from burnlens.storage.models import RequestRecord
 
 if TYPE_CHECKING:
     from burnlens.alerts.engine import AlertEngine
-    from burnlens.config import ApiKeyBudgetsConfig, CustomerBudgetsConfig
+    from burnlens.config import ApiKeyBudgetsConfig, BurnLensConfig, CustomerBudgetsConfig
+    from burnlens.proxy.router import RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +360,7 @@ async def handle_request(
     alert_engine: "AlertEngine | None" = None,
     customer_budgets: "CustomerBudgetsConfig | None" = None,
     api_key_budgets: "ApiKeyBudgetsConfig | None" = None,
+    config: "BurnLensConfig | None" = None,
 ) -> tuple[int, dict[str, str], bytes | None, AsyncIterator[bytes] | None]:
     """Forward a request upstream and return (status, headers, body, stream).
 
@@ -432,6 +434,34 @@ async def handle_request(
     model = model_from_path or _extract_model(body_bytes, provider.name)
     system_hash = _hash_system_prompt(body_bytes)
 
+    # --- Budget-aware model downgrade routing (per D-04) ---
+    decision: "RouteDecision | None" = None
+    if config is not None:
+        from burnlens.proxy.router import decide_route, RouteDecision  # type: ignore[assignment]
+        decision = await decide_route(
+            model, tags.get("team"), tags.get("customer"), config, db_path
+        )
+        if decision.downgraded:
+            # NOTE: Google models are specified in the URL path, not the request body.
+            # For Google requests, this body rewrite has no effect on upstream routing —
+            # the model is encoded in the URL (e.g. /v1beta/models/gemini-1.5-pro/...).
+            # Google URL-path model rewrite is deferred to v2. (per spec/14-CONTEXT.md)
+            try:
+                body_dict = json.loads(body_bytes)
+                body_dict["model"] = decision.routed_model
+                body_bytes = json.dumps(body_dict).encode()
+            except Exception:
+                pass  # fail open — use original body unmodified
+            model = decision.routed_model
+            if getattr(config.routing, "log_downgrades", True):
+                logger.info(
+                    "[BurnLens] Downgraded %s → %s | Budget remaining: $%.4f (%.1f%%)",
+                    decision.original_model,
+                    decision.routed_model,
+                    decision.budget_remaining_usd,
+                    decision.budget_remaining_pct,
+                )
+
     upstream_url = f"{provider.upstream_base}{upstream_path}"
     start_ms = time.monotonic()
 
@@ -451,6 +481,7 @@ async def handle_request(
             request_path=path,
             alert_engine=alert_engine,
             original_headers=headers,
+            decision=decision,
         )
     else:
         return await _handle_non_streaming(
@@ -468,6 +499,7 @@ async def handle_request(
             request_path=path,
             alert_engine=alert_engine,
             original_headers=headers,
+            decision=decision,
         )
 
 
@@ -486,6 +518,7 @@ async def _handle_non_streaming(
     request_path: str,
     alert_engine: "AlertEngine | None" = None,
     original_headers: dict[str, str] | None = None,
+    decision: "RouteDecision | None" = None,
 ) -> tuple[int, dict[str, str], bytes, None]:
     """Forward a non-streaming request and log asynchronously."""
     response = await client.request(
@@ -523,6 +556,17 @@ async def _handle_non_streaming(
         tags=tags,
         system_prompt_hash=system_hash,
     )
+    # Persist routing decision fields (per D-05)
+    if decision is not None:
+        record.routed_model = decision.routed_model
+        record.downgrade_reason = decision.reason if decision.downgraded else None
+        record.budget_remaining_usd = decision.budget_remaining_usd if decision.downgraded else None
+        record.budget_remaining_pct = decision.budget_remaining_pct if decision.downgraded else None
+    else:
+        record.routed_model = model  # same as model when no routing
+        record.downgrade_reason = None
+        record.budget_remaining_usd = None
+        record.budget_remaining_pct = None
     asyncio.create_task(_log_record(db_path, record))
 
     # Async non-blocking asset upsert (runs in same event loop, does not add latency)
@@ -562,6 +606,7 @@ async def _handle_streaming(
     request_path: str,
     alert_engine: "AlertEngine | None" = None,
     original_headers: dict[str, str] | None = None,
+    decision: "RouteDecision | None" = None,
 ) -> tuple[int, dict[str, str], None, AsyncIterator[bytes]]:
     """Forward a streaming request; log usage after stream ends."""
     req = client.build_request(
@@ -619,6 +664,7 @@ async def _handle_streaming(
                     status_code=response.status_code,
                     request_path=request_path,
                     alert_engine=alert_engine,
+                    decision=decision,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -646,6 +692,7 @@ async def _log_streaming_usage(
     status_code: int,
     request_path: str,
     alert_engine: "AlertEngine | None" = None,
+    decision: "RouteDecision | None" = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
@@ -668,6 +715,17 @@ async def _log_streaming_usage(
         tags=tags,
         system_prompt_hash=system_hash,
     )
+    # Persist routing decision fields (per D-05)
+    if decision is not None:
+        record.routed_model = decision.routed_model
+        record.downgrade_reason = decision.reason if decision.downgraded else None
+        record.budget_remaining_usd = decision.budget_remaining_usd if decision.downgraded else None
+        record.budget_remaining_pct = decision.budget_remaining_pct if decision.downgraded else None
+    else:
+        record.routed_model = model  # same as model when no routing
+        record.downgrade_reason = None
+        record.budget_remaining_usd = None
+        record.budget_remaining_pct = None
     await _log_record(db_path, record)
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
