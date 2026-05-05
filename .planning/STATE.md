@@ -17,8 +17,8 @@ progress:
 ## Current Position
 
 Phase: 13 (Alert Management UI) — READY TO PLAN
-Plan: 0 of TBD
-Status: Phases 11 + 12 complete — Phase 13 not started
+Phase: 14 (Budget-Aware Model Downgrade Routing) — READY TO EXECUTE (7 plans)
+Status: Phases 11 + 12 complete — Phase 13 not started — Phase 14 planned 2026-05-05
 Last activity: 2026-05-05
 
 ## Key Decisions (Phase 12)
@@ -42,6 +42,7 @@ See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 | 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | ✓ Complete (2026-05-02) |
 | 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | ✓ Complete (2026-05-02) |
 | 13 | Alert Management UI | ALERT-08–09 (2 reqs) | Not started |
+| 14 | Budget-Aware Model Downgrade Routing | ROUTE-01–07 (7 reqs) | Planned (7 plans, 2026-05-05) |
 
 ## v1.1 Phase Summary
 
