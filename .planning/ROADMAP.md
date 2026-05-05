@@ -83,7 +83,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. An org owner can navigate to /alerts and see all alert rules for their workspace, including current threshold values and enabled/disabled state
   2. An org owner can toggle a rule on or off, change its threshold percentage, and add or remove notification email recipients — changes take effect on the next cron evaluation
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 13-00-PLAN.md — Wave 0: failing test scaffold for alerts_api.py (8 tests, RED state)
+- [ ] 13-01-PLAN.md — Backend: alerts_api.py (GET + PATCH) + main.py router registration
+- [ ] 13-02-PLAN.md — Frontend: alerts/page.tsx replacement + Sidebar nav entry
 **UI hint**: yes
 
 ### Phase 14: Budget-Aware Model Downgrade Routing
