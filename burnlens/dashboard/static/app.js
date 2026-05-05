@@ -581,6 +581,22 @@ async function fetchKeysToday() {
   }
 }
 
+// -------------------------------------------------------- Routing stats (Phase 14)
+
+async function fetchRoutingStats() {
+  try {
+    var d = await apiFetch('/routing-stats');
+    setText('kpi-downgrades', fmtNum(d.downgrades_today));
+    var savedText = d.saved_usd_today > 0
+      ? fmtCost(d.saved_usd_today) + ' saved today'
+      : 'No downgrades yet';
+    setText('kpi-downgrades-sub', savedText);
+  } catch (e) {
+    setText('kpi-downgrades', '0');
+    setText('kpi-downgrades-sub', 'Routing not active');
+  }
+}
+
 // -------------------------------------------------------- Requests table
 
 // Top PRs panel — module-scoped active filter for click-to-drill-down
@@ -645,7 +661,7 @@ async function fetchRequests() {
   if (!rows.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.className = 'loading-text';
     td.textContent = 'No requests yet. Route API calls through the proxy to see them here.';
     tr.appendChild(td);
@@ -673,6 +689,20 @@ async function fetchRequests() {
     tr.appendChild(provTd);
 
     tr.appendChild(makeTd(row.model || '\u2014', 'td-model'));
+
+    // Routed column \u2014 show original\u2192routed badge when downgraded, else dash
+    var routedTd = document.createElement('td');
+    var routedModel = row.routed_model || null;
+    if (routedModel && routedModel !== row.model) {
+      var routedBadge = document.createElement('span');
+      routedBadge.className = 'routed-badge';
+      routedBadge.textContent = row.model + '\u2192' + routedModel;
+      routedTd.appendChild(routedBadge);
+    } else {
+      routedTd.textContent = '\u2014';
+      routedTd.className = 'td-muted';
+    }
+    tr.appendChild(routedTd);
 
     // Feature tag cell — text only, styled via class
     const tagTd = document.createElement('td');
@@ -709,6 +739,7 @@ async function refresh() {
     fetchCustomers(),
     fetchTeamBudgets(),
     fetchKeysToday(),
+    fetchRoutingStats(),
     fetchTopPRs(),
     fetchRequests(),
   ]);
