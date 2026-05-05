@@ -131,6 +131,16 @@ class AlertsConfig:
 
 
 @dataclass
+class RoutingConfig:
+    """Budget-aware routing configuration."""
+
+    budget_downgrade: bool = True
+    downgrade_threshold_pct: float = 20.0
+    downgrade_threshold_usd: float = 5.00
+    log_downgrades: bool = True
+
+
+@dataclass
 class BurnLensConfig:
     """BurnLens runtime configuration."""
 
@@ -150,6 +160,7 @@ class BurnLensConfig:
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     cloud: CloudConfig = field(default_factory=CloudConfig)
     google_billing: GoogleBillingConfig = field(default_factory=GoogleBillingConfig)
+    routing: RoutingConfig = field(default_factory=RoutingConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -329,6 +340,17 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             lookback_days=int(gb_data.get("lookback_days", 30)),
         )
         kwargs["google_billing"] = google_billing
+
+    # Parse routing config
+    routing_data = data.get("routing")
+    if routing_data:
+        routing = RoutingConfig(
+            budget_downgrade=bool(routing_data.get("budget_downgrade", True)),
+            downgrade_threshold_pct=float(routing_data.get("downgrade_threshold_pct", 20.0)),
+            downgrade_threshold_usd=float(routing_data.get("downgrade_threshold_usd", 5.00)),
+            log_downgrades=bool(routing_data.get("log_downgrades", True)),
+        )
+        kwargs["routing"] = routing
 
     cfg = BurnLensConfig(**kwargs)
     _apply_env_overrides(cfg)
