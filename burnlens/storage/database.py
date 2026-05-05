@@ -901,6 +901,42 @@ async def get_all_keys_today_spend(
     return {label: float(spent or 0.0) for label, spent in rows}
 
 
+async def get_routing_events(
+    db_path: str,
+    today_only: bool = False,
+) -> list[dict[str, Any]]:
+    """Return downgrade events (rows where downgrade_reason IS NOT NULL), newest first, limit 200.
+
+    Columns returned: timestamp, model, routed_model, downgrade_reason,
+    budget_remaining_usd, budget_remaining_pct, tags.
+
+    Args:
+        db_path: Path to the SQLite database.
+        today_only: When True, restrict to rows where DATE(timestamp) equals today's date.
+
+    Returns:
+        List of dicts, one per downgrade event, ordered by timestamp DESC.
+    """
+    from datetime import date
+
+    where = "downgrade_reason IS NOT NULL"
+    params: list[Any] = []
+    if today_only:
+        where += " AND DATE(timestamp) = ?"
+        params.append(date.today().isoformat())
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"SELECT timestamp, model, routed_model, downgrade_reason, "
+            f"budget_remaining_usd, budget_remaining_pct, tags "
+            f"FROM requests WHERE {where} ORDER BY timestamp DESC LIMIT 200",
+            params,
+        )
+        rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id.
 
