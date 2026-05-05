@@ -1516,5 +1516,60 @@ def keys(
     asyncio.run(_run())
 
 
+@app.command()
+def routing(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    today_only: bool = typer.Option(False, "--today", help="Show today's downgrade events only"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output"),
+) -> None:
+    """Show downgrade routing activity.
+
+    Displays all requests where BurnLens silently routed to a cheaper model
+    due to budget threshold. Use --today to filter to today only, --json for
+    machine-readable output.
+    """
+    import json as json_mod
+
+    from burnlens.storage.database import get_routing_events
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        rows = await get_routing_events(cfg.db_path, today_only=today_only)
+
+        if json_output:
+            console.print(json_mod.dumps(rows, indent=2))
+            return
+
+        if not rows:
+            console.print("[yellow]No downgrade events found.[/yellow]")
+            return
+
+        table = Table(title="[bold]Routing Downgrades[/bold]", expand=True)
+        table.add_column("Timestamp", style="dim")
+        table.add_column("Original Model", style="cyan")
+        table.add_column("Routed Model", style="green")
+        table.add_column("Reason")
+        table.add_column("Budget Left")
+
+        for r in rows:
+            # Budget Left: populated from budget_remaining_usd/pct stored at downgrade time (Plan 02/04)
+            budget_left = "-"
+            if r.get("budget_remaining_usd") is not None and r.get("budget_remaining_pct") is not None:
+                budget_left = f"{r['budget_remaining_pct']:.1f}% / ${r['budget_remaining_usd']:.2f}"
+
+            table.add_row(
+                r["timestamp"][:19] if r["timestamp"] else "-",
+                r["model"] or "-",
+                r["routed_model"] or "-",
+                r["downgrade_reason"] or "-",
+                budget_left,
+            )
+
+        console.print(table)
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()
