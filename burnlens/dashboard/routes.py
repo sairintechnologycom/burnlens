@@ -4,11 +4,12 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
+import aiosqlite
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
@@ -35,6 +36,11 @@ _DEFAULT_DB = str(Path.home() / ".burnlens" / "burnlens.db")
 
 def _db_path(request: Request) -> str:
     return getattr(request.app.state, "db_path", _DEFAULT_DB)
+
+
+def get_db_path() -> str:
+    """Return the default DB path (used by standalone helpers without a Request)."""
+    return _DEFAULT_DB
 
 
 def _budget_limit(request: Request) -> float | None:
@@ -402,6 +408,150 @@ async def export_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=burnlens_export_{days}d.csv"},
     )
+
+
+# ------------------------------------------------------- /api/routing-stats
+
+
+async def _compute_savings(
+    db: aiosqlite.Connection,
+    *,
+    date_filter: str | None,
+    since: str | None = None,
+) -> float:
+    """Compute USD saved by downgrading: sum of max(0, original_cost - actual_cost).
+
+    Queries downgraded rows (downgrade_reason IS NOT NULL) for a given day
+    (``date_filter``) or since an ISO date (``since``).  For each row it
+    re-calculates what the *original* model would have cost using
+    ``calculate_cost()``, then subtracts the actual ``cost_usd`` already
+    recorded (which used the cheaper routed model).
+
+    Returns 0.0 gracefully when the ``routed_model`` / ``downgrade_reason``
+    columns do not yet exist in the DB (pre-migration databases).
+    """
+    from burnlens.cost.calculator import calculate_cost, TokenUsage
+
+    # Guard: confirm the routing columns exist before querying them.
+    try:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "downgrade_reason" not in columns or "routed_model" not in columns:
+            return 0.0
+    except Exception:
+        return 0.0
+
+    if date_filter is not None:
+        where = "downgrade_reason IS NOT NULL AND DATE(timestamp) = ?"
+        params: tuple = (date_filter,)
+    elif since is not None:
+        where = "downgrade_reason IS NOT NULL AND DATE(timestamp) >= ?"
+        params = (since,)
+    else:
+        return 0.0
+
+    try:
+        cursor = await db.execute(
+            f"""
+            SELECT provider, model, routed_model,
+                   input_tokens, output_tokens, reasoning_tokens,
+                   cache_read_tokens, cache_write_tokens, cost_usd
+            FROM requests
+            WHERE {where}
+            """,
+            params,
+        )
+        rows = await cursor.fetchall()
+    except Exception as exc:
+        logger.warning("routing-stats savings query failed (non-fatal): %s", exc)
+        return 0.0
+
+    total_saved = 0.0
+    for row in rows:
+        (provider, original_model, routed_model,
+         input_tokens, output_tokens, reasoning_tokens,
+         cache_read_tokens, cache_write_tokens, cost_usd) = row
+
+        if not original_model or not provider:
+            continue
+
+        usage = TokenUsage(
+            input_tokens=int(input_tokens or 0),
+            output_tokens=int(output_tokens or 0),
+            reasoning_tokens=int(reasoning_tokens or 0),
+            cache_read_tokens=int(cache_read_tokens or 0),
+            cache_write_tokens=int(cache_write_tokens or 0),
+        )
+        original_cost = calculate_cost(provider, original_model, usage)
+        actual_cost = float(cost_usd or 0.0)
+        saved = original_cost - actual_cost
+        if saved > 0:
+            total_saved += saved
+
+    return total_saved
+
+
+@router.get("/routing-stats")
+async def get_routing_stats(request: Request) -> dict:
+    """Budget-aware routing statistics: downgrade counts and USD savings.
+
+    Returns:
+        downgrades_today: number of requests downgraded today (local date)
+        saved_usd_today: USD saved today via downgrades
+        downgrades_this_month: number of requests downgraded this calendar month
+        saved_usd_this_month: USD saved this calendar month via downgrades
+
+    All counts are 0 when the routing columns (routed_model, downgrade_reason)
+    have not yet been added by the database migration — the endpoint never
+    raises a 500 due to a missing column.
+    """
+    db_path = _db_path(request)
+    today = date.today().isoformat()
+    first_of_month = date.today().replace(day=1).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        # Guard: confirm routing columns exist.
+        try:
+            cursor = await db.execute("PRAGMA table_info(requests)")
+            columns = {row[1] for row in await cursor.fetchall()}
+            has_routing_cols = "downgrade_reason" in columns
+        except Exception:
+            has_routing_cols = False
+
+        if not has_routing_cols:
+            return {
+                "downgrades_today": 0,
+                "saved_usd_today": 0.0,
+                "downgrades_this_month": 0,
+                "saved_usd_this_month": 0.0,
+            }
+
+        # Count downgrades today
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM requests "
+            "WHERE downgrade_reason IS NOT NULL AND DATE(timestamp) = ?",
+            (today,),
+        )
+        downgrades_today = (await cursor.fetchone())[0]
+
+        # Count downgrades this month
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM requests "
+            "WHERE downgrade_reason IS NOT NULL AND DATE(timestamp) >= ?",
+            (first_of_month,),
+        )
+        downgrades_this_month = (await cursor.fetchone())[0]
+
+        # Compute USD savings
+        saved_usd_today = await _compute_savings(db, date_filter=today)
+        saved_usd_this_month = await _compute_savings(db, date_filter=None, since=first_of_month)
+
+    return {
+        "downgrades_today": downgrades_today,
+        "saved_usd_today": round(saved_usd_today, 4),
+        "downgrades_this_month": downgrades_this_month,
+        "saved_usd_this_month": round(saved_usd_this_month, 4),
+    }
 
 
 @router.get("/models")
