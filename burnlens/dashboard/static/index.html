@@ -62,6 +62,11 @@
         <div class="budget-bar" id="budget-bar"></div>
       </div>
     </div>
+    <div class="card" id="downgrades-card">
+      <div class="card-label">Downgrades Today</div>
+      <div class="card-value" id="kpi-downgrades">—</div>
+      <div class="card-sub" id="kpi-downgrades-sub"></div>
+    </div>
   </section>
 
   <!-- Charts row -->
@@ -168,6 +173,7 @@
             <th>Time</th>
             <th>Provider</th>
             <th>Model</th>
+            <th>Routed</th>
             <th>Feature</th>
             <th>Tokens In</th>
             <th>Tokens Out</th>
@@ -176,7 +182,7 @@
           </tr>
         </thead>
         <tbody id="requests-body">
-          <tr><td colspan="8" class="loading-text">Loading…</td></tr>
+          <tr><td colspan="9" class="loading-text">Loading…</td></tr>
         </tbody>
       </table>
     </div>
