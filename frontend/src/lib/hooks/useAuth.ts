@@ -17,6 +17,8 @@ export interface AuthSession {
   emailVerified: boolean;
   /** Owner email stored at login time; used by resend-verification flow. */
   ownerEmail: string;
+  /** Workspace role from JWT claim — "owner" | "admin" | "viewer". */
+  role: string;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8420";
@@ -40,6 +42,7 @@ const LOCAL_SESSION: AuthSession = {
   isLocal: true,
   emailVerified: true,
   ownerEmail: "",
+  role: "owner",
 };
 
 export function useAuth() {
@@ -62,6 +65,8 @@ export function useAuth() {
     const apiKey = localStorage.getItem("burnlens_api_key");
     const ownerEmail = localStorage.getItem("burnlens_owner_email") || "";
     const emailVerifiedRaw = localStorage.getItem("burnlens_email_verified");
+    // Default "owner" for sessions predating role storage (backward compat).
+    const role = localStorage.getItem("burnlens_role") || "owner";
     // Treat missing (null) as false — localStorage is a convenience hint only.
     // Defaulting to false means tampered/missing values show the verification
     // banner rather than suppress it (safe direction). Verified users have the
@@ -88,6 +93,7 @@ export function useAuth() {
       isLocal: false,
       emailVerified,
       ownerEmail,
+      role,
     });
     setLoading(false);
   }, [router]);
@@ -107,6 +113,7 @@ export function useAuth() {
     localStorage.removeItem("burnlens_api_key");
     localStorage.removeItem("burnlens_owner_email");
     localStorage.removeItem("burnlens_email_verified");
+    localStorage.removeItem("burnlens_role");
     setSession(null);
     if (isLocalBackend()) {
       router.push("/");

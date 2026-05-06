@@ -715,6 +715,7 @@ async def login(request: LoginRequest, response: Response):
         expires_in=settings.jwt_expiration_seconds,
         workspace=workspace,
         email_verified=email_verified,
+        role=role,
     )
 
 
