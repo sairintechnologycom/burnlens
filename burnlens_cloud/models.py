@@ -80,6 +80,7 @@ class LoginResponse(BaseModel):
     expires_in: int
     workspace: WorkspaceResponse
     email_verified: bool = True
+    role: str = "owner"
 
 
 class SignupRequest(BaseModel):

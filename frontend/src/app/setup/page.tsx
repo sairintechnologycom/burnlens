@@ -19,6 +19,7 @@ function storeSession(data: {
   token: string;
   workspace: { id: string; name: string; plan: string; api_key: string; owner_email?: string };
   email_verified?: boolean;
+  role?: string;
 }) {
   // C-3: the JWT is set by the backend as the `burnlens_session` HttpOnly
   // cookie — we intentionally DO NOT persist `data.token` client-side.
@@ -33,6 +34,9 @@ function storeSession(data: {
     localStorage.setItem("burnlens_owner_email", data.workspace.owner_email);
   }
   localStorage.setItem("burnlens_email_verified", String(data.email_verified ?? true));
+  // role drives UI role-gating (e.g. toggle vs read-only on /alerts). Default
+  // "owner" so existing sessions without this field keep full access.
+  localStorage.setItem("burnlens_role", data.role ?? "owner");
   // Clean up legacy JWT if a previous (pre-C-3) session left one behind.
   localStorage.removeItem("burnlens_token");
 }

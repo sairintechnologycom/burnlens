@@ -34,9 +34,7 @@ function AlertsContent() {
   const [emailError, setEmailError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Derive owner status — session.isLocal is the proxy (no cloud roles); remote
-  // users are treated as owners until a role field is added to AuthSession.
-  const isOwner = session !== null && !session.isLocal;
+  const isOwner = session?.role === "owner";
 
   useEffect(() => {
     document.title = "Alerts | BurnLens";
