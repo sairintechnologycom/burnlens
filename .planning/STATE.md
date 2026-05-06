@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Account Security & Notifications
 status: completed
-last_updated: "2026-05-05T19:00:00.000Z"
-last_activity: 2026-05-05
+last_updated: "2026-05-06T00:27:00.000Z"
+last_activity: 2026-05-06
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 23
+  completed_phases: 4
+  total_plans: 10
+  completed_plans: 26
   percent: 100
 ---
 
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: 13 (Alert Management UI) — READY TO PLAN
+Phase: 13 (Alert Management UI) — COMPLETE (2026-05-06)
 Phase: 14 (Budget-Aware Model Downgrade Routing) — COMPLETE (2026-05-05)
-Status: Phases 11, 12 + 14 complete — Phase 13 not started
-Last activity: 2026-05-05
+Status: v1.2 milestone complete — all 4 phases done (11, 12, 13, 14)
+Last activity: 2026-05-06
 
 ## Key Decisions (Phase 12)
 
@@ -34,7 +34,7 @@ Last activity: 2026-05-05
 See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** Phase 11 — Auth Essentials
+**Current focus:** v1.2 milestone complete
 
 ## v1.2 Phase Summary
 
@@ -42,7 +42,7 @@ See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
 |---|-------|-------------|--------|
 | 11 | Auth Essentials | AUTH-01–07, EMAIL-01–04 (11 reqs) | ✓ Complete (2026-05-02) |
 | 12 | Cloud Alert Engine | ALERT-01–07 (7 reqs) | ✓ Complete (2026-05-02) |
-| 13 | Alert Management UI | ALERT-08–09 (2 reqs) | Not started |
+| 13 | Alert Management UI | ALERT-08–09 (2 reqs) | ✓ Complete (2026-05-06) |
 | 14 | Budget-Aware Model Downgrade Routing | ROUTE-01–07 (7 reqs) | ✓ Complete (2026-05-05) |
 
 ## v1.1 Phase Summary

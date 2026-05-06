@@ -9,7 +9,7 @@ gsd_roadmap_version: 1.0
 - ✅ **v0.x Core Proxy & FinOps** — Pre-GSD (shipped)
 - ✅ **v1.0 Shadow AI Discovery & Inventory** — Phases 1–5 (shipped 2026-04-15)
 - ✅ **v1.1 Billing & Quota** — Phases 6–10 (shipped 2026-04-30)
-- 📋 **v1.2 Account Security & Notifications** — Phases 11–13 (active)
+- ✅ **v1.2 Account Security & Notifications** — Phases 11–13 (shipped 2026-05-06)
 
 ## Phases
 
@@ -43,7 +43,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 - [ ] **Phase 11: Auth Essentials** — password reset, email verification, transactional email infrastructure
 - [ ] **Phase 12: Cloud Alert Engine** — alert schema, Railway cron evaluation, email + Slack dispatch
-- [ ] **Phase 13: Alert Management UI** — /alerts page for viewing and managing workspace alert rules
+- [ ] **Phase 13: Alert Management UI** — /alerts page for viewing and managing workspace alert rules *(planned — 3 plans ready)*
 
 ## Phase Details
 
@@ -85,9 +85,11 @@ Plans:
   2. An org owner can toggle a rule on or off, change its threshold percentage, and add or remove notification email recipients — changes take effect on the next cron evaluation
 **Plans**: 3 plans
 Plans:
-- [ ] 13-00-PLAN.md — Wave 0: failing test scaffold for alerts_api.py (8 tests, RED state)
-- [ ] 13-01-PLAN.md — Backend: alerts_api.py (GET + PATCH) + main.py router registration
-- [ ] 13-02-PLAN.md — Frontend: alerts/page.tsx replacement + Sidebar nav entry
+**Wave 0**
+- [x] 13-00-PLAN.md — Wave 0: failing test scaffold for alerts_api.py (8 tests, RED state)
+**Wave 1** *(blocked on Wave 0 completion)*
+- [x] 13-01-PLAN.md — Backend: alerts_api.py (GET + PATCH) + main.py router registration
+- [x] 13-02-PLAN.md — Frontend: alerts/page.tsx replacement + Sidebar nav entry
 **UI hint**: yes
 
 ### Phase 14: Budget-Aware Model Downgrade Routing
@@ -127,7 +129,7 @@ Plans:
 | 10. Feature Gating & Usage Visibility UI | v1.1 | 4/4 | Complete | 2026-04-27 |
 | 11. Auth Essentials | v1.2 | 0/? | Not started | — |
 | 12. Cloud Alert Engine | v1.2 | 0/3 | Not started | — |
-| 13. Alert Management UI | v1.2 | 0/? | Not started | — |
+| 13. Alert Management UI | v1.2 | 3/3 | Complete | 2026-05-06 |
 | 14. Budget-Aware Model Downgrade Routing | OSS | 0/7 | Planned | — |
 
 ---
