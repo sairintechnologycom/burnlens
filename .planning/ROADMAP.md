@@ -43,7 +43,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 - [ ] **Phase 11: Auth Essentials** — password reset, email verification, transactional email infrastructure
 - [ ] **Phase 12: Cloud Alert Engine** — alert schema, Railway cron evaluation, email + Slack dispatch
-- [ ] **Phase 13: Alert Management UI** — /alerts page for viewing and managing workspace alert rules *(planned — 3 plans ready)*
+- [x] **Phase 13: Alert Management UI** — /alerts page for viewing and managing workspace alert rules *(completed 2026-05-06)*
 
 ## Phase Details
 
