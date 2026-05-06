@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Account Security & Notifications
 status: completed
-last_updated: "2026-05-06T00:27:00.000Z"
+last_updated: "2026-05-06T11:49:27.192Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 4
-  completed_phases: 4
+  completed_phases: 2
   total_plans: 10
-  completed_plans: 26
+  completed_plans: 20
   percent: 100
 ---
 

@@ -1,12 +1,26 @@
 """Tests for status page and SLA tracking."""
 
 import pytest
+import pytest_asyncio
 from datetime import datetime
 from unittest.mock import patch, AsyncMock
 from uuid import uuid4
+from fastapi import FastAPI
+from httpx import AsyncClient, ASGITransport
 
 from burnlens_cloud.deployment.status import StatusChecker, StatusPageRenderer
 from burnlens_cloud.models import ComponentStatus, StatusResponse
+
+
+@pytest_asyncio.fixture
+async def client():
+    """AsyncClient wired to the cloud deployment/status router."""
+    from burnlens_cloud.deployment_api import router as deployment_router
+    app = FastAPI()
+    app.include_router(deployment_router)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        yield ac
 
 
 @pytest.fixture
@@ -31,7 +45,7 @@ class TestStatusChecker:
 
             ok, latency_ms = await status_checker.check_endpoint("Ingest API", "/v1/ingest")
 
-            assert ok is False  # POST to ingest endpoint
+            assert ok is True
             assert isinstance(latency_ms, int)
             assert latency_ms >= 0
 

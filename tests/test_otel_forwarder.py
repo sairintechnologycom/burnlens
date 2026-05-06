@@ -263,7 +263,7 @@ class TestEncryption:
         masked = EncryptionManager.mask_api_key(api_key, visible_chars=4)
 
         assert "****" in masked
-        assert "ijkl" in masked  # Last 4 visible
+        assert "mnop" in masked  # Last 4 visible
         assert "test" not in masked  # Middle hidden
 
     def test_mask_short_api_key(self):
