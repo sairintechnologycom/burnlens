@@ -1,25 +1,41 @@
 import pytest
+import pytest_asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
 from uuid import uuid4
 from datetime import datetime
+from fastapi import FastAPI
+from httpx import AsyncClient, ASGITransport
+
+
+@pytest_asyncio.fixture
+async def dash_client():
+    """AsyncClient wired to the cloud dashboard router."""
+    from burnlens_cloud.dashboard_api import router as dashboard_router
+    app = FastAPI()
+    app.include_router(dashboard_router)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        yield ac
 
 
 @pytest.fixture
 def valid_jwt_token():
     """Generate a valid JWT token for testing."""
     from burnlens_cloud.auth import encode_jwt
-    return encode_jwt(str(uuid4()), "cloud")
+    ws_id = str(uuid4())
+    user_id = str(uuid4())
+    return encode_jwt(ws_id, user_id, "owner", "cloud")
 
 
 @pytest.mark.asyncio
-async def test_summary_requires_auth(client):
+async def test_summary_requires_auth(dash_client):
     """Test that summary endpoint requires authentication."""
-    response = await client.get("/api/summary")
+    response = await dash_client.get("/api/v1/usage/summary")
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_summary_with_auth(client, valid_jwt_token):
+async def test_summary_with_auth(dash_client, valid_jwt_token):
     """Test summary endpoint with valid JWT."""
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
         mock_query.return_value = [
@@ -31,8 +47,8 @@ async def test_summary_with_auth(client, valid_jwt_token):
             }
         ]
 
-        response = await client.get(
-            "/api/summary",
+        response = await dash_client.get(
+            "/api/v1/usage/summary",
             headers={"Authorization": f"Bearer {valid_jwt_token}"},
         )
 
@@ -44,7 +60,7 @@ async def test_summary_with_auth(client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
-async def test_costs_by_model(client, valid_jwt_token):
+async def test_costs_by_model(dash_client, valid_jwt_token):
     """Test costs by model endpoint."""
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
         mock_query.return_value = [
@@ -58,8 +74,8 @@ async def test_costs_by_model(client, valid_jwt_token):
             }
         ]
 
-        response = await client.get(
-            "/api/costs/by-model?period=7d",
+        response = await dash_client.get(
+            "/api/v1/usage/by-model?days=7",
             headers={"Authorization": f"Bearer {valid_jwt_token}"},
         )
 
@@ -71,7 +87,7 @@ async def test_costs_by_model(client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
-async def test_costs_by_tag(client, valid_jwt_token):
+async def test_costs_by_tag(dash_client, valid_jwt_token):
     """Test costs by tag endpoint."""
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
         mock_query.return_value = [
@@ -84,8 +100,8 @@ async def test_costs_by_tag(client, valid_jwt_token):
             }
         ]
 
-        response = await client.get(
-            "/api/costs/by-tag?tag_type=team&period=7d",
+        response = await dash_client.get(
+            "/api/v1/usage/by-tag?tag_type=feature&days=7",
             headers={"Authorization": f"Bearer {valid_jwt_token}"},
         )
 
@@ -97,7 +113,7 @@ async def test_costs_by_tag(client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
-async def test_costs_timeline(client, valid_jwt_token):
+async def test_costs_timeline(dash_client, valid_jwt_token):
     """Test cost timeline endpoint."""
     from datetime import date
 
@@ -110,8 +126,8 @@ async def test_costs_timeline(client, valid_jwt_token):
             }
         ]
 
-        response = await client.get(
-            "/api/costs/timeline?period=7d&granularity=daily",
+        response = await dash_client.get(
+            "/api/v1/usage/timeseries?days=7&granularity=day",
             headers={"Authorization": f"Bearer {valid_jwt_token}"},
         )
 
@@ -122,7 +138,7 @@ async def test_costs_timeline(client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
-async def test_requests_endpoint(client, valid_jwt_token):
+async def test_requests_endpoint(dash_client, valid_jwt_token):
     """Test requests endpoint."""
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
         mock_query.return_value = [
@@ -146,8 +162,8 @@ async def test_requests_endpoint(client, valid_jwt_token):
             }
         ]
 
-        response = await client.get(
-            "/api/requests?limit=50&period=7d",
+        response = await dash_client.get(
+            "/api/v1/requests?limit=50&days=7",
             headers={"Authorization": f"Bearer {valid_jwt_token}"},
         )
 
@@ -158,7 +174,7 @@ async def test_requests_endpoint(client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
-async def test_period_clamping_free_tier(client):
+async def test_period_clamping_free_tier(dash_client):
     """Test that period is clamped based on plan."""
     from burnlens_cloud.dashboard_api import clamp_days_by_plan
 

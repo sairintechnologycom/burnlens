@@ -342,6 +342,8 @@ class TestDiscoveryAlertEngine:
         with (
             patch("burnlens.alerts.discovery.get_new_shadow_events_since", new_callable=AsyncMock) as mock_shadow,
             patch("burnlens.alerts.discovery.get_asset_by_id", new_callable=AsyncMock) as mock_asset,
+            patch("burnlens.alerts.discovery.was_alert_fired", new_callable=AsyncMock, return_value=False),
+            patch("burnlens.alerts.discovery.mark_alert_fired", new_callable=AsyncMock) as mock_mark,
         ):
             mock_shadow.return_value = [event]
             mock_asset.return_value = asset
@@ -355,7 +357,7 @@ class TestDiscoveryAlertEngine:
         assert count == 1
         engine._slack.send_discovery.assert_called_once()
         engine._email.send.assert_called_once()
-        assert 42 in engine._fired_events
+        mock_mark.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_shadow_alerts_skips_already_fired(self, tmp_path) -> None:
@@ -364,11 +366,13 @@ class TestDiscoveryAlertEngine:
         db_path = str(tmp_path / "test.db")
         config = self._make_config()
         engine = DiscoveryAlertEngine(config, db_path)
-        engine._fired_events.add(42)  # Pre-populate dedup set
 
         event = _make_event(id=42)
 
-        with patch("burnlens.alerts.discovery.get_new_shadow_events_since", new_callable=AsyncMock) as mock_shadow:
+        with (
+            patch("burnlens.alerts.discovery.get_new_shadow_events_since", new_callable=AsyncMock) as mock_shadow,
+            patch("burnlens.alerts.discovery.was_alert_fired", new_callable=AsyncMock, return_value=True),
+        ):
             mock_shadow.return_value = [event]
             engine._slack = MagicMock()
             engine._slack.send_discovery = AsyncMock()
@@ -418,6 +422,8 @@ class TestDiscoveryAlertEngine:
         with (
             patch("burnlens.alerts.discovery.get_new_provider_events_since", new_callable=AsyncMock) as mock_provider,
             patch("burnlens.alerts.discovery.get_asset_by_id", new_callable=AsyncMock) as mock_asset,
+            patch("burnlens.alerts.discovery.was_alert_fired", new_callable=AsyncMock, return_value=False),
+            patch("burnlens.alerts.discovery.mark_alert_fired", new_callable=AsyncMock) as mock_mark,
         ):
             mock_provider.return_value = [event]
             mock_asset.return_value = asset
@@ -430,7 +436,7 @@ class TestDiscoveryAlertEngine:
 
         assert count == 1
         engine._slack.send_discovery.assert_called_once()
-        assert 10 in engine._fired_events
+        mock_mark.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_spend_spikes_fires_when_ratio_above_threshold(self, tmp_path) -> None:
@@ -445,6 +451,8 @@ class TestDiscoveryAlertEngine:
         with (
             patch("burnlens.alerts.discovery.get_assets", new_callable=AsyncMock) as mock_assets,
             patch("burnlens.alerts.discovery.get_asset_spend_history", new_callable=AsyncMock) as mock_history,
+            patch("burnlens.alerts.discovery.was_alert_fired", new_callable=AsyncMock, return_value=False),
+            patch("burnlens.alerts.discovery.mark_alert_fired", new_callable=AsyncMock) as mock_mark,
         ):
             mock_assets.return_value = [asset]
             mock_history.return_value = 100.0  # 30-day avg = 100.0, current = 300 → ratio 3.0
@@ -458,7 +466,7 @@ class TestDiscoveryAlertEngine:
 
         assert count == 1
         engine._slack.send_spend_spike.assert_called_once()
-        assert 7 in engine._fired_spikes
+        mock_mark.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_spend_spikes_skips_when_ratio_below_threshold(self, tmp_path) -> None:
@@ -541,16 +549,14 @@ class TestDiscoveryAlertEngine:
         db_path = str(tmp_path / "test.db")
         config = self._make_config()
         engine = DiscoveryAlertEngine(config, db_path)
-        engine._fired_spikes.add(7)
 
         asset = _make_asset(id=7, monthly_spend_usd=300.0)
 
         with (
             patch("burnlens.alerts.discovery.get_assets", new_callable=AsyncMock) as mock_assets,
-            patch("burnlens.alerts.discovery.get_asset_spend_history", new_callable=AsyncMock) as mock_history,
+            patch("burnlens.alerts.discovery.was_alert_fired", new_callable=AsyncMock, return_value=True),
         ):
             mock_assets.return_value = [asset]
-            mock_history.return_value = 100.0
 
             engine._slack = MagicMock()
             engine._slack.send_spend_spike = AsyncMock()
