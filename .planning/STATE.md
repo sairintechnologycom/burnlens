@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-07T00:00:00.000Z"
 last_activity: 2026-05-07
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap created, ready for planning)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-07 — Milestone v1.3 started
+Status: Roadmap approved — run `/gsd-plan-phase 15` to start
+Last activity: 2026-05-07 — v1.3 roadmap created (Phases 15–18)
 
 ## Key Decisions (Phase 12)
 
@@ -34,7 +34,16 @@ Last activity: 2026-05-07 — Milestone v1.3 started
 See: .planning/PROJECT.md (updated 2026-05-07 after v1.2 milestone close)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** Planning v1.3 — run `/gsd-new-milestone` to start
+**Current focus:** v1.3 — Quota Enforcement & API Key Management — Phases 15–18
+
+## v1.3 Phase Summary
+
+| # | Phase | Requirements | Status |
+|---|-------|-------------|--------|
+| 15 | Hard Ingest Quota Enforcement | QUOTA-01–05 (5 reqs) | Not started |
+| 16 | API Key Management | APIKEY-01–05 + AUTH-08 (6 reqs) | Not started |
+| 17 | Google URL-Path Routing | ROUTE-08 (1 req) | Not started |
+| 18 | Usage Dashboard Improvements | DASH-01–04 (4 reqs) | Not started |
 
 ## v1.2 Phase Summary
 
@@ -86,13 +95,13 @@ Known deferred items at close: 25+ (see above)
 - Pct threshold check runs before USD check; when both trigger, reason = "budget_pct"
 - Team spend cached 60 seconds per team (`_team_spend_cache` dict) to avoid per-request DB reads
 - Deferred imports inside `_resolve_budget()` to break circular dependency between router ↔ database
-- Body rewrite is JSON-decode + field replace + re-encode; Google URL-path routing is a known limitation
+- Body rewrite is JSON-decode + field replace + re-encode; Google URL-path routing is a known limitation (addressed in Phase 17)
 
 ## Session Continuity
 
-**Next action:** Run `/gsd-plan-phase 15` to plan Phase 15 after roadmap is approved
+**Next action:** Run `/gsd-plan-phase 15` to plan Phase 15 — Hard Ingest Quota Enforcement
 **Last milestone:** v1.2 complete — all 4 phases (11–14) shipped 2026-05-06
-**Active milestone:** v1.3 Quota Enforcement & API Key Management — requirements phase
+**Active milestone:** v1.3 Quota Enforcement & API Key Management — roadmap created, 4 phases (15–18)
 
 ## Phase 11 Execution Plan
 

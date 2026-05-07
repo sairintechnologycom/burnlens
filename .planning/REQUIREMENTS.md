@@ -67,23 +67,23 @@ Harden the platform with real enforcement teeth — 429 hard caps at ingest, ful
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| QUOTA-01 | — | Pending |
-| QUOTA-02 | — | Pending |
-| QUOTA-03 | — | Pending |
-| QUOTA-04 | — | Pending |
-| QUOTA-05 | — | Pending |
-| APIKEY-01 | — | Pending |
-| APIKEY-02 | — | Pending |
-| APIKEY-03 | — | Pending |
-| APIKEY-04 | — | Pending |
-| APIKEY-05 | — | Pending |
-| AUTH-08 | — | Pending |
-| ROUTE-08 | — | Pending |
-| DASH-01 | — | Pending |
-| DASH-02 | — | Pending |
-| DASH-03 | — | Pending |
-| DASH-04 | — | Pending |
+| QUOTA-01 | Phase 15 | Pending |
+| QUOTA-02 | Phase 15 | Pending |
+| QUOTA-03 | Phase 15 | Pending |
+| QUOTA-04 | Phase 15 | Pending |
+| QUOTA-05 | Phase 15 | Pending |
+| APIKEY-01 | Phase 16 | Pending |
+| APIKEY-02 | Phase 16 | Pending |
+| APIKEY-03 | Phase 16 | Pending |
+| APIKEY-04 | Phase 16 | Pending |
+| APIKEY-05 | Phase 16 | Pending |
+| AUTH-08 | Phase 16 | Pending |
+| ROUTE-08 | Phase 17 | Pending |
+| DASH-01 | Phase 18 | Pending |
+| DASH-02 | Phase 18 | Pending |
+| DASH-03 | Phase 18 | Pending |
+| DASH-04 | Phase 18 | Pending |
 
 ---
 
-*Last updated: 2026-05-07 — v1.3 milestone start*
+*Last updated: 2026-05-07 — v1.3 roadmap created, phase assignments filled*
