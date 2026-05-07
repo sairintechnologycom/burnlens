@@ -391,6 +391,27 @@ class PricingResponse(BaseModel):
     pricing: dict[str, dict[str, float]]
 
 
+# Phase 15: hard ingest quota enforcement
+class QuotaExceededDetail(BaseModel):
+    """Structured 429 response detail for POST /v1/ingest quota violations (QUOTA-05).
+
+    `dimension` identifies which quota was breached:
+      "requests"  — monthly API call quota (QUOTA-01)
+      "tokens"    — monthly token consumption (QUOTA-02)
+      "spend_usd" — cumulative dollar ceiling (QUOTA-03)
+      "seats"     — active workspace members above seat cap (QUOTA-04)
+
+    `current` is the workspace's current usage value.
+    `limit` is the plan ceiling that was exceeded.
+    `retry_after` is informational — quotas reset on the next billing cycle.
+    """
+    error: str = "quota_exceeded"
+    dimension: str
+    current: float
+    limit: float
+    retry_after: str = "next billing cycle"
+
+
 # Phase 6: plan limits
 class PlanLimits(BaseModel):
     """Row from the plan_limits table — the plan default before any override merge.
@@ -421,6 +442,8 @@ class ResolvedLimits(BaseModel):
     seat_count: Optional[int] = None
     retention_days: Optional[int] = None
     api_key_count: Optional[int] = None
+    monthly_token_cap: Optional[int] = None
+    monthly_spend_cap_usd: Optional[float] = None
     gated_features: dict = Field(default_factory=dict)
 
 
