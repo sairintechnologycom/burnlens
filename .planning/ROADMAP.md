@@ -71,7 +71,11 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
   3. A workspace whose cumulative spend has crossed its dollar ceiling receives a 429 from POST /v1/ingest
   4. An API key belonging to a seat number above the plan's seat cap is rejected with a 429
   5. Every 429 response body contains a structured JSON object with the quota dimension, current usage value, and plan limit value
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 15-PLAN-00.md — TDD scaffold: 12 RED test stubs for all QUOTA-01–05 cases
+- [ ] 15-PLAN-01.md — Schema migrations + QuotaExceededDetail model + ResolvedLimits extension + plans.py wrapper
+- [ ] 15-PLAN-02.md — _check_quota_or_raise() enforcement + extended UPSERT tracking
 
 ### Phase 16: API Key Management
 **Goal**: Workspace owners can manage the full API key lifecycle from the UI, and the auth bug for API-key users is resolved
@@ -84,7 +88,11 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
   4. An owner can edit the label or scope note on any existing key without revoking and re-creating it
   5. A viewer-role user visiting `/api-keys` sees only their own key and cannot access the create or revoke actions
   6. A user who signed up via API key (null `owner_email` in localStorage) successfully receives a resend-verification email because the handler reads email from the server-side session instead of localStorage
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 15-PLAN-00.md — TDD scaffold: 12 RED test stubs for all QUOTA-01–05 cases
+- [ ] 15-PLAN-01.md — Schema migrations + QuotaExceededDetail model + ResolvedLimits extension + plans.py wrapper
+- [ ] 15-PLAN-02.md — _check_quota_or_raise() enforcement + extended UPSERT tracking
 **UI hint**: yes
 
 ### Phase 17: Google URL-Path Routing
@@ -94,7 +102,11 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 **Success Criteria** (what must be TRUE):
   1. When `decide_route()` selects a downgrade model for a Google Generative Language API request, the outbound request URL path reflects the downgrade model name (not the original model from the path)
   2. The body-rewrite behavior from v1.2 is preserved — URL-path rewrite is additive, not a replacement
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 15-PLAN-00.md — TDD scaffold: 12 RED test stubs for all QUOTA-01–05 cases
+- [ ] 15-PLAN-01.md — Schema migrations + QuotaExceededDetail model + ResolvedLimits extension + plans.py wrapper
+- [ ] 15-PLAN-02.md — _check_quota_or_raise() enforcement + extended UPSERT tracking
 
 ### Phase 18: Usage Dashboard Improvements
 **Goal**: Users can slice, filter, and export their usage data from the cloud dashboard with richer chart views
@@ -105,7 +117,11 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
   2. User can view a ranked breakdown of cost by model (table or chart) showing each model's share of total spend for the selected period
   3. User can click an export button and download a CSV file containing the usage rows that match the currently active filters and date range
   4. Dashboard displays a daily cost trend chart that overlays per-model cost distribution so users can see both total spend trajectory and model mix over time
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 15-PLAN-00.md — TDD scaffold: 12 RED test stubs for all QUOTA-01–05 cases
+- [ ] 15-PLAN-01.md — Schema migrations + QuotaExceededDetail model + ResolvedLimits extension + plans.py wrapper
+- [ ] 15-PLAN-02.md — _check_quota_or_raise() enforcement + extended UPSERT tracking
 **UI hint**: yes
 
 ## Progress
@@ -126,7 +142,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 | 12. Cloud Alert Engine | v1.2 | 3/3 | Complete | 2026-05-02 |
 | 13. Alert Management UI | v1.2 | 3/3 | Complete | 2026-05-06 |
 | 14. Budget-Aware Model Downgrade Routing | v1.2 | 7/7 | Complete | 2026-05-05 |
-| 15. Hard Ingest Quota Enforcement | v1.3 | 0/? | Not started | - |
+| 15. Hard Ingest Quota Enforcement | v1.3 | 0/3 | Not started | - |
 | 16. API Key Management | v1.3 | 0/? | Not started | - |
 | 17. Google URL-Path Routing | v1.3 | 0/? | Not started | - |
 | 18. Usage Dashboard Improvements | v1.3 | 0/? | Not started | - |
