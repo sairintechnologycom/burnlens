@@ -60,5 +60,7 @@ async def resolve_limits(workspace_id: UUID) -> Optional[ResolvedLimits]:
         seat_count=row["seat_count"],
         retention_days=row["retention_days"],
         api_key_count=row["api_key_count"],
+        monthly_token_cap=row["monthly_token_cap"],
+        monthly_spend_cap_usd=row["monthly_spend_cap_usd"],
         gated_features=gated or {},
     )
