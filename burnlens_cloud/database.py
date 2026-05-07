@@ -816,6 +816,61 @@ async def init_db():
             ON workspace_usage_cycles(workspace_id, cycle_start)
         """)
 
+        # Phase 15 (QUOTA-02/03): token and spend tracking columns on workspace_usage_cycles.
+        # token_count accumulates sum(input+output+reasoning tokens) per cycle.
+        # spend_usd accumulates sum(cost_usd) per cycle.
+        # Both default to 0 so existing rows are valid without backfill.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspace_usage_cycles' AND column_name = 'token_count'
+                ) THEN
+                    ALTER TABLE workspace_usage_cycles ADD COLUMN token_count BIGINT NOT NULL DEFAULT 0;
+                END IF;
+            END $$;
+        """)
+
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspace_usage_cycles' AND column_name = 'spend_usd'
+                ) THEN
+                    ALTER TABLE workspace_usage_cycles ADD COLUMN spend_usd NUMERIC(12,8) NOT NULL DEFAULT 0;
+                END IF;
+            END $$;
+        """)
+
+        # Phase 15 (QUOTA-02/03): cap columns on plan_limits.
+        # NULL = unlimited (D-02). Initial seeding is NULL for all plans — caps are
+        # configured via workspaces.limit_overrides or a future plan-limits update.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'plan_limits' AND column_name = 'monthly_token_cap'
+                ) THEN
+                    ALTER TABLE plan_limits ADD COLUMN monthly_token_cap BIGINT;
+                END IF;
+            END $$;
+        """)
+
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'plan_limits' AND column_name = 'monthly_spend_cap_usd'
+                ) THEN
+                    ALTER TABLE plan_limits ADD COLUMN monthly_spend_cap_usd NUMERIC(12,2);
+                END IF;
+            END $$;
+        """)
+
         # Phase 9 (D-11): per-workspace API keys, hashed-only storage.
         # key_hash UNIQUE makes the (D-12) set-based backfill safe to repeat.
         # created_by_user_id uses ON DELETE SET NULL (not cascade) so the audit
@@ -947,13 +1002,14 @@ async def init_db():
             WHERE plan = 'teams'
         """)
 
-        # Phase 6: resolver function — merges workspace overrides over plan defaults
+        # Phase 6 (updated Phase 15): resolver function — merges workspace overrides over plan defaults
         # in a single Postgres round-trip. Called by burnlens_cloud/plans.py.
         #
         # Merge rules:
         #   - Scalar fields: COALESCE(override, plan_default). NULL = unlimited.
         #   - gated_features: plan.gated_features || override.gated_features
         #     (JSONB shallow merge, right side wins per key — D-04).
+        #   - Phase 15: monthly_token_cap (BIGINT) and monthly_spend_cap_usd (NUMERIC(12,2)) added.
         #
         # Returns a single row (or no rows if workspace_id does not exist).
         await conn.execute("""
@@ -964,7 +1020,9 @@ async def init_db():
                 seat_count INT,
                 retention_days INT,
                 api_key_count INT,
-                gated_features JSONB
+                gated_features JSONB,
+                monthly_token_cap BIGINT,
+                monthly_spend_cap_usd NUMERIC
             )
             LANGUAGE SQL
             STABLE
@@ -978,7 +1036,9 @@ async def init_db():
                     (
                         pl.gated_features
                         || COALESCE(w.limit_overrides->'gated_features', '{}'::jsonb)
-                    ) AS gated_features
+                    ) AS gated_features,
+                    COALESCE((w.limit_overrides->>'monthly_token_cap')::bigint,   pl.monthly_token_cap)     AS monthly_token_cap,
+                    COALESCE((w.limit_overrides->>'monthly_spend_cap_usd')::numeric, pl.monthly_spend_cap_usd) AS monthly_spend_cap_usd
                 FROM workspaces w
                 JOIN plan_limits pl ON pl.plan = w.plan
                 WHERE w.id = ws_id
