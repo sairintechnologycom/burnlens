@@ -8,11 +8,18 @@ BurnLens is an open-source LLM FinOps tool — a transparent proxy + CLI + dashb
 
 Complete visibility into AI API spending with zero code changes — if you can't see it, you can't control it.
 
-## Current State: v1.2 Shipped — Planning v1.3
+## Current Milestone: v1.3 Quota Enforcement & API Key Management
 
-**v1.2 shipped 2026-05-06:** Auth Essentials, Cloud Alert Engine, Alert Management UI, Budget-Aware Model Downgrade Routing — all 4 phases complete.
+**Goal:** Harden the platform with real enforcement teeth — 429 hard caps at ingest, full API key lifecycle in the UI, and close the remaining v1.2 gaps (W-01, Google routing, dashboard UX).
 
-**Last phase number:** 14 (continue from 15 in v1.3)
+**Target features:**
+- Hard 429 quota enforcement at POST /v1/ingest (API calls + tokens + spend cap + seat count)
+- API key management UI at /api-keys — list/revoke/create, labels+scopes, owner-only gate
+- W-01: Fix resend-verification for API-key users with null `owner_email` in localStorage
+- Google model routing via URL-path (not just body rewrite — known v1.2 limitation)
+- Usage dashboard improvements — richer charts, date-range picker, model breakdown, CSV export
+
+**Last phase number:** 14 (v1.3 starts at Phase 15)
 
 ## Requirements
 
@@ -48,11 +55,13 @@ Complete visibility into AI API spending with zero code changes — if you can't
 - ✓ Plan-Gated Features (LockedPanel with dynamic 402-driven copy + frosted-glass teaser + upgrade CTAs) — v1.1
 - ✓ Usage Meter (sidebar meter with green/amber/red thresholds + Settings → Usage daily breakdown) — v1.1
 
-### Active
+### Active (v1.3)
 
-- [ ] Hard quota enforcement at ingest (429 on over-quota) — deferred from v1.2, v1.3 scope
-- [ ] API key management UI (`/api-keys` CRUD) — foundation in Phase 9, frontend deferred
-- [ ] Resend-verification fix for API-key users with null `owner_email` in localStorage (W-01)
+- [ ] Hard 429 quota enforcement at ingest (API calls + tokens + spend cap + seat count) — deferred from v1.2
+- [ ] API key management UI (`/api-keys` — list/revoke/create/label/scope, owner-only gate) — backend foundation in Phase 9, frontend deferred
+- [ ] W-01: Resend-verification fix for API-key users with null `owner_email` in localStorage
+- [ ] Google model routing via URL-path (downgrade map currently body-rewrite only — known v1.2 limitation)
+- [ ] Usage dashboard improvements (date-range picker, model breakdown, CSV export, richer charts)
 
 ### Out of Scope
 
@@ -125,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 after v1.2 milestone — Account Security & Notifications shipped*
+*Last updated: 2026-05-07 after v1.2 milestone close — v1.3 Quota Enforcement & API Key Management started*
