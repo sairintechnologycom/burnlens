@@ -53,15 +53,27 @@
 
 ---
 
-## v1.2 — Account Security & Notifications (Planned)
+## v1.2 — Account Security & Notifications (Shipped)
 
-**Goal:** Close the auth-UX gaps and add server-side alerting so cloud users can recover accounts, verify ownership of their email, and get notified when spend crosses thresholds — without needing the local proxy running.
-**Status:** Queued (not started)
-**Scope doc:** `.planning/backlog/v1.2-auth-notifications.md`
+**Goal:** Close the auth-UX gaps and add server-side alerting so cloud users can recover accounts, verify email ownership, and get notified when spend crosses thresholds — without needing the local proxy running.
+**Started:** 2026-04-30
+**Completed:** 2026-05-06
+**Status:** Shipped
 
-**Planned phases (numbering assigned at kickoff):**
-- Auth Essentials — password reset, email verification, transactional email templates wired into signup/billing flows
-- Cloud Alerting — lift `burnlens/alerts/engine.py` budget logic into a Railway cron emailing org owners on threshold breach
+**Shipped:**
+- 4 phases (11–14), 22 plans, ~150 commits
+- 181 files changed, +23,628 / -1,830 lines (7 days)
+- Password reset + email verification flows with single-use RETURNING-safe tokens; `BillingStatusBanner` for soft-gate verification; typed TemplateSpec registry with 6 SendGrid templates; grandfathering for pre-v1.2 users
+- `alert_rules` + `alert_events` Postgres schema with idempotent 80%/100% seeding; hourly Railway cron with 24h dedup; email + SSRF-guarded Slack dispatch; fail-open cron error handling
+- `/alerts` management page with toggle/edit/threshold UX; viewer-role enforcement via `isOwner`; IDOR-protected GET+PATCH backend endpoints; sidebar nav entry
+- `decide_route()` in OSS proxy with 60s team-spend cache, fail-open semantics, provider downgrade map; DB columns `routed_model`+`downgrade_reason`; "Downgrades Today" dashboard stat card; `burnlens routing` CLI command; 12-test suite
+
+**Known deferred items at close:**
+- W-01: Resend-verification button silently no-ops for API-key users with null `owner_email` in localStorage
+- Hard ingest 429 quota enforcement deferred to v1.3 pending real usage data
+- Google URL-path model routing (downgrade map uses body rewrite only)
+
+**Last phase number:** 14
 
 ---
 

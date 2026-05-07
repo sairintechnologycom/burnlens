@@ -52,13 +52,64 @@
 
 ---
 
+## Milestone: v1.2 — Account Security & Notifications
+
+**Shipped:** 2026-05-06
+**Phases:** 4 (11–14) | **Plans:** 22 | **Commits:** ~150
+
+### What Was Built
+
+- `auth_tokens` table + `email_verified_at` column; password-reset + verify-email flows with RETURNING-safe single-use token enforcement; `BillingStatusBanner` for soft-gate; grandfathering for pre-v1.2 users
+- Typed `TemplateSpec` registry with 6 SendGrid transactional templates (welcome, verify, reset-request, reset-confirm, receipt, alert); `TemplateRegistry` extensible for all future notification types
+- `alert_rules` + `alert_events` Postgres schema with idempotent 80%/100% seeding; hourly Railway cron with 24h dedup window; email dispatch + SSRF-guarded Slack webhook
+- `/alerts` management UI with toggle/edit/threshold controls; viewer-role enforcement via `session.role`; IDOR-protected backend endpoints
+- `decide_route()` in OSS proxy: 60s team-spend TTL cache, fail-open on all exceptions, provider downgrade map; `routed_model`+`downgrade_reason` DB columns; "Downgrades Today" dashboard KPI; `burnlens routing` CLI
+
+### What Worked
+
+- **TDD Wave 0 for Phase 13**: Writing 8 failing tests before any implementation kept the API contract honest and caught the IDOR gap before it was written. Red-first discipline paid off.
+- **Worktree-based parallel execution (Phase 13)**: Backend (Plan 01) and frontend (Plan 02) ran in parallel worktrees — both merged cleanly with no conflicts. The pattern is repeatable for any phase with independent backend/frontend tracks.
+- **Fail-open as a design axiom**: Codifying `decide_route()` never raises as an explicit contract (not just a hope) made the router testable and the proxy provably safe. Every error path is exercised in the 12-test suite.
+- **Security review cycle**: Phase 12 SSRF guard and Phase 14 Phase 11 TOCTOU fixes (CR-01–03) were caught and patched within the same milestone. The code-review → review-fix cycle is working.
+- **Stale audit problem solved**: The v1.2 milestone audit was run at Phase 11 completion (mid-milestone), not at close. Recognizing it as stale at close (rather than acting on it) saved a false-positive audit loop.
+
+### What Was Inefficient
+
+- **Milestone audit was stale at close**: Audit ran 2026-05-02 after Phase 11; Phases 12–14 were executed after. Resulted in a `gaps_found` status that was misleading at close. Audit should run at close, not mid-milestone.
+- **REQUIREMENTS.md never kept up**: All AUTH/EMAIL checkboxes stayed `[ ]` throughout execution. Phase 14 requirements (ROUTE-01–07) were never added. Checkbox hygiene needs to happen at plan-commit time, not at milestone close.
+- **ROADMAP.md Phase 14 showed as "OSS / Planned"**: Phase 14 was added to the milestone post-kickoff but the milestone header was never updated from Phases 11–13 to 11–14. One stale line caused confusion at progress checks throughout.
+- **UAT Test 3 skipped**: The auto-downgrade live-fire test was skipped because it required a real API call with a budget-constrained workspace. This class of test (requires real money/credentials) should be scheduled as a dedicated manual test session, not left as a skipped UAT item.
+
+### Patterns Established
+
+- **`decide_route()` fail-open contract**: Any async function that can influence proxy behavior should be wrapped in a try/except that returns a safe passthrough default. Never let routing logic raise to the caller.
+- **IDOR protection via `WHERE id=$N AND workspace_id=$N+1`**: Workspace ID always comes from the JWT (not the request body). Any PATCH/DELETE on a workspace-scoped resource must double-filter. Established in `alerts_api.py`.
+- **`role` in JWT + `LoginResponse`**: Role encoded in JWT at login; `LoginResponse` returns it to frontend; `AuthSession` shape in `useAuth.ts` carries it. Any new role-gated UI reads `session.role`, never a separate fetch.
+- **Worktree parallel execution**: For phases with independent backend + frontend plans, launch both in separate git worktrees, merge both on green. Documented in Phase 13 execution artifacts.
+
+### Key Lessons
+
+- **Run the milestone audit at close, not during execution.** Mid-milestone audits are useful for catching blockers but produce misleading `gaps_found` status for unstarted phases. The final audit should be the one that gates milestone completion.
+- **Keep REQUIREMENTS.md checkboxes current at plan-commit time.** It's a 30-second edit; deferring it to close creates a false impression of incomplete work throughout the milestone.
+- **Update the milestones list header when scope changes.** Adding Phase 14 mid-milestone without updating the Milestones section header created "Phases 11–13" staleness that persisted to close.
+- **Schedule live-fire UAT tests with real credentials as a separate calendar event.** Don't leave them as skipped UAT items — they require a human with a funded sandbox account and can't be automated into the normal CI flow.
+
+### Cost Observations
+
+- Sessions: ~8 across 7 days (dense execution)
+- Notable: Worktree parallel execution compressed Phase 13 to a single session; Phase 14 (7 plans) executed efficiently with narrow per-plan scope
+- Phase 11 was the heaviest context phase (9 plans, review cycle, auth complexity)
+
+---
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Days | Files | LOC+ |
 |-----------|--------|-------|------|-------|------|
 | v1.0 | 5 | ~15 | 5 | — | — |
 | v1.1 | 5 | 31 | 12 | 241 | +48,179 |
+| v1.2 | 4 | 22 | 7 | 181 | +23,628 |
 
-**Trend:** Plan count doubled v1.0→v1.1 due to Phase 8 granularity (12 plans vs 3/4 typical). Timeline stayed reasonable (12 days). Larger plan counts correlate with cleaner executor contexts and fewer mid-plan pivots.
+**Trend:** v1.2 was the most time-efficient milestone — 4 phases in 7 days vs v1.1's 5 phases in 12 days. Narrower plan scope (avg 5.5 plans/phase vs 6.2) and parallel worktree execution both contributed. LOC delta is lower because v1.2 was more targeted (auth + alerting) vs v1.1's broad billing infrastructure.
 
-**Recurring issue:** ROADMAP.md status staleness appeared in both v1.0 and v1.1. Needs a hook or checklist at plan-commit time.
+**Recurring issue (3rd milestone):** ROADMAP.md and REQUIREMENTS.md status staleness appeared again in v1.2 (Phase 14 scope not added to milestones list, all AUTH/EMAIL checkboxes unchecked). This is a systemic gap — needs a post-plan-commit hook or a pre-progress-check lint step.

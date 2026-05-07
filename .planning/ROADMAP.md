@@ -9,7 +9,7 @@ gsd_roadmap_version: 1.0
 - ✅ **v0.x Core Proxy & FinOps** — Pre-GSD (shipped)
 - ✅ **v1.0 Shadow AI Discovery & Inventory** — Phases 1–5 (shipped 2026-04-15)
 - ✅ **v1.1 Billing & Quota** — Phases 6–10 (shipped 2026-04-30)
-- ✅ **v1.2 Account Security & Notifications** — Phases 11–13 (shipped 2026-05-06)
+- ✅ **v1.2 Account Security & Notifications** — Phases 11–14 (shipped 2026-05-06)
 
 ## Phases
 
@@ -39,79 +39,17 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full details.
 
 </details>
 
-### 📋 v1.2 Account Security & Notifications (Active)
+<details>
+<summary>✅ v1.2 Account Security & Notifications (Phases 11–14) — SHIPPED 2026-05-06</summary>
 
-- [ ] **Phase 11: Auth Essentials** — password reset, email verification, transactional email infrastructure
-- [ ] **Phase 12: Cloud Alert Engine** — alert schema, Railway cron evaluation, email + Slack dispatch
-- [x] **Phase 13: Alert Management UI** — /alerts page for viewing and managing workspace alert rules *(completed 2026-05-06)*
+- [x] Phase 11: Auth Essentials (9 plans) — completed 2026-05-02
+- [x] Phase 12: Cloud Alert Engine (3 plans) — completed 2026-05-02
+- [x] Phase 13: Alert Management UI (3 plans) — completed 2026-05-06
+- [x] Phase 14: Budget-Aware Model Downgrade Routing (7 plans) — completed 2026-05-05
 
-## Phase Details
+See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 
-### Phase 11: Auth Essentials
-**Goal**: Cloud users can recover locked accounts and verify email ownership; transactional email infrastructure supports all current and future notification types
-**Depends on**: Phase 10 (v1.1 complete)
-**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, EMAIL-01, EMAIL-02, EMAIL-03, EMAIL-04
-**Success Criteria** (what must be TRUE):
-  1. A user who forgot their password can request a reset link, click it, set a new password, and log in — all within the time-limit window; the reset link is single-use
-  2. The password-reset request endpoint always returns 200 regardless of whether the email exists (no user enumeration)
-  3. A newly registered user automatically receives a welcome email and sees a dashboard banner prompting email verification until they click the verification link
-  4. An existing user whose account predates v1.2 sees no verification banner and is treated as verified without any action on their part
-  5. After completing a password reset, the user receives a confirmation email; after a successful Paddle payment, they receive a receipt — both delivered via the typed template registry
-**Plans**: TBD
-**UI hint**: yes
-
-### Phase 12: Cloud Alert Engine
-**Goal**: Org owners are automatically notified by email (and optionally Slack) when workspace spend crosses configured budget thresholds — no proxy needed, runs server-side on Railway
-**Depends on**: Phase 11
-**Requirements**: ALERT-01, ALERT-02, ALERT-03, ALERT-04, ALERT-05, ALERT-06, ALERT-07
-**Success Criteria** (what must be TRUE):
-  1. Cloud plan workspaces have default alert rules seeded at 80% and 100% of their plan's monthly allowance without any manual configuration
-  2. The org owner receives an email notification when a budget threshold is crossed; repeated crossings of the same threshold within 24 hours do not generate duplicate notifications
-  3. Org owners who configure a Slack webhook receive threshold notifications in Slack in addition to email
-  4. Alert evaluation runs automatically on an hourly schedule via Railway cron; evaluation failures are logged but never interrupt the cron job
-  5. Every fired alert is recorded in an audit log table with the rule, timestamp, and recipient
-**Plans**: 3 plans
-Plans:
-- [ ] 12-01-PLAN.md — Schema: alert_rules + alert_events tables + default seeding migration
-- [ ] 12-02-PLAN.md — Alert engine: burnlens_cloud/alert_engine.py + 24h dedup + email + Slack dispatch
-- [ ] 12-03-PLAN.md — Cron endpoint + Slack webhook settings + config + test suite
-
-### Phase 13: Alert Management UI
-**Goal**: Org owners can view, enable/disable, and edit their workspace alert rules from the cloud dashboard without needing API access
-**Depends on**: Phase 12
-**Requirements**: ALERT-08, ALERT-09
-**Success Criteria** (what must be TRUE):
-  1. An org owner can navigate to /alerts and see all alert rules for their workspace, including current threshold values and enabled/disabled state
-  2. An org owner can toggle a rule on or off, change its threshold percentage, and add or remove notification email recipients — changes take effect on the next cron evaluation
-**Plans**: 3 plans
-Plans:
-**Wave 0**
-- [x] 13-00-PLAN.md — Wave 0: failing test scaffold for alerts_api.py (8 tests, RED state)
-**Wave 1** *(blocked on Wave 0 completion)*
-- [x] 13-01-PLAN.md — Backend: alerts_api.py (GET + PATCH) + main.py router registration
-- [x] 13-02-PLAN.md — Frontend: alerts/page.tsx replacement + Sidebar nav entry
-**UI hint**: yes
-
-### Phase 14: Budget-Aware Model Downgrade Routing
-**Goal**: When a caller's remaining budget drops below a configurable threshold, BurnLens silently routes to a cheaper model tier instead of blocking with 429 — zero code change for the user
-**Depends on**: Phase 13
-**Requirements**: ROUTE-01, ROUTE-02, ROUTE-03, ROUTE-04, ROUTE-05, ROUTE-06, ROUTE-07
-**Success Criteria** (what must be TRUE):
-  1. A gpt-4o request tagged to a team with <20% budget remaining is transparently forwarded as gpt-4o-mini; the caller receives a valid gpt-4o-mini response with no error
-  2. If the routing logic fails for any reason (DB error, config error), the original model request passes through unmodified — proxy never blocks due to routing
-  3. The `requests` table records `routed_model` and `downgrade_reason` for every request; downgraded rows have non-NULL `downgrade_reason`
-  4. The dashboard "Downgrades Today" stat card shows correct counts and estimated savings pulled from `/api/routing-stats`
-  5. `burnlens routing` CLI command shows a table of all downgrade events with timestamp, original model, routed model, reason, and budget left
-**Plans**: 7 plans
-Plans:
-- [ ] 14-01-PLAN.md — Provider downgrade map (downgrade.py) + RoutingConfig (config.py)
-- [ ] 14-02-PLAN.md — RequestRecord extension + DB migration + insert_request update
-- [ ] 14-03-PLAN.md — burnlens/proxy/router.py: RouteDecision + decide_route()
-- [ ] 14-04-PLAN.md — handle_request() integration + server.py config pass-through
-- [ ] 14-05-PLAN.md — Dashboard /api/routing-stats endpoint + Downgrades Today UI
-- [ ] 14-06-PLAN.md — CLI routing command (--today, --json)
-- [ ] 14-07-PLAN.md — tests/test_router.py (12 test cases)
-**Stream**: OSS proxy (`burnlens/`)
+</details>
 
 ## Progress
 
@@ -127,10 +65,11 @@ Plans:
 | 8. Billing Self-Service | v1.1 | 12/12 | Complete | 2026-04-20 |
 | 9. Quota Tracking & Soft Enforcement | v1.1 | 8/8 | Complete | 2026-04-29 |
 | 10. Feature Gating & Usage Visibility UI | v1.1 | 4/4 | Complete | 2026-04-27 |
-| 11. Auth Essentials | v1.2 | 0/? | Not started | — |
-| 12. Cloud Alert Engine | v1.2 | 0/3 | Not started | — |
+| 11. Auth Essentials | v1.2 | 9/9 | Complete | 2026-05-02 |
+| 12. Cloud Alert Engine | v1.2 | 3/3 | Complete | 2026-05-02 |
 | 13. Alert Management UI | v1.2 | 3/3 | Complete | 2026-05-06 |
-| 14. Budget-Aware Model Downgrade Routing | OSS | 0/7 | Planned | — |
+| 14. Budget-Aware Model Downgrade Routing | v1.2 | 7/7 | Complete | 2026-05-05 |
 
 ---
 *v1.1 archived 2026-04-30. See `.planning/milestones/v1.1-ROADMAP.md` for full phase details.*
+*v1.2 archived 2026-05-07. See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.*

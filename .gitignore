@@ -38,6 +38,8 @@ test-results/
 .planning/*
 !.planning/backlog/
 !.planning/backlog/**
+!.planning/milestones/
+!.planning/milestones/**
 graphify-out/
 
 # Data exports

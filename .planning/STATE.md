@@ -31,10 +31,10 @@ Last activity: 2026-05-06
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-30 after v1.2 milestone start)
+See: .planning/PROJECT.md (updated 2026-05-07 after v1.2 milestone close)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** v1.2 milestone complete
+**Current focus:** Planning v1.3 — run `/gsd-new-milestone` to start
 
 ## v1.2 Phase Summary
 
@@ -90,9 +90,9 @@ Known deferred items at close: 25+ (see above)
 
 ## Session Continuity
 
-**Next action:** Plan Phase 13 — Alert Management UI (ALERT-08, ALERT-09)
-**Last milestone:** v1.1 ended at Phase 10; Phases 11, 12, and 14 are complete; Phase 13 not started
-**Roadmap:** 4 phases (11–14), 26 requirements; 3 of 4 phases done
+**Next action:** Run `/gsd-new-milestone` to plan v1.3
+**Last milestone:** v1.2 complete — all 4 phases (11–14) shipped 2026-05-06
+**Roadmap:** v1.2 archived; no active roadmap — start fresh with `/gsd-new-milestone`
 
 ## Phase 11 Execution Plan
 

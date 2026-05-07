@@ -8,24 +8,21 @@ BurnLens is an open-source LLM FinOps tool — a transparent proxy + CLI + dashb
 
 Complete visibility into AI API spending with zero code changes — if you can't see it, you can't control it.
 
-## Current Milestone: v1.2 Account Security & Notifications
+## Current State: v1.2 Shipped — Planning v1.3
 
-**Goal:** Close the auth-UX gaps and add server-side alerting so cloud users can recover accounts, verify email ownership, and get notified when spend crosses thresholds — without needing the local proxy running.
+**v1.2 shipped 2026-05-06:** Auth Essentials, Cloud Alert Engine, Alert Management UI, Budget-Aware Model Downgrade Routing — all 4 phases complete.
 
-**Target features:**
-- Auth Essentials — password reset flow, email verification (soft-gate/banner for MVP), transactional email system (welcome, password-changed, receipt, verify templates) on SendGrid
-- Cloud Alerting — alert_rules + alert_events schema, hourly Railway cron evaluator, email/Slack dispatch, /alerts management UI
-
-**Key context:**
-- Auth Essentials ships before Cloud Alerting (no point alerting unverified addresses)
-- Existing users (`email_verified_at = NULL`) grandfathered as verified
-- Railway cron infra: TBD at plan time — Phase B includes setup if not already wired
-- Continues phase numbering from v1.1 → Phase 11 onward
+**Last phase number:** 14 (continue from 15 in v1.3)
 
 ## Requirements
 
 ### Validated
 
+- ✓ Password reset + email verification (Auth Essentials, soft-gate) — v1.2
+- ✓ Transactional email system (typed TemplateSpec registry, 6 SendGrid templates) — v1.2
+- ✓ Server-side budget alerting (Railway cron, 24h dedup, email + Slack) — v1.2
+- ✓ Alert management UI (/alerts page, toggle/edit/threshold, viewer-role enforcement) — v1.2
+- ✓ Budget-aware model downgrade routing (decide_route, fail-open, downgrade map) — v1.2
 - ✓ Transparent proxy for OpenAI, Anthropic, Google — v0.1.0
 - ✓ Cost calculation from token usage — v0.1.0
 - ✓ SQLite storage with WAL mode — v0.1.0
@@ -53,10 +50,9 @@ Complete visibility into AI API spending with zero code changes — if you can't
 
 ### Active
 
-- [ ] Hard quota enforcement at ingest (429 on over-quota) — v1.2 scope
-- [ ] Password reset + email verification (Auth Essentials) — v1.2 scope
-- [ ] Cloud alerting — lift budget alert logic into Railway cron for org owners — v1.2 scope
-- [ ] API key plaintext reveal via `/api-keys` CRUD (foundation shipped in Phase 9) — available for v1.2 frontend integration
+- [ ] Hard quota enforcement at ingest (429 on over-quota) — deferred from v1.2, v1.3 scope
+- [ ] API key management UI (`/api-keys` CRUD) — foundation in Phase 9, frontend deferred
+- [ ] Resend-verification fix for API-key users with null `owner_email` in localStorage (W-01)
 
 ### Out of Scope
 
@@ -72,14 +68,15 @@ Complete visibility into AI API spending with zero code changes — if you can't
 
 ## Context
 
+- v1.2 shipped 2026-05-06: auth essentials, cloud alerting, alert UI, and budget-aware routing live
 - v1.1 shipped 2026-04-30: full billing + quota enforcement live on Railway + Vercel
 - Paddle products live: Cloud $29/mo (7-day trial), Teams $99/mo — plan_limits table is authoritative
 - Cloud backend: `burnlens_cloud/` on Railway (FastAPI + asyncpg + Postgres)
 - Frontend: `burnlens.app` on Vercel (Next.js App Router, TypeScript, custom CSS)
-- Auth: session.plan + apiKey in localStorage after login; `verify_token` on all cloud routes
-- OSS proxy (`burnlens/`) releases independently on PyPI — v0.3.1 current; 0.1.2/0.2.0 in flight (ROADMAP-OSS.md)
-- Codebase: ~241 files, ~50k LOC total; Python (cloud backend) + TypeScript/Next.js (frontend)
-- Tech stack unchanged from v1.0: FastAPI + asyncpg + Postgres + Next.js + Paddle
+- Auth: JWT with `email_verified` + `role` claims; `verify_token` on all cloud routes
+- OSS proxy (`burnlens/`) releases independently on PyPI — v0.3.1 current (ROADMAP-OSS.md)
+- Codebase: ~422 files (181 changed in v1.2), ~52k Python LOC + frontend TypeScript
+- Tech stack unchanged: FastAPI + asyncpg + Postgres + Next.js + Paddle + SendGrid
 
 ## Constraints
 
@@ -104,7 +101,11 @@ Complete visibility into AI API spending with zero code changes — if you can't
 | Soft enforcement only in v1.1 | Need real usage data before choosing 429 thresholds; seat/key 402s are sufficient initially | ✓ Validated v1.1 |
 | Entitlement middleware is mandatory (not just UI gating) | UI gating can be bypassed; 402 at route level is the real gate | ✓ Validated v1.1 |
 | Local proxy stays unmetered | OSS product, zero friction for self-hosting — only cloud workspaces have quotas | ✓ Validated v1.1 |
-| Quota enforcement at POST /v1/ingest | Single chokepoint — all cloud usage flows through here | — v1.2 (hard 429 deferred) |
+| Quota enforcement at POST /v1/ingest | Single chokepoint — all cloud usage flows through here | — v1.3 (hard 429 deferred from v1.2) |
+| `decide_route()` never raises | Fail-open is non-negotiable for a proxy — any routing error must passthrough the original model | ✓ Validated v1.2 |
+| Budget priority: customer > team > global_usd > budget_limit_usd | Customer budget is most specific, global is fallback — respects scoping hierarchy | ✓ Validated v1.2 |
+| Verify-email as POST (not GET) | GET token in URL leaks to server logs, referrer headers, and browser history (CR-03) | ✓ Validated v1.2 |
+| SSRF guard on Slack webhook URL | Rejects any URL not starting with https://hooks.slack.com/ — prevents SSRF via org-owner-controlled config | ✓ Validated v1.2 |
 
 ## Evolution
 
@@ -124,4 +125,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-30 after v1.1 milestone — Billing & Quota shipped*
+*Last updated: 2026-05-07 after v1.2 milestone — Account Security & Notifications shipped*
