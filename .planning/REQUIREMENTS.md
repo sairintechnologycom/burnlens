@@ -10,11 +10,11 @@ Harden the platform with real enforcement teeth — 429 hard caps at ingest, ful
 
 ### QUOTA — Hard 429 Enforcement
 
-- [ ] **QUOTA-01**: System returns 429 when workspace exceeds monthly API call quota at POST /v1/ingest
-- [ ] **QUOTA-02**: System returns 429 when workspace monthly token consumption exceeds plan limit at POST /v1/ingest
-- [ ] **QUOTA-03**: System returns 429 when workspace cumulative spend crosses the plan's dollar ceiling
-- [ ] **QUOTA-04**: System rejects API keys belonging to seats above the plan's seat cap
-- [ ] **QUOTA-05**: 429 response includes structured error body with quota dimension, current usage, and plan limit
+- [x] **QUOTA-01**: System returns 429 when workspace exceeds monthly API call quota at POST /v1/ingest
+- [x] **QUOTA-02**: System returns 429 when workspace monthly token consumption exceeds plan limit at POST /v1/ingest
+- [x] **QUOTA-03**: System returns 429 when workspace cumulative spend crosses the plan's dollar ceiling
+- [x] **QUOTA-04**: System rejects API keys belonging to seats above the plan's seat cap
+- [x] **QUOTA-05**: 429 response includes structured error body with quota dimension, current usage, and plan limit
 
 ### APIKEY — API Key Management UI
 
@@ -67,11 +67,11 @@ Harden the platform with real enforcement teeth — 429 hard caps at ingest, ful
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| QUOTA-01 | Phase 15 | Pending |
-| QUOTA-02 | Phase 15 | Pending |
-| QUOTA-03 | Phase 15 | Pending |
-| QUOTA-04 | Phase 15 | Pending |
-| QUOTA-05 | Phase 15 | Pending |
+| QUOTA-01 | Phase 15 | ✅ Verified 2026-05-08 |
+| QUOTA-02 | Phase 15 | ✅ Verified 2026-05-08 |
+| QUOTA-03 | Phase 15 | ✅ Verified 2026-05-08 |
+| QUOTA-04 | Phase 15 | ✅ Verified 2026-05-08 |
+| QUOTA-05 | Phase 15 | ✅ Verified 2026-05-08 |
 | APIKEY-01 | Phase 16 | Pending |
 | APIKEY-02 | Phase 16 | Pending |
 | APIKEY-03 | Phase 16 | Pending |
@@ -86,4 +86,4 @@ Harden the platform with real enforcement teeth — 429 hard caps at ingest, ful
 
 ---
 
-*Last updated: 2026-05-07 — v1.3 roadmap created, phase assignments filled*
+*Last updated: 2026-05-08 — Phase 15 verified (QUOTA-01–05 all passed, 16/16 tests green)*
