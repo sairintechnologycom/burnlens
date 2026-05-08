@@ -118,9 +118,9 @@ async def _check_quota_or_raise(
             )
             if usage_rows:
                 row = usage_rows[0]
-                current_requests = int(row["request_count"])
-                current_tokens = int(row["token_count"])
-                current_spend = float(row["spend_usd"])
+                current_requests = int(row.get("request_count", 0))
+                current_tokens = int(row.get("token_count", 0))
+                current_spend = float(row.get("spend_usd", 0.0))
 
                 # --- QUOTA-01: monthly request cap ---
                 if check_requests and current_requests >= limits.monthly_request_cap:
@@ -180,6 +180,8 @@ async def _record_usage_and_maybe_notify(
     workspace_id: str,
     plan: str,
     records_count: int,
+    batch_tokens: int = 0,
+    batch_spend_usd: float = 0.0,
 ) -> None:
     """UPSERT the cycle counter; if we just crossed 80% or 100%, enqueue the email.
 
@@ -242,20 +244,25 @@ async def _record_usage_and_maybe_notify(
         cycle_end = cycle_row[0]["cycle_end"]
 
         # 2) UPSERT the counter (D-04). RETURNING gives us the new count inline.
+        #    Phase 15: also increments token_count and spend_usd (QUOTA-02/03 tracking).
         upserted = await execute_query(
             """
             INSERT INTO workspace_usage_cycles
-                (workspace_id, cycle_start, cycle_end, request_count, updated_at)
-            VALUES ($1, $2, $3, $4, NOW())
+                (workspace_id, cycle_start, cycle_end, request_count, token_count, spend_usd, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (workspace_id, cycle_start) DO UPDATE
                 SET request_count = workspace_usage_cycles.request_count + EXCLUDED.request_count,
-                    updated_at = NOW()
-            RETURNING id, request_count, notified_80_at, notified_100_at
+                    token_count   = workspace_usage_cycles.token_count   + EXCLUDED.token_count,
+                    spend_usd     = workspace_usage_cycles.spend_usd     + EXCLUDED.spend_usd,
+                    updated_at    = NOW()
+            RETURNING id, request_count, token_count, spend_usd, notified_80_at, notified_100_at
             """,
             workspace_id,
             cycle_start,
             cycle_end,
             records_count,
+            batch_tokens,
+            batch_spend_usd,
         )
         if not upserted:
             logger.warning("usage.upsert_returned_empty workspace=%s", workspace_id)
@@ -438,9 +445,18 @@ async def ingest(request: IngestRequest):
 
         # Phase 9 QUOTA-01/02/03: record usage, check 80/100% thresholds, enqueue email.
         # Wrapped internally; failures MUST NOT affect the ingest 200 response.
+        # Compute batch token and spend totals for usage tracking (Phase 15 QUOTA-02/03).
+        batch_tokens = sum(
+            r.input_tokens + r.output_tokens + (r.reasoning_tokens or 0)
+            for r in request.records
+        )
+        batch_spend_usd = sum(float(r.cost_usd) for r in request.records)
+
         try:
             await _record_usage_and_maybe_notify(
-                workspace_id, plan, len(request.records)
+                workspace_id, plan, len(request.records),
+                batch_tokens=batch_tokens,
+                batch_spend_usd=batch_spend_usd,
             )
         except Exception as exc:
             logger.warning(
