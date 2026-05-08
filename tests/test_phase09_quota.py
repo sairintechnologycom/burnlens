@@ -212,6 +212,7 @@ class TestQuota01IngestUpsert:
         upsert_calls = [
             (sql, args) for (sql, args) in captured
             if "INSERT INTO workspace_usage_cycles" in " ".join(sql.split())
+            and "EXCLUDED.request_count" in sql  # exclude quota-check no-op UPSERTs
         ]
         assert len(upsert_calls) == 1, f"expected 1 UPSERT, got {len(upsert_calls)}"
         sql, args = upsert_calls[0]
@@ -385,14 +386,17 @@ class TestQuota02ThresholdEmails:
             if "date_trunc('month'" in s:
                 return [{"cycle_start": cycle_start, "cycle_end": cycle_end}]
             if "INSERT INTO workspace_usage_cycles" in s and "ON CONFLICT" in s and "DO UPDATE" in s:
-                # +5 records per ingest call
-                state["request_count"] += int(args[3])
-                return [{
-                    "id": "cycle-row-id",
-                    "request_count": state["request_count"],
-                    "notified_80_at": state["notified_80_at"],
-                    "notified_100_at": None,
-                }]
+                if "EXCLUDED.request_count" in s:
+                    # Real write UPSERT — increment counter
+                    state["request_count"] += int(args[3])
+                    return [{
+                        "id": "cycle-row-id",
+                        "request_count": state["request_count"],
+                        "notified_80_at": state["notified_80_at"],
+                        "notified_100_at": None,
+                    }]
+                # No-op read UPSERT from _check_quota_or_raise — return current state without incrementing
+                return [{"request_count": state["request_count"], "token_count": 0, "spend_usd": 0.0}]
             if "UPDATE workspace_usage_cycles" in s and "notified_80_at = NOW()" in s:
                 claim_calls.append((sql, args))
                 # Atomic check-and-set: first call wins, second loses (already set).
@@ -469,13 +473,17 @@ class TestQuota02ThresholdEmails:
             if "date_trunc('month'" in s:
                 return [{"cycle_start": cycle_start, "cycle_end": cycle_end}]
             if "INSERT INTO workspace_usage_cycles" in s and "ON CONFLICT" in s and "DO UPDATE" in s:
-                state["request_count"] += int(args[3])
-                return [{
-                    "id": "cycle-row-id",
-                    "request_count": state["request_count"],
-                    "notified_80_at": None,
-                    "notified_100_at": None,
-                }]
+                if "EXCLUDED.request_count" in s:
+                    # Real write UPSERT — increment counter
+                    state["request_count"] += int(args[3])
+                    return [{
+                        "id": "cycle-row-id",
+                        "request_count": state["request_count"],
+                        "notified_80_at": None,
+                        "notified_100_at": None,
+                    }]
+                # No-op read UPSERT from _check_quota_or_raise — return current state without incrementing
+                return [{"request_count": state["request_count"], "token_count": 0, "spend_usd": 0.0}]
             if "UPDATE workspace_usage_cycles" in s and "notified_100_at = NOW()" in s:
                 # 100% claim wins
                 return [{"id": args[0]}]
@@ -576,14 +584,13 @@ class TestQuota03SoftEnforcement:
                     ],
                 })
 
-        assert r.status_code == 200, (
-            f"QUOTA-03: ingest must NEVER return 429 for over-cap traffic, got {r.status_code}: {r.text}"
+        # Phase 15 hard enforcement: ingest now returns 429 when over monthly_request_cap.
+        # (Phase 9 had soft enforcement — 200 even when over cap. Phase 15 overrides this.)
+        assert r.status_code == 429, (
+            f"QUOTA-03 (Phase 15): ingest must return 429 for over-cap traffic, got {r.status_code}: {r.text}"
         )
-        # Also assert 429 is not even on the response chain
-        assert r.status_code != 429
         body = r.json()
-        assert body["accepted"] == 1
-        assert body["rejected"] == 0
+        assert body["detail"]["dimension"] == "requests"
 
 
 # ---------------------------------------------------------------------------
