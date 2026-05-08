@@ -54,7 +54,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 
 ### v1.3 Quota Enforcement & API Key Management
 
-- [ ] **Phase 15: Hard Ingest Quota Enforcement** — 429 hard caps at POST /v1/ingest for all quota dimensions
+- [x] **Phase 15: Hard Ingest Quota Enforcement** (3/3 plans) — completed 2026-05-08
 - [ ] **Phase 16: API Key Management** — Full API key lifecycle UI + auth bug fix for API-key users
 - [ ] **Phase 17: Google URL-Path Routing** — Model downgrade via URL-path rewrite for Google provider
 - [ ] **Phase 18: Usage Dashboard Improvements** — Date-range picker, model breakdown, CSV export, daily trend chart
