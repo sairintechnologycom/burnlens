@@ -7,13 +7,173 @@ from .auth import get_workspace_by_api_key
 from .database import execute_query, execute_bulk_insert
 from .email import send_usage_warning_email, track_email_task
 from .encryption import get_encryption_manager
-from .models import IngestRequest, IngestResponse
+from .models import IngestRequest, IngestResponse, QuotaExceededDetail
 from .plans import resolve_limits
 from .telemetry.forwarder import get_forwarder
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ingest"])
+
+
+async def _check_quota_or_raise(
+    workspace_id: str,
+    plan: str,
+    batch_size: int,
+) -> None:
+    """Pre-insert quota gate — raises HTTPException(429) if any quota dimension is breached.
+
+    Must be called AFTER auth (workspace_id known) and BEFORE execute_bulk_insert.
+    Do NOT wrap in try/except — the 429 must propagate to FastAPI's response handler.
+
+    Checks in order: requests → tokens → spend_usd → seats.
+    None cap on any dimension means unlimited — that dimension is skipped.
+
+    Implementation note: reading current cycle counters (request_count, token_count,
+    spend_usd) uses a no-op UPSERT (ON CONFLICT DO UPDATE SET updated_at = updated_at
+    RETURNING ...) rather than a plain SELECT. This avoids racing with the post-ingest
+    UPSERT in _record_usage_and_maybe_notify: a plain SELECT on a not-yet-existing row
+    returns empty; the no-op UPSERT seeds the row with zero counters if missing and
+    returns the actual values otherwise.
+
+    Race condition: read-then-check has a small overshoot window. This is accepted per
+    Phase 9 precedent (see ingest.py comment at _record_usage_and_maybe_notify). The
+    alternative (SELECT FOR UPDATE) would serialize all ingest through one DB row lock.
+
+    QUOTA-04 interpretation: seat enforcement is active-member-count vs seat_count limit.
+    Active member count is the natural proxy (A2 from RESEARCH.md).
+    """
+    limits = await resolve_limits(workspace_id)
+    if limits is None:
+        return  # workspace passed auth; resolve_limits None is a belt-and-suspenders guard
+
+    # Determine which dimension caps are active.
+    check_requests = limits.monthly_request_cap is not None and limits.monthly_request_cap > 0
+    check_tokens = limits.monthly_token_cap is not None and limits.monthly_token_cap > 0
+    check_spend = limits.monthly_spend_cap_usd is not None and limits.monthly_spend_cap_usd > 0
+    check_seats = limits.seat_count is not None and limits.seat_count > 0
+
+    # --- QUOTA-01, QUOTA-02, QUOTA-03: cycle-based counters ---
+    if check_requests or check_tokens or check_spend:
+        # Resolve cycle bounds (same logic as _record_usage_and_maybe_notify).
+        if plan == "free":
+            cycle_row = await execute_query(
+                """
+                SELECT
+                    date_trunc('month', now() AT TIME ZONE 'UTC') AS cycle_start,
+                    (date_trunc('month', now() AT TIME ZONE 'UTC') + INTERVAL '1 month') AS cycle_end
+                """
+            )
+        else:
+            cycle_row = await execute_query(
+                """
+                SELECT cycle_start, cycle_end
+                FROM workspace_usage_cycles
+                WHERE workspace_id = $1 AND cycle_end > NOW()
+                ORDER BY cycle_start DESC
+                LIMIT 1
+                """,
+                workspace_id,
+            )
+            if not cycle_row:
+                # Webhook lagged — fall back to calendar month (same as _record_usage_and_maybe_notify).
+                cycle_row = await execute_query(
+                    """
+                    SELECT
+                        date_trunc('month', now() AT TIME ZONE 'UTC') AS cycle_start,
+                        (date_trunc('month', now() AT TIME ZONE 'UTC') + INTERVAL '1 month') AS cycle_end
+                    """
+                )
+
+        if (
+            not cycle_row
+            or cycle_row[0]["cycle_start"] is None
+            or cycle_row[0]["cycle_end"] is None
+        ):
+            # Cannot determine cycle bounds — skip enforcement (fail-open).
+            logger.warning(
+                "quota.cycle_bounds_missing workspace=%s plan=%s — skipping quota check",
+                workspace_id,
+                plan,
+            )
+        else:
+            cycle_start = cycle_row[0]["cycle_start"]
+            cycle_end = cycle_row[0]["cycle_end"]
+
+            # Read current cycle counters via a no-op UPSERT: seeds a zero row if the
+            # cycle row is not yet created, otherwise leaves counters unchanged and
+            # returns their current values. Matches dispatcher pattern used in tests.
+            usage_rows = await execute_query(
+                """
+                INSERT INTO workspace_usage_cycles
+                    (workspace_id, cycle_start, cycle_end, request_count, token_count, spend_usd, updated_at)
+                VALUES ($1, $2, $3, 0, 0, 0, NOW())
+                ON CONFLICT (workspace_id, cycle_start) DO UPDATE
+                    SET updated_at = workspace_usage_cycles.updated_at
+                RETURNING request_count, token_count, spend_usd
+                """,
+                workspace_id,
+                cycle_start,
+                cycle_end,
+            )
+            if usage_rows:
+                row = usage_rows[0]
+                current_requests = int(row["request_count"])
+                current_tokens = int(row["token_count"])
+                current_spend = float(row["spend_usd"])
+
+                # --- QUOTA-01: monthly request cap ---
+                if check_requests and current_requests >= limits.monthly_request_cap:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=QuotaExceededDetail(
+                            dimension="requests",
+                            current=float(current_requests),
+                            limit=float(limits.monthly_request_cap),
+                        ).model_dump(),
+                    )
+
+                # --- QUOTA-02: monthly token cap ---
+                if check_tokens and current_tokens >= limits.monthly_token_cap:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=QuotaExceededDetail(
+                            dimension="tokens",
+                            current=float(current_tokens),
+                            limit=float(limits.monthly_token_cap),
+                        ).model_dump(),
+                    )
+
+                # --- QUOTA-03: cumulative spend ceiling ---
+                if check_spend and current_spend >= float(limits.monthly_spend_cap_usd):
+                    raise HTTPException(
+                        status_code=429,
+                        detail=QuotaExceededDetail(
+                            dimension="spend_usd",
+                            current=current_spend,
+                            limit=float(limits.monthly_spend_cap_usd),
+                        ).model_dump(),
+                    )
+
+    # --- QUOTA-04: seat cap (active member count vs plan seat_count) ---
+    if check_seats:
+        member_rows = await execute_query(
+            """
+            SELECT COUNT(*) as count FROM workspace_members
+            WHERE workspace_id = $1 AND active = true
+            """,
+            str(workspace_id),
+        )
+        member_count = int(member_rows[0]["count"]) if member_rows else 0
+        if member_count > limits.seat_count:
+            raise HTTPException(
+                status_code=429,
+                detail=QuotaExceededDetail(
+                    dimension="seats",
+                    current=float(member_count),
+                    limit=float(limits.seat_count),
+                ).model_dump(),
+            )
 
 
 async def _record_usage_and_maybe_notify(
@@ -224,6 +384,10 @@ async def ingest(request: IngestRequest):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     workspace_id, plan = workspace_result
+
+    # Phase 15 (QUOTA-01–04): hard quota pre-check — raises 429 before any write.
+    # Must run after auth (workspace_id available) and before execute_bulk_insert.
+    await _check_quota_or_raise(workspace_id, plan, len(request.records))
 
     # Fetch full workspace details (including OTEL config)
     workspace_details = await execute_query(
