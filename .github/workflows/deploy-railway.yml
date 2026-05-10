@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Railway CLI
-        run: curl -fsSL https://railway.com/install.sh | sh
+        run: curl -fsSL https://railway.com/install.sh | bash
 
       - name: Deploy
         env:
