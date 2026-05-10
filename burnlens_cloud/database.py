@@ -1012,6 +1012,9 @@ async def init_db():
         #   - Phase 15: monthly_token_cap (BIGINT) and monthly_spend_cap_usd (NUMERIC(12,2)) added.
         #
         # Returns a single row (or no rows if workspace_id does not exist).
+        # Phase 15: return type changed (added monthly_token_cap, monthly_spend_cap_usd).
+        # Postgres won't allow CREATE OR REPLACE when the return type changes, so drop first.
+        await conn.execute("DROP FUNCTION IF EXISTS resolve_limits(UUID)")
         await conn.execute("""
             CREATE OR REPLACE FUNCTION resolve_limits(ws_id UUID)
             RETURNS TABLE (
