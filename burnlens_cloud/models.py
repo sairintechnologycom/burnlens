@@ -505,20 +505,25 @@ class ApiKeyCreateRequest(BaseModel):
     """Request body for POST /api-keys.
 
     `name` is optional; defaults to "Primary" server-side if omitted.
+    Phase 16 D-09: max_length raised from 64 to 128 to match the new
+    "Label or note" UI field and align with `ApiKeyUpdateRequest`.
     """
-    name: Optional[str] = Field(None, max_length=64)
+    name: Optional[str] = Field(None, max_length=128)
 
 
 class ApiKey(BaseModel):
     """One row in GET /api-keys list response.
 
     Never contains plaintext or hash — only the last-4 suffix for UI disambiguation.
+    Phase 16 D-05: `last_used_at` surfaces the throttled per-key activity stamp
+    (NULL = never used).
     """
     id: UUID
     name: str
     last4: str
     created_at: datetime
     revoked_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None  # Phase 16 D-05
 
 
 class ApiKeyCreateResponse(ApiKey):
@@ -529,3 +534,13 @@ class ApiKeyCreateResponse(ApiKey):
     subsequent request. Callers must capture it on the create-response.
     """
     key: str
+
+
+class ApiKeyUpdateRequest(BaseModel):
+    """Request body for PATCH /api-keys/{key_id} (Phase 16 D-09, D-10).
+
+    Single editable field — `name` (label or note). Required (not Optional)
+    because this is a single-field PATCH; passing None is meaningless.
+    Max length matches `ApiKeyCreateRequest` (128).
+    """
+    name: str = Field(..., min_length=1, max_length=128)

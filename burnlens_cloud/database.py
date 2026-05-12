@@ -896,6 +896,13 @@ async def init_db():
             ON api_keys(workspace_id) WHERE revoked_at IS NULL
         """)
 
+        # Phase 16 (D-05): per-key last-used tracking.
+        # NULL = never used. Updated at most once per minute via throttled UPDATE
+        # in auth.get_workspace_by_api_key (D-06/D-07).
+        await conn.execute("""
+            ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ
+        """)
+
         # Phase 9 (D-12): backfill existing workspaces.api_key_hash rows into api_keys.
         # Set-based INSERT ... SELECT ... WHERE NOT EXISTS so second run inserts zero rows
         # (UNIQUE(key_hash) + the NOT EXISTS guard make this idempotent by construction).
