@@ -539,31 +539,51 @@ class TestA6VerifyEmail:
 # ---------------------------------------------------------------------------
 
 class TestA7ResendVerification:
-    """AUTH-04: /auth/resend-verification always returns 200 (anti-enumeration,
-    already-verified, and real-resend cases)."""
+    """AUTH-04 / AUTH-08: /auth/resend-verification always returns 200 (anti-
+    enumeration, already-verified, and real-resend cases).
+
+    Phase 16 D-12 update: identity now comes from the session JWT, not the
+    request body. Tests override `verify_token` and POST with empty body. The
+    handler looks up the user by `token.user_id`, not by email_hash.
+    """
 
     def _build_app(self):
         from burnlens_cloud.auth import router
         return _make_app(router)
 
+    def _auth(self, app):
+        """Override verify_token to return a fixed-user TokenPayload."""
+        import time as _t
+        from uuid import UUID
+        from burnlens_cloud.auth import verify_token as _vt
+        from burnlens_cloud.models import TokenPayload
+
+        token = TokenPayload(
+            workspace_id=UUID(WS_A),
+            user_id=UUID(USER_ID),
+            role="owner",
+            plan="cloud",
+            iat=int(_t.time()),
+            exp=int(_t.time()) + 86400,
+        )
+        app.dependency_overrides[_vt] = lambda: token
+
     @pytest.mark.asyncio
     async def test_returns_200_when_email_not_found(self):
-        """Unknown email: still 200 (anti-enumeration)."""
+        """Unknown user_id (e.g. stale JWT): still 200 (anti-enumeration)."""
         app = self._build_app()
+        self._auth(app)
 
         async def _query(sql, *args):
-            return []  # email not found
+            return []  # user not found
 
         with patch("burnlens_cloud.auth.execute_query", AsyncMock(side_effect=_query)), \
              patch("burnlens_cloud.auth.execute_insert", AsyncMock(return_value="UPDATE 0")):
             async with _make_client(app) as ac:
-                resp = await ac.post(
-                    "/auth/resend-verification",
-                    json={"email": "notexist@example.com"},
-                )
+                resp = await ac.post("/auth/resend-verification")
 
         assert resp.status_code == 200, (
-            f"AUTH-04: unknown email must return 200 (anti-enumeration), "
+            f"AUTH-04: unknown user must return 200 (anti-enumeration), "
             f"got {resp.status_code}: {resp.text}"
         )
 
@@ -571,11 +591,12 @@ class TestA7ResendVerification:
     async def test_returns_200_when_user_already_verified(self):
         """Already-verified user: still returns 200 silently."""
         app = self._build_app()
+        self._auth(app)
         from datetime import datetime, timezone
 
         async def _query(sql, *args):
             s = " ".join(sql.split())
-            if "FROM users WHERE email_hash" in s:
+            if "FROM users WHERE id" in s:
                 return [{
                     "id": USER_ID,
                     "email_encrypted": "encrypted:owner@example.com",
@@ -586,10 +607,7 @@ class TestA7ResendVerification:
         with patch("burnlens_cloud.auth.execute_query", AsyncMock(side_effect=_query)), \
              patch("burnlens_cloud.auth.execute_insert", AsyncMock(return_value="UPDATE 0")):
             async with _make_client(app) as ac:
-                resp = await ac.post(
-                    "/auth/resend-verification",
-                    json={"email": "owner@example.com"},
-                )
+                resp = await ac.post("/auth/resend-verification")
 
         assert resp.status_code == 200, (
             f"AUTH-04: already-verified user must return 200, "
@@ -600,12 +618,13 @@ class TestA7ResendVerification:
     async def test_returns_200_when_resend_triggered(self):
         """User exists and is unverified: 200, triggers send_verify_email."""
         app = self._build_app()
+        self._auth(app)
         from burnlens_cloud.pii_crypto import encrypt_pii
         encrypted = encrypt_pii("owner@example.com")
 
         async def _query(sql, *args):
             s = " ".join(sql.split())
-            if "FROM users WHERE email_hash" in s:
+            if "FROM users WHERE id" in s:
                 return [{
                     "id": USER_ID,
                     "email_encrypted": encrypted,
@@ -622,10 +641,7 @@ class TestA7ResendVerification:
              patch("burnlens_cloud.auth.execute_insert", mock_insert), \
              patch("burnlens_cloud.email.send_verify_email", mock_send, create=True):
             async with _make_client(app) as ac:
-                resp = await ac.post(
-                    "/auth/resend-verification",
-                    json={"email": "owner@example.com"},
-                )
+                resp = await ac.post("/auth/resend-verification")
 
         assert resp.status_code == 200, (
             f"AUTH-04: resend for unverified user must return 200, "
