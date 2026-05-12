@@ -35,8 +35,6 @@ export function BillingStatusBanner({ billing, session }: Props) {
     try {
       await fetch(`${API_BASE}/auth/resend-verification`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: session?.ownerEmail ?? "" }),
         credentials: "include",
       });
       setResendStatus("sent");
