@@ -18,12 +18,29 @@ from fastapi import APIRouter, Depends, HTTPException
 from .auth import verify_token, generate_api_key, hash_api_key, invalidate_api_key_cache
 from .config import settings
 from .database import execute_query
-from .models import ApiKey, ApiKeyCreateRequest, ApiKeyCreateResponse, TokenPayload
+from .models import (
+    ApiKey,
+    ApiKeyCreateRequest,
+    ApiKeyCreateResponse,
+    ApiKeyUpdateRequest,
+    TokenPayload,
+)
 from .plans import resolve_limits
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
+
+
+def _viewer_creator_filter(token: TokenPayload) -> Optional[str]:
+    """Return token.user_id (str) when role is 'viewer', else None.
+
+    Used as the $N parameter in queries that conditionally narrow scope:
+        AND ($N::uuid IS NULL OR created_by_user_id = $N)
+    Per Phase 16 D-01/D-03/D-04: viewers see/edit/revoke only keys they
+    created; cross-creator access returns 404 (D-04 indistinguishability).
+    """
+    return str(token.user_id) if token.role == "viewer" else None
 
 
 _PLAN_PRICE_ORDER = ("free", "cloud", "teams")
@@ -108,17 +125,57 @@ async def create_api_key(
 async def list_api_keys(
     token: TokenPayload = Depends(verify_token),
 ) -> list[ApiKey]:
-    """List API keys for the caller's workspace. Never returns plaintext or hash."""
+    """List API keys for the caller's workspace. Never returns plaintext or hash.
+
+    Phase 16 (D-01, D-05): viewers see only keys they created;
+    response includes last_used_at.
+    """
+    creator_filter = _viewer_creator_filter(token)
     rows = await execute_query(
         """
-        SELECT id, name, last4, created_at, revoked_at
+        SELECT id, name, last4, created_at, revoked_at, last_used_at
         FROM api_keys
         WHERE workspace_id = $1
+          AND ($2::uuid IS NULL OR created_by_user_id = $2)
         ORDER BY created_at DESC
         """,
         str(token.workspace_id),
+        creator_filter,
     )
     return [ApiKey(**r) for r in rows]
+
+
+@router.patch("/{key_id}", response_model=ApiKey)
+async def update_api_key(
+    key_id: UUID,
+    body: ApiKeyUpdateRequest,
+    token: TokenPayload = Depends(verify_token),
+) -> ApiKey:
+    """Rename an API key (Phase 16 APIKEY-04 / D-09, D-10, D-11).
+
+    Single editable field — `name`. Hash is unchanged so the cache stays
+    valid (no invalidate_api_key_cache call). Cross-tenant or wrong-creator
+    edit returns 404 per D-04 indistinguishability.
+    """
+    creator_filter = _viewer_creator_filter(token)
+    rows = await execute_query(
+        """
+        UPDATE api_keys
+        SET name = $1
+        WHERE id = $2
+          AND workspace_id = $3
+          AND ($4::uuid IS NULL OR created_by_user_id = $4)
+        RETURNING id, name, last4, created_at, revoked_at, last_used_at
+        """,
+        body.name,
+        str(key_id),
+        str(token.workspace_id),
+        creator_filter,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail={"error": "api_key_not_found"})
+    logger.info("api_key.renamed workspace=%s id=%s", token.workspace_id, key_id)
+    return ApiKey(**rows[0])
 
 
 @router.delete("/{key_id}")
@@ -131,15 +188,20 @@ async def revoke_api_key(
     404 (not 403) on cross-tenant access is deliberate — indistinguishability prevents
     cross-tenant enumeration of key ids.
     """
+    creator_filter = _viewer_creator_filter(token)
     result = await execute_query(
         """
         UPDATE api_keys
         SET revoked_at = NOW()
-        WHERE id = $1 AND workspace_id = $2 AND revoked_at IS NULL
+        WHERE id = $1
+          AND workspace_id = $2
+          AND revoked_at IS NULL
+          AND ($3::uuid IS NULL OR created_by_user_id = $3)
         RETURNING id, key_hash
         """,
         str(key_id),
         str(token.workspace_id),
+        creator_filter,
     )
     if not result:
         raise HTTPException(status_code=404, detail={"error": "api_key_not_found"})
