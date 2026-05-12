@@ -162,7 +162,6 @@ def _schedule_last_used_update(api_key_id: Optional[str]) -> None:
 
     async def _touch_last_used() -> None:
         try:
-            from .database import execute_query  # local import — avoid cycle at module load
             await execute_query(
                 """
                 UPDATE api_keys
