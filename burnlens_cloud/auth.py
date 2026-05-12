@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 import secrets
@@ -139,8 +140,47 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# API key cache: {api_key: (workspace_id, plan, timestamp)}
-_api_key_cache: dict = {}
+# Phase 16 D-06: 4-tuple now includes api_key_id so cache-hit path can fire
+# the throttled last_used_at writer without re-querying.
+# Tuple shape: (workspace_id, plan, api_key_id, cached_at)
+_api_key_cache: dict[str, tuple[str, str, Optional[str], float]] = {}
+
+
+def _schedule_last_used_update(api_key_id: Optional[str]) -> None:
+    """Fire-and-forget per-key last_used_at update (Phase 16 D-06, D-07).
+
+    At-most-one write per key per minute is enforced by the SQL predicate
+    on last_used_at in the UPDATE below. The auth path MUST NOT block on
+    this — exceptions are logged and swallowed so a stuck UPDATE never
+    breaks ingest (CLAUDE.md fail-open posture).
+
+    Legacy fallback rows (workspaces.api_key_hash with no api_keys row) pass
+    api_key_id=None and the writer is skipped silently.
+    """
+    if api_key_id is None:
+        return
+
+    async def _touch_last_used() -> None:
+        try:
+            from .database import execute_query  # local import — avoid cycle at module load
+            await execute_query(
+                """
+                UPDATE api_keys
+                SET last_used_at = now()
+                WHERE id = $1
+                  AND (last_used_at IS NULL
+                       OR last_used_at < now() - interval '60 seconds')
+                """,
+                api_key_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("api_key.last_used_at update failed: %s", e)
+
+    try:
+        asyncio.create_task(_touch_last_used())
+    except RuntimeError as e:
+        # No running loop (e.g., sync test path) — skip silently.
+        logger.debug("api_key.last_used_at scheduler skipped: %s", e)
 
 
 def invalidate_api_key_cache(key_hash: str) -> None:
@@ -538,8 +578,9 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
 
     # Check cache first (keyed on hash)
     if key_hash in _api_key_cache:
-        workspace_id, plan, cached_at = _api_key_cache[key_hash]
+        workspace_id, plan, api_key_id, cached_at = _api_key_cache[key_hash]
         if time.time() - cached_at < settings.api_key_cache_ttl:
+            _schedule_last_used_update(api_key_id)
             return (workspace_id, plan)
         else:
             del _api_key_cache[key_hash]
@@ -552,7 +593,7 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
     # (v1.1.1+) once every live key has been migrated.
     result = await execute_query(
         """
-        SELECT w.id AS id, w.plan AS plan
+        SELECT w.id AS id, w.plan AS plan, ak.id AS api_key_id
         FROM api_keys ak
         JOIN workspaces w ON w.id = ak.workspace_id
         WHERE ak.key_hash = $1 AND ak.revoked_at IS NULL AND w.active = true
@@ -562,20 +603,24 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
     )
     if not result:
         # Legacy fallback for keys created before the api_keys table landed.
-        result = await execute_query(
+        legacy = await execute_query(
             "SELECT id, plan FROM workspaces WHERE api_key_hash = $1 AND active = true",
             key_hash,
         )
+        if not legacy:
+            return None
+        row = legacy[0]
+        workspace_id = str(row["id"])
+        plan = row["plan"]
+        api_key_id: Optional[str] = None  # Legacy fallback — no api_keys row
+    else:
+        row = result[0]
+        workspace_id = str(row["id"])
+        plan = row["plan"]
+        api_key_id = str(row["api_key_id"])
 
-    if not result:
-        return None
-
-    row = result[0]
-    workspace_id = str(row["id"])
-    plan = row["plan"]
-
-    _api_key_cache[key_hash] = (workspace_id, plan, time.time())
-
+    _api_key_cache[key_hash] = (workspace_id, plan, api_key_id, time.time())
+    _schedule_last_used_update(api_key_id)
     return (workspace_id, plan)
 
 
