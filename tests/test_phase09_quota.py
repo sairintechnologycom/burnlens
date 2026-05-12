@@ -745,13 +745,14 @@ class TestGate04ApiKeyEndpoints:
                     "created_at": created_at,
                     "revoked_at": None,
                 }]
-            if "SELECT id, name, last4, created_at, revoked_at FROM api_keys" in s:
+            if "SELECT id, name, last4, created_at, revoked_at, last_used_at" in s:
                 return [{
                     "id": new_id,
                     "name": "test-key",
                     "last4": "abcd",
                     "created_at": created_at,
                     "revoked_at": None,
+                    "last_used_at": None,
                 }]
             if "FROM plan_limits" in s:
                 return [{"plan": "teams", "api_key_count": 5}]
