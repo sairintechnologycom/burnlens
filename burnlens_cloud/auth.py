@@ -1084,18 +1084,29 @@ async def verify_email(body: VerifyEmailBody):
     return {"message": "Email verified successfully."}
 
 
-class ResendVerificationRequest(BaseModel):
-    email: str
+# Phase 16 (AUTH-08, D-12): `ResendVerificationRequest` removed — identity now
+# comes from the session JWT, not from a client-supplied email. Kept commented
+# here as a deprecation marker for historians; do not reinstate. (#16-02)
+# class ResendVerificationRequest(BaseModel):
+#     email: str
 
 
 @router.post("/resend-verification", status_code=200)
-async def resend_verification(request: ResendVerificationRequest):
-    """Resend email verification link. Always returns 200."""
-    from .pii_crypto import lookup_hash as _lh, decrypt_pii as _dec
-    email_norm = request.email.strip().lower()
+async def resend_verification(token: TokenPayload = Depends(verify_token)):
+    """Resend email verification link.
+
+    Phase 16 (AUTH-08, D-12): Identity comes from the session JWT, not the
+    request body. Body is empty. Frontend BillingStatusBanner.tsx no longer
+    sends `email` (16-06).
+
+    Always returns 200 (D-14 — enumeration-safe). Already-verified users
+    receive the same response with no email sent.
+    """
+    from .pii_crypto import decrypt_pii as _dec
+
     rows = await execute_query(
-        "SELECT id, email_encrypted, email_verified_at FROM users WHERE email_hash = $1",
-        _lh(email_norm),
+        "SELECT id, email_encrypted, email_verified_at FROM users WHERE id = $1",
+        str(token.user_id),
     )
     if not rows or rows[0].get("email_verified_at") is not None:
         return {"message": "If applicable, a verification email has been sent."}
