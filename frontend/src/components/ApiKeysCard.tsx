@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { apiFetch, AuthError, PaymentRequiredError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -211,14 +212,27 @@ export default function ApiKeysCard() {
         <span className="section-header-title" style={{ fontWeight: 600 }}>
           API Keys
         </span>
-        <button
-          className="btn btn-cyan"
-          onClick={() => setShowCreate(true)}
-          disabled={atCap}
-          type="button"
-        >
-          Create key
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Link
+            href="/api-keys"
+            style={{
+              color: "var(--cyan)",
+              fontSize: 13,
+              fontWeight: 500,
+              textDecoration: "none",
+            }}
+          >
+            Manage all keys →
+          </Link>
+          <button
+            className="btn btn-cyan"
+            onClick={() => setShowCreate(true)}
+            disabled={atCap}
+            type="button"
+          >
+            Create key
+          </button>
+        </div>
       </div>
 
       {atCap && cap && (
@@ -396,6 +410,7 @@ export default function ApiKeysCard() {
               className="form-input"
               placeholder="Primary"
               value={nameInput}
+              maxLength={128}
               onChange={(e) => setNameInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreate();
