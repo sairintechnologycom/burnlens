@@ -131,7 +131,7 @@ Plans:
 | 13. Alert Management UI | v1.2 | 3/3 | Complete | 2026-05-06 |
 | 14. Budget-Aware Model Downgrade Routing | v1.2 | 7/7 | Complete | 2026-05-05 |
 | 15. Hard Ingest Quota Enforcement | v1.3 | 0/3 | Not started | - |
-| 16. API Key Management | v1.3 | 2/6 | In Progress|  |
+| 16. API Key Management | v1.3 | 4/6 | In Progress|  |
 | 17. Google URL-Path Routing | v1.3 | 0/? | Not started | - |
 | 18. Usage Dashboard Improvements | v1.3 | 0/? | Not started | - |
 
