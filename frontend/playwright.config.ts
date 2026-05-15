@@ -64,10 +64,24 @@ export default defineConfig({
     // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  // webServer: {
-  //   command: 'npm run dev',
-  //   url: 'http://127.0.0.1:3000',
-  //   reuseExistingServer: !process.env.CI,
-  // },
+  /* Run your local dev server before starting the tests.
+   *
+   * NEXT_PUBLIC_API_URL MUST be a non-localhost host so that
+   * frontend/src/lib/hooks/useAuth.ts::isLocalBackend() returns false.
+   * Otherwise useAuth short-circuits to LOCAL_SESSION (emailVerified: true,
+   * isLocal: true), `showVerify` evaluates to false, and the
+   * BillingStatusBanner under test never renders.
+   *
+   * The route-mocks in phase16_resend_banner.spec.ts use a host-agnostic
+   * glob targeting the path suffix /auth/resend-verification, so they
+   * intercept regardless of the base URL chosen here.
+   */
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://127.0.0.1:3000',
+    reuseExistingServer: !process.env.CI,
+    env: {
+      NEXT_PUBLIC_API_URL: 'https://api.example.test',
+    },
+  },
 });
