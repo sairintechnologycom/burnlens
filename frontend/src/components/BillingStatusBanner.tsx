@@ -33,12 +33,20 @@ export function BillingStatusBanner({ billing, session }: Props) {
     if (resendStatus !== "idle") return;
     setResendStatus("sending");
     try {
-      await fetch(`${API_BASE}/auth/resend-verification`, {
+      const r = await fetch(`${API_BASE}/auth/resend-verification`, {
         method: "POST",
         credentials: "include",
       });
+      if (!r.ok) {
+        // CR-03: do NOT show "email sent!" on 401 (expired cookie), 500 (backend
+        // error), or any non-2xx. The truthful end-to-end signal is what AUTH-08
+        // exists to provide — silent false-positives hide the exact failure mode.
+        setResendStatus("error");
+        return;
+      }
       setResendStatus("sent");
     } catch {
+      // Network failure / CORS abort — also surfaces as error.
       setResendStatus("error");
     }
   }
