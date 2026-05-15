@@ -86,7 +86,7 @@ Plans:
   2. An owner can generate a new `bl_live_xxx` key with a custom label, and the full key value is immediately copyable to clipboard before leaving the creation dialog
   3. An owner can revoke any key and subsequent requests using that key are immediately rejected server-side (no grace period)
   4. An owner can edit the label or scope note on any existing key without revoking and re-creating it
-  5. A viewer-role user visiting `/api-keys` sees only their own key and cannot access the create or revoke actions
+  5. A viewer-role user visiting `/api-keys` sees only keys they created and cannot access keys created by other users (per D-04 — viewers may self-create and self-revoke their own keys; cross-creator access returns 404 indistinguishability)
   6. A user who signed up via API key (null `owner_email` in localStorage) successfully receives a resend-verification email because the handler reads email from the server-side session instead of localStorage
 **Plans**: TBD
 **UI hint**: yes

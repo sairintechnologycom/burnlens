@@ -3,7 +3,7 @@ phase: 16-api-key-management
 verified: 2026-05-15T00:00:00Z
 status: gaps_found
 score: 5/6 must-haves verified
-overrides_applied: 1
+overrides_applied: 2
 re_verification:
   previous_status: gaps_found
   previous_score: 3/6
@@ -19,14 +19,19 @@ overrides:
     reason: "Server-side filter is verified-correct; the UI surface deviation is a documented spec/decision ambiguity (ROADMAP SC-5 verbatim vs D-04 viewer self-create/self-revoke). 16-10-PLAN.md exists with a checkpoint:decision gate and is intentionally deferred from this gap-closure wave. Per verification context, do not penalize the score for this and flag as deferred."
     accepted_by: "verification context (16-VERIFICATION re-verification instruction)"
     accepted_at: "2026-05-15T00:00:00Z"
+  - rule: "SC-5 verbatim wording 'cannot access the create or revoke actions'"
+    accepted_by: "human (16-10 plan, path-b)"
+    rationale: "Server-side enforcement of viewer-creator scoping is security-equivalent to a UI gate. D-04 (locked decision) explicitly permits viewers to self-create and self-revoke their own keys. ROADMAP wording predates D-04 and is the artefact that moves. No production code change."
+    date: "2026-05-15"
 gaps:
   - truth: "A viewer-role user visiting /api-keys sees only their own key and cannot access the create or revoke actions (SC-5 / APIKEY-05)"
-    status: deferred
-    reason: "Policy ambiguity between ROADMAP SC-5 verbatim wording and D-04 viewer self-create/self-revoke decision. Server-side scoping (_viewer_creator_filter) is correct; UI gating is the contested question. 16-10-PLAN.md is a checkpoint:decision plan that resolves this by either (a) tightening the UI to match SC-5 or (b) adopting an override to accept D-04. Intentionally not executed in this wave."
+    status: resolved_via_override
+    resolution: "16-10 path-b — ROADMAP SC-5 reworded to match D-04 (no production code change). Override recorded above."
+    reason: "Policy ambiguity between ROADMAP SC-5 verbatim wording and D-04 viewer self-create/self-revoke decision. Server-side scoping (_viewer_creator_filter) is correct; UI gating is the contested question. Resolved by 16-10 path-b: ROADMAP wording moves to match D-04."
     pointer: ".planning/phases/16-api-key-management/16-10-PLAN.md"
     artifacts:
       - path: ".planning/phases/16-api-key-management/16-10-PLAN.md"
-        issue: "Checkpoint decision pending; not executed this wave (per verification context)"
+        issue: "Resolved 2026-05-15 via path-b (ROADMAP wording updated; override recorded)"
 human_verification:
   - test: "Owner full lifecycle on /api-keys — create / copy / revoke / edit label"
     expected: "All four flows succeed end-to-end; plaintext shown exactly once; revoked row dims; toasts match UI-SPEC copy"
