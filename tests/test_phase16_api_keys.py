@@ -87,7 +87,7 @@ async def test_list_keys_owner_returns_all(owner_token):
     ) as mock_exec:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.get("/api-keys")
+            r = await ac.get("/account/api-keys")
     assert r.status_code == 200
     # Owner: creator_filter is None — third positional arg (sql, workspace_id, creator_filter)
     assert mock_exec.call_args.args[1] == str(owner_token.workspace_id)
@@ -105,7 +105,7 @@ async def test_list_keys_viewer_returns_only_own(viewer_token):
     ) as mock_exec:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.get("/api-keys")
+            r = await ac.get("/account/api-keys")
     assert r.status_code == 200
     # Viewer: creator_filter must be str(viewer.user_id)
     assert mock_exec.call_args.args[1] == str(viewer_token.workspace_id)
@@ -136,7 +136,7 @@ async def test_list_keys_response_includes_last_used_at(owner_token):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.get("/api-keys")
+            r = await ac.get("/account/api-keys")
     body = r.json()
     assert isinstance(body, list) and len(body) == 1
     assert body[0]["last_used_at"] is not None
@@ -166,7 +166,7 @@ async def test_patch_keys_name_max_length_128(owner_token):
     ) as mock_exec:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.patch(f"/api-keys/{key_id}", json={"name": new_name})
+            r = await ac.patch(f"/account/api-keys/{key_id}", json={"name": new_name})
     assert r.status_code == 200
     body = r.json()
     assert body["name"] == new_name
@@ -186,7 +186,7 @@ async def test_patch_keys_name_too_long_422(owner_token):
     _auth(app, owner_token)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-        r = await ac.patch(f"/api-keys/{uuid4()}", json={"name": "x" * 129})
+        r = await ac.patch(f"/account/api-keys/{uuid4()}", json={"name": "x" * 129})
     assert r.status_code == 422
 
 
@@ -198,7 +198,7 @@ async def test_patch_keys_name_empty_422(owner_token):
     _auth(app, owner_token)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-        r = await ac.patch(f"/api-keys/{uuid4()}", json={"name": ""})
+        r = await ac.patch(f"/account/api-keys/{uuid4()}", json={"name": ""})
     assert r.status_code == 422
 
 
@@ -210,7 +210,7 @@ async def test_patch_keys_missing_name_422(owner_token):
     _auth(app, owner_token)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-        r = await ac.patch(f"/api-keys/{uuid4()}", json={})
+        r = await ac.patch(f"/account/api-keys/{uuid4()}", json={})
     assert r.status_code == 422
 
 
@@ -231,7 +231,7 @@ async def test_patch_keys_viewer_404_on_other_creator(viewer_token):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.patch(f"/api-keys/{uuid4()}", json={"name": "renamed"})
+            r = await ac.patch(f"/account/api-keys/{uuid4()}", json={"name": "renamed"})
     assert r.status_code == 404
     assert r.json() == {"detail": {"error": "api_key_not_found"}}
 
@@ -248,7 +248,7 @@ async def test_delete_keys_viewer_404_on_other_creator(viewer_token):
     ), patch("burnlens_cloud.api_keys_api.invalidate_api_key_cache") as mock_inv:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.delete(f"/api-keys/{uuid4()}")
+            r = await ac.delete(f"/account/api-keys/{uuid4()}")
     assert r.status_code == 404
     assert r.json() == {"detail": {"error": "api_key_not_found"}}
     # 404 path must NOT touch the cache
@@ -267,7 +267,7 @@ async def test_patch_keys_cross_tenant_404(owner_token):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.patch(f"/api-keys/{uuid4()}", json={"name": "renamed"})
+            r = await ac.patch(f"/account/api-keys/{uuid4()}", json={"name": "renamed"})
     assert r.status_code == 404
 
 
@@ -294,7 +294,7 @@ async def test_patch_keys_does_not_invalidate_cache(owner_token):
     ), patch("burnlens_cloud.api_keys_api.invalidate_api_key_cache") as mock_inv:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.patch(f"/api-keys/{key_id}", json={"name": "renamed"})
+            r = await ac.patch(f"/account/api-keys/{key_id}", json={"name": "renamed"})
     assert r.status_code == 200
     mock_inv.assert_not_called()
 
@@ -375,7 +375,7 @@ async def test_owner_can_revoke_any_key(owner_token):
     ), patch("burnlens_cloud.api_keys_api.invalidate_api_key_cache") as mock_inv:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.delete(f"/api-keys/{key_id}")
+            r = await ac.delete(f"/account/api-keys/{key_id}")
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
@@ -399,6 +399,6 @@ async def test_patch_revoked_key_returns_404(owner_token):
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
-            r = await ac.patch(f"/api-keys/{key_id}", json={"name": "still-trying"})
+            r = await ac.patch(f"/account/api-keys/{key_id}", json={"name": "still-trying"})
     assert r.status_code == 404
     assert r.json() == {"detail": {"error": "api_key_not_found"}}

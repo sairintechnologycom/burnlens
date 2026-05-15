@@ -186,7 +186,7 @@ def get_app() -> FastAPI:
     app.include_router(audit_router)     # /api/audit-log, /api/audit-log/export
     app.include_router(deployment_router) # /status, /api/status
     app.include_router(stubs_router)     # stub endpoints — see burnlens_cloud/stubs_api.py
-    app.include_router(api_keys_router)  # /api-keys CRUD (Phase 9 GATE-04)
+    app.include_router(api_keys_router)  # /account/api-keys CRUD (Phase 9 GATE-04, repathed in Phase 16 hotfix to avoid Vercel static collision)
     app.include_router(cron_router)     # /cron/evaluate-alerts (Phase 12)
     app.include_router(alerts_router)   # /api/v1/alert-rules (Phase 13)
 

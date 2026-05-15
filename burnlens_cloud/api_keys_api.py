@@ -29,7 +29,7 @@ from .plans import resolve_limits
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api-keys", tags=["api-keys"])
+router = APIRouter(prefix="/account/api-keys", tags=["api-keys"])
 
 
 def _viewer_creator_filter(token: TokenPayload) -> Optional[str]:
