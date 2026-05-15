@@ -18,7 +18,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || 'http://localhost:3500',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -77,8 +77,11 @@ export default defineConfig({
    * intercept regardless of the base URL chosen here.
    */
   webServer: {
-    command: 'npm run dev',
-    url: 'http://127.0.0.1:3000',
+    // Port 3500 chosen because :3000 is often occupied by other dev servers on
+    // this machine (an unrelated Next.js project); the previous reuseExistingServer
+    // setting would silently reuse that server and every authenticated route 404'd.
+    command: 'npm run dev -- -p 3500',
+    url: 'http://127.0.0.1:3500',
     reuseExistingServer: !process.env.CI,
     env: {
       NEXT_PUBLIC_API_URL: 'https://api.example.test',
