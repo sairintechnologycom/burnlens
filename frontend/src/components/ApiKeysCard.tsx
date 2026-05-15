@@ -104,7 +104,7 @@ export default function ApiKeysCard() {
     setLoading(true);
     setError(null);
     try {
-      const rows = (await apiFetch("/api-keys", session.token)) as ApiKeyRow[];
+      const rows = (await apiFetch("/account/api-keys", session.token)) as ApiKeyRow[];
       // D-28: most-recently-created first, active+revoked intermixed.
       setKeys([...rows].sort((a, b) => b.created_at.localeCompare(a.created_at)));
     } catch (e) {
@@ -127,7 +127,7 @@ export default function ApiKeysCard() {
     setCreating(true);
     setCreateError(null);
     try {
-      const created = (await apiFetch("/api-keys", session.token, {
+      const created = (await apiFetch("/account/api-keys", session.token, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: nameInput || undefined }),

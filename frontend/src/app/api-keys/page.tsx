@@ -35,7 +35,7 @@ function ApiKeysContent() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch("/api-keys", session.token);
+      const data = await apiFetch("/account/api-keys", session.token);
       setKeys(Array.isArray(data) ? data : []);
     } catch (err: unknown) {
       if (err instanceof AuthError) logout();
@@ -57,7 +57,7 @@ function ApiKeysContent() {
     setCreating(true);
     try {
       const body = newKeyName.trim() ? { name: newKeyName.trim() } : {};
-      const created = (await apiFetch("/api-keys", session.token, {
+      const created = (await apiFetch("/account/api-keys", session.token, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -91,7 +91,7 @@ function ApiKeysContent() {
       ks.map((k) => (k.id === id ? { ...k, name: newName } : k))
     );
     try {
-      await apiFetch(`/api-keys/${id}`, session.token, {
+      await apiFetch(`/account/api-keys/${id}`, session.token, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName }),
@@ -108,7 +108,7 @@ function ApiKeysContent() {
     if (!session || !pendingRevoke) return;
     const target = pendingRevoke;
     try {
-      await apiFetch(`/api-keys/${target.id}`, session.token, {
+      await apiFetch(`/account/api-keys/${target.id}`, session.token, {
         method: "DELETE",
       });
       // Optimistic update: mark this row revoked locally.

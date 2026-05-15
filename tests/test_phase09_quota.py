@@ -767,7 +767,7 @@ class TestGate04ApiKeyEndpoints:
              patch("burnlens_cloud.api_keys_api.resolve_limits", mock_resolve):
             async with _make_client(app) as ac:
                 r_create = await ac.post(
-                    "/api-keys",
+                    "/account/api-keys",
                     json={"name": "test-key"},
                     headers={"Authorization": f"Bearer {token}"},
                 )
@@ -787,7 +787,7 @@ class TestGate04ApiKeyEndpoints:
 
                 # GET /api-keys must NOT return plaintext
                 r_list = await ac.get(
-                    "/api-keys",
+                    "/account/api-keys",
                     headers={"Authorization": f"Bearer {token}"},
                 )
                 assert r_list.status_code == 200
@@ -823,7 +823,7 @@ class TestGate04ApiKeyEndpoints:
              patch("burnlens_cloud.api_keys_api.resolve_limits", mock_resolve):
             async with _make_client(app) as ac:
                 r = await ac.post(
-                    "/api-keys",
+                    "/account/api-keys",
                     json={"name": "second-key"},
                     headers={"Authorization": f"Bearer {token}"},
                 )
@@ -870,12 +870,12 @@ class TestGate04ApiKeyEndpoints:
             async with _make_client(app) as ac:
                 # Own key — succeed
                 r_own = await ac.delete(
-                    f"/api-keys/{own_key_id}",
+                    f"/account/api-keys/{own_key_id}",
                     headers={"Authorization": f"Bearer {token_a}"},
                 )
                 # Cross-tenant — must be 404 (not 403 — D-13 enumeration safety)
                 r_other = await ac.delete(
-                    f"/api-keys/{other_key_id}",
+                    f"/account/api-keys/{other_key_id}",
                     headers={"Authorization": f"Bearer {token_a}"},
                 )
 
