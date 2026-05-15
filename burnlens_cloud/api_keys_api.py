@@ -156,6 +156,10 @@ async def update_api_key(
     Single editable field — `name`. Hash is unchanged so the cache stays
     valid (no invalidate_api_key_cache call). Cross-tenant or wrong-creator
     edit returns 404 per D-04 indistinguishability.
+
+    Revoked keys are immutable — terminal state (CR-01 closure). PATCH on a
+    revoked key returns 404 with the same envelope as DELETE, preserving the
+    D-04 indistinguishability rule.
     """
     creator_filter = _viewer_creator_filter(token)
     rows = await execute_query(
@@ -164,6 +168,7 @@ async def update_api_key(
         SET name = $1
         WHERE id = $2
           AND workspace_id = $3
+          AND revoked_at IS NULL
           AND ($4::uuid IS NULL OR created_by_user_id = $4)
         RETURNING id, name, last4, created_at, revoked_at, last_used_at
         """,
