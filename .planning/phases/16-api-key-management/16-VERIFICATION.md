@@ -1,8 +1,8 @@
 ---
 phase: 16-api-key-management
 verified: 2026-05-15T00:00:00Z
-status: gaps_found
-score: 5/6 must-haves verified
+status: passed
+score: 6/6 must-haves verified (1 via override — SC-5 resolved by 16-10 path-b)
 overrides_applied: 2
 re_verification:
   previous_status: gaps_found

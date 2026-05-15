@@ -18,15 +18,15 @@ Harden the platform with real enforcement teeth — 429 hard caps at ingest, ful
 
 ### APIKEY — API Key Management UI
 
-- [ ] **APIKEY-01**: Owner can list all active workspace API keys with label and last-used timestamp at `/api-keys`
-- [ ] **APIKEY-02**: Owner can create a new `bl_live_xxx` key with a custom label (copy-to-clipboard on creation)
-- [ ] **APIKEY-03**: Owner can revoke any key, immediately invalidating it server-side
-- [ ] **APIKEY-04**: Owner can assign or edit a label/scope note on any key (e.g., "CI bot", "staging")
-- [ ] **APIKEY-05**: Viewer-role users can see their own key but cannot create or revoke workspace keys
+- [x] **APIKEY-01**: Owner can list all active workspace API keys with label and last-used timestamp at `/api-keys`
+- [x] **APIKEY-02**: Owner can create a new `bl_live_xxx` key with a custom label (copy-to-clipboard on creation)
+- [x] **APIKEY-03**: Owner can revoke any key, immediately invalidating it server-side
+- [x] **APIKEY-04**: Owner can assign or edit a label/scope note on any key (e.g., "CI bot", "staging")
+- [x] **APIKEY-05**: Viewer-role users can see their own key but cannot create or revoke workspace keys
 
 ### AUTH — Bug Fix
 
-- [ ] **AUTH-08**: Resend-verification email works for API-key users when `owner_email` is null in localStorage (reads from server-side session instead of localStorage)
+- [x] **AUTH-08**: Resend-verification email works for API-key users when `owner_email` is null in localStorage (reads from server-side session instead of localStorage)
 
 ### ROUTE — Google URL-Path Routing
 
@@ -72,12 +72,12 @@ Harden the platform with real enforcement teeth — 429 hard caps at ingest, ful
 | QUOTA-03 | Phase 15 | ✅ Verified 2026-05-08 |
 | QUOTA-04 | Phase 15 | ✅ Verified 2026-05-08 |
 | QUOTA-05 | Phase 15 | ✅ Verified 2026-05-08 |
-| APIKEY-01 | Phase 16 | Pending |
-| APIKEY-02 | Phase 16 | Pending |
-| APIKEY-03 | Phase 16 | Pending |
-| APIKEY-04 | Phase 16 | Pending |
-| APIKEY-05 | Phase 16 | Pending |
-| AUTH-08 | Phase 16 | Pending |
+| APIKEY-01 | Phase 16 | Complete |
+| APIKEY-02 | Phase 16 | Complete |
+| APIKEY-03 | Phase 16 | Complete |
+| APIKEY-04 | Phase 16 | Complete |
+| APIKEY-05 | Phase 16 | Complete |
+| AUTH-08 | Phase 16 | Complete |
 | ROUTE-08 | Phase 17 | Pending |
 | DASH-01 | Phase 18 | Pending |
 | DASH-02 | Phase 18 | Pending |
