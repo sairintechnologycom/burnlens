@@ -132,3 +132,71 @@ async def test_resend_verification_requires_session():
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         r = await ac.post("/auth/resend-verification")
     assert r.status_code in (401, 403), r.text
+
+
+@pytest.mark.asyncio
+async def test_resend_verification_handles_null_email_encrypted(user_token):
+    """CR-02: NULL email_encrypted (rotated PII master key / partial backfill / dev row)
+    MUST NOT 500. Endpoint returns the standard always-200 envelope and does NOT call
+    send_verify_email. Enumeration safety per D-14 + CLAUDE.md fail-open posture."""
+    app = _make_auth_app()
+    _auth(app, user_token)
+
+    null_blob_row = [{
+        "id": user_token.user_id,
+        "email_encrypted": None,         # ← the failure mode
+        "email_verified_at": None,
+    }]
+
+    # NB: decrypt_pii is imported INSIDE resend_verification (auth.py:~1149
+    # via `from .pii_crypto import decrypt_pii as _dec`), so patching at the
+    # source module (burnlens_cloud.pii_crypto.decrypt_pii) works because
+    # the local import re-resolves the name on every call. If a future
+    # refactor hoists the import to module scope, change the patch target
+    # to 'burnlens_cloud.auth._dec' (or whichever alias the module binds).
+    with patch("burnlens_cloud.auth.execute_query", AsyncMock(return_value=null_blob_row)), \
+         patch("burnlens_cloud.auth.execute_insert", AsyncMock(return_value=None)), \
+         patch("burnlens_cloud.pii_crypto.decrypt_pii") as mock_dec, \
+         patch("burnlens_cloud.email.send_verify_email", AsyncMock(return_value=None)) as mock_send:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            r = await ac.post("/auth/resend-verification")
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"message": "If applicable, a verification email has been sent."}
+    mock_dec.assert_not_called()        # NULL guard hits BEFORE decrypt
+    mock_send.assert_not_called()       # no email attempted with empty recipient
+
+
+@pytest.mark.asyncio
+async def test_resend_verification_handles_decrypt_error(user_token):
+    """CR-02 (corollary): decrypt_pii raising (corrupted blob, wrong master key) MUST
+    NOT 500. Endpoint returns 200, send_verify_email NOT called.
+
+    NB: decrypt_pii is imported INSIDE resend_verification (auth.py:~1149 via
+    `from .pii_crypto import decrypt_pii as _dec`), so patching at the source
+    module (burnlens_cloud.pii_crypto.decrypt_pii) works because the local
+    import re-resolves the name on every call. If a future refactor hoists
+    the import to module scope, change the patch target to
+    'burnlens_cloud.auth._dec' (or whichever alias the module binds).
+    """
+    app = _make_auth_app()
+    _auth(app, user_token)
+
+    corrupt_row = [{
+        "id": user_token.user_id,
+        "email_encrypted": b"CORRUPTED_BLOB",
+        "email_verified_at": None,
+    }]
+
+    with patch("burnlens_cloud.auth.execute_query", AsyncMock(return_value=corrupt_row)), \
+         patch("burnlens_cloud.auth.execute_insert", AsyncMock(return_value=None)), \
+         patch("burnlens_cloud.pii_crypto.decrypt_pii", side_effect=ValueError("decrypt failed")), \
+         patch("burnlens_cloud.email.send_verify_email", AsyncMock(return_value=None)) as mock_send:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            r = await ac.post("/auth/resend-verification")
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {"message": "If applicable, a verification email has been sent."}
+    mock_send.assert_not_called()
