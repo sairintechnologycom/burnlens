@@ -1156,7 +1156,21 @@ async def resend_verification(token: TokenPayload = Depends(verify_token)):
         return {"message": "If applicable, a verification email has been sent."}
 
     user_id = str(rows[0]["id"])
-    recipient_email = _dec(rows[0]["email_encrypted"])
+
+    # CR-02: fail-open per CLAUDE.md + D-14 enumeration-safe envelope.
+    # NULL email_encrypted (rotated PII master key, partial Phase 1c backfill,
+    # dev row) or a decrypt failure must NOT 500. Return the same 200 message
+    # without sending an email — callers cannot distinguish degraded-state
+    # users from already-verified or non-existent users.
+    email_blob = rows[0].get("email_encrypted")
+    if email_blob is None:
+        logger.warning("resend_verification: email_encrypted is NULL for user_id=%s", user_id)
+        return {"message": "If applicable, a verification email has been sent."}
+    try:
+        recipient_email = _dec(email_blob)
+    except Exception as e:  # noqa: BLE001 — fail-open per CLAUDE.md
+        logger.warning("resend_verification: decrypt_pii failed for user_id=%s: %s", user_id, e)
+        return {"message": "If applicable, a verification email has been sent."}
 
     # Invalidate existing unused tokens.
     await execute_insert(
