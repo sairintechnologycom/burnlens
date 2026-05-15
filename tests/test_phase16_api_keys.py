@@ -173,8 +173,9 @@ async def test_patch_keys_name_max_length_128(owner_token):
     sql = mock_exec.call_args.args[0]
     assert "SET name = $1" in sql
     assert "RETURNING" in sql and "last_used_at" in sql
-    # PATCH must NOT touch revoked_at — only the RETURNING tail references it
-    assert "revoked_at" not in sql.split("RETURNING")[0]
+    # CR-01: PATCH must guard the terminal-state invariant — revoked keys are immutable.
+    # The WHERE clause (the portion BEFORE the RETURNING tail) must contain `revoked_at IS NULL`.
+    assert "revoked_at IS NULL" in sql.split("RETURNING")[0]
 
 
 @pytest.mark.asyncio
@@ -380,3 +381,24 @@ async def test_owner_can_revoke_any_key(owner_token):
     assert body["ok"] is True
     assert body["id"] == str(key_id)
     mock_inv.assert_called_once_with("abc123")
+
+
+@pytest.mark.asyncio
+async def test_patch_revoked_key_returns_404(owner_token):
+    """CR-01: PATCH on a revoked key must 404 (D-04 indistinguishability — same
+    shape as DELETE on a revoked key, so a caller cannot tell whether the key
+    exists but is revoked vs. does not exist at all)."""
+    from httpx import ASGITransport, AsyncClient
+
+    app = _make_keys_app()
+    _auth(app, owner_token)
+    key_id = uuid4()
+    # UPDATE matched no rows because the guarded WHERE excluded the revoked key.
+    with patch(
+        "burnlens_cloud.api_keys_api.execute_query", AsyncMock(return_value=[])
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+            r = await ac.patch(f"/api-keys/{key_id}", json={"name": "still-trying"})
+    assert r.status_code == 404
+    assert r.json() == {"detail": {"error": "api_key_not_found"}}
