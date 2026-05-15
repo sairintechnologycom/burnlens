@@ -57,9 +57,9 @@ Complete visibility into AI API spending with zero code changes — if you can't
 
 ### Active (v1.3)
 
-- [ ] Hard 429 quota enforcement at ingest (API calls + tokens + spend cap + seat count) — deferred from v1.2
-- [ ] API key management UI (`/api-keys` — list/revoke/create/label/scope, owner-only gate) — backend foundation in Phase 9, frontend deferred
-- [ ] W-01: Resend-verification fix for API-key users with null `owner_email` in localStorage
+- [x] Hard 429 quota enforcement at ingest (API calls + tokens + spend cap + seat count) — shipped Phase 15
+- [x] API key management UI (`/api-keys` — list/revoke/create/label/scope, viewer-creator scoped per D-04) — shipped Phase 16
+- [x] W-01: Resend-verification fix for API-key users with null `owner_email` in localStorage — shipped Phase 16 (AUTH-08)
 - [ ] Google model routing via URL-path (downgrade map currently body-rewrite only — known v1.2 limitation)
 - [ ] Usage dashboard improvements (date-range picker, model breakdown, CSV export, richer charts)
 
@@ -134,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 after v1.2 milestone close — v1.3 Quota Enforcement & API Key Management started*
+*Last updated: 2026-05-15 after Phase 16 complete — v1.3 Quota Enforcement & API Key Management: phases 15 & 16 shipped; phases 17 & 18 remaining*
