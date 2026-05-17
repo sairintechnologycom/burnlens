@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "BurnLens vs Langfuse — LLM Cost Tracking with Hard-Cap Budgets (2026)",
-  description: "Langfuse is observability — it shows you what cost was spent. BurnLens is FinOps — it enforces what cost can be spent. Compared on budget enforcement, install complexity, and where each tool fits in your LLM stack.",
+  description: "Langfuse reports LLM cost. BurnLens enforces it — open-source proxy that returns HTTP 429 before the upstream call when your daily budget is hit.",
   alternates: { canonical: "/compare/burnlens-vs-langfuse" },
   openGraph: {
     title: "BurnLens vs Langfuse — LLM Cost Tracking with Hard Caps",

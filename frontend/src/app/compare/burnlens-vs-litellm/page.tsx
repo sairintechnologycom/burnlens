@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "BurnLens vs LiteLLM — Simpler LLM Cost Tracking Alternative (2026)",
-  description: "LiteLLM is a full LLM gateway with YAML config and request rewriting. BurnLens is a transparent FinOps proxy: one env var, zero payload modification, and hard-cap budgets that return 429 before the upstream call. Compared on install, latency, and cost control.",
+  description: "LiteLLM is a full gateway with YAML config. BurnLens is a transparent FinOps proxy: one env var, zero payload rewrites, and hard-cap budgets per API key.",
   alternates: { canonical: "/compare/burnlens-vs-litellm" },
   openGraph: {
     title: "BurnLens vs LiteLLM — Simpler LLM Cost Tracking Alternative",

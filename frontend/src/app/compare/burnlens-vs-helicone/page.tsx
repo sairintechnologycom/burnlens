@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "BurnLens vs Helicone — Open-Source LLM Cost Tracking Alternative (2026)",
-  description: "Helicone entered maintenance mode in 2025. BurnLens is the actively maintained open-source LLM cost tracking proxy with hard-cap budgets, local-first storage, and multi-provider support across OpenAI, Anthropic, Google, Azure, Bedrock, and Groq.",
+  description: "Helicone is in maintenance mode. BurnLens is the actively maintained open-source alternative — pip install, one env var, hard-cap budgets, local-first.",
   alternates: { canonical: "/compare/burnlens-vs-helicone" },
   openGraph: {
     title: "BurnLens vs Helicone — Open-Source LLM Cost Tracking Alternative",
