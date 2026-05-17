@@ -23,6 +23,12 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+    other: {
+      "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION ?? "",
+    },
+  },
   openGraph: {
     title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
     description: "The open-source FinOps proxy for AI spend. Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Azure, AWS Bedrock, and Groq.",
