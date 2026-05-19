@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Mono, Inter_Tight } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/lib/contexts/ToastContext";
+import SupportChat from "@/components/SupportChat";
 import "./globals.css";
 
 const dmMono = DM_Mono({
@@ -86,6 +87,7 @@ export default function RootLayout({
         <ThemeProvider>
           <ToastProvider>
             {children}
+            <SupportChat />
           </ToastProvider>
         </ThemeProvider>
       </body>
