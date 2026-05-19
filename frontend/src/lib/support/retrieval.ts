@@ -1,36 +1,52 @@
-import type { IndexedChunk } from "./types";
+import type { Chunk, SearchResult } from "./types";
 
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error(`Vector dimension mismatch: ${a.length} vs ${b.length}`);
-  }
-  let dot = 0;
-  let na = 0;
-  let nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  const denom = Math.sqrt(na) * Math.sqrt(nb);
-  return denom === 0 ? 0 : dot / denom;
+const STOP_WORDS = new Set([
+  "a", "an", "the", "of", "in", "on", "at", "to", "for", "is", "are", "be",
+  "and", "or", "but", "if", "i", "it", "its", "as", "by", "with", "from",
+  "this", "that", "these", "those", "my", "your", "our",
+]);
+
+export function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9_$]+/)
+    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
 }
 
-export interface ScoredChunk {
-  chunk: IndexedChunk;
-  score: number;
+function scoreChunk(chunk: Chunk, queryTokens: string[]): number {
+  if (queryTokens.length === 0) return 0;
+  const heading = chunk.heading.toLowerCase();
+  const text = chunk.text.toLowerCase();
+  let score = 0;
+  for (const token of queryTokens) {
+    if (heading.includes(token)) score += 4;
+    const wordBoundary = new RegExp(`\\b${escapeRegex(token)}\\b`);
+    if (wordBoundary.test(heading)) score += 2;
+    let bodyMatches = 0;
+    const re = new RegExp(escapeRegex(token), "g");
+    bodyMatches = (text.match(re) || []).length;
+    score += Math.min(bodyMatches, 3);
+    if (wordBoundary.test(text)) score += 1;
+  }
+  return score;
 }
 
-export function topK(
-  query: number[],
-  chunks: IndexedChunk[],
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function searchChunks(
+  query: string,
+  chunks: Chunk[],
   k: number
-): ScoredChunk[] {
-  if (k <= 0) return [];
-  const scored = chunks.map((chunk) => ({
-    chunk,
-    score: cosineSimilarity(query, chunk.embedding),
-  }));
+): SearchResult[] {
+  const tokens = tokenize(query);
+  if (tokens.length === 0 || k <= 0) return [];
+  const scored: SearchResult[] = [];
+  for (const chunk of chunks) {
+    const score = scoreChunk(chunk, tokens);
+    if (score > 0) scored.push({ chunk, score });
+  }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, k);
 }

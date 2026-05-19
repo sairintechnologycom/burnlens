@@ -6,19 +6,12 @@ export interface Chunk {
   text: string;
 }
 
-export interface IndexedChunk extends Chunk {
-  embedding: number[];
-}
-
 export interface SupportIndex {
   generatedAt: string;
-  embedModel: string;
-  dimension: number;
-  chunks: IndexedChunk[];
+  chunks: Chunk[];
 }
 
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  citations?: { source: string; heading: string; url: string }[];
+export interface SearchResult {
+  chunk: Chunk;
+  score: number;
 }
