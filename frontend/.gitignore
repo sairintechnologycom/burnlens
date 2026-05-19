@@ -48,4 +48,4 @@ next-env.d.ts
 /playwright/.cache/
 
 # Generated support chat vector index
-src/lib/support/index.json
+# src/lib/support/index.json (now shipped client-side)
