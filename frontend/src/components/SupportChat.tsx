@@ -36,7 +36,7 @@ export default function SupportChat() {
         type="button"
         aria-label={open ? "Close BurnLens support" : "Ask BurnLens"}
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-50 rounded-full bg-[color:var(--cyan)] px-4 py-3 text-sm font-medium text-[#0a0b0f] shadow-lg hover:opacity-90"
+        className="support-chat-trigger"
       >
         {open ? "Close" : "Ask BurnLens"}
       </button>
@@ -45,19 +45,19 @@ export default function SupportChat() {
         <div
           role="dialog"
           aria-label="BurnLens support search"
-          className="fixed bottom-20 right-5 z-50 flex h-[32rem] w-[24rem] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card-bg)] shadow-2xl"
+          className="support-chat-panel"
         >
-          <header className="flex items-center justify-between border-b border-[color:var(--border)] px-4 py-2 text-sm text-[color:var(--text)]">
-            <span className="font-medium">BurnLens Support</span>
+          <header className="support-chat-header">
+            <span className="support-chat-header-title">BurnLens Support</span>
             <a
               href="mailto:support@burnlens.app"
-              className="text-xs text-[color:var(--muted)] underline hover:text-[color:var(--text)]"
+              className="support-chat-header-link"
             >
               Email instead
             </a>
           </header>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="support-chat-body">
             <SupportChatResults query={query} results={results} searched={searched} />
           </div>
 
@@ -66,7 +66,7 @@ export default function SupportChat() {
               e.preventDefault();
               search();
             }}
-            className="flex gap-2 border-t border-[color:var(--border)] p-2"
+            className="support-chat-form"
           >
             <input
               type="text"
@@ -74,12 +74,12 @@ export default function SupportChat() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Search the docs…"
               maxLength={2000}
-              className="flex-1 rounded-md bg-[color:var(--stat-bg)] px-3 py-2 text-sm text-[color:var(--text)] outline-none placeholder:text-[color:var(--muted)] focus:ring-2 focus:ring-[color:var(--cyan)]"
+              className="support-chat-input"
             />
             <button
               type="submit"
               disabled={!input.trim()}
-              className="rounded-md bg-[color:var(--cyan)] px-3 py-2 text-sm font-medium text-[#0a0b0f] disabled:opacity-50"
+              className="support-chat-submit"
             >
               Search
             </button>
