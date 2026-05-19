@@ -34,7 +34,7 @@ export default function SupportChat() {
     <>
       <button
         type="button"
-        aria-label={open ? "Close support" : "Open support"}
+        aria-label={open ? "Close BurnLens support" : "Ask BurnLens"}
         onClick={() => setOpen((v) => !v)}
         className="fixed bottom-5 right-5 z-50 rounded-full bg-[color:var(--cyan)] px-4 py-3 text-sm font-medium text-[#0a0b0f] shadow-lg hover:opacity-90"
       >
