@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build:index": "tsx scripts/build-support-index.ts",
+    "build": "npm run build:index && next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui"
   },
@@ -26,8 +29,11 @@
     "@types/node": "^20.19.39",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9",
     "eslint-config-next": "^16.2.4",
-    "typescript": "^5"
+    "tsx": "^4.22.1",
+    "typescript": "^5",
+    "vitest": "^2.1.9"
   }
 }
