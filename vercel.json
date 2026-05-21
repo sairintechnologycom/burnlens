@@ -1,8 +1,5 @@
 {
   "cleanUrls": true,
-  "installCommand": "cd frontend && npm install",
-  "buildCommand": "cd frontend && npx next build",
-  "outputDirectory": "frontend/out",
   "rewrites": [
     {
       "source": "/:path*",
