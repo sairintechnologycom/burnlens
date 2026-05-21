@@ -1,0 +1,30 @@
+# Mirror main from Azure DevOps to GitHub on every push.
+# Vercel watches the GitHub repo, so the mirror is what triggers prod deploys.
+#
+# One-time setup (Azure DevOps UI):
+#   1. Pipelines > New pipeline > Azure Repos Git > burnlens > Existing YAML > /azure-pipelines.yml
+#   2. Pipeline > Edit > Variables > New > name=GITHUB_PAT, value=<github PAT with 'repo' scope>, mark as Secret
+#   3. Save and run once to confirm.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+    persistCredentials: false
+
+  - bash: |
+      set -euo pipefail
+      git remote add github "https://x-access-token:${GITHUB_PAT}@github.com/sairintechnologycom/burnlens.git"
+      git push github "HEAD:refs/heads/main"
+    displayName: Mirror main to GitHub
+    env:
+      GITHUB_PAT: $(GITHUB_PAT)
