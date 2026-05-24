@@ -96,7 +96,7 @@ export default function CompareLiteLLM() {
               <tr><td>Payload modification</td><td>None — transparent passthrough</td><td>Rewrites requests into OpenAI format</td></tr>
               <tr><td>Proxy overhead target</td><td>&lt; 20ms</td><td>~40-100ms with router</td></tr>
               <tr><td>Hard caps before upstream call</td><td>Yes — HTTP 429 at limit</td><td>Hosted tier only</td></tr>
-              <tr><td>Multi-provider</td><td>OpenAI, Anthropic, Google, Azure, Bedrock, Groq</td><td>100+ providers</td></tr>
+              <tr><td>Multi-provider</td><td>OpenAI, Anthropic, Google (Azure / Bedrock / Groq / Mistral / Together on v0.2 / v0.3 roadmap)</td><td>100+ providers</td></tr>
               <tr><td>Streaming passthrough (SSE chunks unbuffered)</td><td>Yes</td><td>Yes, with re-serialization</td></tr>
               <tr><td>Local SQLite, no external DB</td><td>Yes</td><td>Requires Postgres for spend tracking</td></tr>
               <tr><td>Per-customer attribution via headers</td><td>Yes — <code>X-BurnLens-Tag-*</code></td><td>Yes — virtual keys</td></tr>
