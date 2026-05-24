@@ -341,6 +341,14 @@ export default function LandingPage() {
                 or PR. Hard daily caps per API key stop one runaway agent from
                 burning the team&apos;s monthly budget overnight.
               </p>
+              <p style={{ marginTop: 12, fontSize: "var(--fs-12)" }}>
+                <a
+                  href="/scan"
+                  style={{ color: "var(--cyan)", textDecoration: "none", fontWeight: 500 }}
+                >
+                  Scan retroactive history with one command →
+                </a>
+              </p>
             </div>
             <div className="lp-usecase-card">
               <div className="lp-usecase-label">Customer-facing AI</div>
@@ -546,6 +554,13 @@ export default function LandingPage() {
           </div>
           <div className="lp-footer-company">
             A product of <a href="https://sairintechnology.com" target="_blank" rel="noopener noreferrer">Sairin Technology</a>
+          </div>
+          <div className="lp-footer-legal">
+            <a href="/scan">Scan coding-agent spend</a>
+            <span>·</span>
+            <a href="/demo">Live demo</a>
+            <span>·</span>
+            <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
           <div className="lp-footer-legal">
             <a href="/security">Security</a>
