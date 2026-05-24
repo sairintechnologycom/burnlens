@@ -111,9 +111,17 @@ def get_app() -> FastAPI:
         for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
         if o.strip()
     ]
+    # Vercel preview deployments use rotating subdomains like
+    # https://burnlens-app-git-<branch>-<team>.vercel.app — these can't be
+    # enumerated, so we match them with a regex. Override via
+    # ALLOWED_ORIGIN_REGEX env to broaden (e.g. for a renamed project) or set
+    # to an empty string to disable preview-host matching entirely.
+    _default_origin_regex = r"^https://burnlens-app-[a-z0-9-]+\.vercel\.app$"
+    _origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", _default_origin_regex) or None
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_origins,
+        allow_origin_regex=_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
