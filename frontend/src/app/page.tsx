@@ -208,14 +208,15 @@ export default function LandingPage() {
             The open-source <span className="acc">FinOps proxy</span> for AI spend
           </h1>
           <p className="lp-subline">
-            Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Azure, AWS Bedrock, and Groq.
-            Hard-cap budgets before the API call — not after the bill arrives.
+            Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google today —
+            with Azure, AWS Bedrock, Groq, Mistral, and Together on the roadmap.
+            Hard-cap budgets before the API call, not after the bill arrives.
           </p>
           <div className="lp-provider-strip">
-            {["OpenAI", "Anthropic", "Google", "Azure", "AWS Bedrock", "Groq", "Mistral", "Together"].map((p) => (
+            {["OpenAI", "Anthropic", "Google"].map((p) => (
               <span key={p} className="lp-provider-chip">{p}</span>
             ))}
-            <span className="lp-provider-more">+ more</span>
+            <span className="lp-provider-more">Azure · AWS Bedrock · Groq · Mistral · Together — coming in v0.2 / v0.3</span>
           </div>
           <TerminalAnimation onComplete={() => setTermDone(true)} />
         </section>
@@ -320,9 +321,9 @@ export default function LandingPage() {
             <div className="lp-ed-content">
               <h3>Every provider, unified.</h3>
               <p>
-                OpenAI, Anthropic, Google, Azure, Bedrock, and Groq spend in
-                one view. Model breakdowns, waste detection, and budget tracking
-                — all reconciled to the provider bill.
+                OpenAI, Anthropic, and Google spend in one view today.
+                Azure, AWS Bedrock, Groq, Mistral, and Together are on the v0.2 / v0.3 roadmap.
+                Model breakdowns, waste detection, and budget tracking — all reconciled to the provider bill.
               </p>
             </div>
           </div>
@@ -411,7 +412,7 @@ export default function LandingPage() {
                 </tr>
                 <tr>
                   <td>Multi-cloud (Azure / AWS / GCP)</td>
-                  <td className="yes">✓</td>
+                  <td className="partial">Roadmap (v0.2 / v0.3)</td>
                   <td className="partial">Partial</td>
                   <td className="yes">✓</td>
                 </tr>
