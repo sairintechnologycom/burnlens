@@ -36,7 +36,7 @@ const faqStructuredData = {
       name: "What is the best open-source alternative to Helicone?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "BurnLens is the closest one-line drop-in alternative. Install with pip, set one environment variable, and every OpenAI, Anthropic, Google, Azure, Bedrock, and Groq call is tracked with cost attribution and hard-cap budget enforcement.",
+        text: "BurnLens is the closest one-line drop-in alternative. Install with pip, set one environment variable, and every OpenAI, Anthropic, and Google call is tracked with cost attribution and hard-cap budget enforcement. Azure, AWS Bedrock, Groq, Mistral, and Together are on the v0.2 / v0.3 roadmap.",
       },
     },
     {
@@ -96,7 +96,7 @@ export default function CompareHelicone() {
               <tr><td>Local-first (prompts never leave machine)</td><td>Yes</td><td>No — proxies through Helicone Cloud by default</td></tr>
               <tr><td>Hard-cap budgets (returns 429 before upstream call)</td><td>Yes</td><td>No — alerts only, post-call</td></tr>
               <tr><td>Per-customer cost attribution via headers</td><td>Yes</td><td>Yes</td></tr>
-              <tr><td>Multi-provider (OpenAI, Anthropic, Google, Azure, Bedrock, Groq)</td><td>Yes</td><td>Partial</td></tr>
+              <tr><td>Multi-provider</td><td>OpenAI, Anthropic, Google (Azure / Bedrock / Groq / Mistral / Together on v0.2 / v0.3 roadmap)</td><td>OpenAI, Anthropic, Azure (frozen)</td></tr>
               <tr><td>Local CLI dashboard, no signup required</td><td>Yes</td><td>No</td></tr>
               <tr><td>Free tier</td><td>Unlimited self-hosted</td><td>10K requests/mo on hosted</td></tr>
             </tbody>
