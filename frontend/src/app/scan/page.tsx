@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { CopyCommand } from "@/components/CopyCommand";
 
 export const metadata: Metadata = {
   title: "Scan your AI coding agent spend — Claude Code, Cursor, Codex, Gemini CLI · BurnLens",
@@ -180,21 +181,13 @@ Top repos by spend (last 7 days):
 
         <section>
           <h2>Try it in three commands</h2>
-          <pre
-            style={{
-              background: "#0e1318",
-              border: "1px solid #1e2830",
-              padding: "1rem 1.25rem",
-              borderRadius: 8,
-              overflowX: "auto",
-              fontSize: 13,
-              lineHeight: 1.7,
-            }}
-          >
-            <code>{`pip install burnlens
+          <CopyCommand
+            eventName="Scan Install Copy"
+            command={`pip install burnlens
 burnlens scan
-burnlens top    # live spend by model, session, repo`}</code>
-          </pre>
+burnlens top    # live spend by model, session, repo`}
+          />
+
           <p>
             No env vars to set, no proxy to start, no account to create. If you have Claude Code, Cursor, Codex, or
             Gemini CLI installed and have used them recently, you&apos;ll see cost data in your terminal in under a
@@ -234,13 +227,18 @@ burnlens top    # live spend by model, session, repo`}</code>
         <section>
           <h2>Get started</h2>
           <p>
-            <Link href="/setup?intent=register" className="legal-nav-link">Start the free trial</Link>
+            <Link
+              href="/setup?intent=register"
+              className="legal-nav-link plausible-event-name=Scan+Get+Started"
+            >
+              Start the free trial
+            </Link>
             {" · "}
             <a
               href="https://github.com/sairintechnologycom/burnlens"
               target="_blank"
               rel="noopener noreferrer"
-              className="legal-nav-link"
+              className="legal-nav-link plausible-event-name=Scan+GitHub+Click"
             >
               Star on GitHub
             </a>
