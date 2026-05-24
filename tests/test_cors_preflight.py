@@ -53,3 +53,39 @@ def test_cors_preflight_origin_credentials_vary(cloud_app):
     assert resp.headers.get("access-control-allow-origin") == "https://burnlens.app"
     assert resp.headers.get("access-control-allow-credentials") == "true"
     assert "Origin" in (resp.headers.get("vary") or "")
+
+
+def test_cors_allows_vercel_preview_hosts(cloud_app):
+    """Vercel preview deploys (burnlens-app-git-<branch>-<team>.vercel.app)
+    must pass CORS so preview-deploy E2E tests aren't blocked. See
+    reference_vercel_preview_env_gap.md."""
+    client = TestClient(cloud_app)
+    preview_origin = (
+        "https://burnlens-app-git-feat-foo-sairintechnologycom.vercel.app"
+    )
+    resp = client.options(
+        "/billing/summary",
+        headers={
+            "Origin": preview_origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == preview_origin
+
+
+def test_cors_rejects_unrelated_vercel_hosts(cloud_app):
+    """The preview regex must be anchored to the burnlens-app project — an
+    attacker-controlled vercel.app subdomain must not be allowed."""
+    client = TestClient(cloud_app)
+    resp = client.options(
+        "/billing/summary",
+        headers={
+            "Origin": "https://malicious-project.vercel.app",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    # Starlette returns 400 for disallowed preflight origins
+    assert resp.headers.get("access-control-allow-origin") != "https://malicious-project.vercel.app"
