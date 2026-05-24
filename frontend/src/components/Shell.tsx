@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { PeriodProvider } from "@/lib/contexts/PeriodContext";
 import { BillingProvider } from "@/lib/contexts/BillingContext";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -11,7 +12,19 @@ import RightPanel from "./RightPanel";
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Unauth visitors landing on any Shell-wrapped route (dashboard, alerts,
+  // budgets, etc.) used to see an infinite skeleton. Send them to /setup
+  // with a `next` hint so we can return them here after login.
+  useEffect(() => {
+    if (!loading && !session) {
+      const next = pathname && pathname !== "/setup" ? `?next=${encodeURIComponent(pathname)}` : "";
+      router.replace(`/setup${next}`);
+    }
+  }, [loading, session, pathname, router]);
 
   if (loading || !session) {
     return (
