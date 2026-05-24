@@ -45,6 +45,10 @@ function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "1";
+  // Shell.tsx redirects unauth visitors here with ?next=<path>; honor it
+  // after successful login/register. Only relative paths are allowed.
+  const nextParam = searchParams.get("next");
+  const nextPath = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
   // /signup, /register, and "Start free trial" CTAs land here with
   // ?intent=register so the form opens on the workspace-creation tab
   // instead of Sign In. /login lands without a query string and stays
@@ -92,13 +96,13 @@ function SetupContent() {
       }
       const data = await resp.json();
       storeSession(data);
-      router.push("/dashboard");
+      router.push(nextPath);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [email, password, router]);
+  }, [email, password, router, nextPath]);
 
   async function handleForgotSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -138,13 +142,13 @@ function SetupContent() {
       }
       const data = await resp.json();
       storeSession(data);
-      router.push("/dashboard");
+      router.push(nextPath);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [regName, regEmail, regPassword, router]);
+  }, [regName, regEmail, regPassword, router, nextPath]);
 
   return (
     <>
