@@ -3,6 +3,7 @@ import { DM_Mono, Inter_Tight } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/lib/contexts/ToastContext";
 import SupportChat from "@/components/SupportChat";
+import { PlausibleScript } from "@/components/PlausibleScript";
 import "./globals.css";
 
 const dmMono = DM_Mono({
@@ -84,6 +85,7 @@ export default function RootLayout({
     <html lang="en" className="theme-dark">
       <body className={`${dmMono.variable} ${interTight.variable}`}>
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
+        <PlausibleScript />
         <ThemeProvider>
           <ToastProvider>
             {children}
