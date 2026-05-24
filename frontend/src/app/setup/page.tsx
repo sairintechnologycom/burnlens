@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BASE_URL } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 function isLocalBackend(): boolean {
   try {
@@ -125,6 +126,7 @@ function SetupContent() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    trackEvent("Signup Submit");
     try {
       const resp = await fetch(`${BASE_URL}/auth/signup`, {
         method: "POST",
@@ -141,9 +143,11 @@ function SetupContent() {
         throw new Error(data.detail || "Registration failed");
       }
       const data = await resp.json();
+      trackEvent("Signup Success");
       storeSession(data);
       router.push(nextPath);
     } catch (err: any) {
+      trackEvent("Signup Error", { message: String(err?.message || "unknown").slice(0, 120) });
       setError(err.message);
     } finally {
       setLoading(false);

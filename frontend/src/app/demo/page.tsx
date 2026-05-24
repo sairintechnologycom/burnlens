@@ -139,6 +139,7 @@ export default function DemoPage() {
         <div style={{ display: "flex", gap: 8 }}>
           <Link
             href="/setup?intent=register"
+            className="plausible-event-name=Demo+Get+Started plausible-event-position=Header"
             style={{
               background: "#00e5c8",
               color: "#080c10",
@@ -452,6 +453,7 @@ export default function DemoPage() {
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
           <Link
             href="/setup?intent=register"
+            className="plausible-event-name=Demo+Get+Started plausible-event-position=Footer"
             style={{
               background: "#00e5c8",
               color: "#080c10",
@@ -468,6 +470,7 @@ export default function DemoPage() {
             href="https://github.com/sairintechnologycom/burnlens"
             target="_blank"
             rel="noopener noreferrer"
+            className="plausible-event-name=Demo+GitHub+Click"
             style={{
               background: "transparent",
               color: "var(--text)",

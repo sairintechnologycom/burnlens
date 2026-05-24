@@ -548,6 +548,8 @@ export default function LandingPage() {
             A product of <a href="https://sairintechnology.com" target="_blank" rel="noopener noreferrer">Sairin Technology</a>
           </div>
           <div className="lp-footer-legal">
+            <a href="/security">Security</a>
+            <span>·</span>
             <a href="/terms">Terms &amp; Conditions</a>
             <span>·</span>
             <a href="/privacy">Privacy Policy</a>
