@@ -9,6 +9,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${BASE}/`, lastModified: now, changeFrequency: "weekly", priority: 1.0 },
     { url: `${BASE}/scan`, lastModified: now, changeFrequency: "monthly", priority: 0.95 },
+    { url: `${BASE}/demo`, lastModified: now, changeFrequency: "weekly", priority: 0.95 },
     { url: `${BASE}/compare/burnlens-vs-helicone`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${BASE}/compare/burnlens-vs-litellm`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${BASE}/compare/burnlens-vs-langfuse`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
