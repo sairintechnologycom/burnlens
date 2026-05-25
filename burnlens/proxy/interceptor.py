@@ -442,14 +442,22 @@ async def handle_request(
             model, tags.get("team"), tags.get("customer"), config, db_path
         )
         if decision.downgraded:
-            # NOTE: Google models are specified in the URL path, not the request body.
-            # For Google requests, this body rewrite has no effect on upstream routing —
-            # the model is encoded in the URL (e.g. /v1beta/models/gemini-1.5-pro/...).
-            # Google URL-path model rewrite is deferred to v2. (per spec/14-CONTEXT.md)
+            # 1. URL-path rewrite (polymorphic Provider hook — per ROUTE-08 / phase 17).
+            #    No-op for OpenAI/Anthropic (default base implementation); Google
+            #    rewrites /v1beta/models/{model}:generateContent. The hook is a
+            #    pure regex substitution on str — cannot raise on valid input,
+            #    so it sits outside the try/except by design.
+            upstream_path = provider.rewrite_path_for_routing(
+                upstream_path, decision.routed_model
+            )
+            # 2. Body rewrite — guarded by 'model' key presence. Google bodies
+            #    have no 'model' field so this naturally skips for them; OpenAI
+            #    and Anthropic bodies always include it, so behavior is preserved.
             try:
                 body_dict = json.loads(body_bytes)
-                body_dict["model"] = decision.routed_model
-                body_bytes = json.dumps(body_dict).encode()
+                if "model" in body_dict:
+                    body_dict["model"] = decision.routed_model
+                    body_bytes = json.dumps(body_dict).encode()
             except Exception:
                 pass  # fail open — use original body unmodified
             model = decision.routed_model
