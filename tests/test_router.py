@@ -196,6 +196,38 @@ async def test_request_body_rewritten_with_routed_model():
 
 
 # ---------------------------------------------------------------------------
+# Test 9b: Google body without 'model' field is not mutated on downgrade
+# (regression guard for Phase 17 ROUTE-08 / CONTEXT decision #4)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_google_body_without_model_not_mutated_on_downgrade():
+    """Google request bodies have no 'model' field; the body-rewrite must skip it.
+
+    Mirrors the interceptor body-guard logic:
+        if "model" in body_dict:
+            body_dict["model"] = decision.routed_model
+    """
+    cfg = _cfg(team_budgets={"eng": 100.0}, threshold_pct=20.0, threshold_usd=1.0)
+
+    with patch(TEAM_SPEND_PATCH, new_callable=AsyncMock, return_value={"eng": 85.0}):
+        decision = await decide_route("gemini-1.5-pro", "eng", None, cfg, ":memory:")
+
+    assert decision.downgraded is True
+    assert decision.routed_model == "gemini-1.5-flash"
+
+    # Google body has no 'model' field — model is encoded in the URL path.
+    google_body = {"contents": [{"parts": [{"text": "hi"}]}]}
+    body_dict = dict(google_body)
+    if "model" in body_dict:
+        body_dict["model"] = decision.routed_model
+
+    # The body must remain unchanged — no 'model' key injected.
+    assert "model" not in body_dict
+    assert body_dict == google_body
+
+
+# ---------------------------------------------------------------------------
 # Test 10: Cost calculated on routed model, not original
 # ---------------------------------------------------------------------------
 
