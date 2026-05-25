@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "burnlens-cloud"
-version = "1.0.1"
+version = "1.2.1"
 description = "BurnLens Cloud Backend — Cost aggregation and billing service"
 authors = [{name = "Bhushan", email = "bhushan@burnlens.app"}]
 requires-python = ">=3.11"
