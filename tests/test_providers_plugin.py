@@ -15,6 +15,7 @@ from burnlens.providers.registry import (
 from burnlens.providers.anthropic import anthropic_provider
 from burnlens.providers.google import google_provider
 from burnlens.providers.openai import openai_provider
+from burnlens.providers.downgrade import get_downgrade_model
 from burnlens.cost.calculator import TokenUsage
 
 
@@ -233,3 +234,91 @@ class TestStreamChunkAccumulation:
         google_provider.extract_usage_from_stream_chunk(chunk2.encode(), acc)
         assert acc["input_tokens"] == 5
         assert acc["output_tokens"] == 7
+
+
+# ---------------------------------------------------------------------------
+# rewrite_path_for_routing — Phase 17 ROUTE-08
+# ---------------------------------------------------------------------------
+
+
+class TestRewritePathForRouting:
+    def test_google_rewrites_generate_content(self):
+        out = google_provider.rewrite_path_for_routing(
+            "/v1beta/models/gemini-1.5-pro:generateContent", "gemini-1.5-flash"
+        )
+        assert out == "/v1beta/models/gemini-1.5-flash:generateContent"
+
+    def test_google_rewrites_stream_generate_content(self):
+        out = google_provider.rewrite_path_for_routing(
+            "/v1beta/models/gemini-2.0-pro:streamGenerateContent", "gemini-1.5-flash"
+        )
+        assert out == "/v1beta/models/gemini-1.5-flash:streamGenerateContent"
+        # Critical: :streamGenerateContent suffix preserved verbatim for _is_streaming()
+        assert out.endswith(":streamGenerateContent")
+
+    def test_google_rewrites_v1_prefix(self):
+        out = google_provider.rewrite_path_for_routing(
+            "/v1/models/gemini-1.5-pro:generateContent", "gemini-1.5-flash"
+        )
+        assert out == "/v1/models/gemini-1.5-flash:generateContent"
+
+    def test_google_passes_through_count_tokens(self):
+        path = "/v1beta/models/gemini-1.5-pro:countTokens"
+        assert google_provider.rewrite_path_for_routing(path, "gemini-1.5-flash") == path
+
+    def test_google_passes_through_embed_content(self):
+        path = "/v1beta/models/text-embedding-004:embedContent"
+        assert google_provider.rewrite_path_for_routing(path, "gemini-1.5-flash") == path
+
+    def test_google_passes_through_batch_embed(self):
+        path = "/v1beta/models/text-embedding-004:batchEmbedContents"
+        assert google_provider.rewrite_path_for_routing(path, "gemini-1.5-flash") == path
+
+    def test_google_passes_through_tuning_path(self):
+        # Tuning paths use /tunedModels/, not /models/
+        path = "/v1beta/tunedModels/foo:generateContent"
+        assert google_provider.rewrite_path_for_routing(path, "gemini-1.5-flash") == path
+
+    def test_openai_default_no_op(self):
+        path = "/v1/chat/completions"
+        assert openai_provider.rewrite_path_for_routing(path, "gpt-4o-mini") == path
+
+    def test_anthropic_default_no_op(self):
+        path = "/v1/messages"
+        assert anthropic_provider.rewrite_path_for_routing(path, "claude-haiku-4-5-20251001") == path
+
+
+# ---------------------------------------------------------------------------
+# DOWNGRADE_MAP normalization — Phase 17 ROUTE-08
+# ---------------------------------------------------------------------------
+
+
+class TestDowngradeMapNormalization:
+    def test_exact_match_wins(self):
+        assert get_downgrade_model("gemini-1.5-pro") == "gemini-1.5-flash"
+
+    def test_strips_latest_suffix(self):
+        assert get_downgrade_model("gemini-1.5-pro-latest") == "gemini-1.5-flash"
+
+    def test_strips_001_suffix(self):
+        assert get_downgrade_model("gemini-1.5-pro-001") == "gemini-1.5-flash"
+
+    def test_strips_002_suffix(self):
+        assert get_downgrade_model("gemini-1.5-pro-002") == "gemini-1.5-flash"
+
+    def test_strips_arbitrary_nnn_suffix(self):
+        assert get_downgrade_model("gemini-1.5-pro-123") == "gemini-1.5-flash"
+
+    def test_does_not_strip_short_numeric_suffix(self):
+        # Regex requires \d{3,} — two-digit suffixes do not normalize
+        assert get_downgrade_model("gemini-1.5-pro-12") is None
+
+    def test_unmapped_returns_none(self):
+        assert get_downgrade_model("gpt-3.5-turbo") is None
+
+    def test_openai_exact_match_still_works(self):
+        assert get_downgrade_model("gpt-4o") == "gpt-4o-mini"
+
+    def test_openai_normalization_no_false_positive(self):
+        # gpt-4o-latest is not in the map, but suffix-strip yields gpt-4o which is
+        assert get_downgrade_model("gpt-4o-latest") == "gpt-4o-mini"
