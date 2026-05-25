@@ -49,6 +49,9 @@ class MockCloudServer:
             if self.reject_next:
                 self.reject_next = False
                 return Response(status_code=500, content="simulated failure")
+            # OSS proxy sends the API key in the X-API-Key header, not the
+            # JSON body. Capture it so tests can assert on it.
+            body["_api_key"] = request.headers.get("X-API-Key")
             self.received_batches.append(body)
             return Response(status_code=200, content="ok")
 
@@ -203,8 +206,8 @@ def test_proxy_request_syncs_to_cloud(
 
     batch = mock_cloud.received_batches[0]
 
-    # Verify API key was sent
-    assert batch["api_key"] == "bl_live_e2e_test_key"
+    # Verify API key was sent (in the X-API-Key header, captured by the mock).
+    assert batch["_api_key"] == "bl_live_e2e_test_key"
 
     # Verify records array
     assert len(batch["records"]) >= 1
@@ -282,7 +285,9 @@ def test_privacy_no_prompt_content_in_any_batch() -> None:
         # These are the prompt contents from our test requests
         assert "hello from e2e" not in payload_str, f"Batch {i} leaks prompt content"
         assert "retry test" not in payload_str, f"Batch {i} leaks prompt content"
-        # Structural fields that should be stripped
-        for field in ["request_path", "status_code", "cache_read_tokens"]:
+        # request_path could leak endpoint info and must be stripped. token
+        # counts / status_code / duration are intentional operational metadata
+        # (see SYNC_ALLOWED_FIELDS), not privacy-sensitive.
+        for field in ["request_path"]:
             for record in batch.get("records", []):
                 assert field not in record, f"Batch {i} record contains '{field}'"

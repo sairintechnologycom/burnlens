@@ -6,6 +6,38 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Cloud `burnlens-cloud` v1.2.1] — 2026-05-25
+
+### Fixed
+- **Cloud ingest accepted nothing the OSS proxy sent — the product's core data
+  path was 100% broken** (found by live QA on 2026-05-25). Three stacked bugs
+  meant every sync batch from the `burnlens` package was silently dropped:
+  - **Wire-format mismatch (was HTTP 422).** The OSS proxy sends the API key in
+    the `X-API-Key` header and posts `{"records":[...]}`, but `/v1/ingest`
+    required `api_key` inside the JSON body. `ingest()` now reads the key from
+    the `X-API-Key` header or the body (body wins), and 401s only when neither is
+    present. `IngestRequest.api_key` is now optional. This recovers every
+    already-installed proxy (1.0–1.3) in place, no client upgrade required.
+  - **JSONB encoding 500 on every non-empty batch.** asyncpg has no built-in
+    encoder for Python `dict` ↔ `JSONB`, so the bulk insert of `tags` raised and
+    failed the whole batch. The connection pool now registers a `jsonb` codec
+    (`json.dumps`/`json.loads`) via `init=`.
+  - **Attribution tags silently dropped.** The proxy flattens tags to
+    `tag_feature` / `tag_team` / `tag_customer` at the top level; Pydantic
+    discarded them, erasing per-feature/team/customer cost attribution. A
+    `model_validator` re-nests the flat keys into `tags` (an explicit `tags`
+    object still wins).
+
+### Tests
+- `tests/test_ingest_wire_format.py`: 8 regression tests pinning the exact OSS
+  proxy wire shape (header auth, body auth, 401-not-422, flat-tag lifting,
+  explicit-tags-win, JSONB codec wiring).
+- Updated `tests/test_cloud_sync.py`, `tests/test_cloud_sync_e2e.py` to assert
+  the current wire format (API key in `X-API-Key` header; `status_code` is
+  intentional operational metadata, `request_path` remains stripped for privacy).
+- Fixed a stale `tests/test_keys.py` CLI test that hung the suite on an empty
+  hidden-prompt under the test runner.
+
 ## [PyPI `burnlens` 1.3.0] — 2026-05-25
 
 ### Fixed
