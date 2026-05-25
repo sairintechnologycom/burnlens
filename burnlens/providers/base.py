@@ -93,3 +93,11 @@ class Provider(ABC):
             "x-burnlens-tag-customer",
             "x-burnlens-key",
         }
+
+    def rewrite_path_for_routing(self, path: str, routed_model: str) -> str:
+        """Rewrite upstream URL path to reflect a downgraded model.
+
+        Default no-op. Override for providers that encode the model in the URL
+        path (e.g. Google: /v1beta/models/{model}:generateContent).
+        """
+        return path
