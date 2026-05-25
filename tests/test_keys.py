@@ -205,14 +205,15 @@ def test_cli_key_register_prompts_when_key_missing(tmp_path: Path) -> None:
 
 def test_cli_key_register_rejects_empty_prompt(tmp_path: Path) -> None:
     db = str(tmp_path / "burnlens.db")
-    with _patched_cfg(db):
+    # typer.prompt(hide_input=True) re-asks on empty input, which loops forever
+    # under CliRunner's simulated stdin. Patch it to hand back an empty string
+    # directly so we exercise the command's own empty-key abort (Exit(1)).
+    with _patched_cfg(db), patch("typer.prompt", return_value=""):
         result = runner.invoke(
             app,
             ["key", "register", "--label", "empty", "--provider", "openai"],
-            input="\n",
         )
-    # typer.prompt re-asks on empty input then aborts; our own empty check
-    # also raises Exit(1). Either way, exit must be non-zero and nothing
+    # Our empty check raises Exit(1): exit must be non-zero and nothing
     # should land in the table.
     assert result.exit_code != 0
 
