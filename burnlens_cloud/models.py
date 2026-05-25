@@ -1,7 +1,7 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # Request/Response Schemas
@@ -41,6 +41,33 @@ class RequestRecordBase(BaseModel):
     tags: dict = Field(default_factory=dict)
     system_prompt_hash: Optional[str] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_flat_tags(cls, data: Any) -> Any:
+        # OSS proxy `_row_to_payload` (burnlens/cloud/sync.py) flattens tags into
+        # `tag_feature` / `tag_team` / `tag_customer` at the top level, then
+        # Pydantic silently drops them and `tags` defaults to {}. That would
+        # erase per-feature / per-team / per-customer attribution end-to-end.
+        # Re-nest the flat keys into `tags` before field validation, but only
+        # when the caller didn't already send a `tags` object — explicit body
+        # wins.
+        if not isinstance(data, dict):
+            return data
+        if data.get("tags"):
+            return data
+        nested: dict[str, Any] = {}
+        for src, dst in (
+            ("tag_feature", "feature"),
+            ("tag_team", "team"),
+            ("tag_customer", "customer"),
+        ):
+            v = data.get(src)
+            if v is not None:
+                nested[dst] = v
+        if nested:
+            data = {**data, "tags": nested}
+        return data
+
 
 class RequestRecordCreate(RequestRecordBase):
     """Schema for creating a request record."""
@@ -54,8 +81,14 @@ class RequestRecordResponse(RequestRecordCreate):
 
 
 class IngestRequest(BaseModel):
-    """Schema for ingest endpoint request."""
-    api_key: str
+    """Schema for ingest endpoint request.
+
+    `api_key` is optional in the body — older OSS proxy builds (1.0–1.3) send
+    it via the `X-API-Key` request header and post only `{"records":[...]}`.
+    The endpoint resolves header-or-body in `ingest()` and 401s if neither is
+    present.
+    """
+    api_key: Optional[str] = None
     # Bound list size — a single batch above this is rejected to prevent
     # memory/DB exhaustion from a misbehaving or stolen-key client.
     records: list[RequestRecordBase] = Field(..., max_length=10_000)

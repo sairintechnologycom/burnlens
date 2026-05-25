@@ -1,7 +1,8 @@
 import asyncio
 import logging
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Header, HTTPException
 
 from .auth import get_workspace_by_api_key
 from .database import execute_query, execute_bulk_insert
@@ -359,9 +360,16 @@ async def _record_usage_and_maybe_notify(
 
 
 @router.post("/v1/ingest", response_model=IngestResponse)
-async def ingest(request: IngestRequest):
+async def ingest(
+    request: IngestRequest,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+):
     """
     Bulk ingest cost records from OSS proxy.
+
+    The API key is accepted from either the `X-API-Key` request header
+    (the OSS proxy's wire format) or the JSON body's `api_key` field.
+    If both are present, the body wins.
 
     Expected request body:
     {
@@ -384,8 +392,13 @@ async def ingest(request: IngestRequest):
         "rejected": 0
     }
     """
+    # Resolve API key from body (preferred) or X-API-Key header (OSS proxy compat).
+    api_key = request.api_key or x_api_key
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
     # Validate API key and get workspace
-    workspace_result = await get_workspace_by_api_key(request.api_key)
+    workspace_result = await get_workspace_by_api_key(api_key)
     if not workspace_result:
         logger.warning(f"Ingest request with invalid API key")
         raise HTTPException(status_code=401, detail="Invalid API key")

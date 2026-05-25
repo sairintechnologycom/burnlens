@@ -128,7 +128,9 @@ async def test_push_batch_sends_correct_payload(cloud_config):
     client.post.assert_called_once()
     call_kwargs = client.post.call_args
     payload = call_kwargs.kwargs["json"]
-    assert payload["api_key"] == "bl_live_test123"
+    # api_key travels in the X-API-Key header, not the JSON body.
+    assert call_kwargs.kwargs["headers"]["X-API-Key"] == "bl_live_test123"
+    assert "api_key" not in payload
     assert len(payload["records"]) == 1
     assert payload["records"][0]["model"] == "claude-haiku-4-5-20251001"
 
@@ -198,7 +200,7 @@ async def test_sync_loop_marks_records_synced(cloud_config, db_with_records):
 async def test_sync_now_pushes_nothing_when_all_synced(cloud_config, db_with_records):
     """sync_now returns 0 if everything is already synced."""
     # Mark all as synced first
-    rows = await _fetch_unsynced(db_with_records)
+    rows = await _fetch_unsynced(db_with_records, limit=1000)
     await _mark_synced(db_with_records, [r["id"] for r in rows])
 
     sync = CloudSync(cloud_config)
@@ -227,8 +229,8 @@ def test_anonymise_removes_prompt_content():
         "duration_ms": 800,
         "tags": json.dumps({"feature": "chat", "team": "backend"}),
         "system_prompt_hash": "sha256_abc",
+        # request_path could leak endpoint info — it must never be sent.
         "request_path": "/v1/chat/completions",
-        # These fields should NOT appear in the payload
         "reasoning_tokens": 0,
         "cache_read_tokens": 0,
         "cache_write_tokens": 0,
@@ -239,17 +241,19 @@ def test_anonymise_removes_prompt_content():
     payload = _row_to_payload(row)
 
     # Verify expected fields present
-    assert payload["ts"] == "2025-04-08T18:35:46"
+    assert payload["timestamp"] == "2025-04-08T18:35:46"
     assert payload["provider"] == "openai"
     assert payload["model"] == "gpt-4o"
     assert payload["system_prompt_hash"] == "sha256_abc"
     assert payload["tag_feature"] == "chat"
     assert payload["tag_team"] == "backend"
 
-    # Verify no raw content leaked
+    # Verify no raw content / endpoint path leaked. status_code and
+    # duration_ms are intentional operational metadata (see SYNC_ALLOWED_FIELDS)
+    # and are part of the wire contract.
     payload_str = json.dumps(payload)
     assert "request_path" not in payload_str
-    assert "status_code" not in payload_str
+    assert payload["status_code"] == 200
 
 
 # ---------------------------------------------------------------------------
