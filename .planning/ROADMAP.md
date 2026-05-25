@@ -98,7 +98,9 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. When `decide_route()` selects a downgrade model for a Google Generative Language API request, the outbound request URL path reflects the downgrade model name (not the original model from the path)
   2. The body-rewrite behavior from v1.2 is preserved — URL-path rewrite is additive, not a replacement
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 17-01-PLAN.md — Add polymorphic rewrite_path_for_routing Provider hook + Google override + DOWNGRADE_MAP suffix normalization + interceptor wiring; closes ROUTE-08
 
 ### Phase 18: Usage Dashboard Improvements
 **Goal**: Users can slice, filter, and export their usage data from the cloud dashboard with richer chart views
