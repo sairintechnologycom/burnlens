@@ -6,6 +6,26 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [PyPI `burnlens` 1.3.0] — 2026-05-25
+
+### Fixed
+- **Google model downgrade now rewrites the URL path** (ROUTE-08). When
+  `decide_route()` selects a downgrade model for a Google Generative Language API
+  request, the outbound request URL path is rewritten to reflect the downgrade
+  model name (in addition to the existing body-field rewrite from v1.2). Closes
+  the known v1.2 limitation where Google requests still hit the original-model
+  endpoint despite body rewriting. OpenAI and Anthropic are unaffected — their
+  model identifier already lives in the body, not the URL.
+
+### Added
+- **`Provider.rewrite_path_for_routing()` hook** — polymorphic, opt-in path
+  rewriter on the Provider plugin base class. Default is a no-op; the Google
+  provider implements it. Future providers can add path rewriting without core
+  changes.
+- **`DOWNGRADE_MAP` suffix normalization** — Google model keys like
+  `models/gemini-1.5-flash` are normalized to suffix form so URL-path matching
+  is single-source-of-truth.
+
 ## [OSS `burnlens` — bugfix] — 2026-05-04
 
 ### Fixed
