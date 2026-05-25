@@ -5,6 +5,7 @@
 **Goal:** Build the foundational LLM FinOps proxy with cost tracking, dashboard, and CLI.
 
 **Shipped:**
+
 - v0.1.0: Transparent proxy (OpenAI, Anthropic, Google), cost calculation, SQLite storage, streaming SSE
 - v0.3.0: Full feature release — CLI commands, dashboard, budget alerts, waste detection, tags
 - v0.3.1: Normalize model display names, strip date suffixes, burnlens doctor
@@ -21,6 +22,7 @@
 **Status:** Shipped
 
 **Shipped:**
+
 - 5 phases: Data Foundation, Detection Engine, Asset Management API, Alert System, Discovery Dashboard
 - AI asset registry with auto-detection and shadow classification
 - Provider signature matching, discovery event audit log
@@ -39,6 +41,7 @@
 **Status:** Shipped
 
 **Shipped:**
+
 - 5 phases (6–10), 31 plans, 178 commits
 - 241 files changed, +48,179 / -1,478 lines (12 days)
 - Plan limits Postgres table with `resolve_limits()` SQL function; Free/Cloud/Teams seeded with live Paddle IDs
@@ -61,6 +64,7 @@
 **Status:** Shipped
 
 **Shipped:**
+
 - 4 phases (11–14), 22 plans, ~150 commits
 - 181 files changed, +23,628 / -1,830 lines (7 days)
 - Password reset + email verification flows with single-use RETURNING-safe tokens; `BillingStatusBanner` for soft-gate verification; typed TemplateSpec registry with 6 SendGrid templates; grandfathering for pre-v1.2 users
@@ -69,11 +73,37 @@
 - `decide_route()` in OSS proxy with 60s team-spend cache, fail-open semantics, provider downgrade map; DB columns `routed_model`+`downgrade_reason`; "Downgrades Today" dashboard stat card; `burnlens routing` CLI command; 12-test suite
 
 **Known deferred items at close:**
+
 - W-01: Resend-verification button silently no-ops for API-key users with null `owner_email` in localStorage
 - Hard ingest 429 quota enforcement deferred to v1.3 pending real usage data
 - Google URL-path model routing (downgrade map uses body rewrite only)
 
 **Last phase number:** 14
+
+---
+
+## v1.3 — Quota Enforcement & API Key Management (Shipped)
+
+**Goal:** Harden the cloud platform with real enforcement teeth — 429 hard caps at ingest across all four quota dimensions, full API key lifecycle UI with viewer-creator scoping, and close the v1.2 Google routing gap via URL-path rewrite.
+**Started:** 2026-05-07
+**Completed:** 2026-05-25
+**Status:** Shipped
+
+**Shipped:**
+
+- 3 phases (15–17), 14 plans, 119 commits
+- 147 files changed, +22,075 / -12,816 lines (18 days)
+- Hard 429 quota enforcement at POST /v1/ingest across all four dimensions (API calls, tokens, spend, seats) with structured `QuotaExceededDetail` JSON body; `resolve_limits()` extended to 8 columns; UPSERT now tracks `token_count` + `spend_usd`
+- Full API key lifecycle UI at `/api-keys` — list/create/revoke/edit with copy-on-create dialog, last-used timestamps, viewer-creator D-04 scoping (cross-creator returns 404 indistinguishability)
+- AUTH-08 closed: resend-verification reads identity from server-side JWT session, unblocking API-key signup users whose localStorage has no `owner_email`; fail-open + enumeration-safe
+- Truthful UI: `handleResend` branches on Response.ok so 401/500 surface honestly instead of false success
+- ROUTE-08 closed: polymorphic `rewrite_path_for_routing()` Provider hook + Google override + DOWNGRADE_MAP suffix normalization; URL-path rewrite is additive to v1.2 body rewrite
+
+**Known deferred items at close:**
+
+- Phase 18 / DASH-01–04 (Usage Dashboard Improvements: date-range picker, model breakdown, CSV export, daily trend chart) deferred to v1.4
+
+**Last phase number:** 17
 
 ---
 

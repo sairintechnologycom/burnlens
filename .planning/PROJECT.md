@@ -8,18 +8,17 @@ BurnLens is an open-source LLM FinOps tool — a transparent proxy + CLI + dashb
 
 Complete visibility into AI API spending with zero code changes — if you can't see it, you can't control it.
 
-## Current Milestone: v1.3 Quota Enforcement & API Key Management
+## Current Milestone: v1.4 Usage Dashboard Improvements
 
-**Goal:** Harden the platform with real enforcement teeth — 429 hard caps at ingest, full API key lifecycle in the UI, and close the remaining v1.2 gaps (W-01, Google routing, dashboard UX).
+**Goal:** Land the usage analytics UX that was deferred from v1.3 — give users a real way to slice, filter, and export their cloud usage data.
 
 **Target features:**
-- Hard 429 quota enforcement at POST /v1/ingest (API calls + tokens + spend cap + seat count)
-- API key management UI at /api-keys — list/revoke/create, labels+scopes, owner-only gate
-- W-01: Fix resend-verification for API-key users with null `owner_email` in localStorage
-- Google model routing via URL-path (not just body rewrite — known v1.2 limitation)
-- Usage dashboard improvements — richer charts, date-range picker, model breakdown, CSV export
+- Date-range picker (7d / 30d / 90d / custom) wired into all dashboard charts (DASH-01)
+- Cost breakdown by model — ranked table or chart (DASH-02)
+- CSV export of filtered usage rows (DASH-03)
+- Daily cost trend chart with model-distribution overlay (DASH-04)
 
-**Last phase number:** 14 (v1.3 starts at Phase 15)
+**Last phase number:** 17 (v1.4 starts at Phase 18)
 
 ## Requirements
 
@@ -54,14 +53,17 @@ Complete visibility into AI API spending with zero code changes — if you can't
 - ✓ Quota Tracking & Soft Enforcement (monthly counters, 80%/100% emails, seat/API-key 402s, retention pruning, entitlement middleware) — v1.1
 - ✓ Plan-Gated Features (LockedPanel with dynamic 402-driven copy + frosted-glass teaser + upgrade CTAs) — v1.1
 - ✓ Usage Meter (sidebar meter with green/amber/red thresholds + Settings → Usage daily breakdown) — v1.1
+- ✓ Hard 429 quota enforcement at ingest (API calls + tokens + spend cap + seat count, structured `QuotaExceededDetail` body) — v1.3
+- ✓ API key management UI (`/api-keys` — list/revoke/create/label/scope, viewer-creator scoped per D-04) — v1.3
+- ✓ Resend-verification fix for API-key users with null `owner_email` (server-side JWT identity source, fail-open) — v1.3 (AUTH-08)
+- ✓ Google model routing via URL-path rewrite (polymorphic Provider hook, additive to v1.2 body rewrite) — v1.3 (ROUTE-08)
 
-### Active (v1.3)
+### Active (v1.4)
 
-- [x] Hard 429 quota enforcement at ingest (API calls + tokens + spend cap + seat count) — shipped Phase 15
-- [x] API key management UI (`/api-keys` — list/revoke/create/label/scope, viewer-creator scoped per D-04) — shipped Phase 16
-- [x] W-01: Resend-verification fix for API-key users with null `owner_email` in localStorage — shipped Phase 16 (AUTH-08)
-- [ ] Google model routing via URL-path (downgrade map currently body-rewrite only — known v1.2 limitation)
-- [ ] Usage dashboard improvements (date-range picker, model breakdown, CSV export, richer charts)
+- [ ] Usage dashboard date-range picker — preset 7d/30d/90d + custom range, all charts respect filter (DASH-01)
+- [ ] Cost breakdown by model — ranked table or chart for selected period (DASH-02)
+- [ ] CSV export of filtered usage rows (DASH-03)
+- [ ] Daily cost trend chart with model-distribution overlay (DASH-04)
 
 ### Out of Scope
 
@@ -77,6 +79,7 @@ Complete visibility into AI API spending with zero code changes — if you can't
 
 ## Context
 
+- v1.3 shipped 2026-05-25: hard 429 ingest quota enforcement, full API key lifecycle UI, AUTH-08 resend-verification fix, Google URL-path routing closed; 147 files changed, +22k/-13k lines, 119 commits over 18 days
 - v1.2 shipped 2026-05-06: auth essentials, cloud alerting, alert UI, and budget-aware routing live
 - v1.1 shipped 2026-04-30: full billing + quota enforcement live on Railway + Vercel
 - Paddle products live: Cloud $29/mo (7-day trial), Teams $99/mo — plan_limits table is authoritative
@@ -110,11 +113,15 @@ Complete visibility into AI API spending with zero code changes — if you can't
 | Soft enforcement only in v1.1 | Need real usage data before choosing 429 thresholds; seat/key 402s are sufficient initially | ✓ Validated v1.1 |
 | Entitlement middleware is mandatory (not just UI gating) | UI gating can be bypassed; 402 at route level is the real gate | ✓ Validated v1.1 |
 | Local proxy stays unmetered | OSS product, zero friction for self-hosting — only cloud workspaces have quotas | ✓ Validated v1.1 |
-| Quota enforcement at POST /v1/ingest | Single chokepoint — all cloud usage flows through here | — v1.3 (hard 429 deferred from v1.2) |
+| Quota enforcement at POST /v1/ingest | Single chokepoint — all cloud usage flows through here | ✓ Validated v1.3 |
 | `decide_route()` never raises | Fail-open is non-negotiable for a proxy — any routing error must passthrough the original model | ✓ Validated v1.2 |
 | Budget priority: customer > team > global_usd > budget_limit_usd | Customer budget is most specific, global is fallback — respects scoping hierarchy | ✓ Validated v1.2 |
 | Verify-email as POST (not GET) | GET token in URL leaks to server logs, referrer headers, and browser history (CR-03) | ✓ Validated v1.2 |
 | SSRF guard on Slack webhook URL | Rejects any URL not starting with https://hooks.slack.com/ — prevents SSRF via org-owner-controlled config | ✓ Validated v1.2 |
+| `QuotaExceededDetail` as structured Pydantic JSON body | Clients parse `dimension/current/limit` programmatically instead of regexing free text | ✓ Validated v1.3 |
+| Viewer-creator scoping (D-04) for API keys | Cross-creator access returns 404 indistinguishability (not 403) — prevents key-existence enumeration | ✓ Validated v1.3 |
+| Resend-verification reads identity from server-side JWT | Never trust client-supplied email — closes AUTH-08 W-01 and prevents enumeration regressions | ✓ Validated v1.3 |
+| Polymorphic `rewrite_path_for_routing()` Provider hook | Extensible — future providers can add path rewriting without core changes (closes ROUTE-08) | ✓ Validated v1.3 |
 
 ## Evolution
 
@@ -134,4 +141,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-15 after Phase 16 complete — v1.3 Quota Enforcement & API Key Management: phases 15 & 16 shipped; phases 17 & 18 remaining*
+*Last updated: 2026-05-25 after v1.3 milestone close — Phases 15–17 shipped (Hard Ingest Quota Enforcement, API Key Management, Google URL-Path Routing). Phase 18 / DASH-01–04 deferred to v1.4.*

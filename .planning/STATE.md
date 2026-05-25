@@ -2,26 +2,25 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Quota Enforcement & API Key Management
-status: completed
-last_updated: "2026-05-25T11:17:41.618Z"
-last_activity: 2026-05-25 -- Phase 17 marked complete
+status: shipped
+last_updated: "2026-05-25T12:05:00.000Z"
+last_activity: 2026-05-25 — Milestone v1.3 completed and archived (Phases 15–17 shipped; Phase 18 deferred to v1.4)
 progress:
-  total_phases: 4
+  total_phases: 3
   completed_phases: 3
   total_plans: 14
   completed_plans: 14
-  percent: 75
+  percent: 100
 ---
 
 # State
 
 ## Current Position
 
-Phase: 17 — COMPLETE
-Plan: 1 of 1
-Status: Phase 17 complete
-Resume file: .planning/phases/17-google-url-path-routing/17-CONTEXT.md
-Last activity: 2026-05-25 -- Phase 17 marked complete
+Milestone: v1.3 — SHIPPED 2026-05-25
+Next: v1.4 Usage Dashboard Improvements (Phase 18 / DASH-01–04 deferred from v1.3)
+Resume: run `/gsd-new-milestone` to kick off v1.4 with fresh requirements
+Last activity: 2026-05-25 — Milestone v1.3 completed and archived
 
 ## Key Decisions (Phase 12)
 
@@ -32,19 +31,19 @@ Last activity: 2026-05-25 -- Phase 17 marked complete
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-07 after v1.2 milestone close)
+See: .planning/PROJECT.md (updated 2026-05-25 after v1.3 milestone close)
 
 **Core value:** Complete visibility into AI API spending with zero code changes
-**Current focus:** Phase 17 — google-url-path-routing
+**Current focus:** Planning v1.4 — Usage Dashboard Improvements (Phase 18 / DASH-01–04, deferred from v1.3)
 
-## v1.3 Phase Summary
+## v1.3 Phase Summary (Shipped 2026-05-25)
 
 | # | Phase | Requirements | Status |
 |---|-------|-------------|--------|
-| 15 | Hard Ingest Quota Enforcement | QUOTA-01–05 (5 reqs) | Not started |
-| 16 | API Key Management | APIKEY-01–05 + AUTH-08 (6 reqs) | Not started |
-| 17 | Google URL-Path Routing | ROUTE-08 (1 req) | Not started |
-| 18 | Usage Dashboard Improvements | DASH-01–04 (4 reqs) | Not started |
+| 15 | Hard Ingest Quota Enforcement | QUOTA-01–05 (5 reqs) | ✓ Complete (2026-05-08) |
+| 16 | API Key Management | APIKEY-01–05 + AUTH-08 (6 reqs) | ✓ Complete (2026-05-15) |
+| 17 | Google URL-Path Routing | ROUTE-08 (1 req) | ✓ Complete (2026-05-25) |
+| 18 | Usage Dashboard Improvements | DASH-01–04 (4 reqs) | Deferred to v1.4 |
 
 ## v1.2 Phase Summary
 
@@ -100,9 +99,9 @@ Known deferred items at close: 25+ (see above)
 
 ## Session Continuity
 
-**Next action:** Run `/gsd-plan-phase 15` to plan Phase 15 — Hard Ingest Quota Enforcement
-**Last milestone:** v1.2 complete — all 4 phases (11–14) shipped 2026-05-06
-**Active milestone:** v1.3 Quota Enforcement & API Key Management — roadmap created, 4 phases (15–18)
+**Next action:** Run `/gsd-new-milestone` to kick off v1.4 — Usage Dashboard Improvements (questioning → research → requirements → roadmap)
+**Last milestone:** v1.3 complete — Phases 15–17 shipped 2026-05-25 (Phase 18 deferred)
+**Active milestone:** v1.4 Usage Dashboard Improvements — pending kickoff (Phase 18 / DASH-01–04 carried forward)
 
 ## Phase 11 Execution Plan
 
@@ -121,3 +120,7 @@ Wave 3:
 
 - `11-PLAN-05a` (after 03b) → useAuth.ts emailVerified + setup/page.tsx forgot-password flow
 - `11-PLAN-05b` (after 05a) → /reset-password page + /verify-email page + BillingStatusBanner
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
