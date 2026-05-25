@@ -1,6 +1,8 @@
 """Budget-aware model downgrade map for BurnLens proxy routing."""
 from __future__ import annotations
 
+import re
+
 DOWNGRADE_MAP: dict[str, str] = {
     # OpenAI
     "gpt-4o":                     "gpt-4o-mini",
@@ -17,7 +19,24 @@ DOWNGRADE_MAP: dict[str, str] = {
     "gemini-2.0-pro":             "gemini-1.5-flash",
 }
 
+# Strip trailing version/alias suffixes: -latest, -001, -002, or any -NNN
+# (3+ digits). Used for DOWNGRADE_MAP lookup fallback. Linear regex —
+# no ReDoS risk on str input.
+_SUFFIX_RE = re.compile(r"-(latest|\d{3,})$")
+
 
 def get_downgrade_model(model: str) -> str | None:
-    """Return cheaper alternative model, or None if already cheapest / not mapped."""
-    return DOWNGRADE_MAP.get(model)
+    """Return cheaper alternative model, or None if already cheapest / not mapped.
+
+    Tries exact match first; on miss, strips a trailing -latest / -NNN
+    suffix and retries (per phase 17 CONTEXT decision #2). The returned
+    value is always the bare downgrade target from DOWNGRADE_MAP
+    (e.g. ``gemini-1.5-flash``, never ``gemini-1.5-flash-latest``).
+    """
+    exact = DOWNGRADE_MAP.get(model)
+    if exact is not None:
+        return exact
+    stripped = _SUFFIX_RE.sub("", model)
+    if stripped != model:
+        return DOWNGRADE_MAP.get(stripped)
+    return None

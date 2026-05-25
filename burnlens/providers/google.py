@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Optional
 
 from burnlens.cost.calculator import TokenUsage, extract_usage_google
@@ -19,6 +20,15 @@ class GoogleProvider(Provider):
         env_var="",  # Google SDK does not support a base-URL env var; use burnlens.patch
     )
 
+    # Compiled once at module import. Linear regex (no nested quantifiers,
+    # no greedy alternation that backtracks) — no ReDoS risk on str input.
+    # Restricted to the two generation methods; :countTokens, :embedContent,
+    # :batchEmbedContents, and /tunedModels/ paths fall outside the pattern
+    # and pass through unmodified (per phase 17 CONTEXT decision #1).
+    _MODEL_IN_PATH_RE = re.compile(
+        r"(/(?:v1|v1beta)/models/)([^:/]+)(:(?:generateContent|streamGenerateContent))"
+    )
+
     def resolve_upstream_url(self, request_path: str, headers: dict[str, str]) -> str:
         return self.config.upstream_url + request_path
 
@@ -29,6 +39,21 @@ class GoogleProvider(Provider):
             if part == "models" and i + 1 < len(parts):
                 return parts[i + 1].split(":")[0]
         return request_body.get("model")
+
+    def rewrite_path_for_routing(self, path: str, routed_model: str) -> str:
+        """Rewrite the {model} segment for :generateContent / :streamGenerateContent.
+
+        Other methods (:countTokens, :embedContent, :batchEmbedContents, tuning
+        paths) pass through unmodified — downgrading them is not in scope
+        (per phase 17 CONTEXT decision #1).
+
+        URL-injection invariant: ``routed_model`` is sourced exclusively from
+        ``DOWNGRADE_MAP`` (a hardcoded dict in ``burnlens/providers/downgrade.py``),
+        never from user input. The substitution string is fully trusted.
+        """
+        return self._MODEL_IN_PATH_RE.sub(
+            rf"\g<1>{routed_model}\g<3>", path, count=1
+        )
 
     def extract_usage(self, response_body: dict) -> TokenUsage:
         return extract_usage_google(response_body)
