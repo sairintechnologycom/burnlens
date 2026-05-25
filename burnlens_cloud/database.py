@@ -1,5 +1,6 @@
 import asyncpg
 import hashlib
+import json
 import logging
 import os
 from .config import settings
@@ -8,6 +9,20 @@ logger = logging.getLogger(__name__)
 
 # Global database pool
 pool: asyncpg.Pool = None
+
+
+async def _register_jsonb_codec(conn: asyncpg.Connection) -> None:
+    # asyncpg has no built-in encoder for Python dicts ↔ JSONB. Without this,
+    # executemany() on tables like request_records (tags JSONB) raises
+    # InvalidArgumentError and the whole batch fails. Existing call sites that
+    # use the `$N::jsonb` + json.dumps() pattern stay valid; this just makes
+    # raw-dict args work too.
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+    )
 
 
 async def init_db():
@@ -20,6 +35,7 @@ async def init_db():
         min_size=2,
         max_size=20,
         command_timeout=60,
+        init=_register_jsonb_codec,
     )
 
     # Create tables
