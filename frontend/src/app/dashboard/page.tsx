@@ -9,25 +9,18 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 
 interface SummaryData {
-  total_cost: number;
-  total_tokens: number;
-  total_calls: number;
-  by_provider: any[];
-  by_model: any[];
-}
-
-interface TimeseriesPoint {
-  date: string;
-  cost: number;
+  total_cost_usd: number;
+  total_requests: number;
+  avg_cost_per_request_usd: number;
+  models_used: number;
 }
 
 interface RequestRecord {
   timestamp: string;
   model: string;
-  feature?: string;
-  team?: string;
-  cost: number;
-  latency_ms?: number;
+  cost_usd: number;
+  duration_ms?: number;
+  tags?: { feature?: string; team?: string; [k: string]: unknown } | null;
 }
 
 function formatCost(n: number): string {
@@ -65,7 +58,7 @@ function DashboardContent() {
       // Aggregate timeseries by date
       const byDate: Record<string, number> = {};
       (ts as any[]).forEach((p: any) => {
-        byDate[p.date] = (byDate[p.date] || 0) + (p.cost || 0);
+        byDate[p.date] = (byDate[p.date] || 0) + (p.total_cost_usd || 0);
       });
       const sorted = Object.entries(byDate)
         .sort(([a], [b]) => a.localeCompare(b))
@@ -87,8 +80,8 @@ function DashboardContent() {
 
   useEffect(() => { document.title = "Overview | BurnLens"; }, []);
 
-  const totalCost = summary?.total_cost ?? 0;
-  const totalCalls = summary?.total_calls ?? 0;
+  const totalCost = summary?.total_cost_usd ?? 0;
+  const totalCalls = summary?.total_requests ?? 0;
   const wasteAmount = totalCost * 0.15; // estimate
   const avgPerReq = totalCalls > 0 ? totalCost / totalCalls : 0;
 
@@ -130,13 +123,13 @@ function DashboardContent() {
         <div className="stat-cell">
           <div className="stat-label">Total spend</div>
           <div className="stat-value">
-            {hasData ? `$${formatCost(summary?.total_cost ?? 0)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+            {hasData ? `$${formatCost(summary?.total_cost_usd ?? 0)}` : <span style={{ color: "var(--dim)" }}>—</span>}
           </div>
         </div>
         <div className="stat-cell">
           <div className="stat-label">Requests</div>
           <div className="stat-value">
-            {hasData ? (summary?.total_calls ?? 0).toLocaleString() : <span style={{ color: "var(--dim)" }}>—</span>}
+            {hasData ? (summary?.total_requests ?? 0).toLocaleString() : <span style={{ color: "var(--dim)" }}>—</span>}
           </div>
         </div>
         <div className="stat-cell">
@@ -226,24 +219,24 @@ function DashboardContent() {
                   <td>{new Date(r.timestamp).toLocaleTimeString()}</td>
                   <td>{r.model}</td>
                   <td>
-                    {r.feature ? (
-                      <span className="tag tag-feature">{r.feature}</span>
+                    {r.tags?.feature ? (
+                      <span className="tag tag-feature">{r.tags.feature}</span>
                     ) : (
                       <span style={{ color: "var(--dim)" }}>—</span>
                     )}
                   </td>
                   <td>
-                    {r.team ? (
-                      <span className="tag tag-team">{r.team}</span>
+                    {r.tags?.team ? (
+                      <span className="tag tag-team">{r.tags.team}</span>
                     ) : (
                       <span style={{ color: "var(--dim)" }}>—</span>
                     )}
                   </td>
-                  <td style={{ color: r.cost > 0.01 ? "var(--amber)" : undefined }}>
-                    ${r.cost.toFixed(4)}
+                  <td style={{ color: (r.cost_usd ?? 0) > 0.01 ? "var(--amber)" : undefined }}>
+                    ${(r.cost_usd ?? 0).toFixed(4)}
                   </td>
-                  <td className={r.latency_ms ? latencyClass(r.latency_ms) : ""}>
-                    {r.latency_ms ? `${r.latency_ms}` : "—"}
+                  <td className={r.duration_ms ? latencyClass(r.duration_ms) : ""}>
+                    {r.duration_ms ? `${r.duration_ms}` : "—"}
                   </td>
                 </tr>
               ))

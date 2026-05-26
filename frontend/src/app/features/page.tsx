@@ -8,13 +8,13 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 
 interface FeatureRow {
-  feature: string;
-  total_cost: number;
-  api_calls: number;
+  tag: string;
+  total_cost_usd: number;
+  request_count: number;
 }
 
 function formatCost(n: number): string {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return (n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
 function FeaturesContent() {
@@ -41,7 +41,7 @@ function FeaturesContent() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalCost = features.reduce((s, f) => s + f.total_cost, 0);
+  const totalCost = features.reduce((s, f) => s + (f.total_cost_usd ?? 0), 0);
 
   if (loading) {
     return (
@@ -80,8 +80,8 @@ function FeaturesContent() {
             <span className="section-header-action">{days}d</span>
           </div>
           <BarChart
-            labels={features.map((f) => f.feature || "untagged")}
-            data={features.map((f) => f.total_cost)}
+            labels={features.map((f) => f.tag || "untagged")}
+            data={features.map((f) => f.total_cost_usd ?? 0)}
             height={200}
           />
         </div>
@@ -110,10 +110,10 @@ function FeaturesContent() {
             ) : (
               features.map((f, i) => (
                 <tr key={i}>
-                  <td><span className="tag tag-feature">{f.feature || "untagged"}</span></td>
-                  <td style={{ color: "var(--cyan)" }}>${formatCost(f.total_cost)}</td>
-                  <td>{f.api_calls.toLocaleString()}</td>
-                  <td>{totalCost > 0 ? ((f.total_cost / totalCost) * 100).toFixed(1) : "0.0"}%</td>
+                  <td><span className="tag tag-feature">{f.tag || "untagged"}</span></td>
+                  <td style={{ color: "var(--cyan)" }}>${formatCost(f.total_cost_usd ?? 0)}</td>
+                  <td>{(f.request_count ?? 0).toLocaleString()}</td>
+                  <td>{totalCost > 0 ? (((f.total_cost_usd ?? 0) / totalCost) * 100).toFixed(1) : "0.0"}%</td>
                 </tr>
               ))
             )}
