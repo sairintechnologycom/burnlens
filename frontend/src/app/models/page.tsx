@@ -6,20 +6,12 @@ import HorizontalBar from "@/components/charts/HorizontalBar";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface ModelData {
-  model: string;
-  provider: string;
-  request_count: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-  total_cost_usd: number;
-}
+import type { CostByModelRow } from "@/lib/contracts";
 
 function ModelsContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
-  const [models, setModels] = useState<ModelData[]>([]);
+  const [models, setModels] = useState<CostByModelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,7 +19,7 @@ function ModelsContent() {
     if (!session) return;
     setLoading(true);
     apiFetch(`/api/v1/usage/by-model?days=${days}`, session.token)
-      .then((data) => setModels(data as ModelData[]))
+      .then((data) => setModels(data as CostByModelRow[]))
       .catch((err) => {
         if (err instanceof AuthError) logout();
         else setError(err.message);

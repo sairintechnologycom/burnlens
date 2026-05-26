@@ -12,13 +12,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface CustomerData {
-  tag: string;
-  request_count: number;
-  total_cost_usd: number;
-  budget_cap?: number;
-}
+import type { CostByTagBudgetRow } from "@/lib/contracts";
 
 // D-06: Per-page skeleton with the recognizable shape of the real Customers
 // page (HorizontalBar-shaped placeholder + table-shaped placeholder).
@@ -83,7 +77,7 @@ function CustomersSkeleton() {
 function CustomersContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
-  const [customers, setCustomers] = useState<CustomerData[]>([]);
+  const [customers, setCustomers] = useState<CostByTagBudgetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // D-03: store the full 402 body so both required_feature AND required_plan
@@ -95,7 +89,7 @@ function CustomersContent() {
     setLoading(true);
     setLocked(null);
     apiFetch(`/api/v1/usage/by-customer?days=${days}`, session.token)
-      .then((data) => setCustomers(data as CustomerData[]))
+      .then((data) => setCustomers(data as CostByTagBudgetRow[]))
       .catch((err) => {
         if (err instanceof AuthError) logout();
         else if (err instanceof PaymentRequiredError) setLocked(err.data);

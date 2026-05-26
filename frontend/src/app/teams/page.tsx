@@ -12,14 +12,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface TeamData {
-  tag: string;
-  request_count: number;
-  total_cost_usd: number;
-  budget?: number;
-  budget_status?: "ok" | "warning" | "critical";
-}
+import type { CostByTagBudgetRow } from "@/lib/contracts";
 
 // D-06: Per-page skeleton with the recognizable shape of the real page
 // (HorizontalBar-shaped placeholder + table-shaped placeholder).
@@ -92,7 +85,7 @@ function TeamsSkeleton() {
 function TeamsContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
-  const [teams, setTeams] = useState<TeamData[]>([]);
+  const [teams, setTeams] = useState<CostByTagBudgetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // D-03: store the full 402 body so both required_feature AND required_plan
@@ -104,7 +97,7 @@ function TeamsContent() {
     setLoading(true);
     setLocked(null);
     apiFetch(`/api/v1/usage/by-team?days=${days}`, session.token)
-      .then((data) => setTeams(data as TeamData[]))
+      .then((data) => setTeams(data as CostByTagBudgetRow[]))
       .catch((err) => {
         if (err instanceof AuthError) logout();
         else if (err instanceof PaymentRequiredError) setLocked(err.data);
