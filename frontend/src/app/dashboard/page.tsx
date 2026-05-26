@@ -85,6 +85,8 @@ function DashboardContent() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  useEffect(() => { document.title = "Overview | BurnLens"; }, []);
+
   const totalCost = summary?.total_cost ?? 0;
   const totalCalls = summary?.total_calls ?? 0;
   const wasteAmount = totalCost * 0.15; // estimate
