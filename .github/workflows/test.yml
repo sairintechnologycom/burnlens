@@ -1,9 +1,21 @@
 name: Tests
 
+# First test-running CI for this repo. Gates PRs on:
+#   1. OpenAPI snapshot freshness (backend Pydantic models vs the committed snapshot)
+#   2. Frontend vitest, which includes the frontend<->API contract test
+#
+# Backend pytest is intentionally NOT gated here: the suite is currently red on
+# main for pre-existing, unrelated reasons (tracked as separate debt). Add a
+# pytest job once that suite is green. Python is installed below only to
+# regenerate the OpenAPI snapshot.
+
 on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   contract-and-frontend:
@@ -16,6 +28,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install backend deps
         run: |
@@ -27,8 +40,9 @@ jobs:
 
       - name: Fail if snapshot is stale
         run: |
-          if ! git diff --exit-code frontend/tests/contract/openapi-schemas.snapshot.json; then
-            echo "::error::OpenAPI snapshot is out of date. Run 'npm run contract:snapshot' and commit the result."
+          if [ -n "$(git status --porcelain frontend/tests/contract/openapi-schemas.snapshot.json)" ]; then
+            git diff -- frontend/tests/contract/openapi-schemas.snapshot.json
+            echo "::error::OpenAPI snapshot is out of date or untracked. Run 'npm run contract:snapshot' and commit the result."
             exit 1
           fi
 
