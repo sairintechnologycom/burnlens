@@ -38,6 +38,7 @@ export const CostByModelFields: Record<keyof CostByModelRow, true> = {
 };
 
 // --- /api/v1/usage/by-feature | by-customer | by-team  ->  CostByTag ---
+// All three tag-breakdown endpoints return the same row shape.
 export interface CostByTagRow {
   tag: string;
   request_count: number;
@@ -65,6 +66,7 @@ export interface RequestRow {
   model: string;
   cost_usd: number;
   duration_ms?: number;
+  // tags shape is freeform; the contract test only checks key presence, not nested fields.
   tags?: { feature?: string; team?: string; [k: string]: unknown } | null;
 }
 export const RequestRowFields: Record<keyof RequestRow, true> = {
