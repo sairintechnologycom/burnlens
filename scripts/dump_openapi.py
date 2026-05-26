@@ -12,11 +12,17 @@ app.openapi() does NOT open a DB connection (the pool is created in the FastAPI
 lifespan, which this does not trigger), so this runs offline.
 """
 import json
+import sys
 from pathlib import Path
 
-from burnlens_cloud.main import app
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# Ensure the repo root is importable when run as `python scripts/dump_openapi.py`
+# (which otherwise puts only scripts/ on sys.path) and in CI where the package
+# is not pip-installed.
+sys.path.insert(0, str(REPO_ROOT))
+
+from burnlens_cloud.main import app  # noqa: E402  (import after sys.path setup)
+
 SNAPSHOT = REPO_ROOT / "frontend" / "tests" / "contract" / "openapi-schemas.snapshot.json"
 
 
