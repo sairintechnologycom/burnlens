@@ -106,15 +106,22 @@ pointing at the snapshot regen step.
 
 1. **Snapshot freshness:** set up Python, install backend deps, regenerate the
    snapshot, `git diff --exit-code` on it. Fails if the backend changed a model
-   without the committed snapshot being regenerated.
+   without the committed snapshot being regenerated. (`app.openapi()` runs with
+   no DB — verified — so no Postgres service is needed.)
 2. **Contract + frontend tests:** `npm ci && npm run test` (vitest; includes the
    new contract test) in `frontend/`.
-3. **Backend tests:** `pytest` — wired into CI here for the first time.
 
 **Why both CI steps are needed (they compose):**
 - Rename a backend field, forget the snapshot → step 1 (`git diff`) fails.
 - Regenerate the snapshot, forget the frontend interface → contract test fails.
 - Either path is red.
+
+**Backend pytest is intentionally NOT wired into this gate.** The full backend
+suite is already red on `main` (36 failed / 12 errors as of 2026-05-26 — the
+known `test_plan_limits.py` dotenv-shim issue + `test_teams.py` failures, all
+pre-existing and unrelated to this work). Adding it as a blocking gate would make
+CI red on day one. Logged as separate debt; a pytest gate can be added once the
+suite is green.
 
 ## Data flow (drift detection)
 
@@ -169,6 +176,7 @@ page / RightPanel component  (TS errors if it reads an off-interface field)
 1. Renaming any covered backend field without updating the frontend makes CI red
    (demonstrated by a deliberate local rename during implementation).
 2. The contract test passes against the current `main` schemas.
-3. `test.yml` runs on PRs and gates merge on contract + vitest + pytest.
+3. `test.yml` runs on PRs and gates merge on snapshot-freshness + vitest
+   (contract test). Backend pytest excluded — see CI note.
 4. Adding a new covered endpoint is a two-line change (interface+manifest, table
    row).
