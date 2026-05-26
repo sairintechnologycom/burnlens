@@ -6,12 +6,7 @@ import BarChart from "@/components/charts/BarChart";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface FeatureRow {
-  tag: string;
-  total_cost_usd: number;
-  request_count: number;
-}
+import type { CostByTagRow } from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return (n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -20,7 +15,7 @@ function formatCost(n: number): string {
 function FeaturesContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
-  const [features, setFeatures] = useState<FeatureRow[]>([]);
+  const [features, setFeatures] = useState<CostByTagRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -30,7 +25,7 @@ function FeaturesContent() {
     setError("");
     try {
       const data = await apiFetch(`/api/v1/usage/by-feature?days=${days}`, session.token);
-      setFeatures(data as FeatureRow[]);
+      setFeatures(data as CostByTagRow[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
       else setError(err.message);

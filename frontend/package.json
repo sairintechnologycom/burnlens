@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx playwright test",
-    "test:e2e:ui": "npx playwright test --ui"
+    "test:e2e:ui": "npx playwright test --ui",
+    "contract:snapshot": "${BURNLENS_PYTHON:-python3} ../scripts/dump_openapi.py"
   },
   "dependencies": {
     "@paddle/paddle-js": "^1.6.2",
