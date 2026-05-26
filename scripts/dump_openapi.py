@@ -3,10 +3,17 @@
 
 The frontend contract test (frontend/tests/contract/api-contract.test.ts) reads
 this file as the backend's source of truth. Regenerate after changing any
-Pydantic response_model:
+Pydantic response_model.
 
-    python scripts/dump_openapi.py        # CI / any python with deps
-    BURNLENS_PYTHON=/opt/homebrew/bin/python3.11 npm run contract:snapshot  # local
+IMPORTANT: regenerate against the PINNED deps in requirements.txt, not a system
+interpreter that may have newer pydantic/fastapi. The JSON-schema output is
+version-sensitive (e.g. pydantic 2.7 -> 2.13 adds `additionalProperties`/`ctx`/
+`input` fields), so a snapshot built with unpinned deps fails CI's
+snapshot-freshness gate, which runs `pip install -r requirements.txt` first.
+
+    # Canonical (matches CI): build a venv from the pinned requirements
+    python3.11 -m venv /tmp/bl-venv && /tmp/bl-venv/bin/pip install -r requirements.txt
+    /tmp/bl-venv/bin/python scripts/dump_openapi.py
 
 app.openapi() does NOT open a DB connection (the pool is created in the FastAPI
 lifespan, which this does not trigger), so this runs offline.
