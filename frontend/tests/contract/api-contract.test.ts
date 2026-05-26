@@ -46,27 +46,32 @@ function openApiType(prop: OpenApiProp): string | undefined {
 // is compatible with the OpenAPI type. We only need coarse buckets — the crash
 // class was wrong names + number-vs-string, not deep shape mismatches.
 const NUMBER_TYPES = new Set(["number", "integer"]);
+
+// Static lookup tables: which manifest fields the frontend treats as numbers
+// (anything it runs .toFixed / arithmetic / .toLocaleString on) vs strings.
+const NUMERIC_FIELDS = new Set([
+  "total_cost_usd",
+  "total_requests",
+  "avg_cost_per_request_usd",
+  "models_used",
+  "request_count",
+  "total_input_tokens",
+  "total_output_tokens",
+  "cost_usd",
+  "duration_ms",
+]);
+const STRING_FIELDS = new Set(["model", "provider", "tag", "date", "timestamp"]);
+
+// Check a manifest field's OpenAPI type against how the frontend uses it. We use
+// coarse buckets — the crash class was wrong names + number-vs-string, not deep
+// shape mismatches.
 function typesCompatible(field: string, apiType: string | undefined): boolean {
-  // Fields the frontend treats as numbers (everything it runs .toFixed /
-  // arithmetic / .toLocaleString on).
-  const numericFields = new Set([
-    "total_cost_usd",
-    "total_requests",
-    "avg_cost_per_request_usd",
-    "models_used",
-    "request_count",
-    "total_input_tokens",
-    "total_output_tokens",
-    "cost_usd",
-    "duration_ms",
-  ]);
-  if (numericFields.has(field)) return apiType !== undefined && NUMBER_TYPES.has(apiType);
-  // string-ish fields
-  const stringFields = new Set(["model", "provider", "tag", "date", "timestamp"]);
-  if (stringFields.has(field)) return apiType === "string";
-  // object-ish (tags)
+  if (NUMERIC_FIELDS.has(field)) return apiType !== undefined && NUMBER_TYPES.has(apiType);
+  if (STRING_FIELDS.has(field)) return apiType === "string";
   if (field === "tags") return apiType === "object";
-  // any other field: presence is enough
+  // NOTE: fields not listed above are only presence-checked, not type-checked.
+  // If you add a numeric or string field to a manifest in contracts.ts, add it to
+  // NUMERIC_FIELDS / STRING_FIELDS here too, or type drift won't be caught.
   return true;
 }
 
