@@ -53,7 +53,9 @@ export const CostByTagFields: Record<keyof CostByTagRow, true> = {
 // Used by the customers and teams pages, which render budget columns alongside
 // the CostByTag data. These budget fields are FRONTEND-ONLY: the by-customer /
 // by-team endpoints (CostByTag) do NOT currently return them, so they are always
-// undefined ("—" in the UI). They are deliberately NOT in the contract manifest /
+// undefined ("—" in the UI).
+// budget_cap is used by the customers page; budget and budget_status by the teams page.
+// They are deliberately NOT in the contract manifest /
 // contract test — only the real CostByTag fields are checked. If the backend
 // starts returning these, promote them into CostByTagRow + CostByTagFields and
 // regenerate the snapshot.
