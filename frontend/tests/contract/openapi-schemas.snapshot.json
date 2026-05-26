@@ -1,0 +1,1666 @@
+{
+  "AlertRulePatch": {
+    "properties": {
+      "enabled": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Enabled"
+      },
+      "extra_emails": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Extra Emails"
+      },
+      "threshold_pct": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Threshold Pct"
+      }
+    },
+    "title": "AlertRulePatch",
+    "type": "object"
+  },
+  "ApiKey": {
+    "description": "One row in GET /api-keys list response.\n\nNever contains plaintext or hash \u2014 only the last-4 suffix for UI disambiguation.\nPhase 16 D-05: `last_used_at` surfaces the throttled per-key activity stamp\n(NULL = never used).",
+    "properties": {
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "last4": {
+        "title": "Last4",
+        "type": "string"
+      },
+      "last_used_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Last Used At"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "revoked_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Revoked At"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "last4",
+      "created_at"
+    ],
+    "title": "ApiKey",
+    "type": "object"
+  },
+  "ApiKeyCreateRequest": {
+    "description": "Request body for POST /api-keys.\n\n`name` is optional; defaults to \"Primary\" server-side if omitted.\nPhase 16 D-09: max_length raised from 64 to 128 to match the new\n\"Label or note\" UI field and align with `ApiKeyUpdateRequest`.",
+    "properties": {
+      "name": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Name"
+      }
+    },
+    "title": "ApiKeyCreateRequest",
+    "type": "object"
+  },
+  "ApiKeyCreateResponse": {
+    "description": "Response body for POST /api-keys.\n\nExtends `ApiKey` with the plaintext `key`. This field is emitted EXACTLY ONCE\nat key-creation time and is never stored server-side or re-emitted on any\nsubsequent request. Callers must capture it on the create-response.",
+    "properties": {
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "key": {
+        "title": "Key",
+        "type": "string"
+      },
+      "last4": {
+        "title": "Last4",
+        "type": "string"
+      },
+      "last_used_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Last Used At"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "revoked_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Revoked At"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "last4",
+      "created_at",
+      "key"
+    ],
+    "title": "ApiKeyCreateResponse",
+    "type": "object"
+  },
+  "ApiKeyUpdateRequest": {
+    "description": "Request body for PATCH /api-keys/{key_id} (Phase 16 D-09, D-10).\n\nSingle editable field \u2014 `name` (label or note). Required (not Optional)\nbecause this is a single-field PATCH; passing None is meaningless.\nMax length matches `ApiKeyCreateRequest` (128).",
+    "properties": {
+      "name": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "ApiKeyUpdateRequest",
+    "type": "object"
+  },
+  "ApiKeysSummary": {
+    "description": "Pre-emptive at-cap state for the API Keys card (D-26).\n\n`active_count` is the count of non-revoked api_keys rows for the caller's\nworkspace. `limit` is the plan_limits.api_key_count value (None means\nunlimited \u2014 no plan-level cap).",
+    "properties": {
+      "active_count": {
+        "title": "Active Count",
+        "type": "integer"
+      },
+      "limit": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Limit"
+      }
+    },
+    "required": [
+      "active_count"
+    ],
+    "title": "ApiKeysSummary",
+    "type": "object"
+  },
+  "AuditLogEntryExtended": {
+    "description": "Extended audit log entry with network info.",
+    "properties": {
+      "action": {
+        "title": "Action",
+        "type": "string"
+      },
+      "api_key_last4": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Api Key Last4"
+      },
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "detail": {
+        "additionalProperties": true,
+        "title": "Detail",
+        "type": "object"
+      },
+      "id": {
+        "title": "Id",
+        "type": "integer"
+      },
+      "ip_address": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Ip Address"
+      },
+      "user": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "User"
+      },
+      "user_agent": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "User Agent"
+      }
+    },
+    "required": [
+      "id",
+      "action",
+      "detail",
+      "created_at"
+    ],
+    "title": "AuditLogEntryExtended",
+    "type": "object"
+  },
+  "AuditLogResponse": {
+    "description": "Response for audit log query.",
+    "properties": {
+      "entries": {
+        "items": {
+          "$ref": "#/components/schemas/AuditLogEntryExtended"
+        },
+        "title": "Entries",
+        "type": "array"
+      },
+      "limit": {
+        "title": "Limit",
+        "type": "integer"
+      },
+      "offset": {
+        "title": "Offset",
+        "type": "integer"
+      },
+      "total": {
+        "title": "Total",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "entries",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "title": "AuditLogResponse",
+    "type": "object"
+  },
+  "AvailablePlan": {
+    "description": "One row in /billing/summary `available_plans` \u2014 drives the LockedPanel\nupgrade CTA copy and PlanPickerModal price comparison.\n\n`price_cents` is sourced from a module-level constant in `billing.py`\n(paddle_product_spec.md is source of truth) \u2014 `plan_limits` does not yet\ncarry the column. v1.2 promotes this to a real DB column; see\n.planning/followups/v1.2-price-cents-column.md.",
+    "properties": {
+      "currency": {
+        "default": "USD",
+        "title": "Currency",
+        "type": "string"
+      },
+      "plan": {
+        "title": "Plan",
+        "type": "string"
+      },
+      "price_cents": {
+        "title": "Price Cents",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "plan",
+      "price_cents"
+    ],
+    "title": "AvailablePlan",
+    "type": "object"
+  },
+  "BillingSummary": {
+    "description": "Read model for GET /billing/summary.\n\nReflects the workspaces-row cache written by the Paddle webhook (Phase 7).\nNo Paddle API round-trip on read. `price_cents` and `currency` are null for\nfree-tier workspaces (D-07). Date fields are null when Paddle has not\npopulated them (free plan, or new sub before first Paddle payload).\n`status` values expected from Paddle: 'active' | 'trialing' | 'past_due'\n| 'canceled' | 'paused'. Stored as plain str so Paddle can add new states\nwithout breaking the read path.",
+    "properties": {
+      "api_keys": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ApiKeysSummary"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "available_plans": {
+        "items": {
+          "$ref": "#/components/schemas/AvailablePlan"
+        },
+        "title": "Available Plans",
+        "type": "array"
+      },
+      "cancel_at_period_end": {
+        "default": false,
+        "title": "Cancel At Period End",
+        "type": "boolean"
+      },
+      "currency": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Currency"
+      },
+      "current_period_ends_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Current Period Ends At"
+      },
+      "plan": {
+        "title": "Plan",
+        "type": "string"
+      },
+      "price_cents": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Price Cents"
+      },
+      "scheduled_change_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Scheduled Change At"
+      },
+      "scheduled_plan": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Scheduled Plan"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "trial_ends_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Trial Ends At"
+      },
+      "usage": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/UsageCurrentCycle"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "plan",
+      "status"
+    ],
+    "title": "BillingSummary",
+    "type": "object"
+  },
+  "CancelBody": {
+    "description": "Request body for POST /billing/cancel.\n\nBoth fields are optional (D-10). When both are None/missing, no\nsurvey row is inserted. Free-text is length-capped at schema level\nto prevent storage abuse from an authenticated but hostile user.",
+    "properties": {
+      "reason_code": {
+        "anyOf": [
+          {
+            "maxLength": 64,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Reason Code"
+      },
+      "reason_text": {
+        "anyOf": [
+          {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Reason Text"
+      }
+    },
+    "title": "CancelBody",
+    "type": "object"
+  },
+  "ChangePlanBody": {
+    "description": "Request body for POST /billing/change-plan.\n\n`target_plan` is the ONLY client-controlled field on any Phase 8\nmutation (D-32). All Paddle identifiers (customer_id, subscription_id,\nprice_id) are server-read from the workspaces row.",
+    "properties": {
+      "target_plan": {
+        "title": "Target Plan",
+        "type": "string"
+      }
+    },
+    "required": [
+      "target_plan"
+    ],
+    "title": "ChangePlanBody",
+    "type": "object"
+  },
+  "CheckoutBody": {
+    "properties": {
+      "plan": {
+        "default": "cloud",
+        "title": "Plan",
+        "type": "string"
+      }
+    },
+    "title": "CheckoutBody",
+    "type": "object"
+  },
+  "ComponentStatus": {
+    "description": "Status of a service component.",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "uptime_30d": {
+        "title": "Uptime 30D",
+        "type": "number"
+      }
+    },
+    "required": [
+      "name",
+      "uptime_30d",
+      "status"
+    ],
+    "title": "ComponentStatus",
+    "type": "object"
+  },
+  "CostByModel": {
+    "description": "Cost aggregated by model.",
+    "properties": {
+      "model": {
+        "title": "Model",
+        "type": "string"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "total_cost_usd": {
+        "title": "Total Cost Usd",
+        "type": "number"
+      },
+      "total_input_tokens": {
+        "title": "Total Input Tokens",
+        "type": "integer"
+      },
+      "total_output_tokens": {
+        "title": "Total Output Tokens",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "model",
+      "provider",
+      "request_count",
+      "total_input_tokens",
+      "total_output_tokens",
+      "total_cost_usd"
+    ],
+    "title": "CostByModel",
+    "type": "object"
+  },
+  "CostByTag": {
+    "description": "Cost aggregated by tag (team, feature, customer).",
+    "properties": {
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "tag": {
+        "title": "Tag",
+        "type": "string"
+      },
+      "total_cost_usd": {
+        "title": "Total Cost Usd",
+        "type": "number"
+      },
+      "total_input_tokens": {
+        "title": "Total Input Tokens",
+        "type": "integer"
+      },
+      "total_output_tokens": {
+        "title": "Total Output Tokens",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "tag",
+      "request_count",
+      "total_cost_usd",
+      "total_input_tokens",
+      "total_output_tokens"
+    ],
+    "title": "CostByTag",
+    "type": "object"
+  },
+  "CostTimeline": {
+    "description": "Cost over time.",
+    "properties": {
+      "date": {
+        "title": "Date",
+        "type": "string"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "total_cost_usd": {
+        "title": "Total Cost Usd",
+        "type": "number"
+      }
+    },
+    "required": [
+      "date",
+      "request_count",
+      "total_cost_usd"
+    ],
+    "title": "CostTimeline",
+    "type": "object"
+  },
+  "HTTPValidationError": {
+    "properties": {
+      "detail": {
+        "items": {
+          "$ref": "#/components/schemas/ValidationError"
+        },
+        "title": "Detail",
+        "type": "array"
+      }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+  },
+  "IngestRequest": {
+    "description": "Schema for ingest endpoint request.\n\n`api_key` is optional in the body \u2014 older OSS proxy builds (1.0\u20131.3) send\nit via the `X-API-Key` request header and post only `{\"records\":[...]}`.\nThe endpoint resolves header-or-body in `ingest()` and 401s if neither is\npresent.",
+    "properties": {
+      "api_key": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Api Key"
+      },
+      "records": {
+        "items": {
+          "$ref": "#/components/schemas/RequestRecordBase"
+        },
+        "maxItems": 10000,
+        "title": "Records",
+        "type": "array"
+      }
+    },
+    "required": [
+      "records"
+    ],
+    "title": "IngestRequest",
+    "type": "object"
+  },
+  "IngestResponse": {
+    "description": "Schema for ingest endpoint response.",
+    "properties": {
+      "accepted": {
+        "title": "Accepted",
+        "type": "integer"
+      },
+      "rejected": {
+        "title": "Rejected",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "accepted",
+      "rejected"
+    ],
+    "title": "IngestResponse",
+    "type": "object"
+  },
+  "InvitationRequest": {
+    "description": "Request to invite someone to workspace.",
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "role": {
+        "default": "viewer",
+        "title": "Role",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "title": "InvitationRequest",
+    "type": "object"
+  },
+  "InvitationResponse": {
+    "description": "Response for created invitation.",
+    "properties": {
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "expires_at": {
+        "format": "date-time",
+        "title": "Expires At",
+        "type": "string"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "token": {
+        "title": "Token",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "email",
+      "token",
+      "expires_at",
+      "created_at"
+    ],
+    "title": "InvitationResponse",
+    "type": "object"
+  },
+  "Invoice": {
+    "description": "One row in GET /billing/invoices response.\n\nShape projects Paddle's Transaction object down to just what the UI\nrenders. `invoice_pdf_url` is the Paddle-hosted signed URL; the\nfrontend links directly to it, BurnLens never proxies bytes (D-19).\nWhen Paddle's PDF lookup fails or times out (W4), the field is None\nand the UI renders \"\u2014\" instead of a broken Download link.",
+    "properties": {
+      "amount_cents": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Amount Cents"
+      },
+      "billed_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Billed At"
+      },
+      "currency": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Currency"
+      },
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "invoice_pdf_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Invoice Pdf Url"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "status"
+    ],
+    "title": "Invoice",
+    "type": "object"
+  },
+  "InvoicesResponse": {
+    "description": "Response envelope for GET /billing/invoices.",
+    "properties": {
+      "invoices": {
+        "items": {
+          "$ref": "#/components/schemas/Invoice"
+        },
+        "title": "Invoices",
+        "type": "array"
+      }
+    },
+    "title": "InvoicesResponse",
+    "type": "object"
+  },
+  "LoginRequest": {
+    "description": "Schema for login request \u2014 API key OR email+password.",
+    "properties": {
+      "api_key": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Api Key"
+      },
+      "email": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Email"
+      },
+      "password": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Password"
+      }
+    },
+    "title": "LoginRequest",
+    "type": "object"
+  },
+  "LoginResponse": {
+    "description": "Schema for login response.",
+    "properties": {
+      "email_verified": {
+        "default": true,
+        "title": "Email Verified",
+        "type": "boolean"
+      },
+      "expires_in": {
+        "title": "Expires In",
+        "type": "integer"
+      },
+      "role": {
+        "default": "owner",
+        "title": "Role",
+        "type": "string"
+      },
+      "token": {
+        "title": "Token",
+        "type": "string"
+      },
+      "workspace": {
+        "$ref": "#/components/schemas/WorkspaceResponse"
+      }
+    },
+    "required": [
+      "token",
+      "expires_in",
+      "workspace"
+    ],
+    "title": "LoginResponse",
+    "type": "object"
+  },
+  "MemberRoleUpdate": {
+    "description": "Request to update member role.",
+    "properties": {
+      "role": {
+        "title": "Role",
+        "type": "string"
+      }
+    },
+    "required": [
+      "role"
+    ],
+    "title": "MemberRoleUpdate",
+    "type": "object"
+  },
+  "OtelConfig": {
+    "description": "OpenTelemetry configuration for enterprise workspace.",
+    "properties": {
+      "api_key": {
+        "title": "Api Key",
+        "type": "string"
+      },
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "endpoint": {
+        "title": "Endpoint",
+        "type": "string"
+      }
+    },
+    "required": [
+      "endpoint",
+      "api_key",
+      "enabled"
+    ],
+    "title": "OtelConfig",
+    "type": "object"
+  },
+  "OtelConfigResponse": {
+    "description": "Response for OTEL configuration (with masked API key).",
+    "properties": {
+      "api_key_masked": {
+        "title": "Api Key Masked",
+        "type": "string"
+      },
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "endpoint": {
+        "title": "Endpoint",
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "endpoint",
+      "api_key_masked"
+    ],
+    "title": "OtelConfigResponse",
+    "type": "object"
+  },
+  "OtelTestResponse": {
+    "description": "Response for OTEL connectivity test.",
+    "properties": {
+      "error": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Error"
+      },
+      "latency_ms": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Latency Ms"
+      },
+      "ok": {
+        "title": "Ok",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ok"
+    ],
+    "title": "OtelTestResponse",
+    "type": "object"
+  },
+  "PricingResponse": {
+    "description": "Response for current pricing (default or custom).",
+    "properties": {
+      "pricing": {
+        "additionalProperties": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "title": "Pricing",
+        "type": "object"
+      }
+    },
+    "required": [
+      "pricing"
+    ],
+    "title": "PricingResponse",
+    "type": "object"
+  },
+  "RequestRecordBase": {
+    "description": "Base request record schema.",
+    "properties": {
+      "cache_read_tokens": {
+        "default": 0,
+        "title": "Cache Read Tokens",
+        "type": "integer"
+      },
+      "cache_write_tokens": {
+        "default": 0,
+        "title": "Cache Write Tokens",
+        "type": "integer"
+      },
+      "cost_usd": {
+        "default": 0.0,
+        "title": "Cost Usd",
+        "type": "number"
+      },
+      "duration_ms": {
+        "default": 0,
+        "title": "Duration Ms",
+        "type": "integer"
+      },
+      "input_tokens": {
+        "default": 0,
+        "title": "Input Tokens",
+        "type": "integer"
+      },
+      "model": {
+        "title": "Model",
+        "type": "string"
+      },
+      "output_tokens": {
+        "default": 0,
+        "title": "Output Tokens",
+        "type": "integer"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "reasoning_tokens": {
+        "default": 0,
+        "title": "Reasoning Tokens",
+        "type": "integer"
+      },
+      "status_code": {
+        "default": 200,
+        "title": "Status Code",
+        "type": "integer"
+      },
+      "system_prompt_hash": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "System Prompt Hash"
+      },
+      "tags": {
+        "additionalProperties": true,
+        "title": "Tags",
+        "type": "object"
+      },
+      "timestamp": {
+        "format": "date-time",
+        "title": "Timestamp",
+        "type": "string"
+      }
+    },
+    "required": [
+      "timestamp",
+      "provider",
+      "model"
+    ],
+    "title": "RequestRecordBase",
+    "type": "object"
+  },
+  "RequestRecordResponse": {
+    "description": "Schema for request record response.",
+    "properties": {
+      "cache_read_tokens": {
+        "default": 0,
+        "title": "Cache Read Tokens",
+        "type": "integer"
+      },
+      "cache_write_tokens": {
+        "default": 0,
+        "title": "Cache Write Tokens",
+        "type": "integer"
+      },
+      "cost_usd": {
+        "default": 0.0,
+        "title": "Cost Usd",
+        "type": "number"
+      },
+      "duration_ms": {
+        "default": 0,
+        "title": "Duration Ms",
+        "type": "integer"
+      },
+      "id": {
+        "title": "Id",
+        "type": "integer"
+      },
+      "input_tokens": {
+        "default": 0,
+        "title": "Input Tokens",
+        "type": "integer"
+      },
+      "model": {
+        "title": "Model",
+        "type": "string"
+      },
+      "output_tokens": {
+        "default": 0,
+        "title": "Output Tokens",
+        "type": "integer"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "reasoning_tokens": {
+        "default": 0,
+        "title": "Reasoning Tokens",
+        "type": "integer"
+      },
+      "received_at": {
+        "format": "date-time",
+        "title": "Received At",
+        "type": "string"
+      },
+      "status_code": {
+        "default": 200,
+        "title": "Status Code",
+        "type": "integer"
+      },
+      "system_prompt_hash": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "System Prompt Hash"
+      },
+      "tags": {
+        "additionalProperties": true,
+        "title": "Tags",
+        "type": "object"
+      },
+      "timestamp": {
+        "format": "date-time",
+        "title": "Timestamp",
+        "type": "string"
+      },
+      "workspace_id": {
+        "format": "uuid",
+        "title": "Workspace Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "timestamp",
+      "provider",
+      "model",
+      "workspace_id",
+      "id",
+      "received_at"
+    ],
+    "title": "RequestRecordResponse",
+    "type": "object"
+  },
+  "ResetPasswordConfirmRequest": {
+    "properties": {
+      "new_password": {
+        "title": "New Password",
+        "type": "string"
+      },
+      "token": {
+        "title": "Token",
+        "type": "string"
+      }
+    },
+    "required": [
+      "token",
+      "new_password"
+    ],
+    "title": "ResetPasswordConfirmRequest",
+    "type": "object"
+  },
+  "ResetPasswordRequest": {
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email"
+    ],
+    "title": "ResetPasswordRequest",
+    "type": "object"
+  },
+  "SignupRequest": {
+    "description": "Schema for signup request.",
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string"
+      },
+      "workspace_name": {
+        "title": "Workspace Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "email",
+      "password",
+      "workspace_name"
+    ],
+    "title": "SignupRequest",
+    "type": "object"
+  },
+  "SignupResponse": {
+    "description": "Schema for signup response.",
+    "properties": {
+      "api_key": {
+        "title": "Api Key",
+        "type": "string"
+      },
+      "email_verified": {
+        "default": false,
+        "title": "Email Verified",
+        "type": "boolean"
+      },
+      "expires_in": {
+        "title": "Expires In",
+        "type": "integer"
+      },
+      "message": {
+        "default": "Workspace created successfully.",
+        "title": "Message",
+        "type": "string"
+      },
+      "token": {
+        "title": "Token",
+        "type": "string"
+      },
+      "workspace": {
+        "$ref": "#/components/schemas/WorkspaceResponse"
+      },
+      "workspace_id": {
+        "format": "uuid",
+        "title": "Workspace Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "api_key",
+      "workspace_id",
+      "token",
+      "expires_in",
+      "workspace"
+    ],
+    "title": "SignupResponse",
+    "type": "object"
+  },
+  "SlackWebhookRequest": {
+    "properties": {
+      "webhook_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Webhook Url"
+      }
+    },
+    "title": "SlackWebhookRequest",
+    "type": "object"
+  },
+  "StatsSummary": {
+    "description": "Summary statistics response.",
+    "properties": {
+      "avg_cost_per_request_usd": {
+        "title": "Avg Cost Per Request Usd",
+        "type": "number"
+      },
+      "budget_limit_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Budget Limit Usd"
+      },
+      "budget_pct_used": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Budget Pct Used"
+      },
+      "models_used": {
+        "title": "Models Used",
+        "type": "integer"
+      },
+      "total_cost_usd": {
+        "title": "Total Cost Usd",
+        "type": "number"
+      },
+      "total_requests": {
+        "title": "Total Requests",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "total_cost_usd",
+      "total_requests",
+      "avg_cost_per_request_usd",
+      "models_used"
+    ],
+    "title": "StatsSummary",
+    "type": "object"
+  },
+  "StatusResponse": {
+    "description": "Response for /status endpoint.",
+    "properties": {
+      "components": {
+        "items": {
+          "$ref": "#/components/schemas/ComponentStatus"
+        },
+        "title": "Components",
+        "type": "array"
+      },
+      "incidents": {
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "title": "Incidents",
+        "type": "array"
+      }
+    },
+    "required": [
+      "components",
+      "incidents"
+    ],
+    "title": "StatusResponse",
+    "type": "object"
+  },
+  "UsageCurrentCycle": {
+    "description": "Current billing cycle counter + cap for the caller's workspace.\n\n`start` / `end` are the cycle bounds (paid: workspaces.current_period_*; free:\ncalendar-month UTC). `request_count` mirrors workspace_usage_cycles.request_count.\n`monthly_request_cap` is the resolved limit (per-workspace override merged over\nplan default). The meter widget renders `request_count / monthly_request_cap`.",
+    "properties": {
+      "end": {
+        "format": "date-time",
+        "title": "End",
+        "type": "string"
+      },
+      "monthly_request_cap": {
+        "title": "Monthly Request Cap",
+        "type": "integer"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "start": {
+        "format": "date-time",
+        "title": "Start",
+        "type": "string"
+      }
+    },
+    "required": [
+      "start",
+      "end",
+      "request_count",
+      "monthly_request_cap"
+    ],
+    "title": "UsageCurrentCycle",
+    "type": "object"
+  },
+  "UsageDailyEntry": {
+    "description": "One row in /billing/usage/daily `daily[]` \u2014 a single day's request count.",
+    "properties": {
+      "date": {
+        "format": "date",
+        "title": "Date",
+        "type": "string"
+      },
+      "requests": {
+        "title": "Requests",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "date",
+      "requests"
+    ],
+    "title": "UsageDailyEntry",
+    "type": "object"
+  },
+  "UsageDailyResponse": {
+    "description": "Response shape for GET /billing/usage/daily (D-20).\n\nCarries the cycle bounds + cap + current count alongside the daily series so\nthe Settings \u2192 Usage card renders the bar chart and the cap line in one\nround-trip.",
+    "properties": {
+      "cap": {
+        "title": "Cap",
+        "type": "integer"
+      },
+      "current": {
+        "title": "Current",
+        "type": "integer"
+      },
+      "cycle_end": {
+        "format": "date-time",
+        "title": "Cycle End",
+        "type": "string"
+      },
+      "cycle_start": {
+        "format": "date-time",
+        "title": "Cycle Start",
+        "type": "string"
+      },
+      "daily": {
+        "items": {
+          "$ref": "#/components/schemas/UsageDailyEntry"
+        },
+        "title": "Daily",
+        "type": "array"
+      }
+    },
+    "required": [
+      "cycle_start",
+      "cycle_end",
+      "cap",
+      "current",
+      "daily"
+    ],
+    "title": "UsageDailyResponse",
+    "type": "object"
+  },
+  "ValidationError": {
+    "properties": {
+      "ctx": {
+        "title": "Context",
+        "type": "object"
+      },
+      "input": {
+        "title": "Input"
+      },
+      "loc": {
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "title": "Location",
+        "type": "array"
+      },
+      "msg": {
+        "title": "Message",
+        "type": "string"
+      },
+      "type": {
+        "title": "Error Type",
+        "type": "string"
+      }
+    },
+    "required": [
+      "loc",
+      "msg",
+      "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+  },
+  "VerifyEmailBody": {
+    "properties": {
+      "token": {
+        "title": "Token",
+        "type": "string"
+      }
+    },
+    "required": [
+      "token"
+    ],
+    "title": "VerifyEmailBody",
+    "type": "object"
+  },
+  "WorkspaceMemberResponse": {
+    "description": "Workspace member response model.",
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "invited_by": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Invited By"
+      },
+      "joined_at": {
+        "format": "date-time",
+        "title": "Joined At",
+        "type": "string"
+      },
+      "last_login": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Last Login"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Name"
+      },
+      "role": {
+        "title": "Role",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "email",
+      "role",
+      "joined_at"
+    ],
+    "title": "WorkspaceMemberResponse",
+    "type": "object"
+  },
+  "WorkspaceResponse": {
+    "description": "Schema for workspace response.",
+    "properties": {
+      "active": {
+        "title": "Active",
+        "type": "boolean"
+      },
+      "api_key": {
+        "title": "Api Key",
+        "type": "string"
+      },
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "owner_email": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Owner Email"
+      },
+      "plan": {
+        "title": "Plan",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "id",
+      "plan",
+      "api_key",
+      "created_at",
+      "active"
+    ],
+    "title": "WorkspaceResponse",
+    "type": "object"
+  }
+}
