@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 
 interface ModelEntry {
   model: string;
-  total_cost: number;
+  total_cost_usd: number;
 }
 
 interface WasteAlert {
@@ -37,7 +37,7 @@ export default function RightPanel() {
     }).finally(() => setLoading(false));
   }, [session, days]);
 
-  const maxCost = models.length > 0 ? models[0].total_cost : 1;
+  const maxCost = models.length > 0 ? (models[0].total_cost_usd || 1) : 1;
   const isEmpty = !loading && models.length === 0 && alerts.length === 0;
 
   // Hide the 260px rail entirely when there is nothing to show.
@@ -64,10 +64,10 @@ export default function RightPanel() {
               <div className="rp-model-name">{m.model}</div>
               <div
                 className="rp-model-bar"
-                style={{ width: `${(m.total_cost / maxCost) * 100}%` }}
+                style={{ width: `${((m.total_cost_usd ?? 0) / maxCost) * 100}%` }}
               />
             </div>
-            <span className="rp-model-cost">${m.total_cost.toFixed(2)}</span>
+            <span className="rp-model-cost">${(m.total_cost_usd ?? 0).toFixed(2)}</span>
           </div>
         ))
       )}
@@ -90,7 +90,7 @@ export default function RightPanel() {
             </span>
             <div className="rp-alert-title">{a.title}</div>
             <div className="rp-alert-desc">{a.description}</div>
-            <div className="rp-alert-savings">Save ${a.monthly_savings.toFixed(2)}/mo</div>
+            <div className="rp-alert-savings">Save ${(a.monthly_savings ?? 0).toFixed(2)}/mo</div>
           </div>
         ))
       )}

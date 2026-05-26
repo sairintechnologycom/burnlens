@@ -14,10 +14,9 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 
 interface TeamData {
-  team: string;
-  api_calls: number;
-  total_cost: number;
-  pct_of_total: number;
+  tag: string;
+  request_count: number;
+  total_cost_usd: number;
   budget?: number;
   budget_status?: "ok" | "warning" | "critical";
 }
@@ -147,6 +146,9 @@ function TeamsContent() {
     return "budget-ok";
   };
 
+  // pct_of_total is not returned by /usage/by-team — derive it client-side.
+  const teamsTotalCost = teams.reduce((s, t) => s + (t.total_cost_usd ?? 0), 0);
+
   return (
     <div>
       <div className="card" style={{ margin: 16, marginBottom: 0 }}>
@@ -156,8 +158,8 @@ function TeamsContent() {
         </div>
         {teams.length > 0 ? (
           <HorizontalBar
-            labels={teams.map((t) => t.team)}
-            data={teams.map((t) => t.total_cost)}
+            labels={teams.map((t) => t.tag)}
+            data={teams.map((t) => t.total_cost_usd ?? 0)}
             height={Math.max(200, teams.length * 36)}
           />
         ) : (
@@ -191,11 +193,11 @@ function TeamsContent() {
               </tr>
             ) : (
               teams.map((t) => (
-                <tr key={t.team}>
-                  <td style={{ fontWeight: 500 }}>{t.team}</td>
-                  <td>{t.api_calls.toLocaleString()}</td>
-                  <td>${t.total_cost.toFixed(2)}</td>
-                  <td>{(t.pct_of_total * 100).toFixed(1)}%</td>
+                <tr key={t.tag}>
+                  <td style={{ fontWeight: 500 }}>{t.tag}</td>
+                  <td>{(t.request_count ?? 0).toLocaleString()}</td>
+                  <td>${(t.total_cost_usd ?? 0).toFixed(2)}</td>
+                  <td>{teamsTotalCost > 0 ? (((t.total_cost_usd ?? 0) / teamsTotalCost) * 100).toFixed(1) : "0.0"}%</td>
                   <td>{t.budget ? `$${t.budget.toFixed(0)}` : "—"}</td>
                   <td>
                     <span className={statusClass(t.budget_status)} style={{ fontWeight: 500, textTransform: "uppercase", fontSize: 10 }}>
