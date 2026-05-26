@@ -26,6 +26,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
   }, [loading, session, pathname, router]);
 
+  // Close the mobile nav drawer on route change so tapping a link navigates
+  // and dismisses the drawer in one action.
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
   if (loading || !session) {
     return (
       <div style={{
@@ -44,7 +50,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     <PeriodProvider>
       <BillingProvider>
         <div className="shell">
-          <Topbar />
+          <Topbar onMenuClick={() => setMobileMenuOpen(true)} />
           <BillingStatusBanner session={session} />
           <div className="shell-main">
             <Sidebar />
