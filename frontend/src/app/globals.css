@@ -1168,6 +1168,12 @@ img, svg { display: block; }
     display: none;
   }
 
+  /* The sidebar rendered inside the mobile drawer must stay visible — the
+     rule above hides the in-layout sidebar on small screens. */
+  .mobile-drawer .sidebar {
+    display: flex;
+  }
+
   .right-panel {
     display: none;
   }
