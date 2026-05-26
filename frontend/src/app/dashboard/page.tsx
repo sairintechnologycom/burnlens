@@ -7,7 +7,7 @@ import BarChart from "@/components/charts/BarChart";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-import type { UsageSummary, RequestRow } from "@/lib/contracts";
+import type { UsageSummary, RequestRow, CostTimelinePoint } from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -43,7 +43,7 @@ function DashboardContent() {
 
       // Aggregate timeseries by date
       const byDate: Record<string, number> = {};
-      (ts as any[]).forEach((p: any) => {
+      (ts as CostTimelinePoint[]).forEach((p) => {
         byDate[p.date] = (byDate[p.date] || 0) + (p.total_cost_usd || 0);
       });
       const sorted = Object.entries(byDate)
