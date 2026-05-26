@@ -6,6 +6,22 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Frontend `burnlens.app`] — 2026-05-26
+
+### Fixed
+- **Every authenticated page crashed for any workspace that had usage data**
+  (found by `/investigate` on 2026-05-26). The dashboard read `total_cost` /
+  `api_calls` / `cost` / `latency_ms`, but the cloud API serializes
+  `total_cost_usd` / `request_count` / `cost_usd` / `duration_ms` (and `tags`
+  as an object). The wrong field names resolved to `undefined`, and the
+  unguarded `.toFixed()` / `.toLocaleString()` calls threw a `TypeError`.
+  Because the throw happened in `RightPanel` (shared dashboard chrome), it took
+  down `/dashboard`, `/api-keys`, and every Shell-wrapped page — but only for
+  workspaces with data, so empty QA accounts never surfaced it. Aligned all six
+  consumers (RightPanel, Overview, By model, By feature, By customer, By team)
+  to the real API field names and added `?? 0` guards so malformed data
+  degrades to `$0` instead of a white screen.
+
 ## [Cloud `burnlens-cloud` v1.2.1] — 2026-05-25
 
 ### Fixed

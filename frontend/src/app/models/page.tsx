@@ -10,10 +10,10 @@ import { usePeriod } from "@/lib/contexts/PeriodContext";
 interface ModelData {
   model: string;
   provider: string;
-  api_calls: number;
-  input_tokens: number;
-  output_tokens: number;
-  total_cost: number;
+  request_count: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_usd: number;
 }
 
 function ModelsContent() {
@@ -65,7 +65,7 @@ function ModelsContent() {
         {models.length > 0 ? (
           <HorizontalBar
             labels={models.map((m) => m.model)}
-            data={models.map((m) => m.total_cost)}
+            data={models.map((m) => m.total_cost_usd ?? 0)}
             height={Math.max(200, models.length * 36)}
           />
         ) : (
@@ -104,11 +104,11 @@ function ModelsContent() {
                 <tr key={m.model}>
                   <td style={{ fontWeight: 500 }}>{m.model}</td>
                   <td><span className="provider-badge">{m.provider}</span></td>
-                  <td>{m.api_calls.toLocaleString()}</td>
-                  <td>{(m.input_tokens || 0).toLocaleString()}</td>
-                  <td>{(m.output_tokens || 0).toLocaleString()}</td>
-                  <td style={{ fontWeight: 500 }}>${m.total_cost.toFixed(2)}</td>
-                  <td>${(m.api_calls > 0 ? m.total_cost / m.api_calls : 0).toFixed(4)}</td>
+                  <td>{(m.request_count ?? 0).toLocaleString()}</td>
+                  <td>{(m.total_input_tokens || 0).toLocaleString()}</td>
+                  <td>{(m.total_output_tokens || 0).toLocaleString()}</td>
+                  <td style={{ fontWeight: 500 }}>${(m.total_cost_usd ?? 0).toFixed(2)}</td>
+                  <td>${((m.request_count ?? 0) > 0 ? (m.total_cost_usd ?? 0) / (m.request_count ?? 1) : 0).toFixed(4)}</td>
                 </tr>
               ))
             )}
