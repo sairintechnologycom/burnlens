@@ -4,11 +4,7 @@ import { useEffect, useState } from "react";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { apiFetch } from "@/lib/api";
-
-interface ModelEntry {
-  model: string;
-  total_cost_usd: number;
-}
+import type { CostByModelRow } from "@/lib/contracts";
 
 interface WasteAlert {
   id: string;
@@ -21,7 +17,7 @@ interface WasteAlert {
 export default function RightPanel() {
   const { days } = usePeriod();
   const { session } = useAuth();
-  const [models, setModels] = useState<ModelEntry[]>([]);
+  const [models, setModels] = useState<CostByModelRow[]>([]);
   const [alerts, setAlerts] = useState<WasteAlert[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -7,21 +7,7 @@ import BarChart from "@/components/charts/BarChart";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface SummaryData {
-  total_cost_usd: number;
-  total_requests: number;
-  avg_cost_per_request_usd: number;
-  models_used: number;
-}
-
-interface RequestRecord {
-  timestamp: string;
-  model: string;
-  cost_usd: number;
-  duration_ms?: number;
-  tags?: { feature?: string; team?: string; [k: string]: unknown } | null;
-}
+import type { UsageSummary, RequestRow } from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -36,9 +22,9 @@ function latencyClass(ms: number): string {
 function DashboardContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
-  const [summary, setSummary] = useState<SummaryData | null>(null);
+  const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [timeseries, setTimeseries] = useState<{ label: string; cost: number }[]>([]);
-  const [requests, setRequests] = useState<RequestRecord[]>([]);
+  const [requests, setRequests] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestLimit, setRequestLimit] = useState(20);
@@ -67,7 +53,7 @@ function DashboardContent() {
           cost,
         }));
       setTimeseries(sorted);
-      setRequests(reqs as RequestRecord[]);
+      setRequests(reqs as RequestRow[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
       else setError(err.message);
