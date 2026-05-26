@@ -14,9 +14,9 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 
 interface CustomerData {
-  customer: string;
-  api_calls: number;
-  total_cost: number;
+  tag: string;
+  request_count: number;
+  total_cost_usd: number;
   budget_cap?: number;
 }
 
@@ -140,8 +140,8 @@ function CustomersContent() {
         </div>
         {customers.length > 0 ? (
           <HorizontalBar
-            labels={customers.map((c) => c.customer)}
-            data={customers.map((c) => c.total_cost)}
+            labels={customers.map((c) => c.tag)}
+            data={customers.map((c) => c.total_cost_usd ?? 0)}
             height={Math.max(200, customers.length * 36)}
           />
         ) : (
@@ -173,10 +173,10 @@ function CustomersContent() {
               </tr>
             ) : (
               customers.map((c) => (
-                <tr key={c.customer}>
-                  <td style={{ fontWeight: 500 }}>{c.customer}</td>
-                  <td>{c.api_calls.toLocaleString()}</td>
-                  <td>${c.total_cost.toFixed(2)}</td>
+                <tr key={c.tag}>
+                  <td style={{ fontWeight: 500 }}>{c.tag}</td>
+                  <td>{(c.request_count ?? 0).toLocaleString()}</td>
+                  <td>${(c.total_cost_usd ?? 0).toFixed(2)}</td>
                   <td>{c.budget_cap ? `$${c.budget_cap.toFixed(0)}` : "—"}</td>
                 </tr>
               ))
