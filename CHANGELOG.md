@@ -6,6 +6,24 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.3.1] — 2026-05-27
+
+### Fixed
+- **`/ui/discovery` returned 404 on FastAPI 0.115.x.** The route's
+  `-> FileResponse` return annotation (a string under
+  `from __future__ import annotations`) was resolved against module globals,
+  but `FileResponse` was only imported locally inside `get_app()`. On the pinned
+  FastAPI 0.115.0, `get_type_hints()` raised `NameError`, which the surrounding
+  `try/except` swallowed — silently dropping the discovery UI route and its
+  static mount. Now imported at module level. (Surfaced by running the test
+  suite under prod-pinned deps; masked locally by a newer FastAPI.)
+- **Asset API responses dropped the `tags` field.** `_asset_to_dict` omitted
+  `tags`, so the persisted per-asset tags never reached the list / get / patch /
+  discovery endpoints. Now serialized.
+- **Spend-spike alert fired at exactly 200% of the 30-day average.** The guard
+  used `< 2.0`, but the intent (and docstring) is to fire only *above* 200%.
+  Changed to `<= 2.0` so exactly 200% no longer alerts.
+
 ## [Frontend `burnlens.app`] — 2026-05-26
 
 ### Fixed
