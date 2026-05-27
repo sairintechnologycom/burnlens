@@ -203,13 +203,12 @@ class TestDiscoveryJsFunctions:
     def test_dash03_sort_logic(self):
         """DASH-03: JS tracks sort state and sends it to the server.
 
-        The rewritten dashboard does server-side sorting: clicking a column
-        header updates currentSortBy/currentSortDir and re-fetches with
-        sort_by/sort_dir query params. SORTABLE_COLUMNS drives the headers.
+        The dashboard does server-side sorting: clicking a `th.sortable`
+        header (keyed by its `data-col`) updates the sort state and re-fetches
+        with sort_by/sort_dir query params.
         """
-        assert "currentSortBy" in self.js
-        assert "currentSortDir" in self.js
-        assert "SORTABLE_COLUMNS" in self.js
+        assert "sortBy" in self.js and "sortDir" in self.js
+        assert "th.sortable" in self.js and "data-col" in self.js
         assert "sort_by" in self.js and "sort_dir" in self.js
 
     def test_dash06_new_this_week_rendering(self):
@@ -217,8 +216,8 @@ class TestDiscoveryJsFunctions:
         assert "new-this-week" in self.js or "renderNewThisWeek" in self.js or "new_this_week" in self.js
 
     def test_dash07_search_param_passed_to_api(self):
-        """DASH-07: JS passes the search param in API fetch calls."""
-        assert "currentSearch" in self.js
+        """DASH-07: JS reads the search box and passes search to the API."""
+        assert "global-search" in self.js
         assert "'search'" in self.js or '"search"' in self.js
 
 

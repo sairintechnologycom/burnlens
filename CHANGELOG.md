@@ -6,6 +6,26 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.4.0] — 2026-05-27
+
+### Added
+- **Saved Views on the discovery dashboard.** Name and persist a set of
+  filters (provider, status, risk, team, date, search, sort) to `localStorage`,
+  then reload or delete them from the toolbar.
+
+### Fixed
+- **The discovery dashboard (`/ui/discovery`) shipped five panels that never
+  rendered.** The HTML/CSS for the Provider Breakdown chart, Shadow AI Alerts,
+  the Discovery Timeline, the team filter, and the Unassigned KPI were present,
+  but `discovery.js` drove none of them — they sat on "Loading…" or blank
+  indefinitely. All are now wired to existing endpoints: the provider doughnut
+  from `/api/v1/assets/summary`, shadow cards from
+  `/api/v1/assets?status=shadow` (with per-card approve / assign-team), the
+  timeline from `/api/v1/discovery/events`, and the team list + Unassigned count
+  derived client-side from the asset list. A guarded 30s auto-refresh honors the
+  header's refresh indicator without clobbering in-progress edits. (No backend
+  change, so the frontend↔API contract snapshot is unaffected.)
+
 ## [OSS `burnlens` v1.3.1] — 2026-05-27
 
 ### Fixed
