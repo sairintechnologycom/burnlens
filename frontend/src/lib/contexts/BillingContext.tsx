@@ -10,51 +10,22 @@ import React, {
 } from "react";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
+import type {
+  BillingSummary,
+  UsageCurrentCycle,
+  AvailablePlan,
+  ApiKeysSummary,
+} from "@/lib/contracts";
 
-// W5 resolution: `status` is `string` (loose) to match the backend Pydantic
-// `status: str`. Backend openness preserves forward-compat for new Paddle
-// states; runtime defensiveness (fallback to "active" on unknown) lives
-// inside refresh() below, not in the type system.
-
-// Phase 10 Plan 01 additions — mirror the additive fields shipped by the
-// backend (burnlens_cloud/models.py: UsageCurrentCycle / AvailablePlan /
-// ApiKeysSummary). All three are optional on BillingSummary so legacy
-// callers (Phase 7/8) keep type-checking. NOTE: the api_keys table is
-// scoped on workspace_id (not org_id) — see 10-01-SUMMARY.md decision #2.
-export interface UsageCurrentCycle {
-  start: string; // ISO-8601
-  end: string; // ISO-8601
-  request_count: number;
-  monthly_request_cap: number;
-}
-
-export interface AvailablePlan {
-  plan: string; // "cloud" | "teams" (Free excluded by backend)
-  price_cents: number;
-  currency: string; // "USD"
-}
-
-export interface ApiKeysSummary {
-  active_count: number;
-  limit: number | null; // null = unlimited
-}
-
-export interface BillingSummary {
-  plan: string;
-  price_cents: number | null;
-  currency: string | null;
-  status: string;
-  trial_ends_at: string | null;
-  current_period_ends_at: string | null;
-  cancel_at_period_end: boolean;
-  // Phase 10 D-26 / Plan 01 additions — additive, optional.
-  // Backend (burnlens_cloud/billing.py) returns the cycle fields flat on
-  // `usage` (start, end, request_count, monthly_request_cap) — see
-  // tests/test_billing_usage.py asserting body["usage"]["request_count"].
-  usage?: UsageCurrentCycle | null;
-  available_plans?: AvailablePlan[];
-  api_keys?: ApiKeysSummary | null;
-}
+// Billing response shapes now live in @/lib/contracts as the single source of
+// truth, paired with field manifests the frontend↔API contract test enforces
+// (burnlens_cloud/models.py: BillingSummary / UsageCurrentCycle / AvailablePlan /
+// ApiKeysSummary). The W5 status-is-loose-string resolution and the additive,
+// optional usage/available_plans/api_keys fields are documented there. NOTE: the
+// api_keys table is scoped on workspace_id (not org_id) — see 10-01-SUMMARY.md
+// decision #2. Re-exported here so existing importers (settings/page.tsx,
+// CancelSubscriptionModal.tsx) keep resolving these from BillingContext.
+export type { BillingSummary, UsageCurrentCycle, AvailablePlan, ApiKeysSummary };
 
 interface BillingContextValue {
   billing: BillingSummary | null;

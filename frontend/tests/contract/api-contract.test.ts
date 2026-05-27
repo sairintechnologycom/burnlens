@@ -8,6 +8,10 @@ import {
   CostByTagFields,
   CostTimelineFields,
   RequestRowFields,
+  BillingSummaryFields,
+  UsageCurrentCycleFields,
+  AvailablePlanFields,
+  ApiKeysSummaryFields,
 } from "@/lib/contracts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +33,13 @@ const CONTRACTS = [
   { endpoint: "/api/v1/usage/by-team", schema: "CostByTag", fields: CostByTagFields },
   { endpoint: "/api/v1/usage/timeseries", schema: "CostTimeline", fields: CostTimelineFields },
   { endpoint: "/api/v1/requests", schema: "RequestRecordResponse", fields: RequestRowFields },
+  // /billing/summary returns BillingSummary. The top-level row presence-checks
+  // the usage/available_plans/api_keys containers; the three nested rows guard
+  // the numeric fields the UI actually formats (.toLocaleString / arithmetic).
+  { endpoint: "/billing/summary", schema: "BillingSummary", fields: BillingSummaryFields },
+  { endpoint: "/billing/summary (usage)", schema: "UsageCurrentCycle", fields: UsageCurrentCycleFields },
+  { endpoint: "/billing/summary (available_plans[])", schema: "AvailablePlan", fields: AvailablePlanFields },
+  { endpoint: "/billing/summary (api_keys)", schema: "ApiKeysSummary", fields: ApiKeysSummaryFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that
@@ -59,8 +70,28 @@ const NUMERIC_FIELDS = new Set([
   "total_output_tokens",
   "cost_usd",
   "duration_ms",
+  // BillingSummary + nested: the UI runs .toLocaleString / arithmetic on these.
+  "price_cents",
+  "monthly_request_cap",
+  "active_count",
+  "limit",
 ]);
-const STRING_FIELDS = new Set(["model", "provider", "tag", "date", "timestamp"]);
+const STRING_FIELDS = new Set([
+  "model",
+  "provider",
+  "tag",
+  "date",
+  "timestamp",
+  // BillingSummary + nested (date-time strings unwrap to "string").
+  "plan",
+  "currency",
+  "status",
+  "trial_ends_at",
+  "current_period_ends_at",
+  "start",
+  "end",
+]);
+const BOOLEAN_FIELDS = new Set(["cancel_at_period_end"]);
 
 // Check a manifest field's OpenAPI type against how the frontend uses it. We use
 // coarse buckets — the crash class was wrong names + number-vs-string, not deep
@@ -68,10 +99,14 @@ const STRING_FIELDS = new Set(["model", "provider", "tag", "date", "timestamp"])
 function typesCompatible(field: string, apiType: string | undefined): boolean {
   if (NUMERIC_FIELDS.has(field)) return apiType !== undefined && NUMBER_TYPES.has(apiType);
   if (STRING_FIELDS.has(field)) return apiType === "string";
+  if (BOOLEAN_FIELDS.has(field)) return apiType === "boolean";
   if (field === "tags") return apiType === "object";
   // NOTE: fields not listed above are only presence-checked, not type-checked.
-  // If you add a numeric or string field to a manifest in contracts.ts, add it to
-  // NUMERIC_FIELDS / STRING_FIELDS here too, or type drift won't be caught.
+  // If you add a numeric, string, or boolean field to a manifest in contracts.ts,
+  // add it to NUMERIC_FIELDS / STRING_FIELDS / BOOLEAN_FIELDS here too, or type
+  // drift won't be caught. Nested-object/array containers (usage, api_keys,
+  // available_plans, tags) stay presence-only; their numeric fields are guarded
+  // by adding the nested schema as its own CONTRACTS row.
   return true;
 }
 
