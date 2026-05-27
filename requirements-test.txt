@@ -10,15 +10,17 @@
 # snapshot-pinning lesson).
 -r requirements.txt
 
-# OSS proxy (`burnlens`) runtime deps not present in requirements.txt
+# OSS proxy (`burnlens`) runtime deps not present in requirements.txt.
+# These are declared in packaging/burnlens-proxy/pyproject.toml (what
+# `pip install burnlens` installs), but requirements.txt covers only the
+# cloud runtime, so the suite installs them explicitly to exercise the OSS
+# package. APScheduler is lazily imported by burnlens/detection/scheduler.py
+# when the proxy's scheduler starts; it is NOT used by burnlens_cloud, which
+# is why it stays out of requirements.txt (Railway runs burnlens_cloud only).
 aiosqlite==0.22.1
 typer==0.12.3
 rich==13.7.1
 PyYAML==6.0.1
-
-# Cloud scheduler dep imported by burnlens_cloud but missing from
-# requirements.txt (the app imports apscheduler at startup; needed to import
-# the FastAPI app under test).
 APScheduler==3.11.2
 
 # OSS proxy CLI dep. typer 0.12.3 is incompatible with click >= 8.2 (the
