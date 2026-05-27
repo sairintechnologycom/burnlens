@@ -91,3 +91,76 @@ export const RequestRowFields: Record<keyof RequestRow, true> = {
   duration_ms: true,
   tags: true,
 };
+
+// --- /billing/summary  ->  BillingSummary (+ nested schemas) ---
+// The money-facing twin of the PR #18 crash. The sidebar usage meter, api-keys
+// card, and settings page run arithmetic / .toLocaleString() on the NESTED
+// numeric fields (request_count, monthly_request_cap, active_count, limit,
+// price_cents), so all three nested schemas are contracted, not just the top
+// level. Backend schemas: burnlens_cloud/models.py. The contract test adds a row
+// per schema; openApiType only presence-checks the top-level usage/api_keys/
+// available_plans containers, so the nested rows are what actually guard the
+// numeric fields the UI formats.
+
+export interface UsageCurrentCycle {
+  start: string; // ISO-8601
+  end: string; // ISO-8601
+  request_count: number;
+  monthly_request_cap: number;
+}
+export const UsageCurrentCycleFields: Record<keyof UsageCurrentCycle, true> = {
+  start: true,
+  end: true,
+  request_count: true,
+  monthly_request_cap: true,
+};
+
+export interface AvailablePlan {
+  plan: string; // "cloud" | "teams" (Free excluded by backend)
+  price_cents: number;
+  currency: string; // "USD"
+}
+export const AvailablePlanFields: Record<keyof AvailablePlan, true> = {
+  plan: true,
+  price_cents: true,
+  currency: true,
+};
+
+export interface ApiKeysSummary {
+  active_count: number;
+  limit: number | null; // null = unlimited
+}
+export const ApiKeysSummaryFields: Record<keyof ApiKeysSummary, true> = {
+  active_count: true,
+  limit: true,
+};
+
+// W5 resolution: `status` is loose `string` to match the backend Pydantic
+// `status: str`; runtime defensiveness (coerce unknown Paddle states to
+// "active") lives in BillingContext.refresh()/applyBilling(), not in the type.
+// usage / available_plans / api_keys are additive (Phase 10) and optional so
+// legacy callers keep type-checking; the backend always serializes them.
+export interface BillingSummary {
+  plan: string;
+  price_cents: number | null;
+  currency: string | null;
+  status: string;
+  trial_ends_at: string | null;
+  current_period_ends_at: string | null;
+  cancel_at_period_end: boolean;
+  usage?: UsageCurrentCycle | null;
+  available_plans?: AvailablePlan[];
+  api_keys?: ApiKeysSummary | null;
+}
+export const BillingSummaryFields: Record<keyof BillingSummary, true> = {
+  plan: true,
+  price_cents: true,
+  currency: true,
+  status: true,
+  trial_ends_at: true,
+  current_period_ends_at: true,
+  cancel_at_period_end: true,
+  usage: true,
+  available_plans: true,
+  api_keys: true,
+};
