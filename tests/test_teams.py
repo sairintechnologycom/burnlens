@@ -35,16 +35,61 @@ from datetime import datetime, timedelta
 from burnlens_cloud.models import TokenPayload
 
 
+def _resolve_limits_row(plan: str, gated_features: dict, seat_count=10, api_key_count=10):
+    """A single asyncpg-style row as returned by `SELECT * FROM resolve_limits($1)`.
+
+    `burnlens_cloud.plans.resolve_limits` reads every scalar field plus
+    `gated_features` off `rows[0]`, so the mapping must carry all of them.
+    """
+    return {
+        "plan": plan,
+        "monthly_request_cap": 1000,
+        "seat_count": seat_count,
+        "retention_days": 7,
+        "api_key_count": api_key_count,
+        "monthly_token_cap": None,
+        "monthly_spend_cap_usd": None,
+        "gated_features": gated_features,
+    }
+
+
 @pytest_asyncio.fixture
 async def client():
-    """Create test client with mocked database.
+    """Create test client with a mocked burnlens_cloud DB pool.
 
     GAP-06 update: switch from the legacy `AsyncClient(app=app, ...)` constructor
     (removed in modern httpx) to `ASGITransport(app=app)` per current httpx
     contract. Required so the two seat-limit/feature-gate assertions can run.
+
+    Phase 9 added the `require_feature("teams_view")` dependency to every team
+    route. Its `checker` calls `plans.resolve_limits()` which routes through
+    `burnlens_cloud.database.execute_query` -> `pool.acquire()`. This fixture
+    previously left `burnlens_cloud.database.pool` as the module default `None`,
+    so every gated request hit `'NoneType' object has no attribute 'acquire'`.
+
+    Mirror tests/conftest.py's `client` fixture: install a MagicMock pool whose
+    `acquire()` yields an AsyncMock connection. The connection's `fetch` returns,
+    by default, a resolved-limits row with `teams_view` ENABLED so the happy-path
+    tests pass the gate. Tests that need a different gate outcome (free-plan
+    gating) patch `burnlens_cloud.database.execute_query` themselves.
     """
     from httpx import ASGITransport
     from burnlens_cloud.main import get_app
+    import burnlens_cloud.database as db_mod
+
+    # Default DB connection: `resolve_limits()` does `conn.fetch(...)` and reads
+    # `rows[0]`, so `fetch` must return a list with one resolve_limits row that
+    # grants the teams feature.
+    mock_conn = AsyncMock()
+    mock_conn.fetch.return_value = [
+        _resolve_limits_row("teams", {"teams_view": True, "customers_view": True})
+    ]
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    saved_pool = db_mod.pool
+    db_mod.pool = mock_pool
 
     # Bypass lifespan startup (init_db / scheduler tasks) by patching the
     # database hooks before the app is built.
@@ -52,8 +97,11 @@ async def client():
         with patch("burnlens_cloud.database.close_db", new_callable=AsyncMock):
             app = get_app()
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                yield ac
+            try:
+                async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                    yield ac
+            finally:
+                db_mod.pool = saved_pool
 
 
 @pytest.mark.asyncio
@@ -67,11 +115,18 @@ async def test_invite_member_success(client):
         with patch("burnlens_cloud.team_api.execute_insert") as mock_insert:
             with patch("burnlens_cloud.team_api.send_invitation_email") as mock_email:
                 with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
-                    # Mock workspace query
+                    # team_api.execute_query call sequence in invite_member:
+                    #   1) SELECT plan, name FROM workspaces
+                    #   2) existing-member check
+                    #   3) check_seat_limit COUNT (2 < seat_count 10 from fixture)
+                    #   4) SELECT name FROM users (invited-by display name)
+                    # (resolve_limits inside check_seat_limit/get_seat_limit goes
+                    #  through database.execute_query -> the fixture pool, not here.)
                     mock_query.side_effect = [
                         [{"plan": "teams", "name": "Test Workspace"}],  # Workspace info
                         [],  # Check if user already member
                         [{"count": 2}],  # Check seat limit (2 < 10)
+                        [{"name": "Admin User"}],  # invited-by name lookup
                     ]
 
                     mock_insert.return_value = None
@@ -134,28 +189,24 @@ async def test_invite_requires_admin_role(client):
         assert data["detail"]["current"] == "viewer"
 
 
-def _mock_resolve_limits_pool(plan: str, gated_features: dict, seat_count=1, api_key_count=1):
-    """Install a mock asyncpg pool on burnlens_cloud.plans so resolve_limits()
-    returns synthetic data without hitting Postgres.
+def _resolve_limits_execute_query(plan: str, gated_features: dict, seat_count=1, api_key_count=1):
+    """An `execute_query` stand-in for `burnlens_cloud.database.execute_query`.
 
-    `require_feature` lazy-imports `resolve_limits` and captures it in a closure
-    at FastAPI dependency-registration time, so patching the function reference
-    is too late. Patching `burnlens_cloud.plans.pool` makes the captured
-    function find a working (mocked) pool when it runs.
+    `plans.resolve_limits()` calls `database.execute_query("SELECT * FROM
+    resolve_limits($1)", ws_id)` and reads `rows[0]`. It does NOT use any
+    `plans.pool` (plans.py has no such attribute — it routes through
+    `database.execute_query`), which is why the old `plans.pool` patch was a
+    no-op and the gate fell through to the real `database.pool` (None).
+
+    This async stub returns the resolve_limits row for the resolve_limits SQL
+    and an empty list for anything else, giving the feature gate a deterministic
+    answer without a live pool.
     """
-    mock_conn = MagicMock()
-    mock_conn.fetchrow = AsyncMock(return_value={
-        "plan": plan,
-        "monthly_request_cap": 1000,
-        "seat_count": seat_count,
-        "retention_days": 7,
-        "api_key_count": api_key_count,
-        "gated_features": gated_features,
-    })
-    mock_pool = MagicMock()
-    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-    return mock_pool
+    async def _q(sql, *args):
+        if "resolve_limits" in sql:
+            return [_resolve_limits_row(plan, gated_features, seat_count, api_key_count)]
+        return []
+    return _q
 
 
 @pytest.mark.asyncio
@@ -170,7 +221,9 @@ async def test_invite_team_plan_only(client):
     workspace_id = str(uuid4())
     admin_id = str(uuid4())
 
-    mock_pool = _mock_resolve_limits_pool(
+    # Feature gate must resolve to a free plan with teams_view DISABLED so the
+    # require_feature("teams_view") dependency returns 402.
+    gate_q = _resolve_limits_execute_query(
         plan="free",
         gated_features={"teams_view": False, "customers_view": False},
     )
@@ -183,7 +236,7 @@ async def test_invite_team_plan_only(client):
 
     with patch("burnlens_cloud.team_api.execute_query", side_effect=_q):
         with patch("burnlens_cloud.auth.execute_query", side_effect=_q):
-            with patch("burnlens_cloud.plans.pool", mock_pool):
+            with patch("burnlens_cloud.plans.execute_query", side_effect=gate_q):
                 with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
                     token = TokenPayload(
                         workspace_id=workspace_id,
@@ -221,8 +274,11 @@ async def test_seat_limit_enforcement(client):
     admin_id = str(uuid4())
 
     # Teams plan: teams_view feature ON (so the feature gate passes through).
-    # The seat cap is enforced at the handler level: seat_count=1, current=1.
-    mock_pool = _mock_resolve_limits_pool(
+    # The seat cap is enforced at the handler level via resolve_limits().seat_count.
+    # Both the gate and get_seat_limit() read this through
+    # burnlens_cloud.database.execute_query, so the resolve_limits row must carry
+    # seat_count=1 to drive "current(1) >= limit(1)" -> at cap.
+    gate_q = _resolve_limits_execute_query(
         plan="teams",
         gated_features={"teams_view": True, "customers_view": True},
         seat_count=1,
@@ -255,7 +311,7 @@ async def test_seat_limit_enforcement(client):
 
     with patch("burnlens_cloud.team_api.execute_query", side_effect=_team_q):
         with patch("burnlens_cloud.auth.execute_query", side_effect=_auth_q):
-            with patch("burnlens_cloud.plans.pool", mock_pool):
+            with patch("burnlens_cloud.plans.execute_query", side_effect=gate_q):
                 with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
                     token = TokenPayload(
                         workspace_id=workspace_id,
@@ -394,7 +450,7 @@ async def test_dashboard_endpoints_require_viewer_role(client):
             ]
 
             response = await client.get(
-                "/api/summary",
+                "/api/v1/usage/summary",
                 headers={"Authorization": f"Bearer test-token"},
             )
 
@@ -415,9 +471,10 @@ async def test_invitation_token_generation(client):
             with patch("burnlens_cloud.team_api.send_invitation_email"):
                 with patch("burnlens_cloud.auth.decode_jwt") as mock_decode:
                     mock_query.side_effect = [
-                        [{"plan": "teams", "name": "Test Workspace"}],
-                        [],
-                        [{"count": 1}],
+                        [{"plan": "teams", "name": "Test Workspace"}],  # workspaces
+                        [],                                             # existing member
+                        [{"count": 1}],                                 # seat-limit COUNT
+                        [{"name": "Admin User"}],                       # invited-by name
                     ]
 
                     mock_insert.return_value = None

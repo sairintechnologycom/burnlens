@@ -1,0 +1,33 @@
+# Test/CI dependencies for the full pytest suite.
+#
+# The repo ships two packages: `burnlens` (OSS proxy, SQLite/Typer/Rich) and
+# `burnlens_cloud` (Railway backend). requirements.txt covers only the cloud
+# runtime, so the full suite additionally needs the OSS runtime deps plus the
+# test tooling. Versions are pinned to what the suite was verified green against.
+#
+# Pinned deps must match requirements.txt — regenerate-and-verify in a clean
+# venv if you bump anything (see scripts/dump_openapi.py for the related
+# snapshot-pinning lesson).
+-r requirements.txt
+
+# OSS proxy (`burnlens`) runtime deps not present in requirements.txt
+aiosqlite==0.22.1
+typer==0.12.3
+rich==13.7.1
+PyYAML==6.0.1
+
+# Cloud scheduler dep imported by burnlens_cloud but missing from
+# requirements.txt (the app imports apscheduler at startup; needed to import
+# the FastAPI app under test).
+APScheduler==3.11.2
+
+# OSS proxy CLI dep. typer 0.12.3 is incompatible with click >= 8.2 (the
+# Parameter.make_metavar() signature changed to require `ctx`), and click is
+# only pulled transitively, so pin it explicitly to keep `burnlens` CLI tests
+# green.
+click==8.1.8
+
+# Test tooling
+pytest==9.0.3
+pytest-asyncio==1.3.0
+respx==0.23.1
