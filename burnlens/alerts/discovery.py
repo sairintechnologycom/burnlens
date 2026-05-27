@@ -166,7 +166,9 @@ class DiscoveryAlertEngine:
                 continue
 
             spike_ratio = asset.monthly_spend_usd / avg_spend
-            if spike_ratio < 2.0:
+            # Fire only when spend is strictly ABOVE 200% of the 30-day average
+            # (ratio > 2.0). Exactly 2.0 (200%) must NOT fire — see ALRT-05.
+            if spike_ratio <= 2.0:
                 continue
 
             alert = SpendSpikeAlert(

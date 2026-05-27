@@ -71,9 +71,12 @@ async def test_cost_timeline_zero_filled(authed_client):
     ac, mock_conn, token, ws_id = authed_client
 
     mock_conn.fetchrow.return_value = {"id": ws_id, "name": "Test WS", "plan": "cloud", "active": True}
-    # Return data for only 1 out of 3 days
+    # Return data for only 1 out of 3 days. Use a day inside the queried
+    # window (today) so the endpoint's zero-fill range actually includes it;
+    # the other days in the 3-day window must be zero-filled.
+    today = datetime.now(timezone.utc).date()
     mock_conn.fetch = AsyncMock(return_value=[
-        {"day": date(2026, 4, 13), "cost": 1.50},
+        {"day": today, "cost": 1.50},
     ])
 
     resp = await ac.get("/api/cost-timeline?days=3", headers={"Authorization": f"Bearer {token}"})

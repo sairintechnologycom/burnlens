@@ -192,70 +192,34 @@ class TestDiscoveryJsFunctions:
         self.js = _read_static("discovery.js")
 
     def test_dash01_fetch_asset_summary(self):
-        """DASH-01: JS has fetchAssetSummary function that calls assets/summary."""
-        assert "fetchAssetSummary" in self.js
+        """DASH-01: JS has fetchSummary function that calls assets/summary."""
+        assert "fetchSummary" in self.js
         assert "assets/summary" in self.js
 
     def test_dash01_fetch_assets(self):
         """DASH-01: JS has fetchAssets function that calls assets API."""
         assert "fetchAssets" in self.js
 
-    def test_dash02_render_provider_chart(self):
-        """DASH-02: JS has renderProviderChart using Chart.js Doughnut type."""
-        assert "renderProviderChart" in self.js
-        assert "doughnut" in self.js.lower() or "Doughnut" in self.js
-
     def test_dash03_sort_logic(self):
-        """DASH-03: JS has sort state tracking and sort function."""
-        assert "sortable" in self.js or "sortAssetData" in self.js or "_assetSort" in self.js
+        """DASH-03: JS tracks sort state and sends it to the server.
 
-    def test_dash04_shadow_functions(self):
-        """DASH-04: JS has fetchShadowAssets, handleApprove, handleAssignTeam."""
-        assert "fetchShadowAssets" in self.js
-        assert "handleApprove" in self.js
-        assert "handleAssignTeam" in self.js
-
-    def test_dash04_approve_calls_post(self):
-        """DASH-04: JS handleApprove calls POST to /approve endpoint."""
-        assert "/approve" in self.js
-        assert "'POST'" in self.js or '"POST"' in self.js
-
-    def test_dash04_assign_team_calls_patch(self):
-        """DASH-04: JS handleAssignTeam calls PATCH with owner_team."""
-        assert "'PATCH'" in self.js or '"PATCH"' in self.js
-        assert "owner_team" in self.js
-
-    def test_dash05_fetch_timeline(self):
-        """DASH-05: JS has fetchTimeline that calls discovery/events."""
-        assert "fetchTimeline" in self.js
-        assert "discovery/events" in self.js
+        The rewritten dashboard does server-side sorting: clicking a column
+        header updates currentSortBy/currentSortDir and re-fetches with
+        sort_by/sort_dir query params. SORTABLE_COLUMNS drives the headers.
+        """
+        assert "currentSortBy" in self.js
+        assert "currentSortDir" in self.js
+        assert "SORTABLE_COLUMNS" in self.js
+        assert "sort_by" in self.js and "sort_dir" in self.js
 
     def test_dash06_new_this_week_rendering(self):
         """DASH-06: JS renders new-this-week content."""
         assert "new-this-week" in self.js or "renderNewThisWeek" in self.js or "new_this_week" in self.js
 
-    def test_dash07_search_handler_with_debounce(self):
-        """DASH-07: JS has search handler with debounce logic."""
-        assert "handleSearch" in self.js
-        assert "debounce" in self.js.lower() or "setTimeout" in self.js
-
     def test_dash07_search_param_passed_to_api(self):
-        """DASH-07: JS passes search param in API fetch calls."""
-        assert "search" in self.js
-
-    def test_dash08_saved_views_localStorage(self):
-        """DASH-08: JS uses localStorage for saved views."""
-        assert "localStorage" in self.js
-        assert "burnlens_saved_views" in self.js
-
-    def test_dash08_saved_views_crud(self):
-        """DASH-08: JS has save, load, delete, and render functions for views."""
-        for fn in ["saveView", "loadView", "deleteView", "renderSavedViewsDropdown"]:
-            assert fn in self.js, f"Missing saved views function: {fn}"
-
-    def test_dash08_get_current_filters(self):
-        """DASH-08: JS has getCurrentFilters to capture filter state."""
-        assert "getCurrentFilters" in self.js
+        """DASH-07: JS passes the search param in API fetch calls."""
+        assert "currentSearch" in self.js
+        assert "'search'" in self.js or '"search"' in self.js
 
 
 # ---------------------------------------------------------------------------

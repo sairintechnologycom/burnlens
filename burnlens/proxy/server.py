@@ -8,7 +8,7 @@ from typing import AsyncIterator
 
 import httpx
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from burnlens.alerts.engine import AlertEngine

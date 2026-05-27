@@ -10,6 +10,13 @@ import pytest
 class TestPatchGoogle:
     """Tests for patch_google()."""
 
+    @pytest.fixture(autouse=True)
+    def _require_genai(self):
+        # patch_google() lazily imports google.generativeai (an optional
+        # provider dep, not in requirements). Skip rather than fail when it
+        # isn't installed so the suite stays green without the heavy SDK.
+        pytest.importorskip("google.generativeai")
+
     def test_configures_correct_endpoint(self):
         """patch_google() should call genai.configure with the proxy endpoint."""
         with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}):

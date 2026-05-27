@@ -1,13 +1,15 @@
 name: Tests
 
-# First test-running CI for this repo. Gates PRs on:
+# Test-running CI for this repo. Gates PRs on:
 #   1. OpenAPI snapshot freshness (backend Pydantic models vs the committed snapshot)
 #   2. Frontend vitest, which includes the frontend<->API contract test
+#   3. Backend pytest — the full suite, run under requirements-test.txt (the
+#      prod-pinned deps, NOT a dev machine's newer packages).
 #
-# Backend pytest is intentionally NOT gated here: the suite is currently red on
-# main for pre-existing, unrelated reasons (tracked as separate debt). Add a
-# pytest job once that suite is green. Python is installed below only to
-# regenerate the OpenAPI snapshot.
+# The backend suite was made green and gated here after the pre-existing red
+# (36 failed / 12 errors) was resolved. Integration tests that need a real
+# Postgres skip cleanly when no DB is reachable (no Postgres service here), and
+# the optional google-generativeai provider tests importorskip.
 
 on:
   pull_request:
@@ -60,3 +62,23 @@ jobs:
       - name: Run frontend tests (includes contract test)
         working-directory: frontend
         run: npm run test
+
+  backend-pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+
+      - name: Run backend pytest suite
+        run: pytest tests/ -p no:cacheprovider
