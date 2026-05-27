@@ -16,6 +16,7 @@ import pytest
 from burnlens.alerts.discovery import DiscoveryAlertEngine, _build_alert_email_html
 from burnlens.alerts.types import DiscoveryAlert, SpendSpikeAlert
 from burnlens.config import AlertsConfig, BurnLensConfig, EmailConfig
+from burnlens.storage.database import init_db
 from burnlens.storage.models import AiAsset, DiscoveryEvent
 
 
@@ -171,6 +172,10 @@ class TestSpendSpikeThresholdBoundary:
     async def test_exactly_200_percent_does_not_fire(self, tmp_path) -> None:
         """Spend spike at exactly 2.0 ratio (200%) does NOT trigger alert."""
         db_path = str(tmp_path / "test.db")
+        # Apply the real schema so the fired_alerts dedup table exists; the
+        # dedup check should run for real (not fail open) and find no prior
+        # fire, leaving the threshold guard as the only thing deciding.
+        await init_db(db_path)
         config = _make_config()
         engine = DiscoveryAlertEngine(config, db_path)
 

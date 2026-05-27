@@ -32,7 +32,7 @@ async def get_audit_log(
 
     Auth: admin+ and enterprise plan only
     """
-    require_role("admin", token)
+    await require_role("admin", token)
 
     # Check if enterprise plan
     if token.plan != "enterprise":
@@ -129,7 +129,7 @@ async def export_audit_log_csv(
 
     Auth: admin+ and enterprise plan only
     """
-    require_role("admin", token)
+    await require_role("admin", token)
 
     # Check if enterprise plan
     if token.plan != "enterprise":

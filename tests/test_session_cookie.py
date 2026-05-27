@@ -97,6 +97,10 @@ async def test_login_sets_httponly_cookie_and_authorizes_subsequent_request(app_
             "created_at": __import__("datetime").datetime.utcnow(),
             "active": True,
         }],
+        # WR-04: login fetches email_verified_at directly from users.
+        [{"email_verified_at": __import__("datetime").datetime.utcnow()}],
+        # WR-04: login checks for a pending email-verification token.
+        [],
     ]
 
     async def fake_execute_query(sql, *args):

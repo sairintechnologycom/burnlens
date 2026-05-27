@@ -44,6 +44,7 @@ def _asset_to_dict(a: AiAsset) -> dict[str, Any]:
         "last_active_at": a.last_active_at.isoformat(),
         "monthly_spend_usd": a.monthly_spend_usd,
         "monthly_requests": a.monthly_requests,
+        "tags": a.tags,
     }
 
 

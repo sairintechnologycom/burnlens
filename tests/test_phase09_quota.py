@@ -953,17 +953,38 @@ class TestGate05FeatureGates:
         app = _make_app(team_router)
         token = _encode_test_jwt(WS_A, "free", role="owner")
 
-        # Mock the asyncpg pool that resolve_limits() consumes via plans.py.
-        # Free plan: teams_view feature is OFF.
-        mock_pool = _install_mock_pool_for_resolve_limits({
-            "plan": "free",
-            "monthly_request_cap": 1000,
-            "seat_count": 1,
-            "retention_days": 7,
-            "api_key_count": 1,
-            "gated_features": {"teams_view": False, "customers_view": False},
-        })
+        # Drive the REAL resolve_limits() to return a FREE-plan limits object
+        # where teams_view is OFF, by mocking the DB call it makes.
+        #
+        # NOTE on patch target: the `pool` global lives in burnlens_cloud.database,
+        # NOT burnlens_cloud.plans (plans.py deliberately routes through
+        # database.execute_query to avoid capturing a stale import-time pool).
+        # Patching the closure-captured resolve_limits is also unreliable here:
+        # auth.require_feature lazy-imports resolve_limits into its own scope and
+        # `checker` closes over that value at router-import time, so a later
+        # `patch("burnlens_cloud.plans.resolve_limits", ...)` does not reach it.
+        # The robust seam is plans.execute_query, which resolve_limits looks up
+        # in its module namespace on every call. It must return a LIST (fetch),
+        # and the row must carry every column resolve_limits reads.
+        async def _resolve_query_side_effect(sql, *args):
+            s = " ".join(sql.split())
+            if "resolve_limits($1)" in s:
+                return [{
+                    "plan": "free",
+                    "monthly_request_cap": 1000,
+                    "seat_count": 1,
+                    "retention_days": 7,
+                    "api_key_count": 1,
+                    "monthly_token_cap": None,
+                    "monthly_spend_cap_usd": None,
+                    "gated_features": {"teams_view": False, "customers_view": False},
+                }]
+            return []
 
+        mock_resolve_query = AsyncMock(side_effect=_resolve_query_side_effect)
+
+        # _lowest_plan_with_feature() runs execute_query against plan_limits to
+        # compute required_plan; return the teams row so required_plan == "teams".
         async def _query_side_effect(sql, *args):
             s = " ".join(sql.split())
             if "FROM plan_limits" in s and "gated_features" in s:
@@ -972,7 +993,7 @@ class TestGate05FeatureGates:
 
         mock_query = AsyncMock(side_effect=_query_side_effect)
 
-        with patch("burnlens_cloud.plans.pool", mock_pool), \
+        with patch("burnlens_cloud.plans.execute_query", mock_resolve_query), \
              patch("burnlens_cloud.auth.execute_query", mock_query):
             async with _make_client(app) as ac:
                 r = await ac.get(
@@ -1001,14 +1022,27 @@ class TestGate05FeatureGates:
         app = _make_app(dashboard_router)
         token = _encode_test_jwt(WS_A, "free")
 
-        mock_pool = _install_mock_pool_for_resolve_limits({
-            "plan": "free",
-            "monthly_request_cap": 1000,
-            "seat_count": 1,
-            "retention_days": 7,
-            "api_key_count": 1,
-            "gated_features": {"teams_view": False, "customers_view": False},
-        })
+        # Drive the REAL resolve_limits() to a FREE-plan row (both gated features
+        # OFF) by mocking the DB call inside plans.py. resolve_limits looks up
+        # `execute_query` in its module namespace each call, so patching
+        # burnlens_cloud.plans.execute_query is the robust seam (the pool itself
+        # lives in burnlens_cloud.database, never on burnlens_cloud.plans).
+        async def _resolve_query_side_effect(sql, *args):
+            s = " ".join(sql.split())
+            if "resolve_limits($1)" in s:
+                return [{
+                    "plan": "free",
+                    "monthly_request_cap": 1000,
+                    "seat_count": 1,
+                    "retention_days": 7,
+                    "api_key_count": 1,
+                    "monthly_token_cap": None,
+                    "monthly_spend_cap_usd": None,
+                    "gated_features": {"teams_view": False, "customers_view": False},
+                }]
+            return []
+
+        mock_resolve_query = AsyncMock(side_effect=_resolve_query_side_effect)
 
         async def _query_side_effect(sql, *args):
             s = " ".join(sql.split())
@@ -1018,7 +1052,7 @@ class TestGate05FeatureGates:
 
         mock_query = AsyncMock(side_effect=_query_side_effect)
 
-        with patch("burnlens_cloud.plans.pool", mock_pool), \
+        with patch("burnlens_cloud.plans.execute_query", mock_resolve_query), \
              patch("burnlens_cloud.auth.execute_query", mock_query):
             async with _make_client(app) as ac:
                 r = await ac.get(path, headers={"Authorization": f"Bearer {token}"})

@@ -26,6 +26,32 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     pytest.skip("DATABASE_URL not set — Phase 6 tests need a real Postgres", allow_module_level=True)
 
+# Honor the documented intent: skip gracefully when Postgres / the target
+# database is unreachable (e.g. CI without a DB, or the test DB not provisioned),
+# not merely when DATABASE_URL is unset. Attempt a quick connection at module
+# load and skip on any connection failure (InvalidCatalogNameError, ConnectionError,
+# OSError, timeout, etc.) so the module SKIPs locally/CI but RUNs fully when a DB exists.
+import asyncio
+
+
+async def _probe_database() -> None:
+    conn = await asyncpg.connect(DATABASE_URL, timeout=3)
+    await conn.close()
+
+
+try:
+    asyncio.run(asyncio.wait_for(_probe_database(), timeout=5))
+    _DB_REACHABLE = True
+    _SKIP_REASON = ""
+except Exception as exc:  # noqa: BLE001 — any connection failure means "unreachable"
+    _DB_REACHABLE = False
+    _SKIP_REASON = f"Postgres unreachable for Phase 6 tests ({type(exc).__name__}: {exc}) — skipping"
+
+# Skip the collected tests (rather than at collection time) when the DB is
+# unreachable. This still RUNs every test fully when a DB exists, but reports a
+# clean "N skipped" with exit code 0 in CI / local-without-DB environments.
+pytestmark = pytest.mark.skipif(not _DB_REACHABLE, reason=_SKIP_REASON or "db reachable")
+
 
 @pytest_asyncio.fixture(scope="module")
 async def db():
