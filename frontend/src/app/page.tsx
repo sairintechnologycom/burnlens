@@ -63,7 +63,7 @@ function HeatBars() {
           </div>
         ))}
         <div className="lp-heatbars-row tier-faded" style={{ animationDelay: "660ms" }}>
-          <span className="lp-heatbars-model">+ 18 more</span>
+          <span className="lp-heatbars-model">tail of 18</span>
           <div className="lp-heatbars-track">
             <div
               className="lp-heatbars-fill"
@@ -73,7 +73,7 @@ function HeatBars() {
               }}
             />
           </div>
-          <span className="lp-heatbars-value">—</span>
+          <span className="lp-heatbars-value">$11</span>
         </div>
       </div>
       <div className="lp-heatbars-divider" />
@@ -89,8 +89,8 @@ function HeatBars() {
           <div className="lp-heatbars-progress-fill" />
         </div>
         <div className="lp-heatbars-total-foot">
-          <span>72% of cap</span>
-          <span className="lp-heatbars-total-burn">burning at $30/hr</span>
+          <span>$283 left</span>
+          <span className="lp-heatbars-total-burn">burning at $30/hr · 9h to cap</span>
         </div>
       </div>
     </div>
