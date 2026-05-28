@@ -23,6 +23,80 @@ const MOCK_MODELS = [
 
 const MOCK_DAILY = [0.8, 1.2, 2.1, 1.6, 3.4, 2.8, 4.1, 3.2, 2.9, 3.8, 4.6, 3.1, 5.2, 4.8];
 
+const HEATBAR_ROWS = [
+  { model: "gpt-4o",          value: 342, pct: 100, tier: "hot"   },
+  { model: "claude-sonnet-4", value: 218, pct: 64,  tier: "warm"  },
+  { model: "gpt-4o-mini",     value: 94,  pct: 27,  tier: "mid"   },
+  { model: "haiku-4.5",       value: 41,  pct: 12,  tier: "muted" },
+  { model: "gemini-1.5",      value: 22,  pct: 6,   tier: "muted" },
+] as const;
+
+function HeatBars() {
+  return (
+    <div
+      className="lp-heatbars"
+      role="img"
+      aria-label="Example dashboard: gpt-4o burning $342 of the $1,000 daily cap, total $717 used."
+    >
+      <div className="lp-heatbars-head">
+        <span>Spend by model</span>
+        <span className="lp-heatbars-period">past 24h</span>
+      </div>
+      <div className="lp-heatbars-rows">
+        {HEATBAR_ROWS.map((r, i) => (
+          <div
+            key={r.model}
+            className={`lp-heatbars-row tier-${r.tier}`}
+            style={{ animationDelay: `${i * 70 + 200}ms` }}
+          >
+            <span className="lp-heatbars-model">{r.model}</span>
+            <div className="lp-heatbars-track">
+              <div
+                className="lp-heatbars-fill"
+                style={{
+                  ["--lp-fill" as never]: `${r.pct}%`,
+                  animationDelay: `${i * 70 + 280}ms`,
+                }}
+              />
+            </div>
+            <span className="lp-heatbars-value">${r.value}</span>
+          </div>
+        ))}
+        <div className="lp-heatbars-row tier-faded" style={{ animationDelay: "660ms" }}>
+          <span className="lp-heatbars-model">+ 18 more</span>
+          <div className="lp-heatbars-track">
+            <div
+              className="lp-heatbars-fill"
+              style={{
+                ["--lp-fill" as never]: "3%",
+                animationDelay: "740ms",
+              }}
+            />
+          </div>
+          <span className="lp-heatbars-value">—</span>
+        </div>
+      </div>
+      <div className="lp-heatbars-divider" />
+      <div className="lp-heatbars-total">
+        <div className="lp-heatbars-total-head">
+          <span className="lp-heatbars-total-label">Daily cap</span>
+          <span className="lp-heatbars-total-value">
+            <span className="lp-heatbars-total-num">$717</span>
+            <span className="lp-heatbars-total-cap"> / $1,000</span>
+          </span>
+        </div>
+        <div className="lp-heatbars-progress">
+          <div className="lp-heatbars-progress-fill" />
+        </div>
+        <div className="lp-heatbars-total-foot">
+          <span>72% of cap</span>
+          <span className="lp-heatbars-total-burn">burning at $30/hr</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TerminalAnimation({ onComplete }: { onComplete: () => void }) {
   const [visibleLines, setVisibleLines] = useState<number>(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -201,23 +275,55 @@ export default function LandingPage() {
           </>
         )}
 
-        {/* HERO: terminal */}
+        {/* HERO: left-aligned asymmetric two-column */}
         <section className="lp-hero">
-          <h1 className="lp-headline">
-            The open-source <span className="acc">FinOps proxy</span> for AI spend
-          </h1>
-          <p className="lp-subline">
-            Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google today —
-            with Azure, AWS Bedrock, Groq, Mistral, and Together on the roadmap.
-            Hard-cap budgets before the API call, not after the bill arrives.
-          </p>
-          <div className="lp-provider-strip">
-            {["OpenAI", "Anthropic", "Google"].map((p) => (
-              <span key={p} className="lp-provider-chip">{p}</span>
-            ))}
-            <span className="lp-provider-more">Azure · AWS Bedrock · Groq · Mistral · Together — coming in v0.2 / v0.3</span>
+          <div className="lp-hero-grid">
+            <div className="lp-hero-left">
+              <h1 className="lp-headline">
+                The open-source <span className="acc">FinOps proxy</span> for AI spend
+              </h1>
+              <p className="lp-subline">
+                Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google today,
+                with Azure, AWS Bedrock, Groq, Mistral, and Together on the roadmap.
+                Hard-cap budgets before the API call, not after the bill arrives.
+              </p>
+              <div className="lp-hero-cta">
+                <Link href="/setup?intent=register" className="lp-hero-btn primary">
+                  Start free trial
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M5 10h10m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Link>
+                <a
+                  href="https://github.com/sairintechnologycom/burnlens"
+                  className="lp-hero-btn secondary"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.34c-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.88 2.34.67.07-.52.28-.88.51-1.08-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.11 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.91.08 2.11.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                  </svg>
+                  View on GitHub
+                </a>
+              </div>
+              <div className="lp-provider-strip lp-provider-strip-left">
+                {["OpenAI", "Anthropic", "Google"].map((p) => (
+                  <span key={p} className="lp-provider-chip">{p}</span>
+                ))}
+                <span className="lp-provider-more">Azure · AWS Bedrock · Groq · Mistral · Together — coming in v0.2 / v0.3</span>
+              </div>
+            </div>
+            <div className="lp-hero-right">
+              <HeatBars />
+            </div>
           </div>
-          <TerminalAnimation onComplete={() => setTermDone(true)} />
+        </section>
+
+        {/* INSTALL: terminal animation in its own block */}
+        <section className="lp-install-demo">
+          <div className="lp-install-demo-inner">
+            <TerminalAnimation onComplete={() => setTermDone(true)} />
+          </div>
         </section>
 
         {/* TRANSITION: terminal done → dashboard appears */}
