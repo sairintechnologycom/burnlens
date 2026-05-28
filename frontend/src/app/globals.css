@@ -1355,7 +1355,8 @@ img, svg { display: block; }
 .lp-hero {
   min-height: 100vh; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  padding: 80px 24px 40px; text-align: center; position: relative;
+  padding: clamp(96px, 12vh, 128px) 24px 40px;
+  text-align: center; position: relative;
 }
 .lp-hero::before {
   content: ''; position: absolute; top: 25%; left: 50%;
@@ -1776,6 +1777,61 @@ img, svg { display: block; }
   .lp-pricing-grid { grid-template-columns: 1fr; max-width: 360px; margin: 0 auto; }
 }
 
+/* ── Landing page light-theme repalette ──────────────────────────
+   Parchment-and-ember. The thermal-burn lane in light mode reads like
+   a faded letter, not generic cream-and-cyan SaaS. */
+.theme-light .lp {
+  --bg:      oklch(0.97 0.012 80);   /* warm parchment */
+  --bg2:     oklch(0.94 0.014 75);
+  --bg3:     oklch(0.91 0.016 70);
+  --border:  oklch(0.85 0.018 65);
+  --cyan:    oklch(0.55 0.20 40);    /* ember, darkened for L>90 bg contrast */
+  --cyan-dim:oklch(0.48 0.18 40);
+  --amber:   oklch(0.62 0.18 70);
+  --red:     oklch(0.50 0.20 25);
+  --green:   oklch(0.50 0.13 165);
+  --l-text:  oklch(0.18 0.015 35);   /* warm near-black */
+  --l-muted: oklch(0.48 0.012 50);
+  --muted2:  oklch(0.32 0.012 45);
+  --card-bg: oklch(0.96 0.012 75);
+}
+.theme-light .lp-nav {
+  background: oklch(0.97 0.012 80 / 0.88);
+}
+.theme-light .lp-hero::before {
+  background: radial-gradient(ellipse, oklch(0.55 0.20 40 / 0.10) 0%, transparent 70%);
+}
+.theme-light .lp-problem-card {
+  border-top-color: oklch(0.55 0.20 40 / 0.35);
+}
+.theme-light .term-window,
+.theme-light .dash-preview,
+.theme-light .lp-install-code {
+  /* Terminal + dashboard + install code stay dark in light theme —
+     they're literal renderings of dark terminal UI, not page chrome.
+     Keep the dark surface and just soften the shadow against parchment. */
+  background: oklch(0.13 0.015 35);
+  border-color: oklch(0.26 0.020 35);
+  color: oklch(0.96 0.010 80);
+  box-shadow: 0 16px 40px oklch(0.55 0.20 40 / 0.14);
+}
+.theme-light .dash-preview .dash-stat-value,
+.theme-light .dash-preview .dash-model-name,
+.theme-light .dash-preview .dash-topbar-brand {
+  color: oklch(0.96 0.010 80);
+}
+.theme-light .lp-install-line { color: oklch(0.96 0.010 80); }
+.theme-light .lp-install-comment { color: oklch(0.60 0.012 60); }
+.theme-light .lp-provider-chip {
+  background: oklch(0.55 0.20 40 / 0.06);
+}
+.theme-light .lp-compare-table td {
+  border-bottom-color: oklch(0.55 0.20 40 / 0.08);
+}
+.theme-light .lp-compare-table td.no {
+  color: oklch(0.70 0.010 60);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Phase 10: Feature Gating & Usage Visibility UI (additive only)
    File-ownership boundary — Plans 03 and 04 must NOT edit globals.css.
@@ -1934,6 +1990,24 @@ img, svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .locked-panel-card, .api-key-modal-backdrop { animation: none; }
   .usage-meter-fill { transition: none; }
+
+  /* Landing-page: kill entrance reveals, blinks, and bar growth.
+     opacity:1 + transform:none lock final state so content doesn't stay invisible. */
+  .lp-headline,
+  .lp-subline,
+  .term-window,
+  .term-line,
+  .lp-transition,
+  .dash-preview,
+  .dash-bar {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .term-cursor,
+  .dash-live-dot {
+    animation: none !important;
+  }
 }
 
 /* ── Landing page additions ─────────────────────────────────────── */
