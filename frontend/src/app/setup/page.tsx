@@ -268,7 +268,13 @@ function SetupContent() {
           transition: background 0.15s;
         }
         .sp-btn-primary:hover { background: var(--cyan-dim); }
-        .sp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .sp-btn-primary:disabled {
+          background: var(--bg3);
+          color: var(--s-muted);
+          cursor: not-allowed;
+          opacity: 1;
+        }
+        .sp-btn-primary:disabled:hover { background: var(--bg3); }
         .sp-error {
           padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;
           background: rgba(240,64,96,0.08); border: 1px solid rgba(240,64,96,0.2);
