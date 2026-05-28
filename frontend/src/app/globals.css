@@ -1352,29 +1352,275 @@ img, svg { display: block; }
 }
 .lp-nav-right .primary:hover { background: var(--cyan-dim); }
 
+/* HERO — left-aligned asymmetric two-column.
+   Content fills its own height; the 100vh min-height of the old centered-stack
+   pattern is intentionally gone — editorial pages compose, they don't fill viewports. */
 .lp-hero {
-  min-height: 100vh; display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: clamp(96px, 12vh, 128px) 24px 40px;
-  text-align: center; position: relative;
+  position: relative;
+  padding: clamp(96px, 12vh, 128px) 24px clamp(48px, 6vh, 80px);
+  max-width: 1240px;
+  margin: 0 auto;
 }
 .lp-hero::before {
-  content: ''; position: absolute; top: 25%; left: 50%;
-  transform: translate(-50%, -50%); width: 720px; height: 360px;
-  background: radial-gradient(ellipse, oklch(0.72 0.20 45 / 0.07) 0%, transparent 70%);
+  content: ''; position: absolute;
+  top: 8%; right: -8%;
+  width: 60%; height: 70%;
+  background: radial-gradient(ellipse at center, oklch(0.72 0.20 45 / 0.10) 0%, transparent 65%);
   pointer-events: none;
+  z-index: 0;
 }
+.lp-hero-grid {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(40px, 5vw, 72px);
+  align-items: center;
+}
+.lp-hero-left {
+  display: flex; flex-direction: column;
+  gap: clamp(20px, 2.4vw, 28px);
+}
+.lp-hero-right {
+  display: flex; justify-content: flex-end;
+  min-width: 0;
+}
+
 .lp-headline {
-  font-weight: 800; font-size: var(--fs-display);
-  line-height: 1.05; letter-spacing: -0.03em; color: var(--l-text);
-  max-width: 900px; margin-bottom: 20px;
-  opacity: 0; animation: lp-fade 0.5s ease 0.2s forwards;
+  font-weight: 800;
+  font-size: clamp(40px, 5.4vw, 76px);
+  line-height: 1.04; letter-spacing: -0.03em;
+  color: var(--l-text);
+  max-width: 14ch;
+  margin: 0;
+  opacity: 0; animation: lp-fade 0.5s ease 0.15s forwards;
 }
 .lp-headline .acc { color: var(--cyan); }
 .lp-subline {
-  font-size: var(--fs-17); color: var(--muted2); max-width: 420px;
-  line-height: 1.6; margin-bottom: 32px;
-  opacity: 0; animation: lp-fade 0.5s ease 0.3s forwards;
+  font-size: var(--fs-17); color: var(--muted2);
+  max-width: 52ch;
+  line-height: 1.6;
+  margin: 0;
+  opacity: 0; animation: lp-fade 0.5s ease 0.25s forwards;
+}
+
+/* Hero CTA row */
+.lp-hero-cta {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  align-items: center;
+  opacity: 0; animation: lp-fade 0.5s ease 0.35s forwards;
+}
+.lp-hero-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 13px 22px;
+  border-radius: 8px;
+  font-size: var(--fs-15); font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 44px;
+}
+.lp-hero-btn.primary {
+  background: var(--cyan); color: var(--bg);
+  border: 1px solid var(--cyan);
+}
+.lp-hero-btn.primary:hover {
+  background: var(--cyan-dim);
+  border-color: var(--cyan-dim);
+  transform: translateY(-1px);
+}
+.lp-hero-btn.secondary {
+  background: transparent; color: var(--l-text);
+  border: 1px solid var(--border);
+}
+.lp-hero-btn.secondary:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+/* Left-aligned provider strip variant (used in hero left column) */
+.lp-provider-strip-left {
+  justify-content: flex-start;
+  margin: 4px 0 0;
+  opacity: 0; animation: lp-fade 0.5s ease 0.45s forwards;
+}
+
+/* HeatBars — hand-coded burn-heatmap.
+   Right column visual anchor: rows ordered hot→cool so the spike sits on top
+   like the cap of a flame. Bars use saturated ember at the top, desaturating
+   downward (heat dissipation). */
+.lp-heatbars {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 22px 18px;
+  font-family: var(--font-mono), monospace;
+  color: var(--l-text);
+  box-shadow:
+    0 24px 60px oklch(0.72 0.20 45 / 0.10),
+    inset 0 1px 0 oklch(0.72 0.20 45 / 0.06);
+  opacity: 0;
+  animation: lp-heatbars-card 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+  overflow: hidden;
+}
+.lp-heatbars::before {
+  content: '';
+  position: absolute; inset: -20% -10% auto auto;
+  width: 70%; height: 80%;
+  background: radial-gradient(ellipse at center, oklch(0.78 0.20 50 / 0.16) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+.lp-heatbars > * { position: relative; z-index: 1; }
+
+.lp-heatbars-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: var(--fs-10); letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--l-muted);
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.lp-heatbars-period { color: var(--muted2); letter-spacing: 0.06em; text-transform: none; }
+
+.lp-heatbars-rows {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-bottom: 14px;
+}
+.lp-heatbars-row {
+  display: grid;
+  grid-template-columns: 108px 1fr 56px;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  animation: lp-heatbars-row-in 0.4s ease-out forwards;
+}
+.lp-heatbars-model {
+  font-size: var(--fs-12);
+  color: var(--l-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lp-heatbars-track {
+  height: 10px;
+  background: oklch(0.72 0.20 45 / 0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.lp-heatbars-fill {
+  height: 100%; width: 0;
+  border-radius: 2px;
+  animation: lp-heatbars-grow 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.lp-heatbars-value {
+  font-size: var(--fs-12);
+  color: var(--l-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Heat tiers — top of list is hot, cooling downward */
+.tier-hot .lp-heatbars-fill {
+  background: linear-gradient(90deg, oklch(0.72 0.20 45), oklch(0.80 0.21 55));
+  box-shadow: 0 0 14px oklch(0.78 0.20 50 / 0.55);
+}
+.tier-hot .lp-heatbars-model { font-weight: 600; }
+.tier-hot .lp-heatbars-value { color: oklch(0.80 0.21 55); font-weight: 600; }
+
+.tier-warm .lp-heatbars-fill { background: oklch(0.68 0.18 50); }
+.tier-mid  .lp-heatbars-fill { background: oklch(0.60 0.15 55); }
+.tier-muted .lp-heatbars-fill { background: oklch(0.52 0.12 60); }
+.tier-muted .lp-heatbars-model { color: var(--muted2); }
+.tier-faded .lp-heatbars-fill { background: oklch(0.45 0.08 65); }
+.tier-faded .lp-heatbars-model,
+.tier-faded .lp-heatbars-value { color: var(--l-muted); }
+
+.lp-heatbars-divider {
+  height: 1px; background: var(--border);
+  margin: 2px 0 12px;
+}
+
+.lp-heatbars-total-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 8px;
+}
+.lp-heatbars-total-label {
+  font-size: var(--fs-10); letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--l-muted);
+}
+.lp-heatbars-total-num {
+  font-size: var(--fs-22); font-weight: 700;
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+}
+.lp-heatbars-total-cap {
+  color: var(--l-muted);
+  font-size: var(--fs-14);
+  font-variant-numeric: tabular-nums;
+}
+.lp-heatbars-progress {
+  height: 6px;
+  background: oklch(0.72 0.20 45 / 0.08);
+  border-radius: 3px; overflow: hidden;
+  margin-bottom: 8px;
+}
+.lp-heatbars-progress-fill {
+  --lp-fill: 72%;
+  height: 100%; width: 0;
+  background: linear-gradient(90deg, oklch(0.72 0.20 45), oklch(0.82 0.18 70));
+  border-radius: 3px;
+  animation: lp-heatbars-grow 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+}
+.lp-heatbars-total-foot {
+  display: flex; justify-content: space-between;
+  font-size: var(--fs-10);
+  color: var(--l-muted);
+  letter-spacing: 0.04em;
+}
+.lp-heatbars-total-burn { color: var(--cyan); }
+
+@keyframes lp-heatbars-card {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lp-heatbars-row-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes lp-heatbars-grow {
+  from { width: 0; }
+  to   { width: var(--lp-fill, 100%); }
+}
+
+/* Install demo section — terminal animation moved out of hero into its own band */
+.lp-install-demo {
+  padding: 8px 24px 40px;
+  display: flex; justify-content: center;
+}
+.lp-install-demo-inner {
+  width: 100%; max-width: 720px;
+}
+
+/* Mobile: stack hero columns, heatmap slots below the CTAs */
+@media (max-width: 860px) {
+  .lp-hero {
+    padding: clamp(88px, 14vh, 112px) 20px 32px;
+  }
+  .lp-hero::before {
+    top: auto; bottom: 10%; right: -10%;
+    width: 80%; height: 40%;
+  }
+  .lp-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .lp-hero-right { justify-content: stretch; }
+  .lp-heatbars { max-width: 100%; }
+}
+@media (max-width: 560px) {
+  .lp-heatbars { padding: 18px 18px 16px; }
+  .lp-heatbars-row { grid-template-columns: 92px 1fr 48px; gap: 10px; }
 }
 
 .term-window {
@@ -1995,14 +2241,23 @@ img, svg { display: block; }
      opacity:1 + transform:none lock final state so content doesn't stay invisible. */
   .lp-headline,
   .lp-subline,
+  .lp-hero-cta,
+  .lp-provider-strip-left,
   .term-window,
   .term-line,
   .lp-transition,
   .dash-preview,
-  .dash-bar {
+  .dash-bar,
+  .lp-heatbars,
+  .lp-heatbars-row {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+  .lp-heatbars-fill,
+  .lp-heatbars-progress-fill {
+    animation: none !important;
+    width: var(--lp-fill, 100%) !important;
   }
   .term-cursor,
   .dash-live-dot {
