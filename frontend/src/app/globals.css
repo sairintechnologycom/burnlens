@@ -2369,6 +2369,17 @@ img, svg { display: block; }
 }
 .support-chat-trigger:hover { opacity: 0.9; }
 
+/* Brand-aware: when the support trigger overlays the landing page,
+   it picks up the thermal-burn ember instead of the cool default. */
+body:has(.lp) .support-chat-trigger {
+  background: oklch(0.72 0.20 45);
+  color: oklch(0.13 0.015 35);
+}
+html.theme-light body:has(.lp) .support-chat-trigger {
+  background: oklch(0.55 0.20 40);
+  color: oklch(0.97 0.012 80);
+}
+
 .support-chat-panel {
   position: fixed;
   bottom: 84px;
