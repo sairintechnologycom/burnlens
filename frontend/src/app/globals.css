@@ -1520,13 +1520,30 @@ img, svg { display: block; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Heat tiers — top of list is hot, cooling downward */
+/* Heat tiers — top of list is hot, cooling downward.
+   The hot tier carries a layered glow (inset highlight + outer halo) and a
+   slow brightness pulse so the spike literally smolders. */
 .tier-hot .lp-heatbars-fill {
-  background: linear-gradient(90deg, oklch(0.72 0.20 45), oklch(0.80 0.21 55));
-  box-shadow: 0 0 14px oklch(0.78 0.20 50 / 0.55);
+  background: linear-gradient(
+    90deg,
+    oklch(0.72 0.20 45) 0%,
+    oklch(0.80 0.21 55) 60%,
+    oklch(0.86 0.19 65) 100%
+  );
+  box-shadow:
+    inset 0 0 8px oklch(0.96 0.10 75 / 0.45),
+    0 0 18px oklch(0.78 0.20 50 / 0.55);
+  animation:
+    lp-heatbars-grow 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    lp-heatbars-ember 3.4s ease-in-out 1.2s infinite;
 }
 .tier-hot .lp-heatbars-model { font-weight: 600; }
-.tier-hot .lp-heatbars-value { color: oklch(0.80 0.21 55); font-weight: 600; }
+.tier-hot .lp-heatbars-value { color: oklch(0.82 0.20 60); font-weight: 600; }
+
+@keyframes lp-heatbars-ember {
+  0%, 100% { filter: brightness(1) saturate(1); }
+  50%      { filter: brightness(1.12) saturate(1.18); }
+}
 
 .tier-warm .lp-heatbars-fill { background: oklch(0.68 0.18 50); }
 .tier-mid  .lp-heatbars-fill { background: oklch(0.60 0.15 55); }
