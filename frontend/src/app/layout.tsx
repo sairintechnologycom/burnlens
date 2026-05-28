@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Mono, Inter_Tight } from "next/font/google";
+import { DM_Mono, Manrope } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/lib/contexts/ToastContext";
 import SupportChat from "@/components/SupportChat";
@@ -12,7 +12,7 @@ const dmMono = DM_Mono({
   variable: "--font-mono",
 });
 
-const interTight = Inter_Tight({
+const manrope = Manrope({
   weight: ["400", "500", "600", "700", "800"],
   subsets: ["latin"],
   variable: "--font-sans",
@@ -83,7 +83,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="theme-dark">
-      <body className={`${dmMono.variable} ${interTight.variable}`}>
+      <body className={`${dmMono.variable} ${manrope.variable}`}>
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
         <PlausibleScript />
         <ThemeProvider>
