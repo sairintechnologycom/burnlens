@@ -106,7 +106,7 @@ export default function DemoPage() {
       {/* Demo banner */}
       <div
         style={{
-          background: "linear-gradient(90deg, rgba(0,229,200,0.10), rgba(0,229,200,0.02))",
+          background: "linear-gradient(90deg, rgba(224,120,64,0.10), rgba(224,120,64,0.02))",
           borderBottom: "1px solid #1e2830",
           padding: "10px 20px",
           display: "flex",
@@ -119,7 +119,7 @@ export default function DemoPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span
             style={{
-              background: "#00e5c8",
+              background: "#e07840",
               color: "#080c10",
               fontFamily: "var(--font-mono), monospace",
               fontSize: 10,
@@ -141,7 +141,7 @@ export default function DemoPage() {
             href="/setup?intent=register"
             className="plausible-event-name=Demo+Get+Started plausible-event-position=Header"
             style={{
-              background: "#00e5c8",
+              background: "#e07840",
               color: "#080c10",
               fontFamily: "var(--font-mono), monospace",
               fontSize: 11,
@@ -184,7 +184,7 @@ export default function DemoPage() {
             <circle cx="13" cy="13" r="11.5" stroke="#2a3540" strokeWidth="1" />
             <path d="M13 1.5 A11.5 11.5 0 0 1 24 8" stroke="#f0a928" strokeWidth="1.5" strokeLinecap="round" fill="none" />
             <circle cx="13" cy="13" r="7.5" stroke="#1e2830" strokeWidth="1" />
-            <circle cx="13" cy="13" r="2" fill="#00e5c8" />
+            <circle cx="13" cy="13" r="2" fill="#e07840" />
           </svg>
           <span
             style={{
@@ -444,7 +444,7 @@ export default function DemoPage() {
             borderRadius: 6,
             fontFamily: "var(--font-mono), monospace",
             fontSize: 13,
-            color: "#00e5c8",
+            color: "#e07840",
             marginBottom: 18,
           }}
         >
@@ -455,7 +455,7 @@ export default function DemoPage() {
             href="/setup?intent=register"
             className="plausible-event-name=Demo+Get+Started plausible-event-position=Footer"
             style={{
-              background: "#00e5c8",
+              background: "#e07840",
               color: "#080c10",
               fontWeight: 600,
               fontSize: 13,

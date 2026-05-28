@@ -27,7 +27,8 @@
   --bg1: #12141b;
   --bg2: #181b24;
   --bg3: #1f2330;
-  --cyan: #2dd4bf;
+  --cyan: oklch(0.72 0.20 45);       /* ember — primary brand accent */
+  --cyan-dim: oklch(0.65 0.18 45);   /* ember on hover / dim surfaces */
   --amber: #f5a623;
   --red: #f04060;
   --green: #22c98a;
@@ -59,7 +60,8 @@
   --bg1: #f0ede8;
   --bg2: #e8e4dc;
   --bg3: #dedad0;
-  --cyan: #0d7a6e;
+  --cyan: oklch(0.55 0.20 40);       /* ember, darkened for L>90 bg contrast */
+  --cyan-dim: oklch(0.48 0.18 40);
   --amber: #b45309;
   --red: #c0392b;
   --green: #166534;
@@ -1307,15 +1309,13 @@ img, svg { display: block; }
 
 /* ── Landing Page v2 (page.tsx) — Thermal-burn lane ─────────── */
 .lp {
-  /* Warm near-black surfaces */
+  /* Warm near-black surfaces for the landing-page editorial lane.
+     Brand accent (--cyan / --cyan-dim) now ships globally as ember;
+     this scope only overrides the page-level neutrals + text tones. */
   --bg: oklch(0.13 0.015 35);
   --bg2: oklch(0.16 0.018 35);
   --bg3: oklch(0.19 0.020 35);
   --border: oklch(0.26 0.020 35);
-  /* Brand accent token names preserved for backward compat with .lp-* rules;
-     values shifted to the ember/flame heat family. */
-  --cyan: oklch(0.72 0.20 45);       /* ember — primary brand accent */
-  --cyan-dim: oklch(0.65 0.18 45);   /* ember on hover/dim surfaces */
   --amber: oklch(0.82 0.18 75);      /* flame — secondary heat tone */
   --red: oklch(0.55 0.20 25);        /* oxide — danger / overage */
   --green: oklch(0.72 0.13 165);     /* mint — single cool note, used sparingly */
@@ -2048,8 +2048,6 @@ img, svg { display: block; }
   --bg2:     oklch(0.94 0.014 75);
   --bg3:     oklch(0.91 0.016 70);
   --border:  oklch(0.85 0.018 65);
-  --cyan:    oklch(0.55 0.20 40);    /* ember, darkened for L>90 bg contrast */
-  --cyan-dim:oklch(0.48 0.18 40);
   --amber:   oklch(0.62 0.18 70);
   --red:     oklch(0.50 0.20 25);
   --green:   oklch(0.50 0.13 165);
@@ -2385,17 +2383,6 @@ img, svg { display: block; }
   transition: opacity 0.15s;
 }
 .support-chat-trigger:hover { opacity: 0.9; }
-
-/* Brand-aware: when the support trigger overlays the landing page,
-   it picks up the thermal-burn ember instead of the cool default. */
-body:has(.lp) .support-chat-trigger {
-  background: oklch(0.72 0.20 45);
-  color: oklch(0.13 0.015 35);
-}
-html.theme-light body:has(.lp) .support-chat-trigger {
-  background: oklch(0.55 0.20 40);
-  color: oklch(0.97 0.012 80);
-}
 
 .support-chat-panel {
   position: fixed;
