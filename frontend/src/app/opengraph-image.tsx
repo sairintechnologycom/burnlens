@@ -18,7 +18,7 @@ export default function OpenGraphImage() {
           justifyContent: "space-between",
           padding: "80px",
           background:
-            "radial-gradient(ellipse at top left, rgba(0,229,200,0.12) 0%, transparent 55%), radial-gradient(ellipse at bottom right, rgba(255,107,74,0.10) 0%, transparent 55%), #080c10",
+            "radial-gradient(ellipse at top left, rgba(224,120,64,0.12) 0%, transparent 55%), radial-gradient(ellipse at bottom right, rgba(255,107,74,0.10) 0%, transparent 55%), #080c10",
           color: "#e6edf3",
           fontFamily: "system-ui, -apple-system, sans-serif",
         }}
@@ -31,7 +31,7 @@ export default function OpenGraphImage() {
             fontSize: 32,
             letterSpacing: "0.2em",
             fontWeight: 700,
-            color: "#00e5c8",
+            color: "#e07840",
           }}
         >
           <div
@@ -39,7 +39,7 @@ export default function OpenGraphImage() {
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: "#00e5c8",
+              background: "#e07840",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -94,7 +94,7 @@ export default function OpenGraphImage() {
             gap: "20px",
             fontSize: 26,
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            color: "#00e5c8",
+            color: "#e07840",
           }}
         >
           <div style={{ color: "#8b949e" }}>$</div>

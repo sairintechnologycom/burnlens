@@ -49,7 +49,7 @@ export function CopyCommand({ command, eventName, eventProps }: Props) {
           top: 8,
           right: 8,
           padding: "4px 10px",
-          background: copied ? "#00e5c8" : "#131920",
+          background: copied ? "#e07840" : "#131920",
           color: copied ? "#080c10" : "var(--muted, #6b7785)",
           border: "1px solid #1e2830",
           borderRadius: 4,

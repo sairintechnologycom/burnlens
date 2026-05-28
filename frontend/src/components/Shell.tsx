@@ -47,7 +47,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <circle cx="13" cy="13" r="11.5" stroke="#2a3540" strokeWidth="1" />
           <path d="M13 1.5 A11.5 11.5 0 0 1 24 8" stroke="#f0a928" strokeWidth="1.5" strokeLinecap="round" fill="none" />
           <circle cx="13" cy="13" r="7.5" stroke="#1e2830" strokeWidth="1" />
-          <circle cx="13" cy="13" r="2" fill="#00e5c8" />
+          <circle cx="13" cy="13" r="2" fill="#e07840" />
         </svg>
         <div style={{
           fontFamily: "var(--font-mono), monospace",

@@ -110,7 +110,7 @@ export default function VerifyEmailPage() {
       <style>{`
         .sp {
           --bg: #080c10; --bg2: #0e1318; --bg3: #131920; --border: #1e2830;
-          --cyan: #00e5c8; --cyan-dim: #00b89e; --amber: #f0a928;
+          --cyan: oklch(0.72 0.20 45); --cyan-dim: oklch(0.65 0.18 45); --amber: #f0a928;
           --s-text: #e8eaed; --s-muted: #6b7785; --s-red: #f04060;
           min-height: 100vh; background: var(--bg);
           display: flex; flex-direction: column;
@@ -145,7 +145,7 @@ export default function VerifyEmailPage() {
         .sp-left::before {
           content: ''; position: absolute; top: 30%; left: 50%;
           transform: translate(-50%, -50%); width: 500px; height: 300px;
-          background: radial-gradient(ellipse, rgba(0,229,200,0.04) 0%, transparent 70%);
+          background: radial-gradient(ellipse, rgba(224,120,64,0.04) 0%, transparent 70%);
           pointer-events: none;
         }
         .sp-left h2 {
@@ -219,7 +219,7 @@ export default function VerifyEmailPage() {
               <circle cx="13" cy="13" r="11.5" stroke="#2a3540" strokeWidth="1"/>
               <path d="M13 1.5 A11.5 11.5 0 0 1 24 8" stroke="#f0a928" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
               <circle cx="13" cy="13" r="7.5" stroke="#1e2830" strokeWidth="1"/>
-              <circle cx="13" cy="13" r="2" fill="#00e5c8"/>
+              <circle cx="13" cy="13" r="2" fill="#e07840"/>
             </svg>
             BURNLENS
           </Link>

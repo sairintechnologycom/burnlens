@@ -102,7 +102,7 @@ export default function ScanLandingPage() {
             fontSize: 11,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
-            color: "var(--cyan, #00e5c8)",
+            color: "var(--cyan, #e07840)",
             marginBottom: 8,
           }}
         >
