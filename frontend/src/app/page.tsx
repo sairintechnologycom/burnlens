@@ -40,9 +40,9 @@ function TerminalAnimation({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="term-window">
       <div className="term-bar">
-        <span className="term-dot" style={{ background: "var(--red)" }} />
-        <span className="term-dot" style={{ background: "var(--amber)" }} />
-        <span className="term-dot" style={{ background: "var(--green)" }} />
+        <span className="term-dot" style={{ background: "var(--cyan)" }} />
+        <span className="term-dot" style={{ background: "var(--border)" }} />
+        <span className="term-dot" style={{ background: "var(--border)" }} />
         <span className="term-bar-title">Terminal</span>
       </div>
       <div className="term-body">
@@ -66,9 +66,9 @@ function MiniDashboard() {
       <div className="dash-topbar">
         <div className="dash-topbar-left">
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-            <circle cx="10" cy="10" r="8" stroke="#00e5c8" strokeWidth="1.5" />
-            <circle cx="10" cy="10" r="2" fill="#00e5c8" />
-            <path d="M 10 2 A 8 8 0 0 1 18 10" stroke="#f0a928" strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="10" cy="10" r="8" stroke="#e07840" strokeWidth="1.5" />
+            <circle cx="10" cy="10" r="2" fill="#e07840" />
+            <path d="M 10 2 A 8 8 0 0 1 18 10" stroke="#e89656" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           <span className="dash-topbar-brand">BURNLENS</span>
         </div>
@@ -153,12 +153,12 @@ export default function LandingPage() {
         <nav className="lp-nav">
           <Link href="/" className="lp-nav-logo">
             <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-              <circle cx="13" cy="13" r="11.5" stroke="#2a3540" strokeWidth="1"/>
-              <path d="M13 1.5 A11.5 11.5 0 0 1 24 8" stroke="#f0a928" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-              <circle cx="13" cy="13" r="7.5" stroke="#1e2830" strokeWidth="1"/>
-              <path d="M13 5.5 A7.5 7.5 0 0 1 20.5 10" stroke="#f0a928" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
-              <circle cx="13" cy="13" r="3.5" stroke="#1e2830" strokeWidth="0.8"/>
-              <circle cx="13" cy="13" r="2" fill="#00e5c8"/>
+              <circle cx="13" cy="13" r="11.5" stroke="#2f2820" strokeWidth="1"/>
+              <path d="M13 1.5 A11.5 11.5 0 0 1 24 8" stroke="#e89656" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+              <circle cx="13" cy="13" r="7.5" stroke="#2f2820" strokeWidth="1"/>
+              <path d="M13 5.5 A7.5 7.5 0 0 1 20.5 10" stroke="#e07840" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
+              <circle cx="13" cy="13" r="3.5" stroke="#2f2820" strokeWidth="0.8"/>
+              <circle cx="13" cy="13" r="2" fill="#e89656"/>
             </svg>
             BURNLENS
           </Link>
@@ -201,9 +201,8 @@ export default function LandingPage() {
           </>
         )}
 
-        {/* HERO: tagline + terminal */}
+        {/* HERO: terminal */}
         <section className="lp-hero">
-          <p className="lp-tagline">FinOps · Open Source · Multi-Provider</p>
           <h1 className="lp-headline">
             The open-source <span className="acc">FinOps proxy</span> for AI spend
           </h1>
@@ -245,9 +244,9 @@ export default function LandingPage() {
 
         {/* THE PROBLEM */}
         <section className="lp-problem">
+          <h2>The problem</h2>
           <div className="lp-problem-grid">
             <div className="lp-problem-card">
-              <div className="lp-problem-label">The bill</div>
               <h3>Bills tell you the model, not the why.</h3>
               <p>
                 Your invoice says <code>gpt-4o: $4,287</code>. It doesn&apos;t say
@@ -256,7 +255,6 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-problem-card">
-              <div className="lp-problem-label">The damage</div>
               <h3>Alerts arrive after the damage.</h3>
               <p>
                 A bad deploy, a runaway agent, or one abusive customer can trigger
@@ -265,7 +263,6 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-problem-card">
-              <div className="lp-problem-label">The silos</div>
               <h3>Every provider is a different silo.</h3>
               <p>
                 OpenAI&apos;s usage page. Anthropic&apos;s console. Azure Cost Management.
@@ -278,6 +275,7 @@ export default function LandingPage() {
 
         {/* HOW IT WORKS */}
         <div className="lp-editorial" id="how">
+          <h2>How it works</h2>
           <div className="lp-ed-section">
             <div className="lp-ed-label">01 · Drop-in proxy</div>
             <div className="lp-ed-content">
@@ -334,8 +332,7 @@ export default function LandingPage() {
           <h2>Built for every AI use case</h2>
           <div className="lp-usecases-grid">
             <div className="lp-usecase-card">
-              <div className="lp-usecase-label">Coding agents</div>
-              <h3>Per-PR, per-dev attribution</h3>
+              <h3>Coding agents: per-PR, per-dev attribution</h3>
               <p>
                 Cursor, Claude Code, Cline, Windsurf — see cost per repo, developer,
                 or PR. Hard daily caps per API key stop one runaway agent from
@@ -351,8 +348,7 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-usecase-card">
-              <div className="lp-usecase-label">Customer-facing AI</div>
-              <h3>Per-customer spend with 429 enforcement</h3>
+              <h3>Customer-facing AI: per-customer spend with 429 enforcement</h3>
               <p>
                 Tag each request with a customer ID. See which customers drive the
                 most cost. Enforce per-customer monthly spend limits — BurnLens
@@ -360,8 +356,7 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-usecase-card">
-              <div className="lp-usecase-label">RAG and agents</div>
-              <h3>See what justifies the cost</h3>
+              <h3>RAG and agents: see what justifies the cost</h3>
               <p>
                 Tag retrieval calls, tool calls, and generation separately. See
                 whether your vector search or synthesis step is the cost driver —
@@ -369,8 +364,7 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-usecase-card">
-              <div className="lp-usecase-label">Internal tools</div>
-              <h3>Per-team budgets that reconcile to the bill</h3>
+              <h3>Internal tools: per-team budgets that reconcile to the bill</h3>
               <p>
                 Set per-team monthly budgets, get Slack alerts at 80% and 100%,
                 and export monthly reports that reconcile line-by-line to the
@@ -482,45 +476,6 @@ export default function LandingPage() {
                 <li>10-year retention</li>
               </ul>
               <a href="mailto:contact@sairintechnology.com" className="lp-plan-cta outline">Contact Us</a>
-            </div>
-          </div>
-        </section>
-
-        {/* WHAT'S NEW */}
-        <section className="lp-whats-new">
-          <h2 className="lp-wn-title">What&apos;s new in v1.2.0</h2>
-          <div className="lp-wn-list">
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span><code>burnlens scan</code> — reads Claude Code, Cursor, Codex, and Gemini CLI local logs; imports cost history without a proxy</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Claude Code reader — parses <code>~/.claude/projects/</code> JSONL, deduplicates turns, attributes cost per session</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Cursor reader — imports spend from Cursor&apos;s local bubble DB with provider/model cost routing</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Codex reader — parses 700+ session SQLite DB; handles event_msg wrapper and turn_context model fields</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Gemini CLI reader — supports both JSON and JSONL chat formats from <code>~/.gemini/tmp/</code></span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Per-API-key daily hard cap — 50/80/100% alerts, HTTP 429 kill-switch at 100%, TZ-aware reset</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag new">New</span>
-              <span>Git-aware auto-tagging — <code>burnlens run -- &lt;cmd&gt;</code> attributes every call to repo / dev / PR / branch</span>
-            </div>
-            <div className="lp-wn-item">
-              <span className="lp-wn-tag fix">Fixed</span>
-              <span>Google &amp; Anthropic streaming responses now log accurate token counts (no more 0-token rows)</span>
             </div>
           </div>
         </section>
