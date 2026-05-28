@@ -36,12 +36,28 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     return (
       <div style={{
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         height: "100vh",
         background: "var(--bg)",
+        gap: 16,
       }}>
-        <div className="skeleton" style={{ width: 32, height: 32, borderRadius: "50%" }} />
+        <svg width="32" height="32" viewBox="0 0 26 26" fill="none" aria-hidden>
+          <circle cx="13" cy="13" r="11.5" stroke="#2a3540" strokeWidth="1" />
+          <path d="M13 1.5 A11.5 11.5 0 0 1 24 8" stroke="#f0a928" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          <circle cx="13" cy="13" r="7.5" stroke="#1e2830" strokeWidth="1" />
+          <circle cx="13" cy="13" r="2" fill="#00e5c8" />
+        </svg>
+        <div style={{
+          fontFamily: "var(--font-mono), monospace",
+          fontSize: 11,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: "#6b7785",
+        }}>
+          {loading ? "Loading BurnLens…" : "Redirecting…"}
+        </div>
       </div>
     );
   }
