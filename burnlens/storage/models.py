@@ -77,6 +77,7 @@ class GenAICostEvent:
     duration_ms: float
     status_code: int
     pricing_version: str | None
+    ttft_ms: float | None = None
 
 
 @dataclass
@@ -119,6 +120,7 @@ class RequestRecord:
     branch: str | None = None
     commit_sha: str | None = None
     pricing_version: str | None = None
+    ttft_ms: float | None = None
 
     @property
     def tag_repo(self) -> str | None:
@@ -186,6 +188,7 @@ class RequestRecord:
             duration_ms=self.duration_ms,
             status_code=self.status_code,
             pricing_version=self.pricing_version,
+            ttft_ms=self.ttft_ms,
         )
 
     @classmethod
@@ -233,6 +236,7 @@ class RequestRecord:
             branch=event.branch,
             commit_sha=event.commit_sha,
             pricing_version=event.pricing_version,
+            ttft_ms=event.ttft_ms,
         )
 
 
