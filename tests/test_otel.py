@@ -62,6 +62,11 @@ class TestEmitSpan:
             otel.emit_span(_sample_record())
 
             calls = {c[0][0]: c[0][1] for c in mock_span.set_attribute.call_args_list}
+            assert calls["gen_ai.system"] == "openai"
+            assert calls["gen_ai.request.model"] == "gpt-4o-mini"
+            assert calls["gen_ai.usage.input_tokens"] == 100
+            assert calls["gen_ai.usage.output_tokens"] == 50
+
             assert calls["llm.provider"] == "openai"
             assert calls["llm.model"] == "gpt-4o-mini"
             assert calls["llm.tokens.input"] == 100
@@ -72,7 +77,8 @@ class TestEmitSpan:
             assert calls["http.status_code"] == 200
             assert calls["burnlens.feature"] == "chat"
             assert calls["burnlens.team"] == "backend"
-            assert calls["burnlens.customer"] == "acme"
+            import hashlib
+            assert calls["burnlens.customer"] == hashlib.sha256(b"acme").hexdigest()
         finally:
             otel._tracer = original
 

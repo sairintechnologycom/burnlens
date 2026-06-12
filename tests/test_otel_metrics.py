@@ -52,6 +52,8 @@ class TestOtelMetrics:
             mock_req.add.assert_called_once()
             val, attrs = mock_req.add.call_args[0]
             assert val == 1
+            assert attrs["gen_ai.system"] == "anthropic"
+            assert attrs["gen_ai.request.model"] == "claude-3-5-sonnet"
             assert attrs["llm.provider"] == "anthropic"
             assert attrs["llm.model"] == "claude-3-5-sonnet"
             assert attrs["http.status_code"] == 200
@@ -82,3 +84,15 @@ class TestOtelMetrics:
             otel._latency_histogram = original_lat
             otel._cost_counter = original_cost
             otel._ttft_histogram = original_ttft
+
+    def test_otel_disabled_no_metrics(self) -> None:
+        """When meter is not initialised, emit_metrics is a silent no-op."""
+        from burnlens.telemetry import otel
+
+        original = otel._meter
+        try:
+            otel._meter = None
+            # Should not raise
+            otel.emit_metrics(_sample_event())
+        finally:
+            otel._meter = original

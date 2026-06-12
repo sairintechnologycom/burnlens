@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import httpx
@@ -559,7 +559,7 @@ async def _handle_non_streaming(
         provider=provider.name,
         model=model,
         request_path=request_path,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         reasoning_tokens=usage.reasoning_tokens,
@@ -787,7 +787,7 @@ async def _log_streaming_usage(
         provider=provider.name,
         model=model,
         request_path=request_path,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
         reasoning_tokens=usage.reasoning_tokens,
@@ -835,14 +835,16 @@ async def _log_streaming_usage(
         record.budget_remaining_usd = None
         record.budget_remaining_pct = None
     if wal is not None and worker is not None:
-        try:
-            await wal.append_event(record)
-            await worker.enqueue(record)
-        except Exception as e:
-            logger.error("WAL append/enqueue failed: %s", e)
-            await _log_record(db_path, record)
+        async def _log_via_wal():
+            try:
+                await wal.append_event(record)
+                await worker.enqueue(record)
+            except Exception as e:
+                logger.error("WAL append/enqueue failed: %s", e)
+                asyncio.create_task(_log_record(db_path, record))
+        asyncio.create_task(_log_via_wal())
     else:
-        await _log_record(db_path, record)
+        asyncio.create_task(_log_record(db_path, record))
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
         asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())
