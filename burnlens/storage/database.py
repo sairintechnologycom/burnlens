@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS requests (
     repo                TEXT,
     branch              TEXT,
     commit_sha          TEXT,
-    pricing_version     TEXT
+    pricing_version     TEXT,
+    ttft_ms             REAL
 );
 """
 
@@ -248,6 +249,9 @@ async def init_db(db_path: str) -> None:
     # CODE-2: per-API-key daily caps
     await migrate_add_key_label(db_path)
 
+    # Phase 3: OpenTelemetry GenAI Compatibility (TTFT column)
+    await migrate_add_ttft_column(db_path)
+
     # SCAN-1: scan provenance + dedup
     await migrate_add_source_column(db_path)
 
@@ -441,6 +445,20 @@ async def migrate_add_key_label(db_path: str) -> None:
             logger.info(
                 "Migration: added tag_key_label column + api_keys table"
             )
+
+
+async def migrate_add_ttft_column(db_path: str) -> None:
+    """Add ``ttft_ms`` column to requests table.
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "ttft_ms" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN ttft_ms REAL")
+            await db.commit()
+            logger.info("Migration: added ttft_ms column to requests table")
 
 
 async def get_requests_for_export(
@@ -1027,8 +1045,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 budget_remaining_usd, budget_remaining_pct,
                 event_id, trace_id, workspace_id, org_id,
                 team, feature, customer_hash, app_id,
-                env, repo, branch, commit_sha, pricing_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                env, repo, branch, commit_sha, pricing_version,
+                ttft_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1069,6 +1088,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.branch,
                 record.commit_sha,
                 record.pricing_version,
+                record.ttft_ms,
             ),
         )
         await db.commit()
