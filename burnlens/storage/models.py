@@ -4,19 +4,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import os
+import threading
 import time
 
 
 _last_uuid7_ts = 0
+_uuid7_lock = threading.Lock()
 
 
 def uuid7() -> str:
     """Generate an RFC 9562-compatible UUIDv7 string."""
     global _last_uuid7_ts
-    ts_ms = int(time.time() * 1000)
-    if ts_ms <= _last_uuid7_ts:
-        ts_ms = _last_uuid7_ts + 1
-    _last_uuid7_ts = ts_ms
+    with _uuid7_lock:
+        ts_ms = int(time.time() * 1000)
+        if ts_ms <= _last_uuid7_ts:
+            ts_ms = _last_uuid7_ts + 1
+        _last_uuid7_ts = ts_ms
 
     rand_bytes = bytearray(os.urandom(16))
 
@@ -36,7 +39,6 @@ def uuid7() -> str:
 
     h = rand_bytes.hex()
     return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
-
 
 
 @dataclass
