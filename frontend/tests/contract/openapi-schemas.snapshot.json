@@ -240,6 +240,7 @@
         "type": "string"
       },
       "detail": {
+        "additionalProperties": true,
         "title": "Detail",
         "type": "object"
       },
@@ -1092,6 +1093,7 @@
         "title": "System Prompt Hash"
       },
       "tags": {
+        "additionalProperties": true,
         "title": "Tags",
         "type": "object"
       },
@@ -1181,6 +1183,7 @@
         "title": "System Prompt Hash"
       },
       "tags": {
+        "additionalProperties": true,
         "title": "Tags",
         "type": "object"
       },
@@ -1385,6 +1388,7 @@
       },
       "incidents": {
         "items": {
+          "additionalProperties": true,
           "type": "object"
         },
         "title": "Incidents",
@@ -1490,6 +1494,13 @@
   },
   "ValidationError": {
     "properties": {
+      "ctx": {
+        "title": "Context",
+        "type": "object"
+      },
+      "input": {
+        "title": "Input"
+      },
       "loc": {
         "items": {
           "anyOf": [
