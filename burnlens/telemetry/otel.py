@@ -86,7 +86,7 @@ def init_tracer(
     logger.info("OpenTelemetry tracer and metrics initialised → %s", endpoint)
 
 
-def emit_span(record: RequestRecord) -> None:
+def emit_span(record: RequestRecord, headers: dict[str, str] | None = None) -> None:
     """Create a finished span from a RequestRecord.
 
     If the tracer has not been initialised (or OTEL is not installed), this
@@ -96,7 +96,18 @@ def emit_span(record: RequestRecord) -> None:
         return
 
     try:
-        span = _tracer.start_span("llm.request")
+        from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+        parent_context = None
+        if headers:
+            try:
+                # TraceContextTextMapPropagator expects case-insensitive or lowcase keys.
+                # Standard HTTP headers can be mixed case.
+                headers_lower = {k.lower(): v for k, v in headers.items()}
+                parent_context = TraceContextTextMapPropagator().extract(carrier=headers_lower)
+            except Exception:
+                pass
+
+        span = _tracer.start_span("llm.request", context=parent_context)
         span.set_attribute("llm.provider", record.provider)
         span.set_attribute("llm.model", record.model)
         span.set_attribute("llm.tokens.input", record.input_tokens)
@@ -105,6 +116,8 @@ def emit_span(record: RequestRecord) -> None:
         span.set_attribute("llm.cost.usd", record.cost_usd)
         span.set_attribute("llm.latency_ms", record.duration_ms)
         span.set_attribute("http.status_code", record.status_code)
+        if record.ttft_ms is not None:
+            span.set_attribute("llm.ttft_ms", record.ttft_ms)
 
         # BurnLens-specific tags
         tags = record.tags or {}
