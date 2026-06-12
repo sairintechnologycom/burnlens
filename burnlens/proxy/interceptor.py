@@ -699,8 +699,13 @@ async def _handle_streaming(
 
     async def _stream_generator() -> AsyncIterator[bytes]:
         raw_buffer = ""
+        first_chunk_received = False
+        ttft_ms = None
         try:
             async for chunk in response.aiter_bytes():
+                if not first_chunk_received:
+                    first_chunk_received = True
+                    ttft_ms = int((time.monotonic() - start_ms) * 1000)
                 yield chunk
                 raw_buffer += chunk.decode("utf-8", errors="ignore")
         finally:
@@ -729,6 +734,7 @@ async def _handle_streaming(
                     pricing_version=pricing_version,
                     wal=wal,
                     worker=worker,
+                    ttft_ms=ttft_ms,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -763,6 +769,7 @@ async def _log_streaming_usage(
     pricing_version: str | None = None,
     wal: "WriteAheadLog | None" = None,
     worker: "SQLitePersistenceWorker | None" = None,
+    ttft_ms: float | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
@@ -802,6 +809,7 @@ async def _log_streaming_usage(
         branch=meta.get("branch") if meta else None,
         commit_sha=meta.get("commit_sha") if meta else None,
         pricing_version=pricing_version,
+        ttft_ms=ttft_ms,
     )
     # Persist routing decision fields (per D-05)
     if decision is not None:
