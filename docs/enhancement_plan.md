@@ -8,7 +8,7 @@ BurnLens is an open-source FinOps proxy for AI spend. This document outlines the
 | ----: | -------------------------------------- | ------------------------------------------------------------------ |
 |     0 | Repo Baseline & Release Safety (Done)  | Codex understands repo, current tests, and stable extension points |
 |     1 | Event Contract & Attribution (Done)    | Canonical GenAI cost event schema                                  |
-|     2 | Durable Local WAL & Idempotent Sync    | No token/cost event loss during outages                            |
+|     2 | Durable Local WAL & Idempotent Sync (Done) | No token/cost event loss during outages                            |
 |     3 | OTel GenAI Compatibility               | Enterprise observability compatibility                             |
 |     4 | Budget Engine v2                       | Real-time caps across org/team/app/customer/model                  |
 |     5 | Anomaly & Runaway Agent Detection      | Detect loops, spikes, abusive tenants, bad deploys                 |
@@ -54,7 +54,7 @@ Create a canonical event schema for every LLM call.
 
 ---
 
-# Phase 2 — Durable Local WAL & Idempotent Sync
+# Phase 2 — Durable Local WAL & Idempotent Sync [COMPLETED]
 
 ## Objective
 Make telemetry loss-resistant.
