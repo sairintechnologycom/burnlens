@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import fields
 from datetime import datetime
 import json
 import logging
@@ -50,8 +51,11 @@ class WriteAheadLog:
         for line in lines:
             if not line.strip():
                 continue
-            data = json.loads(line)
-            yield self._dict_to_record(data)
+            try:
+                data = json.loads(line)
+                yield self._dict_to_record(data)
+            except json.JSONDecodeError as e:
+                logger.warning("Skipping corrupted WAL line: %s. Error: %s", line, e)
 
     def _read_lines(self) -> list[str]:
         with open(self.wal_path, "r", encoding="utf-8") as f:
@@ -77,10 +81,14 @@ class WriteAheadLog:
         return data
 
     def _dict_to_record(self, data: dict) -> RequestRecord:
-        if "timestamp" in data and isinstance(data["timestamp"], str):
+        # Filter keys to match only valid fields of RequestRecord for compatibility
+        valid_fields = {f.name for f in fields(RequestRecord)}
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+
+        if "timestamp" in filtered_data and isinstance(filtered_data["timestamp"], str):
             # Strip Z suffix if present for fromisoformat compatibility
-            ts_str = data["timestamp"]
+            ts_str = filtered_data["timestamp"]
             if ts_str.endswith("Z"):
                 ts_str = ts_str[:-1] + "+00:00"
-            data["timestamp"] = datetime.fromisoformat(ts_str)
-        return RequestRecord(**data)
+            filtered_data["timestamp"] = datetime.fromisoformat(ts_str)
+        return RequestRecord(**filtered_data)
