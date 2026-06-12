@@ -570,3 +570,28 @@ async def models_compat(request: Request) -> list:
         }
         for r in rows
     ]
+
+
+@router.get("/anomalies")
+async def anomalies(
+    request: Request,
+    limit: int = Query(default=50, le=500),
+) -> list:
+    """Return the most recent N anomaly events."""
+    from burnlens.storage.queries import get_recent_anomaly_events
+
+    db = _db_path(request)
+    events = await get_recent_anomaly_events(db, limit=limit)
+    return [
+        {
+            "id": e.id,
+            "event_type": e.event_type,
+            "scope": e.scope,
+            "target": e.target,
+            "severity": e.severity,
+            "detected_at": e.detected_at.isoformat(),
+            "details": e.details,
+        }
+        for e in events
+    ]
+

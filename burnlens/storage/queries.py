@@ -7,7 +7,7 @@ from typing import Any
 
 import aiosqlite
 
-from burnlens.storage.models import AggregatedUsage, AiAsset, DiscoveryEvent, ProviderSignature
+from burnlens.storage.models import AggregatedUsage, AiAsset, DiscoveryEvent, ProviderSignature, AnomalyEvent
 
 
 def _row_to_asset(row: aiosqlite.Row) -> AiAsset:
@@ -1010,3 +1010,35 @@ async def get_cost_by_repo(
         days=days,
         limit=limit,
     )
+
+
+async def get_recent_anomaly_events(
+    db_path: str,
+    limit: int = 50,
+) -> list[AnomalyEvent]:
+    """Return the most recent N anomaly events, ordered by detected_at DESC."""
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT * FROM anomaly_events
+            ORDER BY detected_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+
+    return [
+        AnomalyEvent(
+            id=row["id"],
+            event_type=row["event_type"],
+            scope=row["scope"],
+            target=row["target"],
+            severity=row["severity"],
+            details=json.loads(row["details"] or "{}"),
+            detected_at=datetime.fromisoformat(row["detected_at"]),
+        )
+        for row in rows
+    ]
+

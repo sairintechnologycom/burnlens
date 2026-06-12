@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from burnlens.analysis.budget import BudgetAlert
     from burnlens.alerts.engine import KeyBudgetAlert
     from burnlens.alerts.types import DiscoveryAlert, SpendSpikeAlert
+    from burnlens.storage.models import AnomalyEvent
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,28 @@ def _build_spend_spike_payload(alert: SpendSpikeAlert) -> dict:
     }
 
 
+def _build_anomaly_payload(event: AnomalyEvent) -> dict:
+    """Build a Slack blocks payload for an anomaly alert."""
+    emoji = ":red_circle:" if event.severity == "critical" else ":warning:"
+    event_label = event.event_type.replace("_", " ").upper()
+    
+    text = (
+        f"{emoji} *BurnLens Anomaly Detected — {event_label} ({event.severity.upper()})*\n"
+        f"Scope: `{event.scope}`\n"
+        f"Target: `{event.target}`\n"
+        f"Details: {event.details.get('description', '')}"
+    )
+
+    return {
+        "blocks": [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": text},
+            }
+        ]
+    }
+
+
 class SlackWebhookAlert:
     """Posts budget alerts to a Slack incoming webhook."""
 
@@ -276,3 +299,22 @@ class SlackWebhookAlert:
                     )
         except Exception as exc:
             logger.warning("Slack spend spike alert failed: %s", exc)
+
+    async def send_anomaly(self, event: AnomalyEvent) -> None:
+        """POST an anomaly detection alert to Slack."""
+        payload = _build_anomaly_payload(event)
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    self._webhook_url,
+                    content=json.dumps(payload),
+                    headers={"Content-Type": "application/json"},
+                )
+                if resp.status_code != 200:
+                    logger.warning(
+                        "Slack anomaly webhook returned %s: %s",
+                        resp.status_code,
+                        resp.text,
+                    )
+        except Exception as exc:
+            logger.warning("Slack anomaly alert failed: %s", exc)
