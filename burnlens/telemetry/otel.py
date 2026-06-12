@@ -108,6 +108,13 @@ def emit_span(record: RequestRecord, headers: dict[str, str] | None = None) -> N
                 pass
 
         span = _tracer.start_span("llm.request", context=parent_context)
+        # OTel GenAI standard attributes
+        span.set_attribute("gen_ai.system", record.provider)
+        span.set_attribute("gen_ai.request.model", record.model)
+        span.set_attribute("gen_ai.usage.input_tokens", record.input_tokens)
+        span.set_attribute("gen_ai.usage.output_tokens", record.output_tokens)
+
+        # Legacy attributes
         span.set_attribute("llm.provider", record.provider)
         span.set_attribute("llm.model", record.model)
         span.set_attribute("llm.tokens.input", record.input_tokens)
@@ -125,8 +132,14 @@ def emit_span(record: RequestRecord, headers: dict[str, str] | None = None) -> N
             span.set_attribute("burnlens.feature", tags["feature"])
         if "team" in tags:
             span.set_attribute("burnlens.team", tags["team"])
-        if "customer" in tags:
-            span.set_attribute("burnlens.customer", tags["customer"])
+        
+        customer_attr = record.customer_hash
+        if not customer_attr and "customer" in tags:
+            import hashlib
+            customer_attr = hashlib.sha256(tags["customer"].encode()).hexdigest()
+        
+        if customer_attr:
+            span.set_attribute("burnlens.customer", customer_attr)
 
         span.end()
     except Exception as exc:
@@ -145,6 +158,8 @@ def emit_metrics(event: GenAICostEvent) -> None:
         attrs = {
             "llm.provider": event.provider,
             "llm.model": event.model,
+            "gen_ai.system": event.provider,
+            "gen_ai.request.model": event.model,
             "http.status_code": event.status_code,
         }
         if event.team:
