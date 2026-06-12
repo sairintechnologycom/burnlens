@@ -80,6 +80,9 @@ Make BurnLens enterprise-ready via OTel conventions.
 - Map provider name, model, tokens, TTFT, latency, and status.
 - Support trace propagation via `traceparent` headers.
 
+> [!NOTE]
+> A detailed step-by-step implementation plan with failing tests, TDD steps, and command instructions has been generated at [2026-06-12-otel-genai-compatibility.md](file:///Users/bhushan/Documents/Projects/burnlens/docs/plans/2026-06-12-otel-genai-compatibility.md). You can execute it task-by-task.
+
 ---
 
 # Phase 4 — Budget Engine v2
