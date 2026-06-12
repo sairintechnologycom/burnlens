@@ -31,6 +31,57 @@ key_app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(key_app, name="key")
+
+wal_app = typer.Typer(
+    name="wal",
+    help="Manage the Write-Ahead Log (WAL) and Dead Letter Queue (DLQ).",
+    add_completion=False,
+)
+app.add_typer(wal_app, name="wal")
+
+
+@wal_app.command("doctor")
+def wal_doctor(
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to burnlens.yaml"),
+) -> None:
+    """Diagnose the health of the WAL and report corrupt lines."""
+    cfg = load_config(config)
+    from burnlens.doctor import check_wal
+    result = check_wal(cfg.wal_path, cfg.dlq_path)
+    if result.status == "pass":
+        console.print(f"[green]PASS:[/green] {result.message}")
+    elif result.status == "warn":
+        console.print(f"[yellow]WARN:[/yellow] {result.message}")
+        if result.fix:
+            console.print(f"Fix suggestion: {result.fix}")
+    else:
+        console.print(f"[red]FAIL:[/red] {result.message}")
+        if result.fix:
+            console.print(f"Fix suggestion: {result.fix}")
+
+
+@wal_app.command("repair")
+def wal_repair(
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to burnlens.yaml"),
+) -> None:
+    """Scan WAL for corrupt JSON entries, move them to DLQ, and save valid ones."""
+    cfg = load_config(config)
+    from burnlens.storage.wal import repair_wal
+    repaired, corrupt = repair_wal(cfg.wal_path, cfg.dlq_path)
+    console.print(f"WAL repair complete: [green]{repaired}[/green] valid records preserved, [red]{corrupt}[/red] corrupt records moved to DLQ.")
+
+
+@wal_app.command("replay-dlq")
+def wal_replay_dlq(
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to burnlens.yaml"),
+) -> None:
+    """Parse fixed entries in DLQ, insert to SQLite, and update DLQ."""
+    cfg = load_config(config)
+    from burnlens.storage.wal import replay_dlq
+    replayed, remaining = asyncio.run(replay_dlq(cfg.dlq_path, cfg.db_path))
+    console.print(f"DLQ replay complete: [green]{replayed}[/green] records replayed to DB, [red]{remaining}[/red] remaining corrupt records in DLQ.")
+
+
 console = Console()
 
 _SEVERITY_COLORS = {"high": "red", "medium": "yellow", "low": "dim"}
