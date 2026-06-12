@@ -131,6 +131,17 @@ class AlertsConfig:
 
 
 @dataclass
+class BudgetPolicy:
+    """Policy config for hierarchical budget enforcement."""
+
+    name: str
+    scope: str  # "org", "team", "app", "customer", "model"
+    target: str  # e.g., "devops", "gpt-4o", or "*" for wildcard
+    limit_usd: float
+    period: str = "monthly"  # "daily", "weekly", "monthly"
+
+
+@dataclass
 class RoutingConfig:
     """Budget-aware routing configuration."""
 
@@ -163,6 +174,7 @@ class BurnLensConfig:
     cloud: CloudConfig = field(default_factory=CloudConfig)
     google_billing: GoogleBillingConfig = field(default_factory=GoogleBillingConfig)
     routing: RoutingConfig = field(default_factory=RoutingConfig)
+    budget_policies: list[BudgetPolicy] = field(default_factory=list)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -355,6 +367,21 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             log_downgrades=bool(routing_data.get("log_downgrades", True)),
         )
         kwargs["routing"] = routing
+
+    # Parse budget policies
+    policies_data = data.get("budget_policies")
+    if policies_data:
+        budget_policies = []
+        for p in policies_data:
+            if isinstance(p, dict):
+                budget_policies.append(BudgetPolicy(
+                    name=str(p.get("name", "unnamed")),
+                    scope=str(p.get("scope", "org")),
+                    target=str(p.get("target", "*")),
+                    limit_usd=float(p.get("limit_usd", 0.0)),
+                    period=str(p.get("period", "monthly")),
+                ))
+        kwargs["budget_policies"] = budget_policies
 
     cfg = BurnLensConfig(**kwargs)
     _apply_env_overrides(cfg)

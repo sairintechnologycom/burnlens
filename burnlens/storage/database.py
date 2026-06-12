@@ -175,6 +175,15 @@ _CREATE_FIRED_ALERTS_FIRED_AT_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_fired_alerts_fired_at ON fired_alerts(fired_at);
 """
 
+_CREATE_BUDGET_COUNTERS_TABLE = """
+CREATE TABLE IF NOT EXISTS budget_counters (
+    policy_name TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    current_spend REAL DEFAULT 0.0,
+    PRIMARY KEY (policy_name, period_start)
+);
+"""
+
 _SEED_PROVIDER_SIGNATURES = [
     ("openai", "api.openai.com/*", '{"keys":["authorization","openai-organization"]}', "body.model"),
     ("anthropic", "api.anthropic.com/*", '{"keys":["x-api-key","anthropic-version"]}', "body.model"),
@@ -227,6 +236,9 @@ async def init_db(db_path: str) -> None:
         await db.execute(_CREATE_FIRED_ALERTS_KEY_INDEX)
         await db.execute(_CREATE_FIRED_ALERTS_FIRED_AT_INDEX)
 
+        # Budget counters table
+        await db.execute(_CREATE_BUDGET_COUNTERS_TABLE)
+
         # Seed provider signatures
         await db.executemany(
             """
@@ -260,6 +272,9 @@ async def init_db(db_path: str) -> None:
 
     # Phase 1: Canonical event fields
     await migrate_add_canonical_event_fields(db_path)
+
+    # Phase 4: Budget counters table
+    await migrate_add_budget_counters_table(db_path)
 
     logger.debug("Database initialized at %s", db_path)
 
@@ -307,6 +322,16 @@ async def migrate_add_canonical_event_fields(db_path: str) -> None:
                 "Migration: added canonical event fields to requests table: %s",
                 ", ".join(added),
             )
+
+
+async def migrate_add_budget_counters_table(db_path: str) -> None:
+    """Create budget_counters table if it does not exist.
+
+    Safe to call multiple times.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(_CREATE_BUDGET_COUNTERS_TABLE)
+        await db.commit()
 
 
 async def migrate_add_source_column(db_path: str) -> None:

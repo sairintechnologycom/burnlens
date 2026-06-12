@@ -465,6 +465,37 @@ async def handle_request(
                     decision.budget_remaining_pct,
                 )
 
+    # --- Phase 4: Budget Engine v2 Hierarchical Budget Policies ---
+    reservation = None
+    if config is not None and config.budget_policies:
+        meta = _resolve_canonical_metadata(headers, tags)
+        request_context = {
+            "org_id": meta.get("org_id"),
+            "team": meta.get("team") or tags.get("team"),
+            "app_id": meta.get("app_id") or tags.get("app_id"),
+            "customer": meta.get("customer") or tags.get("customer"),
+            "model": model,
+        }
+        try:
+            from burnlens.budget_engine import BudgetEngine
+            engine = BudgetEngine(config, db_path)
+            allowed, reservation = await engine.check_and_reserve(
+                provider.name, model, body_bytes, request_context
+            )
+            if not allowed:
+                violated = reservation["violated_policy"]
+                reject_body = json.dumps({
+                    "error": "budget_policy_exceeded",
+                    "policy_name": violated.name,
+                    "scope": violated.scope,
+                    "target": violated.target,
+                    "limit_usd": violated.limit_usd,
+                    "estimated_cost_usd": reservation["estimated_cost"],
+                }).encode()
+                return 429, {"content-type": "application/json"}, reject_body, None
+        except Exception as exc:
+            logger.debug("Budget policy check failed (fail-open): %s", exc)
+
     upstream_url = f"{provider.upstream_base}{upstream_path}"
     start_ms = time.monotonic()
 
@@ -487,6 +518,8 @@ async def handle_request(
             decision=decision,
             wal=wal,
             worker=worker,
+            config=config,
+            reservation=reservation,
         )
     else:
         return await _handle_non_streaming(
@@ -507,6 +540,8 @@ async def handle_request(
             decision=decision,
             wal=wal,
             worker=worker,
+            config=config,
+            reservation=reservation,
         )
 
 
@@ -528,6 +563,8 @@ async def _handle_non_streaming(
     decision: "RouteDecision | None" = None,
     wal: "WriteAheadLog | None" = None,
     worker: "SQLitePersistenceWorker | None" = None,
+    config: "BurnLensConfig | None" = None,
+    reservation: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, str], bytes, None]:
     """Forward a non-streaming request and log asynchronously."""
     response = await client.request(
@@ -548,6 +585,16 @@ async def _handle_non_streaming(
         pass
 
     cost = calculate_cost(provider.name, model, usage)
+
+    # Reconcile budget policy counters
+    if reservation and config:
+        try:
+            from burnlens.budget_engine import BudgetEngine
+            engine = BudgetEngine(config, db_path)
+            reconcile_cost = cost if response.status_code < 400 else 0.0
+            await engine.reconcile(reconcile_cost, reservation)
+        except Exception as exc:
+            logger.debug("Budget reconciliation failed: %s", exc)
 
     from burnlens.storage.models import uuid7
     from burnlens.cost.pricing import get_pricing_version
@@ -659,6 +706,8 @@ async def _handle_streaming(
     decision: "RouteDecision | None" = None,
     wal: "WriteAheadLog | None" = None,
     worker: "SQLitePersistenceWorker | None" = None,
+    config: "BurnLensConfig | None" = None,
+    reservation: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, str], None, AsyncIterator[bytes]]:
     """Forward a streaming request; log usage after stream ends."""
     req = client.build_request(
@@ -685,6 +734,14 @@ async def _handle_streaming(
             if k.lower() not in _STRIP_RESPONSE_HEADERS
         }
         await response.aclose()
+        # Reconcile budget policy counters on failure (refund reservation)
+        if reservation and config:
+            try:
+                from burnlens.budget_engine import BudgetEngine
+                engine = BudgetEngine(config, db_path)
+                await engine.reconcile(0.0, reservation)
+            except Exception as exc:
+                logger.debug("Budget reconciliation failed for streaming error: %s", exc)
         return response.status_code, resp_headers, err_body, None
     duration_ref: list[int] = [0]
 
@@ -738,6 +795,8 @@ async def _handle_streaming(
                     worker=worker,
                     ttft_ms=ttft_ms,
                     original_headers=original_headers or headers,
+                    config=config,
+                    reservation=reservation,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -774,11 +833,23 @@ async def _log_streaming_usage(
     worker: "SQLitePersistenceWorker | None" = None,
     ttft_ms: float | None = None,
     original_headers: dict[str, str] | None = None,
+    config: "BurnLensConfig | None" = None,
+    reservation: dict[str, Any] | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
 
     cost = calculate_cost(provider.name, model, usage)
+
+    # Reconcile budget policy counters
+    if reservation and config:
+        try:
+            from burnlens.budget_engine import BudgetEngine
+            engine = BudgetEngine(config, db_path)
+            reconcile_cost = cost if status_code < 400 else 0.0
+            await engine.reconcile(reconcile_cost, reservation)
+        except Exception as exc:
+            logger.debug("Budget reconciliation failed: %s", exc)
 
     if not request_id:
         request_id = _extract_request_id_from_chunks(usage_chunks)
