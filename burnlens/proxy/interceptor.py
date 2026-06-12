@@ -291,13 +291,6 @@ async def _log_record(db_path: str, record: RequestRecord) -> None:
         except Exception as exc:
             logger.debug("Spend cache invalidate failed: %s", exc)
 
-    # Emit OTEL span (no-op if telemetry is not initialised)
-    try:
-        from burnlens.telemetry.otel import emit_span
-        emit_span(record)
-    except Exception as exc:
-        logger.debug("OTEL emit failed: %s", exc)
-
 
 def _extract_api_key_hash(headers: dict[str, str]) -> str | None:
     """Return SHA-256 hash of the API key from a known auth header.
@@ -604,6 +597,15 @@ async def _handle_non_streaming(
         record.downgrade_reason = None
         record.budget_remaining_usd = None
         record.budget_remaining_pct = None
+
+    # Emit OTEL span and metrics immediately
+    try:
+        from burnlens.telemetry.otel import emit_span, emit_metrics
+        emit_span(record, original_headers or headers)
+        emit_metrics(record.to_event())
+    except Exception as exc:
+        logger.debug("OTEL telemetry emit failed: %s", exc)
+
     if wal is not None and worker is not None:
         async def _log_via_wal():
             try:
@@ -735,6 +737,7 @@ async def _handle_streaming(
                     wal=wal,
                     worker=worker,
                     ttft_ms=ttft_ms,
+                    original_headers=original_headers or headers,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -770,6 +773,7 @@ async def _log_streaming_usage(
     wal: "WriteAheadLog | None" = None,
     worker: "SQLitePersistenceWorker | None" = None,
     ttft_ms: float | None = None,
+    original_headers: dict[str, str] | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
@@ -811,6 +815,14 @@ async def _log_streaming_usage(
         pricing_version=pricing_version,
         ttft_ms=ttft_ms,
     )
+    # Emit OTEL telemetry immediately
+    try:
+        from burnlens.telemetry.otel import emit_span, emit_metrics
+        emit_span(record, original_headers)
+        emit_metrics(record.to_event())
+    except Exception as exc:
+        logger.debug("OTEL telemetry emit failed: %s", exc)
+
     # Persist routing decision fields (per D-05)
     if decision is not None:
         record.routed_model = decision.routed_model

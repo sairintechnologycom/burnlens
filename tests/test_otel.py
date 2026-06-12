@@ -43,7 +43,7 @@ class TestEmitSpan:
             otel._tracer = mock_tracer
             otel.emit_span(_sample_record())
 
-            mock_tracer.start_span.assert_called_once_with("llm.request")
+            mock_tracer.start_span.assert_called_once_with("llm.request", context=None)
             mock_span.end.assert_called_once()
         finally:
             otel._tracer = original
