@@ -6,7 +6,7 @@ BurnLens is an open-source FinOps proxy for AI spend. This document outlines the
 
 | Phase | Name                                   | Primary Outcome                                                    |
 | ----: | -------------------------------------- | ------------------------------------------------------------------ |
-|     0 | Repo Baseline & Release Safety         | Codex understands repo, current tests, and stable extension points |
+|     0 | Repo Baseline & Release Safety (Done)  | Codex understands repo, current tests, and stable extension points |
 |     1 | Event Contract & Attribution Model     | Canonical GenAI cost event schema                                  |
 |     2 | Durable Local WAL & Idempotent Sync    | No token/cost event loss during outages                            |
 |     3 | OTel GenAI Compatibility               | Enterprise observability compatibility                             |
@@ -22,7 +22,7 @@ BurnLens is an open-source FinOps proxy for AI spend. This document outlines the
 
 ---
 
-# Phase 0 — Repo Baseline & Release Safety
+# Phase 0 — Repo Baseline & Release Safety [COMPLETED]
 
 ## Objective
 Establish a safe engineering foundation before feature work.
