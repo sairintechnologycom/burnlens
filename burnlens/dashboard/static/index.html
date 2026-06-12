@@ -103,14 +103,24 @@
     </div>
   </section>
 
-  <!-- Team Budgets (card with progress bars) -->
-  <section class="chart-card" id="team-budgets-section">
-    <div class="chart-header">
-      <h2>Team Budgets</h2>
-      <span class="chart-note">monthly spend caps from <code>budgets.teams</code></span>
+  <!-- Anomalies & Team Budgets row -->
+  <section class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Anomaly & Runaway Alerts</h2>
+      </div>
+      <div id="anomaly-panel">
+        <div class="loading-text">Loading…</div>
+      </div>
     </div>
-    <div id="team-budgets-panel">
-      <div class="loading-text">Loading…</div>
+    <div class="chart-card" id="team-budgets-section">
+      <div class="chart-header">
+        <h2>Team Budgets</h2>
+        <span class="chart-note">monthly spend caps from <code>budgets.teams</code></span>
+      </div>
+      <div id="team-budgets-panel">
+        <div class="loading-text">Loading…</div>
+      </div>
     </div>
   </section>
 

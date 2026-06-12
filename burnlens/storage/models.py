@@ -295,3 +295,17 @@ class DiscoveryEvent:
     details: dict = field(default_factory=dict)
     detected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     id: int | None = None
+
+
+@dataclass
+class AnomalyEvent:
+    """An event representing a detected cost spike or runaway loop anomaly."""
+
+    event_type: str  # 'cost_spike' | 'runaway_loop'
+    scope: str       # 'org' | 'team' | 'app' | 'customer' | 'api_key' | 'model'
+    target: str
+    severity: str    # 'warning' | 'critical'
+    details: dict = field(default_factory=dict)
+    detected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    id: int | None = None
+

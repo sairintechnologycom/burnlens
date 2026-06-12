@@ -304,6 +304,99 @@ canvas {
   font-weight: 600;
 }
 
+/* ----------------------------------------------------------- Anomalies */
+
+#anomaly-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.anomaly-item {
+  background: rgba(26, 30, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.anomaly-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.anomaly-item.severity-critical {
+  border-left-color: var(--red);
+}
+
+.anomaly-item.severity-warning {
+  border-left-color: var(--yellow);
+}
+
+.anomaly-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  color: var(--text);
+}
+
+.anomaly-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15em 0.45em;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.anomaly-badge.critical {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.anomaly-badge.warning {
+  background: rgba(250, 204, 21, 0.15);
+  color: var(--yellow);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+}
+
+.anomaly-desc {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+  margin-bottom: 0.25rem;
+}
+
+.anomaly-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(35, 39, 54, 0.4);
+}
+
+.anomaly-scope-target {
+  font-family: "SF Mono", "Fira Code", monospace;
+  background: var(--surface2);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
 /* -------------------------------------------------------- Recommendations */
 
 #recommendations-panel {

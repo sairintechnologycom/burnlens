@@ -677,6 +677,10 @@ async def _handle_non_streaming(
         asyncio.create_task(alert_engine.check_and_dispatch())
         asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())
 
+    if config is not None:
+        _run_anomaly_detection(record, config, db_path)
+
+
     # Pass through response headers, stripping hop-by-hop and encoding headers
     # (httpx auto-decompresses, so content-encoding must not be forwarded).
     resp_headers = {
@@ -920,6 +924,10 @@ async def _log_streaming_usage(
         asyncio.create_task(alert_engine.check_and_dispatch())
         asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())
 
+    if config is not None:
+        _run_anomaly_detection(record, config, db_path)
+
+
 
 def _extract_trace_id(headers: dict[str, str], tags: dict[str, str]) -> str | None:
     """Extract OpenTelemetry trace ID from traceparent header or custom headers/tags."""
@@ -1064,4 +1072,14 @@ def _extract_request_id_from_chunks(chunks: list[str]) -> str | None:
             except Exception:
                 pass
     return None
+
+
+def _run_anomaly_detection(record: RequestRecord, config: Any, db_path: str) -> None:
+    try:
+        from burnlens.detection.anomaly import AnomalyDetector
+        detector = AnomalyDetector(config, db_path)
+        asyncio.create_task(detector.check_request(record))
+    except Exception as exc:
+        logger.debug("Failed to start anomaly detection task: %s", exc)
+
 

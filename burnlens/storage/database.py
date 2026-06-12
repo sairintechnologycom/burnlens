@@ -8,7 +8,7 @@ from typing import Any
 
 import aiosqlite
 
-from burnlens.storage.models import AiAsset, DiscoveryEvent, ProviderSignature, RequestRecord
+from burnlens.storage.models import AiAsset, DiscoveryEvent, ProviderSignature, RequestRecord, AnomalyEvent
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,27 @@ CREATE TABLE IF NOT EXISTS budget_counters (
 );
 """
 
+_CREATE_ANOMALY_EVENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS anomaly_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type      TEXT NOT NULL CHECK(event_type IN ('cost_spike', 'runaway_loop')),
+    scope           TEXT NOT NULL,
+    target          TEXT NOT NULL,
+    severity        TEXT NOT NULL CHECK(severity IN ('warning', 'critical')),
+    detected_at     TEXT NOT NULL,
+    details         TEXT NOT NULL DEFAULT '{}'
+);
+"""
+
+_CREATE_ANOMALY_EVENTS_DETECTED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_anomaly_events_detected ON anomaly_events(detected_at);
+"""
+
+_CREATE_ANOMALY_EVENTS_SCOPE_TARGET_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_anomaly_events_scope_target ON anomaly_events(scope, target);
+"""
+
+
 _SEED_PROVIDER_SIGNATURES = [
     ("openai", "api.openai.com/*", '{"keys":["authorization","openai-organization"]}', "body.model"),
     ("anthropic", "api.anthropic.com/*", '{"keys":["x-api-key","anthropic-version"]}', "body.model"),
@@ -239,6 +260,12 @@ async def init_db(db_path: str) -> None:
         # Budget counters table
         await db.execute(_CREATE_BUDGET_COUNTERS_TABLE)
 
+        # Anomaly events table
+        await db.execute(_CREATE_ANOMALY_EVENTS_TABLE)
+        await db.execute(_CREATE_ANOMALY_EVENTS_DETECTED_INDEX)
+        await db.execute(_CREATE_ANOMALY_EVENTS_SCOPE_TARGET_INDEX)
+
+
         # Seed provider signatures
         await db.executemany(
             """
@@ -275,6 +302,9 @@ async def init_db(db_path: str) -> None:
 
     # Phase 4: Budget counters table
     await migrate_add_budget_counters_table(db_path)
+
+    # Phase 5: Anomaly events table
+    await migrate_add_anomaly_events_table(db_path)
 
     logger.debug("Database initialized at %s", db_path)
 
@@ -1118,5 +1148,40 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
         )
         await db.commit()
         row_id = cursor.lastrowid if cursor.rowcount > 0 else 0
+
+    return row_id
+
+
+async def migrate_add_anomaly_events_table(db_path: str) -> None:
+    """Create anomaly_events table if it does not exist.
+
+    Safe to call multiple times.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(_CREATE_ANOMALY_EVENTS_TABLE)
+        await db.execute(_CREATE_ANOMALY_EVENTS_DETECTED_INDEX)
+        await db.execute(_CREATE_ANOMALY_EVENTS_SCOPE_TARGET_INDEX)
+        await db.commit()
+
+
+async def insert_anomaly_event(db_path: str, event: AnomalyEvent) -> int:
+    """Insert an AnomalyEvent record and return its new row id."""
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            INSERT INTO anomaly_events (event_type, scope, target, severity, details, detected_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.event_type,
+                event.scope,
+                event.target,
+                event.severity,
+                json.dumps(event.details),
+                event.detected_at.isoformat(),
+            ),
+        )
+        await db.commit()
+        row_id = cursor.lastrowid
 
     return row_id

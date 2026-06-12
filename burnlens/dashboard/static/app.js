@@ -726,6 +726,75 @@ async function fetchRequests() {
   }
 }
 
+// -------------------------------------------------------- Anomalies panel
+
+async function fetchAnomalies() {
+  const panel = $('anomaly-panel');
+  if (!panel) return;
+
+  try {
+    const events = await apiFetch('/anomalies');
+    panel.replaceChildren();
+
+    if (!events.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state-ok';
+      const check = document.createElement('span');
+      check.className = 'check';
+      check.textContent = '✅';
+      empty.appendChild(check);
+      empty.appendChild(document.createTextNode('No anomalies detected'));
+      panel.appendChild(empty);
+      return;
+    }
+
+    for (const e of events) {
+      const item = document.createElement('div');
+      item.className = 'anomaly-item severity-' + e.severity;
+
+      const titleRow = document.createElement('div');
+      titleRow.className = 'anomaly-title';
+
+      const typeName = e.event_type === 'cost_spike' ? 'Cost Spike' : 'Runaway Loop';
+      titleRow.appendChild(document.createTextNode(typeName + ' '));
+
+      const badge = document.createElement('span');
+      badge.className = 'anomaly-badge ' + e.severity;
+      badge.textContent = e.severity;
+      titleRow.appendChild(badge);
+
+      const desc = document.createElement('div');
+      desc.className = 'anomaly-desc';
+      desc.textContent = e.details.description || `${typeName} detected in ${e.details.window || 'unknown'} window.`;
+
+      const metaRow = document.createElement('div');
+      metaRow.className = 'anomaly-meta';
+
+      const scopeTarget = document.createElement('span');
+      scopeTarget.className = 'anomaly-scope-target';
+      scopeTarget.textContent = `${e.scope}: ${e.target}`;
+
+      const timeLabel = document.createElement('span');
+      timeLabel.textContent = fmtTime(e.detected_at);
+
+      metaRow.appendChild(scopeTarget);
+      metaRow.appendChild(timeLabel);
+
+      item.appendChild(titleRow);
+      item.appendChild(desc);
+      item.appendChild(metaRow);
+
+      panel.appendChild(item);
+    }
+  } catch (err) {
+    panel.replaceChildren();
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'loading-text';
+    errorMsg.textContent = 'Error loading anomalies: ' + err.message;
+    panel.appendChild(errorMsg);
+  }
+}
+
 // -------------------------------------------------------- Refresh loop
 
 async function refresh() {
@@ -742,6 +811,7 @@ async function refresh() {
     fetchRoutingStats(),
     fetchTopPRs(),
     fetchRequests(),
+    fetchAnomalies(),
   ]);
 }
 
