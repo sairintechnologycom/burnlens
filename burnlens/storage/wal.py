@@ -179,3 +179,23 @@ class SQLitePersistenceWorker:
             except Exception as e:
                 logger.error("SQLite Persistence Worker loop encountered error: %s", e)
                 await asyncio.sleep(0.5)
+
+
+async def recover_wal(wal: WriteAheadLog, db_path: str) -> int:
+    """Replay outstanding WAL events into SQLite and truncate WAL."""
+    count = 0
+    if not wal.wal_path.exists():
+        return count
+
+    try:
+        async for record in wal.read_events():
+            await insert_request(db_path, record)
+            count += 1
+
+        await wal.truncate()
+        logger.info("WAL recovery completed: replayed %d events", count)
+    except Exception as e:
+        logger.error("Failed to recover WAL: %s", e)
+
+    return count
+
