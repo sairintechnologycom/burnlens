@@ -1,12 +1,10 @@
 import pytest
-import asyncio
 from fastapi.testclient import TestClient
 from burnlens.config import BurnLensConfig
 from burnlens.proxy.server import get_app
 from burnlens.storage.database import init_db
 
-@pytest.mark.asyncio
-async def test_server_lifespan_wal(tmp_path):
+def test_server_lifespan_wal(tmp_path):
     db_path = str(tmp_path / "test.db")
     wal_path = str(tmp_path / "wal.jsonl")
     dlq_path = str(tmp_path / "dlq.jsonl")
