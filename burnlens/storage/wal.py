@@ -104,27 +104,21 @@ class SQLitePersistenceWorker:
         self.queue: asyncio.Queue[RequestRecord] = asyncio.Queue(maxsize=queue_size)
         self.worker_task: asyncio.Task | None = None
         self._running = False
+        self._active_record: RequestRecord | None = None
 
     async def start(self) -> None:
         """Start the background persistence worker loop."""
         self._running = True
         self.worker_task = asyncio.create_task(self._worker_loop())
 
-    async def stop(self) -> None:
-        """Drains remaining queue items and stops cleanly."""
+    async def stop(self) -> bool:
+        """Drains remaining queue items and stops cleanly.
+        Returns True if all records (active + queued) were successfully persisted, or False if any insert failed.
+        """
         self._running = False
+        success = True
 
-        # Process remaining items
-        while not self.queue.empty():
-            try:
-                record = self.queue.get_nowait()
-                await insert_request(self.db_path, record)
-                self.queue.task_done()
-            except asyncio.QueueEmpty:
-                break
-            except Exception as e:
-                logger.error("Failed to persist remaining queue item: %s", e)
-
+        # Stop worker task first to prevent concurrent consumption
         if self.worker_task:
             self.worker_task.cancel()
             try:
@@ -132,6 +126,30 @@ class SQLitePersistenceWorker:
             except asyncio.CancelledError:
                 pass
             self.worker_task = None
+
+        # Persist the record that was active when cancelled
+        if self._active_record:
+            try:
+                await insert_request(self.db_path, self._active_record)
+                self._active_record = None
+            except Exception as e:
+                logger.error("Failed to persist active record during shutdown: %s", e)
+                success = False
+
+        # Process remaining queue items
+        while not self.queue.empty():
+            try:
+                record = self.queue.get_nowait()
+                try:
+                    await insert_request(self.db_path, record)
+                except Exception as e:
+                    logger.error("Failed to persist remaining queue item during shutdown: %s", e)
+                    success = False
+                self.queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+
+        return success
 
     async def enqueue(self, record: RequestRecord) -> None:
         """Enqueue record for DB persistence."""
@@ -141,12 +159,14 @@ class SQLitePersistenceWorker:
         while self._running:
             try:
                 record = await self.queue.get()
+                self._active_record = record
                 inserted = False
                 backoff = 0.1
                 while not inserted and self._running:
                     try:
                         await insert_request(self.db_path, record)
                         inserted = True
+                        self._active_record = None
                     except asyncio.CancelledError:
                         raise
                     except Exception as e:
