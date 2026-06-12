@@ -3,6 +3,40 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import os
+import time
+
+
+_last_uuid7_ts = 0
+
+
+def uuid7() -> str:
+    """Generate an RFC 9562-compatible UUIDv7 string."""
+    global _last_uuid7_ts
+    ts_ms = int(time.time() * 1000)
+    if ts_ms <= _last_uuid7_ts:
+        ts_ms = _last_uuid7_ts + 1
+    _last_uuid7_ts = ts_ms
+
+    rand_bytes = bytearray(os.urandom(16))
+
+    # Write timestamp to first 6 bytes
+    rand_bytes[0] = (ts_ms >> 40) & 0xFF
+    rand_bytes[1] = (ts_ms >> 32) & 0xFF
+    rand_bytes[2] = (ts_ms >> 24) & 0xFF
+    rand_bytes[3] = (ts_ms >> 16) & 0xFF
+    rand_bytes[4] = (ts_ms >> 8) & 0xFF
+    rand_bytes[5] = ts_ms & 0xFF
+
+    # Set version to 7 (bits 4-7 of byte 6)
+    rand_bytes[6] = (rand_bytes[6] & 0x0F) | 0x70
+
+    # Set variant to 2 (bits 6-7 of byte 8)
+    rand_bytes[8] = (rand_bytes[8] & 0x3F) | 0x80
+
+    h = rand_bytes.hex()
+    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+
 
 
 @dataclass
@@ -112,7 +146,6 @@ class RequestRecord:
     def to_event(self) -> GenAICostEvent:
         """Convert this RequestRecord to a canonical GenAICostEvent."""
         import hashlib
-        import uuid
 
         usage = TokenUsageEvent(
             input_tokens=self.input_tokens,
@@ -121,7 +154,7 @@ class RequestRecord:
             cache_read_tokens=self.cache_read_tokens,
             cache_write_tokens=self.cache_write_tokens,
         )
-        event_id = self.event_id or str(uuid.uuid4())
+        event_id = self.event_id or uuid7()
         
         # Calculate customer hash safely
         customer = (self.tags or {}).get("customer")
