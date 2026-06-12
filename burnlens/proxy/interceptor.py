@@ -361,6 +361,8 @@ async def handle_request(
     customer_budgets: "CustomerBudgetsConfig | None" = None,
     api_key_budgets: "ApiKeyBudgetsConfig | None" = None,
     config: "BurnLensConfig | None" = None,
+    wal: "WriteAheadLog | None" = None,
+    worker: "SQLitePersistenceWorker | None" = None,
 ) -> tuple[int, dict[str, str], bytes | None, AsyncIterator[bytes] | None]:
     """Forward a request upstream and return (status, headers, body, stream).
 
@@ -490,6 +492,8 @@ async def handle_request(
             alert_engine=alert_engine,
             original_headers=headers,
             decision=decision,
+            wal=wal,
+            worker=worker,
         )
     else:
         return await _handle_non_streaming(
@@ -508,6 +512,8 @@ async def handle_request(
             alert_engine=alert_engine,
             original_headers=headers,
             decision=decision,
+            wal=wal,
+            worker=worker,
         )
 
 
@@ -527,6 +533,8 @@ async def _handle_non_streaming(
     alert_engine: "AlertEngine | None" = None,
     original_headers: dict[str, str] | None = None,
     decision: "RouteDecision | None" = None,
+    wal: "WriteAheadLog | None" = None,
+    worker: "SQLitePersistenceWorker | None" = None,
 ) -> tuple[int, dict[str, str], bytes, None]:
     """Forward a non-streaming request and log asynchronously."""
     response = await client.request(
@@ -596,7 +604,18 @@ async def _handle_non_streaming(
         record.downgrade_reason = None
         record.budget_remaining_usd = None
         record.budget_remaining_pct = None
-    asyncio.create_task(_log_record(db_path, record))
+    if wal is not None and worker is not None:
+        async def _log_via_wal():
+            try:
+                await wal.append_event(record)
+                await worker.enqueue(record)
+            except Exception as e:
+                logger.error("WAL append/enqueue failed: %s", e)
+                # Fallback to direct insertion so we fail open
+                asyncio.create_task(_log_record(db_path, record))
+        asyncio.create_task(_log_via_wal())
+    else:
+        asyncio.create_task(_log_record(db_path, record))
 
     # Async non-blocking asset upsert (runs in same event loop, does not add latency)
     api_key_hash = _extract_api_key_hash(original_headers or headers)
@@ -636,6 +655,8 @@ async def _handle_streaming(
     alert_engine: "AlertEngine | None" = None,
     original_headers: dict[str, str] | None = None,
     decision: "RouteDecision | None" = None,
+    wal: "WriteAheadLog | None" = None,
+    worker: "SQLitePersistenceWorker | None" = None,
 ) -> tuple[int, dict[str, str], None, AsyncIterator[bytes]]:
     """Forward a streaming request; log usage after stream ends."""
     req = client.build_request(
@@ -706,6 +727,8 @@ async def _handle_streaming(
                     request_id=request_id,
                     meta=meta,
                     pricing_version=pricing_version,
+                    wal=wal,
+                    worker=worker,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -738,6 +761,8 @@ async def _log_streaming_usage(
     request_id: str | None = None,
     meta: dict[str, str | None] | None = None,
     pricing_version: str | None = None,
+    wal: "WriteAheadLog | None" = None,
+    worker: "SQLitePersistenceWorker | None" = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
@@ -789,7 +814,15 @@ async def _log_streaming_usage(
         record.downgrade_reason = None
         record.budget_remaining_usd = None
         record.budget_remaining_pct = None
-    await _log_record(db_path, record)
+    if wal is not None and worker is not None:
+        try:
+            await wal.append_event(record)
+            await worker.enqueue(record)
+        except Exception as e:
+            logger.error("WAL append/enqueue failed: %s", e)
+            await _log_record(db_path, record)
+    else:
+        await _log_record(db_path, record)
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
         asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())

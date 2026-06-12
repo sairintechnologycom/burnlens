@@ -16,6 +16,7 @@ from burnlens.config import BurnLensConfig
 from burnlens.proxy.interceptor import handle_request
 from burnlens.proxy.providers import get_provider_for_path
 from burnlens.storage.database import init_db
+from burnlens.storage.wal import WriteAheadLog, SQLitePersistenceWorker, recover_wal
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,18 @@ def get_app(config: BurnLensConfig) -> FastAPI:
         # Init DB (creates tables if needed)
         await init_db(config.db_path)
         logger.info("Database ready at %s", config.db_path)
+
+        # Initialize WAL and Worker
+        wal = WriteAheadLog(config.wal_path, config.dlq_path)
+        app.state.wal = wal
+
+        # Perform WAL Recovery before starting worker
+        await recover_wal(wal, config.db_path)
+
+        worker = SQLitePersistenceWorker(wal, config.db_path)
+        app.state.wal_worker = worker
+        await worker.start()
+        logger.info("WAL and SQLite persistence worker active")
 
         # Build alert engine (one instance per proxy run; holds dedup state)
         _alert_engine = AlertEngine(config, config.db_path)
@@ -84,6 +97,17 @@ def get_app(config: BurnLensConfig) -> FastAPI:
 
         logger.info("BurnLens proxy ready on http://%s:%d", config.host, config.port)
         yield
+
+        # Shut down worker cleanly
+        flush_success = await worker.stop()
+        logger.info("SQLite persistence worker stopped")
+
+        # Final WAL truncate ONLY if clean shutdown persisted all records successfully
+        if flush_success:
+            await wal.truncate()
+            logger.info("WAL truncated cleanly")
+        else:
+            logger.warning("WAL was NOT truncated due to persistence failures during shutdown")
 
         # Shut down detection scheduler
         _scheduler.shutdown(wait=False)
@@ -158,6 +182,8 @@ def get_app(config: BurnLensConfig) -> FastAPI:
                 customer_budgets=_config.alerts.customer_budgets,
                 api_key_budgets=_config.alerts.api_key_budgets,
                 config=_config,
+                wal=getattr(request.app.state, "wal", None),
+                worker=getattr(request.app.state, "wal_worker", None),
             )
         except httpx.RequestError as exc:
             logger.error("Upstream request failed: %s", exc)

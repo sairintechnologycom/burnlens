@@ -147,6 +147,8 @@ class BurnLensConfig:
     port: int = 8420
     host: str = "127.0.0.1"
     db_path: str = str(Path.home() / ".burnlens" / "burnlens.db")
+    wal_path: str = str(Path.home() / ".burnlens" / "wal.jsonl")
+    dlq_path: str = str(Path.home() / ".burnlens" / "wal_dlq.jsonl")
     log_level: str = "info"
     openai_upstream: str = "https://api.openai.com"
     anthropic_upstream: str = "https://api.anthropic.com"
@@ -167,6 +169,8 @@ _FIELD_TYPES: dict[str, type] = {
     "port": int,
     "host": str,
     "db_path": str,
+    "wal_path": str,
+    "dlq_path": str,
     "log_level": str,
     "openai_upstream": str,
     "anthropic_upstream": str,
