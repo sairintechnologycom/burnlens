@@ -556,7 +556,7 @@ async def _handle_non_streaming(
 
     cost = calculate_cost(provider.name, model, usage)
 
-    import uuid
+    from burnlens.storage.models import uuid7
     from burnlens.cost.pricing import get_pricing_version
 
     meta = _resolve_canonical_metadata(original_headers or headers, tags)
@@ -578,7 +578,7 @@ async def _handle_non_streaming(
         tags=tags,
         system_prompt_hash=system_hash,
         # Phase 1: Canonical event fields
-        event_id=str(uuid.uuid4()),
+        event_id=uuid7(),
         request_id=_extract_request_id(provider.name, response.headers, resp_body),
         trace_id=meta["trace_id"],
         workspace_id=meta["workspace_id"],
@@ -689,12 +689,12 @@ async def _handle_streaming(
     api_key_hash = _extract_api_key_hash(original_headers or headers)
     endpoint_url = provider.upstream_base
 
-    import uuid
+    from burnlens.storage.models import uuid7
     from burnlens.cost.pricing import get_pricing_version
 
     meta = _resolve_canonical_metadata(original_headers or headers, tags)
     pricing_version = get_pricing_version(provider.name)
-    event_id = str(uuid.uuid4())
+    event_id = uuid7()
     request_id = _extract_request_id(provider.name, response.headers, None)
 
     async def _stream_generator() -> AsyncIterator[bytes]:
