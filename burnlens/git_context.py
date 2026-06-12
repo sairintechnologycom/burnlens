@@ -52,7 +52,7 @@ def _parse_pr(branch: str) -> str | None:
 
 
 def read_git_context(cwd: str | None = None) -> dict[str, str]:
-    """Return ``{repo, branch, dev, pr}`` derived from the cwd's git state.
+    """Return ``{repo, branch, dev, pr, commit_sha}`` derived from the cwd's git state.
 
     Keys are omitted when not available. Never raises.
     """
@@ -77,4 +77,9 @@ def read_git_context(cwd: str | None = None) -> dict[str, str]:
     if dev:
         ctx["dev"] = dev
 
+    sha = _run_git(target, "rev-parse", "HEAD")
+    if sha:
+        ctx["commit_sha"] = sha
+
     return ctx
+

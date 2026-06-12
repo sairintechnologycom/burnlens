@@ -6,6 +6,44 @@ from datetime import datetime, timezone
 
 
 @dataclass
+class TokenUsageEvent:
+    """Canonical representation of token counts for a GenAI event."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+
+@dataclass
+class GenAICostEvent:
+    """Canonical schema for a single AI cost event."""
+
+    event_id: str
+    request_id: str | None
+    trace_id: str | None
+    workspace_id: str | None
+    org_id: str | None
+    team: str | None
+    feature: str | None
+    customer_hash: str | None
+    app_id: str | None
+    env: str | None
+    repo: str | None
+    branch: str | None
+    commit_sha: str | None
+    timestamp: datetime
+    provider: str
+    model: str
+    usage: TokenUsageEvent
+    cost_usd: float
+    duration_ms: float
+    status_code: int
+    pricing_version: str | None
+
+
+@dataclass
 class RequestRecord:
     """A single intercepted LLM API request + response pair."""
 
@@ -30,6 +68,138 @@ class RequestRecord:
     downgrade_reason: str | None = None
     budget_remaining_usd: float | None = None
     budget_remaining_pct: float | None = None
+
+    # Phase 1: Canonical event fields
+    event_id: str | None = None
+    trace_id: str | None = None
+    workspace_id: str | None = None
+    org_id: str | None = None
+    team: str | None = None
+    feature: str | None = None
+    customer_hash: str | None = None
+    app_id: str | None = None
+    env: str | None = None
+    repo: str | None = None
+    branch: str | None = None
+    commit_sha: str | None = None
+    pricing_version: str | None = None
+
+    @property
+    def tag_repo(self) -> str | None:
+        """Fallback property for backwards compatibility."""
+        return self.repo or (self.tags or {}).get("repo")
+
+    @property
+    def tag_dev(self) -> str | None:
+        """Fallback property for backwards compatibility."""
+        return (self.tags or {}).get("dev")
+
+    @property
+    def tag_pr(self) -> str | None:
+        """Fallback property for backwards compatibility."""
+        return (self.tags or {}).get("pr")
+
+    @property
+    def tag_branch(self) -> str | None:
+        """Fallback property for backwards compatibility."""
+        return self.branch or (self.tags or {}).get("branch")
+
+    @property
+    def tag_key_label(self) -> str | None:
+        """Fallback property for backwards compatibility."""
+        return (self.tags or {}).get("key_label")
+
+    def to_event(self) -> GenAICostEvent:
+        """Convert this RequestRecord to a canonical GenAICostEvent."""
+        import hashlib
+        import uuid
+
+        usage = TokenUsageEvent(
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            reasoning_tokens=self.reasoning_tokens,
+            cache_read_tokens=self.cache_read_tokens,
+            cache_write_tokens=self.cache_write_tokens,
+        )
+        event_id = self.event_id or str(uuid.uuid4())
+        
+        # Calculate customer hash safely
+        customer = (self.tags or {}).get("customer")
+        cust_hash = self.customer_hash
+        if not cust_hash and customer:
+            cust_hash = hashlib.sha256(customer.encode()).hexdigest()
+
+        return GenAICostEvent(
+            event_id=event_id,
+            request_id=self.request_id,
+            trace_id=self.trace_id,
+            workspace_id=self.workspace_id,
+            org_id=self.org_id,
+            team=self.team or (self.tags or {}).get("team"),
+            feature=self.feature or (self.tags or {}).get("feature"),
+            customer_hash=cust_hash,
+            app_id=self.app_id or (self.tags or {}).get("app_id"),
+            env=self.env or (self.tags or {}).get("env"),
+            repo=self.repo or (self.tags or {}).get("repo"),
+            branch=self.branch or (self.tags or {}).get("branch"),
+            commit_sha=self.commit_sha or (self.tags or {}).get("commit_sha"),
+            timestamp=self.timestamp,
+            provider=self.provider,
+            model=self.model,
+            usage=usage,
+            cost_usd=self.cost_usd,
+            duration_ms=self.duration_ms,
+            status_code=self.status_code,
+            pricing_version=self.pricing_version,
+        )
+
+    @classmethod
+    def from_event(cls, event: GenAICostEvent) -> RequestRecord:
+        """Construct a RequestRecord from a canonical GenAICostEvent."""
+        tags = {
+            "team": event.team,
+            "feature": event.feature,
+            "app_id": event.app_id,
+            "env": event.env,
+            "commit_sha": event.commit_sha,
+        }
+        if event.repo:
+            tags["repo"] = event.repo
+        if event.branch:
+            tags["branch"] = event.branch
+        # Clean out None values
+        tags = {k: v for k, v in tags.items() if v is not None}
+
+        return cls(
+            provider=event.provider,
+            model=event.model,
+            request_path="",
+            timestamp=event.timestamp,
+            input_tokens=event.usage.input_tokens,
+            output_tokens=event.usage.output_tokens,
+            reasoning_tokens=event.usage.reasoning_tokens,
+            cache_read_tokens=event.usage.cache_read_tokens,
+            cache_write_tokens=event.usage.cache_write_tokens,
+            cost_usd=event.cost_usd,
+            duration_ms=event.duration_ms,
+            status_code=event.status_code,
+            tags=tags,
+            request_id=event.request_id,
+            event_id=event.event_id,
+            trace_id=event.trace_id,
+            workspace_id=event.workspace_id,
+            org_id=event.org_id,
+            team=event.team,
+            feature=event.feature,
+            customer_hash=event.customer_hash,
+            app_id=event.app_id,
+            env=event.env,
+            repo=event.repo,
+            branch=event.branch,
+            commit_sha=event.commit_sha,
+            pricing_version=event.pricing_version,
+        )
+
 
 
 @dataclass
