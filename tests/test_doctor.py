@@ -185,11 +185,11 @@ def test_run_all_checks_never_crashes_on_exception():
     with patch("burnlens.doctor.check_proxy", side_effect=RuntimeError("boom")):
         with patch("burnlens.doctor.check_database", side_effect=RuntimeError("boom")):
             results = run_all_checks()
-    # Should still return 7 results, not crash
-    assert len(results) == 7
+    # Should still return 8 results, not crash
+    assert len(results) == 8
     # The crashed checks should be "fail", not missing
     assert results[0].status == "fail"
     assert results[1].status == "fail"
-    # Checks 6 and 7 should be "skip" since proxy/db failed
+    # Checks 6 and 7 (indexes 5 and 6) should be "skip" since proxy/db failed
     assert results[5].status == "skip"
     assert results[6].status == "skip"

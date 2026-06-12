@@ -65,6 +65,9 @@ Make telemetry loss-resistant.
 - Async workers for SQLite persistence and Cloud Sync pushing.
 - WAL recovery, doctor, and DLQ replaying capabilities.
 
+> [!NOTE]
+> A detailed step-by-step implementation plan with failing tests, TDD steps, and command instructions has been generated at [2026-06-12-durable-local-wal-sync.md](file:///Users/bhushan/.gemini/antigravity-cli/brain/7d720b7c-33e1-4b9e-a049-c66c9419a88c/docs/plans/2026-06-12-durable-local-wal-sync.md). You can execute it task-by-task.
+
 ---
 
 # Phase 3 — OpenTelemetry GenAI Compatibility
