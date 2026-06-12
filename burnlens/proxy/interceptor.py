@@ -548,6 +548,12 @@ async def _handle_non_streaming(
 
     cost = calculate_cost(provider.name, model, usage)
 
+    import uuid
+    from burnlens.cost.pricing import get_pricing_version
+
+    meta = _resolve_canonical_metadata(original_headers or headers, tags)
+    pricing_version = get_pricing_version(provider.name)
+
     record = RequestRecord(
         provider=provider.name,
         model=model,
@@ -563,6 +569,21 @@ async def _handle_non_streaming(
         status_code=response.status_code,
         tags=tags,
         system_prompt_hash=system_hash,
+        # Phase 1: Canonical event fields
+        event_id=str(uuid.uuid4()),
+        request_id=_extract_request_id(provider.name, response.headers, resp_body),
+        trace_id=meta["trace_id"],
+        workspace_id=meta["workspace_id"],
+        org_id=meta["org_id"],
+        team=meta["team"],
+        feature=meta["feature"],
+        customer_hash=meta["customer_hash"],
+        app_id=meta["app_id"],
+        env=meta["env"],
+        repo=meta["repo"],
+        branch=meta["branch"],
+        commit_sha=meta["commit_sha"],
+        pricing_version=pricing_version,
     )
     # Persist routing decision fields (per D-05)
     if decision is not None:
@@ -647,6 +668,14 @@ async def _handle_streaming(
     api_key_hash = _extract_api_key_hash(original_headers or headers)
     endpoint_url = provider.upstream_base
 
+    import uuid
+    from burnlens.cost.pricing import get_pricing_version
+
+    meta = _resolve_canonical_metadata(original_headers or headers, tags)
+    pricing_version = get_pricing_version(provider.name)
+    event_id = str(uuid.uuid4())
+    request_id = _extract_request_id(provider.name, response.headers, None)
+
     async def _stream_generator() -> AsyncIterator[bytes]:
         raw_buffer = ""
         try:
@@ -673,6 +702,10 @@ async def _handle_streaming(
                     request_path=request_path,
                     alert_engine=alert_engine,
                     decision=decision,
+                    event_id=event_id,
+                    request_id=request_id,
+                    meta=meta,
+                    pricing_version=pricing_version,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -701,11 +734,18 @@ async def _log_streaming_usage(
     request_path: str,
     alert_engine: "AlertEngine | None" = None,
     decision: "RouteDecision | None" = None,
+    event_id: str | None = None,
+    request_id: str | None = None,
+    meta: dict[str, str | None] | None = None,
+    pricing_version: str | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
 
     cost = calculate_cost(provider.name, model, usage)
+
+    if not request_id:
+        request_id = _extract_request_id_from_chunks(usage_chunks)
 
     record = RequestRecord(
         provider=provider.name,
@@ -722,6 +762,21 @@ async def _log_streaming_usage(
         status_code=status_code,
         tags=tags,
         system_prompt_hash=system_hash,
+        # Phase 1 fields
+        event_id=event_id,
+        request_id=request_id,
+        trace_id=meta.get("trace_id") if meta else None,
+        workspace_id=meta.get("workspace_id") if meta else None,
+        org_id=meta.get("org_id") if meta else None,
+        team=meta.get("team") if meta else None,
+        feature=meta.get("feature") if meta else None,
+        customer_hash=meta.get("customer_hash") if meta else None,
+        app_id=meta.get("app_id") if meta else None,
+        env=meta.get("env") if meta else None,
+        repo=meta.get("repo") if meta else None,
+        branch=meta.get("branch") if meta else None,
+        commit_sha=meta.get("commit_sha") if meta else None,
+        pricing_version=pricing_version,
     )
     # Persist routing decision fields (per D-05)
     if decision is not None:
@@ -738,3 +793,149 @@ async def _log_streaming_usage(
     if alert_engine is not None:
         asyncio.create_task(alert_engine.check_and_dispatch())
         asyncio.create_task(alert_engine.check_and_dispatch_key_budgets())
+
+
+def _extract_trace_id(headers: dict[str, str], tags: dict[str, str]) -> str | None:
+    """Extract OpenTelemetry trace ID from traceparent header or custom headers/tags."""
+    headers_lower = {k.lower(): v for k, v in headers.items()}
+    traceparent = headers_lower.get("traceparent")
+    if traceparent:
+        parts = traceparent.split("-")
+        if len(parts) >= 2 and len(parts[1]) == 32:
+            return parts[1]
+
+    for key in ("x-trace-id", "x-correlation-id", "trace_id", "trace-id"):
+        val = headers_lower.get(key)
+        if val:
+            return val
+        val = tags.get(key.replace("-", "_"))
+        if val:
+            return val
+    return None
+
+
+_cached_git_context: dict[str, str] | None = None
+
+
+def _get_git_context() -> dict[str, str]:
+    """Lazy load and cache git context to avoid subprocess overhead on the hot path."""
+    global _cached_git_context
+    if _cached_git_context is None:
+        try:
+            from burnlens.git_context import read_git_context
+            _cached_git_context = read_git_context()
+        except Exception:
+            _cached_git_context = {}
+    return _cached_git_context
+
+
+def _resolve_canonical_metadata(headers: dict[str, str], tags: dict[str, str]) -> dict[str, str | None]:
+    """Extract and resolve canonical event metadata fields."""
+    import os
+    import hashlib
+
+    headers_lower = {k.lower(): v for k, v in headers.items()}
+
+    trace_id = _extract_trace_id(headers, tags)
+
+    workspace_id = (
+        headers_lower.get("x-burnlens-workspace-id")
+        or tags.get("workspace_id")
+        or os.environ.get("BURNLENS_WORKSPACE_ID")
+        or os.environ.get("BURNLENS_TAG_WORKSPACE")
+    )
+
+    org_id = (
+        headers_lower.get("x-burnlens-org-id")
+        or tags.get("org_id")
+        or os.environ.get("BURNLENS_ORG_ID")
+        or os.environ.get("BURNLENS_TAG_ORG_ID")
+    )
+
+    team = tags.get("team") or os.environ.get("BURNLENS_TAG_TEAM")
+    feature = tags.get("feature") or os.environ.get("BURNLENS_TAG_FEATURE")
+
+    customer = tags.get("customer") or os.environ.get("BURNLENS_TAG_CUSTOMER")
+    customer_hash = None
+    if customer:
+        customer_hash = hashlib.sha256(customer.encode()).hexdigest()
+
+    app_id = (
+        headers_lower.get("x-burnlens-app-id")
+        or tags.get("app_id")
+        or os.environ.get("BURNLENS_APP_ID")
+        or os.environ.get("BURNLENS_TAG_APP_ID")
+    )
+    env = (
+        headers_lower.get("x-burnlens-env")
+        or tags.get("env")
+        or os.environ.get("BURNLENS_ENV")
+        or os.environ.get("BURNLENS_TAG_ENV")
+    )
+
+    git_ctx = _get_git_context()
+
+    repo = tags.get("repo") or os.environ.get("BURNLENS_TAG_REPO") or git_ctx.get("repo")
+    branch = tags.get("branch") or os.environ.get("BURNLENS_TAG_BRANCH") or git_ctx.get("branch")
+    commit_sha = (
+        tags.get("commit_sha")
+        or os.environ.get("BURNLENS_COMMIT_SHA")
+        or os.environ.get("BURNLENS_TAG_COMMIT_SHA")
+        or git_ctx.get("commit_sha")
+    )
+
+    return {
+        "trace_id": trace_id,
+        "workspace_id": workspace_id,
+        "org_id": org_id,
+        "team": team,
+        "feature": feature,
+        "customer_hash": customer_hash,
+        "app_id": app_id,
+        "env": env,
+        "repo": repo,
+        "branch": branch,
+        "commit_sha": commit_sha,
+    }
+
+
+
+def _extract_request_id(provider_name: str, response_headers: dict[str, str], response_body_bytes: bytes | None) -> str | None:
+    """Extract request ID from response body or response headers."""
+    if response_body_bytes:
+        try:
+            body = json.loads(response_body_bytes)
+            if isinstance(body, dict):
+                body_id = body.get("id")
+                if body_id and isinstance(body_id, str):
+                    return body_id
+        except Exception:
+            pass
+
+    headers_lower = {k.lower(): v for k, v in response_headers.items()}
+    for h in ("x-request-id", "request-id", "x-goog-correlation-id", "x-amzn-requestid", "apihdr-request-id"):
+        val = headers_lower.get(h)
+        if val:
+            return val
+    return None
+
+
+def _extract_request_id_from_chunks(chunks: list[str]) -> str | None:
+    """Scan SSE chunks to extract the request ID."""
+    for chunk_str in chunks:
+        for line in chunk_str.splitlines():
+            line = line.strip()
+            if not line.startswith("data:"):
+                continue
+            payload = line[5:].strip()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                data = json.loads(payload)
+                req_id = data.get("id")
+                if req_id and isinstance(req_id, str):
+                    return req_id
+            except Exception:
+                pass
+    return None
+

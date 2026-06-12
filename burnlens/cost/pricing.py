@@ -12,6 +12,7 @@ _PRICING_DIR = Path(__file__).parent / "pricing_data"
 
 # provider name → {model_name → pricing dict}
 _PRICING_CACHE: dict[str, dict[str, dict[str, Any]]] = {}
+_PRICING_UPDATED_CACHE: dict[str, str | None] = {}
 
 
 def _load_provider(provider: str) -> dict[str, dict[str, Any]]:
@@ -21,11 +22,20 @@ def _load_provider(provider: str) -> dict[str, dict[str, Any]]:
         if not path.exists():
             logger.warning("No pricing file for provider %r", provider)
             _PRICING_CACHE[provider] = {}
+            _PRICING_UPDATED_CACHE[provider] = None
         else:
             with open(path) as f:
                 data = json.load(f)
             _PRICING_CACHE[provider] = data.get("models", {})
+            _PRICING_UPDATED_CACHE[provider] = data.get("updated")
     return _PRICING_CACHE[provider]
+
+
+def get_pricing_version(provider: str) -> str | None:
+    """Return the pricing version (updated date) for the provider."""
+    _load_provider(provider)
+    return _PRICING_UPDATED_CACHE.get(provider)
+
 
 
 def get_model_pricing(provider: str, model: str) -> dict[str, Any] | None:

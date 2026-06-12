@@ -28,7 +28,20 @@ CREATE TABLE IF NOT EXISTS requests (
     duration_ms         INTEGER NOT NULL DEFAULT 0,
     status_code         INTEGER NOT NULL DEFAULT 200,
     tags                TEXT    NOT NULL DEFAULT '{}',
-    system_prompt_hash  TEXT
+    system_prompt_hash  TEXT,
+    event_id            TEXT,
+    trace_id            TEXT,
+    workspace_id        TEXT,
+    org_id              TEXT,
+    team                TEXT,
+    feature             TEXT,
+    customer_hash       TEXT,
+    app_id              TEXT,
+    env                 TEXT,
+    repo                TEXT,
+    branch              TEXT,
+    commit_sha          TEXT,
+    pricing_version     TEXT
 );
 """
 
@@ -241,7 +254,55 @@ async def init_db(db_path: str) -> None:
     # ROUTE-05: budget-aware routing decision columns
     await migrate_add_routing_columns(db_path)
 
+    # Phase 1: Canonical event fields
+    await migrate_add_canonical_event_fields(db_path)
+
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_add_canonical_event_fields(db_path: str) -> None:
+    """Add Phase 1 canonical event metadata columns to requests table.
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        added = []
+        fields = {
+            "event_id": "TEXT",
+            "trace_id": "TEXT",
+            "workspace_id": "TEXT",
+            "org_id": "TEXT",
+            "team": "TEXT",
+            "feature": "TEXT",
+            "customer_hash": "TEXT",
+            "app_id": "TEXT",
+            "env": "TEXT",
+            "repo": "TEXT",
+            "branch": "TEXT",
+            "commit_sha": "TEXT",
+            "pricing_version": "TEXT",
+        }
+        for col, col_type in fields.items():
+            if col not in columns:
+                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} {col_type}")
+                added.append(col)
+
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_requests_event_id ON requests(event_id)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_requests_trace_id ON requests(trace_id)"
+        )
+        await db.commit()
+
+        if added:
+            logger.info(
+                "Migration: added canonical event fields to requests table: %s",
+                ", ".join(added),
+            )
 
 
 async def migrate_add_source_column(db_path: str) -> None:
@@ -946,7 +1007,11 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
     (``request_id IS NULL``) the partial index doesn't apply, so behavior
     is unchanged. Returns 0 if the row was ignored as a duplicate.
     """
+    import uuid
+
     tags = record.tags or {}
+    event_id = record.event_id or str(uuid.uuid4())
+
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
             """
@@ -959,8 +1024,11 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 tag_repo, tag_dev, tag_pr, tag_branch, tag_key_label,
                 source, request_id,
                 routed_model, downgrade_reason,
-                budget_remaining_usd, budget_remaining_pct
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                budget_remaining_usd, budget_remaining_pct,
+                event_id, trace_id, workspace_id, org_id,
+                team, feature, customer_hash, app_id,
+                env, repo, branch, commit_sha, pricing_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -988,6 +1056,19 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.downgrade_reason,
                 record.budget_remaining_usd,
                 record.budget_remaining_pct,
+                event_id,
+                record.trace_id,
+                record.workspace_id,
+                record.org_id,
+                record.team,
+                record.feature,
+                record.customer_hash,
+                record.app_id,
+                record.env,
+                record.repo,
+                record.branch,
+                record.commit_sha,
+                record.pricing_version,
             ),
         )
         await db.commit()
