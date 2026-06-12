@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from typing import AsyncIterator
 
+from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
 
 logger = logging.getLogger(__name__)
@@ -92,3 +93,69 @@ class WriteAheadLog:
                 ts_str = ts_str[:-1] + "+00:00"
             filtered_data["timestamp"] = datetime.fromisoformat(ts_str)
         return RequestRecord(**filtered_data)
+
+
+class SQLitePersistenceWorker:
+    """Asynchronously drains a queue and persists records to SQLite with retries."""
+
+    def __init__(self, wal: WriteAheadLog, db_path: str, queue_size: int = 1000) -> None:
+        self.wal = wal
+        self.db_path = db_path
+        self.queue: asyncio.Queue[RequestRecord] = asyncio.Queue(maxsize=queue_size)
+        self.worker_task: asyncio.Task | None = None
+        self._running = False
+
+    async def start(self) -> None:
+        """Start the background persistence worker loop."""
+        self._running = True
+        self.worker_task = asyncio.create_task(self._worker_loop())
+
+    async def stop(self) -> None:
+        """Drains remaining queue items and stops cleanly."""
+        self._running = False
+
+        # Process remaining items
+        while not self.queue.empty():
+            try:
+                record = self.queue.get_nowait()
+                await insert_request(self.db_path, record)
+                self.queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+            except Exception as e:
+                logger.error("Failed to persist remaining queue item: %s", e)
+
+        if self.worker_task:
+            self.worker_task.cancel()
+            try:
+                await self.worker_task
+            except asyncio.CancelledError:
+                pass
+            self.worker_task = None
+
+    async def enqueue(self, record: RequestRecord) -> None:
+        """Enqueue record for DB persistence."""
+        await self.queue.put(record)
+
+    async def _worker_loop(self) -> None:
+        while self._running:
+            try:
+                record = await self.queue.get()
+                inserted = False
+                backoff = 0.1
+                while not inserted and self._running:
+                    try:
+                        await insert_request(self.db_path, record)
+                        inserted = True
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        logger.warning("SQLite insert failed, retrying in %.2fs: %s", backoff, e)
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, 5.0)
+                self.queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("SQLite Persistence Worker loop encountered error: %s", e)
+                await asyncio.sleep(0.5)
