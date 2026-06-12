@@ -1007,10 +1007,10 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
     (``request_id IS NULL``) the partial index doesn't apply, so behavior
     is unchanged. Returns 0 if the row was ignored as a duplicate.
     """
-    import uuid
+    from burnlens.storage.models import uuid7
 
     tags = record.tags or {}
-    event_id = record.event_id or str(uuid.uuid4())
+    event_id = record.event_id or uuid7()
 
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
