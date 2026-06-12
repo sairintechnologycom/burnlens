@@ -81,7 +81,7 @@ class AlertEngine:
     def __init__(self, config: BurnLensConfig, db_path: str) -> None:
         self._config = config
         self._db_path = db_path
-        self._tracker = BudgetTracker(config)
+        self._tracker = BudgetTracker(config, db_path)
         self._terminal = TerminalAlert()
 
         if config.alerts.slack_webhook:
@@ -103,7 +103,7 @@ class AlertEngine:
             logger.error("AlertEngine error: %s", exc)
 
     async def _run(self) -> None:
-        alerts = self._tracker.check_thresholds(thresholds=DEFAULT_THRESHOLDS)
+        alerts = await self._tracker.check_thresholds(thresholds=DEFAULT_THRESHOLDS)
         new_alerts = [a for a in alerts if not self._is_fired(a)]
         top_model = await self._get_top_model()
         for alert in new_alerts:
