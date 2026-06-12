@@ -199,3 +199,78 @@ async def recover_wal(wal: WriteAheadLog, db_path: str) -> int:
 
     return count
 
+
+def repair_wal(wal_path: str, dlq_path: str) -> tuple[int, int]:
+    """Scan WAL for corrupt JSON entries, move them to DLQ, and save valid ones back to WAL."""
+    w_path = Path(wal_path)
+    d_path = Path(dlq_path)
+    if not w_path.exists():
+        return 0, 0
+
+    valid_lines = []
+    corrupt_lines = []
+
+    with open(w_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                json.loads(line)
+                valid_lines.append(line)
+            except json.JSONDecodeError:
+                corrupt_lines.append(line)
+
+    if corrupt_lines:
+        d_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(d_path, "a", encoding="utf-8") as df:
+            for line in corrupt_lines:
+                df.write(line)
+
+    # Rewrite WAL with only valid lines
+    with open(w_path, "w", encoding="utf-8") as wf:
+        for line in valid_lines:
+            wf.write(line)
+
+    return len(valid_lines), len(corrupt_lines)
+
+
+async def replay_dlq(dlq_path: str, db_path: str) -> tuple[int, int]:
+    """Parse fixed entries in DLQ, insert to SQLite, and update DLQ to contain only remaining corrupt ones."""
+    d_path = Path(dlq_path)
+    if not d_path.exists():
+        return 0, 0
+
+    replayed_count = 0
+    remaining_corrupt_lines = []
+
+    with open(d_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # We'll use a temporary WAL instance to reuse its dict_to_record logic
+    temp_wal = WriteAheadLog("", "")
+
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+            record = temp_wal._dict_to_record(data)
+            await insert_request(db_path, record)
+            replayed_count += 1
+        except (json.JSONDecodeError, Exception):
+            remaining_corrupt_lines.append(line)
+
+    if remaining_corrupt_lines:
+        with open(d_path, "w", encoding="utf-8") as f:
+            for line in remaining_corrupt_lines:
+                f.write(line)
+    else:
+        # If no corrupt lines remain, remove the DLQ file
+        try:
+            d_path.unlink()
+        except OSError:
+            pass
+
+    return replayed_count, len(remaining_corrupt_lines)
+
+

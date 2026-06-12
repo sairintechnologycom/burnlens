@@ -219,10 +219,48 @@ def check_token_extraction(db_path: str) -> CheckResult:
         return CheckResult("fail", "Token extraction", f"Query failed: {exc}")
 
 
+def check_wal(wal_path: str, dlq_path: str) -> CheckResult:
+    """Check integrity of the Write-Ahead Log (WAL) file."""
+    path = Path(wal_path)
+    if not path.exists():
+        return CheckResult("pass", "WAL", "No outstanding events (WAL empty)")
+
+    valid_count = 0
+    corrupt_count = 0
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    json.loads(line)
+                    valid_count += 1
+                except json.JSONDecodeError:
+                    corrupt_count += 1
+
+        if corrupt_count > 0:
+            return CheckResult(
+                "warn", "WAL",
+                f"WAL contains {corrupt_count} corrupt line(s) and {valid_count} valid line(s)",
+                fix="Run `burnlens wal repair` to fix",
+            )
+        return CheckResult(
+            "pass", "WAL",
+            f"WAL is healthy with {valid_count} outstanding event(s)",
+        )
+    except Exception as exc:
+        return CheckResult(
+            "fail", "WAL",
+            f"Failed to check WAL: {exc}",
+        )
+
+
 def run_all_checks(
     host: str = "127.0.0.1",
     port: int = 8420,
     db_path: str = str(Path.home() / ".burnlens" / "burnlens.db"),
+    wal_path: str = str(Path.home() / ".burnlens" / "wal.jsonl"),
+    dlq_path: str = str(Path.home() / ".burnlens" / "wal_dlq.jsonl"),
 ) -> list[CheckResult]:
     """Run all doctor checks. Individual checks never crash the runner."""
     results: list[CheckResult] = []
@@ -278,6 +316,12 @@ def run_all_checks(
             results.append(CheckResult("fail", "Token extraction", f"Check crashed: {exc}"))
     else:
         results.append(CheckResult("skip", "Token extraction", "Skipped — proxy or database unavailable"))
+
+    # 8. WAL
+    try:
+        results.append(check_wal(wal_path, dlq_path))
+    except Exception as exc:
+        results.append(CheckResult("fail", "WAL", f"Check crashed: {exc}"))
 
     return results
 
