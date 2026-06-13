@@ -84,6 +84,18 @@ class Settings(BaseSettings):
         os.getenv("ACTIVITY_PII_PURGE_INTERVAL_SECONDS", "86400")
     )
 
+    # Phase 8: ClickHouse Analytics Plane
+    clickhouse_host: str = os.getenv("CLICKHOUSE_HOST", "localhost")
+    clickhouse_port: int = int(os.getenv("CLICKHOUSE_PORT", "8123"))
+    clickhouse_secure: bool = os.getenv("CLICKHOUSE_SECURE", "false").lower() in ("true", "1")
+    clickhouse_user: str = os.getenv("CLICKHOUSE_USER", "default")
+    clickhouse_password: str = os.getenv("CLICKHOUSE_PASSWORD", "")
+    clickhouse_database: str = os.getenv("CLICKHOUSE_DATABASE", "burnlens")
+
+    streaming_enabled: bool = os.getenv("STREAMING_ENABLED", "false").lower() in ("true", "1")
+    kafka_bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    kafka_topic: str = os.getenv("KAFKA_TOPIC", "burnlens-ingest-records")
+
     class Config:
         env_file = ".env"
         case_sensitive = False

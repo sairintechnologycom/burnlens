@@ -7,6 +7,12 @@ from dateutil import tz
 from .auth import verify_token, TokenPayload, require_feature
 from .config import settings
 from .database import execute_query
+from .clickhouse import (
+    get_spend_summary,
+    get_spend_by_model,
+    get_spend_by_tag,
+    get_spend_timeseries,
+)
 from .models import (
     StatsSummary,
     CostByModel,
@@ -69,8 +75,27 @@ async def get_summary(
     await require_role("viewer", token)
 
     days = clamp_days_by_plan(days, token.plan)
-
     cutoff = await parse_period(f"{days}d")
+    
+    # Use ClickHouse if streaming is enabled for high-performance analytics
+    if settings.streaming_enabled:
+        try:
+            summary = await get_spend_summary(
+                str(token.workspace_id),
+                cutoff.date().isoformat(),
+                datetime.utcnow().date().isoformat()
+            )
+            total_requests = summary["total_requests"]
+            avg_cost = summary["total_cost_usd"] / total_requests if total_requests > 0 else 0.0
+            
+            return StatsSummary(
+                total_cost_usd=summary["total_cost_usd"],
+                total_requests=total_requests,
+                avg_cost_per_request_usd=avg_cost,
+                models_used=0, # Summary wrapper doesn't currently return distinct models
+            )
+        except Exception as e:
+            logger.warning("ClickHouse summary query failed, falling back to PostgreSQL: %s", e)
 
     result = await execute_query(
         """
@@ -105,8 +130,29 @@ async def get_costs_by_model(
     await require_role("viewer", token)
 
     days = clamp_days_by_plan(days, token.plan)
-
     cutoff = await parse_period(f"{days}d")
+
+    # Use ClickHouse if streaming is enabled
+    if settings.streaming_enabled:
+        try:
+            results = await get_spend_by_model(
+                str(token.workspace_id),
+                cutoff.date().isoformat(),
+                datetime.utcnow().date().isoformat()
+            )
+            return [
+                CostByModel(
+                    model=row["model"],
+                    provider=row["provider"],
+                    request_count=row["request_count"],
+                    total_input_tokens=row["total_input_tokens"],
+                    total_output_tokens=row["total_output_tokens"],
+                    total_cost_usd=row["total_cost_usd"],
+                )
+                for row in results
+            ]
+        except Exception as e:
+            logger.warning("ClickHouse by-model query failed, falling back to PostgreSQL: %s", e)
 
     result = await execute_query(
         """
@@ -145,13 +191,7 @@ async def get_costs_by_tag(
     tag_type: str = Query("team", pattern="^(team|feature|customer)$", description="Tag type: team, feature, customer"),
     days: int = Query(7, description="Number of days to look back"),
 ):
-    """Get costs broken down by tag (team, feature, customer) (viewer+ can access).
-
-    WR-01: /usage/by-customer and /usage/by-team apply require_feature gates,
-    but this generic endpoint exposes the same data. Enforce the matching
-    feature gate inline here so the gate cannot be bypassed by calling
-    /usage/by-tag directly with ?tag_type=customer|team.
-    """
+    """Get costs broken down by tag (team, feature, customer) (viewer+ can access)."""
     if tag_type == "customer":
         await require_feature("customers_view")(token=token)
     elif tag_type == "team":
@@ -159,8 +199,29 @@ async def get_costs_by_tag(
     await require_role("viewer", token)
 
     days = clamp_days_by_plan(days, token.plan)
-
     cutoff = await parse_period(f"{days}d")
+
+    # Use ClickHouse if streaming is enabled
+    if settings.streaming_enabled:
+        try:
+            results = await get_spend_by_tag(
+                str(token.workspace_id),
+                tag_type,
+                cutoff.date().isoformat(),
+                datetime.utcnow().date().isoformat()
+            )
+            return [
+                CostByTag(
+                    tag=row["tag"],
+                    request_count=row["request_count"],
+                    total_cost_usd=row["total_cost_usd"],
+                    total_input_tokens=row["total_input_tokens"],
+                    total_output_tokens=row["total_output_tokens"],
+                )
+                for row in results
+            ]
+        except Exception as e:
+            logger.warning("ClickHouse by-tag query failed, falling back to PostgreSQL: %s", e)
 
     result = await execute_query(
         f"""
@@ -236,8 +297,26 @@ async def get_costs_timeline(
     await require_role("viewer", token)
 
     days = clamp_days_by_plan(days, token.plan)
-
     cutoff = await parse_period(f"{days}d")
+
+    # Use ClickHouse if streaming is enabled
+    if settings.streaming_enabled:
+        try:
+            results = await get_spend_timeseries(
+                str(token.workspace_id),
+                cutoff.date().isoformat(),
+                datetime.utcnow().date().isoformat()
+            )
+            return [
+                CostTimeline(
+                    date=row["date"],
+                    request_count=row["request_count"],
+                    total_cost_usd=row["total_cost_usd"],
+                )
+                for row in results
+            ]
+        except Exception as e:
+            logger.warning("ClickHouse timeseries query failed, falling back to PostgreSQL: %s", e)
 
     # Group by date (UTC)
     result = await execute_query(
@@ -321,12 +400,7 @@ async def get_requests(
 
 @router.get("/waste-alerts")
 async def get_waste_alerts(token: TokenPayload = Depends(verify_token)):
-    """Get waste detection findings (stub for MVP).
-
-    Returns a bare array — frontend RightPanel and /waste page both call
-    `.slice`/`.filter` on the result. See
-    .planning/backlog/frontend-api-gaps.md for the real detector work.
-    """
+    """Get waste detection findings (stub for MVP)."""
     return []
 
 
@@ -353,6 +427,30 @@ async def get_budget(token: TokenPayload = Depends(verify_token)):
 )
 async def get_customers(token: TokenPayload = Depends(verify_token)):
     """Get cost by customer (from tags) (requires customers_view feature)."""
+    # Use ClickHouse if streaming is enabled
+    if settings.streaming_enabled:
+        try:
+            # Look back 30 days for customers list by default
+            cutoff = datetime.now(tz.UTC) - timedelta(days=30)
+            results = await get_spend_by_tag(
+                str(token.workspace_id),
+                "customer",
+                cutoff.date().isoformat(),
+                datetime.utcnow().date().isoformat()
+            )
+            return [
+                {
+                    "customer": row["tag"],
+                    "request_count": row["request_count"],
+                    "input_tokens": row["total_input_tokens"],
+                    "output_tokens": row["total_output_tokens"],
+                    "total_cost": row["total_cost_usd"],
+                }
+                for row in results
+            ]
+        except Exception as e:
+            logger.warning("ClickHouse customers query failed, falling back to PostgreSQL: %s", e)
+
     result = await execute_query(
         """
         SELECT

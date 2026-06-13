@@ -11,6 +11,8 @@ from .encryption import get_encryption_manager
 from .models import IngestRequest, IngestResponse, QuotaExceededDetail
 from .plans import resolve_limits
 from .telemetry.forwarder import get_forwarder
+from .config import settings
+from .streaming import send_records_to_stream
 
 logger = logging.getLogger(__name__)
 
@@ -439,22 +441,48 @@ async def ingest(
             )
         )
 
-    # Bulk insert records
+    # Ingest records — stream to Kafka/Redpanda if enabled, else insert to PostgreSQL
     try:
-        await execute_bulk_insert(
-            """
-            INSERT INTO request_records
-            (workspace_id, ts, provider, model, input_tokens, output_tokens,
-             reasoning_tokens, cache_read_tokens, cache_write_tokens,
-             cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-            """,
-            insert_data,
-        )
-
-        logger.info(
-            f"Ingested {len(request.records)} records for workspace {workspace_id}"
-        )
+        if settings.streaming_enabled:
+            # Map Pydantic record schema to stream event dict
+            stream_records = []
+            for r in request.records:
+                tags = r.tags or {}
+                stream_records.append({
+                    "ts": r.timestamp.isoformat() if hasattr(r.timestamp, "isoformat") else str(r.timestamp),
+                    "provider": r.provider,
+                    "model": r.model,
+                    "input_tokens": r.input_tokens,
+                    "output_tokens": r.output_tokens,
+                    "reasoning_tokens": r.reasoning_tokens,
+                    "cache_read_tokens": r.cache_read_tokens,
+                    "cache_write_tokens": r.cache_write_tokens,
+                    "cost_usd": float(r.cost_usd),
+                    "duration_ms": r.duration_ms,
+                    "status_code": r.status_code,
+                    "tag_feature": tags.get("feature", ""),
+                    "tag_team": tags.get("team", ""),
+                    "tag_customer": tags.get("customer", ""),
+                    "system_prompt_hash": r.system_prompt_hash or "",
+                })
+            await send_records_to_stream(workspace_id, stream_records)
+            logger.info(
+                f"Streamed {len(request.records)} records for workspace {workspace_id} to stream plane"
+            )
+        else:
+            await execute_bulk_insert(
+                """
+                INSERT INTO request_records
+                (workspace_id, ts, provider, model, input_tokens, output_tokens,
+                 reasoning_tokens, cache_read_tokens, cache_write_tokens,
+                 cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                """,
+                insert_data,
+            )
+            logger.info(
+                f"Ingested {len(request.records)} records for workspace {workspace_id} directly to PostgreSQL"
+            )
 
         # Phase 9 QUOTA-01/02/03: record usage, check 80/100% thresholds, enqueue email.
         # Wrapped internally; failures MUST NOT affect the ingest 200 response.
