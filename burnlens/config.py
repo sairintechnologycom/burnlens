@@ -152,6 +152,24 @@ class RoutingConfig:
 
 
 @dataclass
+class CacheEmbeddingConfig:
+    """Configuration for cache embedding generator."""
+
+    provider: str = "auto"  # "openai" | "google" | "ollama" | "auto"
+    model: str = "text-embedding-3-small"
+
+
+@dataclass
+class CacheConfig:
+    """Configuration for semantic cache."""
+
+    enabled: bool = False
+    similarity_threshold: float = 0.96
+    ttl_seconds: int = 86400
+    embedding: CacheEmbeddingConfig = field(default_factory=CacheEmbeddingConfig)
+
+
+@dataclass
 class BurnLensConfig:
     """BurnLens runtime configuration."""
 
@@ -175,6 +193,7 @@ class BurnLensConfig:
     google_billing: GoogleBillingConfig = field(default_factory=GoogleBillingConfig)
     routing: RoutingConfig = field(default_factory=RoutingConfig)
     budget_policies: list[BudgetPolicy] = field(default_factory=list)
+    cache: CacheConfig = field(default_factory=CacheConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -382,6 +401,24 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
                     period=str(p.get("period", "monthly")),
                 ))
         kwargs["budget_policies"] = budget_policies
+
+    # Parse cache config
+    cache_data = data.get("cache")
+    if cache_data:
+        embed_data = cache_data.get("embedding") or {}
+        embedding = CacheEmbeddingConfig(
+            provider=str(embed_data.get("provider", "auto")),
+            model=str(embed_data.get("model", "text-embedding-3-small")),
+        )
+        cache = CacheConfig(
+            enabled=bool(cache_data.get("enabled", False)),
+            similarity_threshold=float(cache_data.get("similarity_threshold", 0.96)),
+            ttl_seconds=int(cache_data.get("ttl_seconds", 86400)),
+            embedding=embedding,
+        )
+        kwargs["cache"] = cache
+    else:
+        kwargs["cache"] = CacheConfig()
 
     cfg = BurnLensConfig(**kwargs)
     _apply_env_overrides(cfg)

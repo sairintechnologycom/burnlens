@@ -47,7 +47,9 @@ CREATE TABLE IF NOT EXISTS requests (
     prompt_user_tokens   INTEGER NOT NULL DEFAULT 0,
     prompt_tools_tokens  INTEGER NOT NULL DEFAULT 0,
     prompt_rag_tokens    INTEGER NOT NULL DEFAULT 0,
-    prompt_history_tokens INTEGER NOT NULL DEFAULT 0
+    prompt_history_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_hit            INTEGER NOT NULL DEFAULT 0,
+    cache_saved_usd      REAL NOT NULL DEFAULT 0.0
 );
 """
 
@@ -210,6 +212,27 @@ CREATE INDEX IF NOT EXISTS idx_anomaly_events_scope_target ON anomaly_events(sco
 """
 
 
+_CREATE_SEMANTIC_CACHE_TABLE = """
+CREATE TABLE IF NOT EXISTS semantic_cache (
+    id TEXT PRIMARY KEY,
+    system_prompt_hash TEXT NOT NULL,
+    query_text TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    response_body BLOB NOT NULL,
+    embedding TEXT NOT NULL,
+    customer_hash TEXT,
+    tags TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP
+);
+"""
+
+_CREATE_SEMANTIC_CACHE_LOOKUP_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_semantic_cache_lookup ON semantic_cache(system_prompt_hash, customer_hash);
+"""
+
+
 _SEED_PROVIDER_SIGNATURES = [
     ("openai", "api.openai.com/*", '{"keys":["authorization","openai-organization"]}', "body.model"),
     ("anthropic", "api.anthropic.com/*", '{"keys":["x-api-key","anthropic-version"]}', "body.model"),
@@ -270,6 +293,9 @@ async def init_db(db_path: str) -> None:
         await db.execute(_CREATE_ANOMALY_EVENTS_DETECTED_INDEX)
         await db.execute(_CREATE_ANOMALY_EVENTS_SCOPE_TARGET_INDEX)
 
+        # Semantic cache table
+        await db.execute(_CREATE_SEMANTIC_CACHE_TABLE)
+        await db.execute(_CREATE_SEMANTIC_CACHE_LOOKUP_INDEX)
 
         # Seed provider signatures
         await db.executemany(
@@ -314,7 +340,50 @@ async def init_db(db_path: str) -> None:
     # Phase 6: Prompt section token columns
     await migrate_add_prompt_token_fields(db_path)
 
+    # Phase 7: Semantic Cache fields and table
+    await migrate_add_cache_fields_to_requests(db_path)
+    await migrate_create_semantic_cache_table(db_path)
+
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_add_cache_fields_to_requests(db_path: str) -> None:
+    """Add Phase 7 cache columns to requests table.
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        added = []
+        fields = {
+            "cache_hit": "INTEGER NOT NULL DEFAULT 0",
+            "cache_saved_usd": "REAL NOT NULL DEFAULT 0.0",
+        }
+        for col, col_type in fields.items():
+            if col not in columns:
+                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} {col_type}")
+                added.append(col)
+
+        await db.commit()
+
+        if added:
+            logger.info(
+                "Migration: added cache fields to requests table: %s",
+                ", ".join(added),
+            )
+
+
+async def migrate_create_semantic_cache_table(db_path: str) -> None:
+    """Create semantic_cache table and its indexes.
+
+    Safe to call multiple times.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(_CREATE_SEMANTIC_CACHE_TABLE)
+        await db.execute(_CREATE_SEMANTIC_CACHE_LOOKUP_INDEX)
+        await db.commit()
 
 
 async def migrate_add_prompt_token_fields(db_path: str) -> None:
@@ -1143,8 +1212,8 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 ttft_ms,
                 prompt_system_tokens, prompt_user_tokens,
                 prompt_tools_tokens, prompt_rag_tokens,
-                prompt_history_tokens
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                prompt_history_tokens, cache_hit, cache_saved_usd
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1191,6 +1260,8 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.prompt_tools_tokens,
                 record.prompt_rag_tokens,
                 record.prompt_history_tokens,
+                record.cache_hit,
+                record.cache_saved_usd,
             ),
         )
         await db.commit()

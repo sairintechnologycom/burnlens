@@ -429,6 +429,80 @@ async def handle_request(
     model = model_from_path or _extract_model(body_bytes, provider.name)
     system_hash = _hash_system_prompt(body_bytes)
 
+    # --- Phase 7: Semantic Cache Check ---
+    cache_enabled = config.cache.enabled if config else False
+    cache_bypass = False
+    if headers:
+        cc = headers.get("cache-control") or headers.get("Cache-Control") or ""
+        if "no-cache" in cc or "no-store" in cc:
+            cache_bypass = True
+    if query_string:
+        if "nocache=true" in query_string or "nocache=1" in query_string:
+            cache_bypass = True
+
+    if cache_enabled and not cache_bypass and method.upper() == "POST":
+        try:
+            from burnlens.cache.manager import extract_query_text, SemanticCacheManager
+            query_text = extract_query_text(body_bytes, provider.name)
+            
+            import hashlib
+            customer_hash = hashlib.sha256(customer.encode()).hexdigest() if customer else None
+            
+            cache_manager = SemanticCacheManager(db_path)
+            
+            # Stage 1: Exact Match Check
+            cache_hit_res = await cache_manager.lookup_exact(system_hash or "", query_text, customer_hash)
+            
+            # Stage 2: Semantic Match Check
+            if not cache_hit_res:
+                try:
+                    from burnlens.cache.embeddings import get_embedding
+                    query_embedding = await get_embedding(
+                        text=query_text,
+                        config=config,
+                        request_provider=provider.name,
+                        request_headers=headers,
+                        request_query=query_string
+                    )
+                    if query_embedding:
+                        cache_hit_res = await cache_manager.lookup_semantic(
+                            system_prompt_hash=system_hash or "",
+                            query_text=query_text,
+                            query_embedding=query_embedding,
+                            customer_hash=customer_hash,
+                            similarity_threshold=config.cache.similarity_threshold,
+                        )
+                except Exception as emb_exc:
+                    logger.debug("Embedding lookup failed (fail-open): %s", emb_exc)
+
+            if cache_hit_res:
+                hit_body, hit_provider, hit_model = cache_hit_res
+                
+                # Async logging task for cache hit
+                asyncio.create_task(_log_cache_hit(
+                    provider_name=hit_provider,
+                    model=hit_model,
+                    request_path=path,
+                    body_bytes=body_bytes,
+                    response_body=hit_body,
+                    system_hash=system_hash,
+                    customer_hash=customer_hash,
+                    tags=tags,
+                    db_path=db_path,
+                    wal=wal,
+                    worker=worker,
+                    original_headers=headers
+                ))
+                
+                if streaming:
+                    from burnlens.cache.manager import reconstruct_streaming_chunks
+                    stream_iter = reconstruct_streaming_chunks(hit_provider, hit_body)
+                    return 200, {"content-type": "text/event-stream"}, None, stream_iter
+                else:
+                    return 200, {"content-type": "application/json"}, hit_body, None
+        except Exception as cache_exc:
+            logger.warning("Cache pipeline failed (fail-open): %s", cache_exc)
+
     # --- Budget-aware model downgrade routing (per D-04) ---
     decision: "RouteDecision | None" = None
     if config is not None:
@@ -585,6 +659,36 @@ async def _handle_non_streaming(
         pass
 
     cost = calculate_cost(provider.name, model, usage)
+
+    # Save to semantic cache if enabled (Phase 7)
+    cache_enabled = config.cache.enabled if config else False
+    cache_bypass = False
+    if original_headers:
+        cc = original_headers.get("cache-control") or original_headers.get("Cache-Control") or ""
+        if "no-cache" in cc or "no-store" in cc:
+            cache_bypass = True
+    if method.upper() == "POST" and response.status_code == 200 and cache_enabled and not cache_bypass:
+        try:
+            from burnlens.cache.manager import extract_query_text
+            query_text = extract_query_text(body_bytes, provider.name)
+            import hashlib
+            customer = tags.get("customer")
+            customer_hash = hashlib.sha256(customer.encode()).hexdigest() if customer else None
+            
+            asyncio.create_task(_save_to_cache_bg(
+                config=config,
+                db_path=db_path,
+                system_hash=system_hash,
+                query_text=query_text,
+                provider_name=provider.name,
+                model=model,
+                response_body=resp_body,
+                customer_hash=customer_hash,
+                tags=tags,
+                request_headers=original_headers or headers,
+            ))
+        except Exception as cache_exc:
+            logger.debug("Failed to start background cache save: %s", cache_exc)
 
     # Reconcile budget policy counters
     if reservation and config:
@@ -868,6 +972,39 @@ async def _log_streaming_usage(
 
     cost = calculate_cost(provider.name, model, usage)
 
+    # Save streaming response to semantic cache (Phase 7)
+    cache_enabled = config.cache.enabled if config else False
+    cache_bypass = False
+    if original_headers:
+        cc = original_headers.get("cache-control") or original_headers.get("Cache-Control") or ""
+        if "no-cache" in cc or "no-store" in cc:
+            cache_bypass = True
+    if status_code == 200 and cache_enabled and not cache_bypass:
+        try:
+            from burnlens.cache.manager import extract_query_text, reconstruct_complete_response_from_chunks
+            query_text = extract_query_text(body_bytes, provider.name)
+            
+            reconstructed_body = reconstruct_complete_response_from_chunks(provider.name, usage_chunks)
+            if reconstructed_body:
+                import hashlib
+                customer = tags.get("customer")
+                customer_hash = hashlib.sha256(customer.encode()).hexdigest() if customer else None
+                
+                asyncio.create_task(_save_to_cache_bg(
+                    config=config,
+                    db_path=db_path,
+                    system_hash=system_hash,
+                    query_text=query_text,
+                    provider_name=provider.name,
+                    model=model,
+                    response_body=reconstructed_body,
+                    customer_hash=customer_hash,
+                    tags=tags,
+                    request_headers=original_headers,
+                ))
+        except Exception as cache_exc:
+            logger.debug("Failed to start background cache save for stream: %s", cache_exc)
+
     # Reconcile budget policy counters
     if reservation and config:
         try:
@@ -1125,5 +1262,154 @@ def _run_anomaly_detection(record: RequestRecord, config: Any, db_path: str) -> 
         asyncio.create_task(detector.check_request(record))
     except Exception as exc:
         logger.debug("Failed to start anomaly detection task: %s", exc)
+
+
+async def _log_cache_hit(
+    provider_name: str,
+    model: str,
+    request_path: str,
+    body_bytes: bytes,
+    response_body: bytes,
+    system_hash: str | None,
+    customer_hash: str | None,
+    tags: dict[str, str],
+    db_path: str,
+    wal: "WriteAheadLog | None",
+    worker: "SQLitePersistenceWorker | None",
+    original_headers: dict[str, str] | None = None,
+):
+    try:
+        from burnlens.providers.registry import get as _get_provider
+        from burnlens.cost.calculator import calculate_cost, TokenUsage
+        from burnlens.storage.models import uuid7, RequestRecord
+        from burnlens.cost.pricing import get_pricing_version
+        
+        provider = _get_provider(provider_name)
+        usage = TokenUsage()
+        try:
+            resp_json = json.loads(response_body)
+            if provider:
+                usage = provider.extract_usage(resp_json)
+        except Exception:
+            pass
+
+        # Calculate saved cost
+        saved_cost = calculate_cost(provider_name, model, usage)
+
+        # Analyze prompt segment tokens (Phase 6)
+        try:
+            from burnlens.analysis.prompt_analyzer import analyze_request_prompt
+            prompt_analysis = analyze_request_prompt(
+                provider_name, model, body_bytes, usage.input_tokens
+            )
+        except Exception:
+            prompt_analysis = {
+                "prompt_system_tokens": 0,
+                "prompt_user_tokens": usage.input_tokens,
+                "prompt_tools_tokens": 0,
+                "prompt_rag_tokens": 0,
+                "prompt_history_tokens": 0,
+            }
+
+        pricing_version = get_pricing_version(provider_name)
+        meta = _resolve_canonical_metadata(original_headers or {}, tags)
+
+        record = RequestRecord(
+            provider=provider_name,
+            model=model,
+            request_path=request_path,
+            timestamp=datetime.now(timezone.utc),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            reasoning_tokens=usage.reasoning_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+            cost_usd=0.0,  # Actual cost is 0
+            duration_ms=0,
+            status_code=200,
+            tags=tags,
+            system_prompt_hash=system_hash,
+            prompt_system_tokens=prompt_analysis["prompt_system_tokens"],
+            prompt_user_tokens=prompt_analysis["prompt_user_tokens"],
+            prompt_tools_tokens=prompt_analysis["prompt_tools_tokens"],
+            prompt_rag_tokens=prompt_analysis["prompt_rag_tokens"],
+            prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
+            cache_hit=1,
+            cache_saved_usd=saved_cost,
+            event_id=uuid7(),
+            trace_id=meta.get("trace_id"),
+            workspace_id=meta.get("workspace_id"),
+            org_id=meta.get("org_id"),
+            team=meta.get("team") or tags.get("team"),
+            feature=meta.get("feature") or tags.get("feature"),
+            customer_hash=customer_hash,
+            app_id=meta.get("app_id") or tags.get("app_id"),
+            env=meta.get("env") or tags.get("env"),
+            repo=meta.get("repo") or tags.get("repo"),
+            branch=meta.get("branch") or tags.get("branch"),
+            commit_sha=meta.get("commit_sha") or tags.get("commit_sha"),
+            pricing_version=pricing_version,
+        )
+
+        # Emit OTEL span and metrics immediately
+        try:
+            from burnlens.telemetry.otel import emit_span, emit_metrics
+            emit_span(record, original_headers or {})
+            emit_metrics(record.to_event())
+        except Exception as exc:
+            logger.debug("OTEL telemetry emit failed for cache hit: %s", exc)
+
+        if wal is not None and worker is not None:
+            await wal.append_event(record)
+            await worker.enqueue(record)
+        else:
+            from burnlens.storage.database import insert_request
+            await insert_request(db_path, record)
+
+        # Trigger Anomaly Detection on cache hits too
+        _run_anomaly_detection(record, None, db_path)
+
+    except Exception as exc:
+        logger.warning("Failed to log cache hit (non-fatal): %s", exc)
+
+
+async def _save_to_cache_bg(
+    config: Any,
+    db_path: str,
+    system_hash: str | None,
+    query_text: str,
+    provider_name: str,
+    model: str,
+    response_body: bytes,
+    customer_hash: str | None,
+    tags: dict[str, str],
+    request_headers: dict[str, str] | None = None,
+    request_query: str | None = None,
+):
+    try:
+        from burnlens.cache.embeddings import get_embedding
+        embedding = await get_embedding(
+            text=query_text,
+            config=config,
+            request_provider=provider_name,
+            request_headers=request_headers,
+            request_query=request_query
+        )
+        if embedding:
+            from burnlens.cache.manager import SemanticCacheManager
+            cache_manager = SemanticCacheManager(db_path)
+            await cache_manager.save(
+                system_prompt_hash=system_hash or "",
+                query_text=query_text,
+                provider=provider_name,
+                model=model,
+                response_body=response_body,
+                embedding=embedding,
+                customer_hash=customer_hash,
+                tags=tags,
+                ttl_seconds=config.cache.ttl_seconds
+            )
+    except Exception as exc:
+        logger.debug("Background cache save failed (non-fatal): %s", exc)
 
 
