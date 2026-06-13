@@ -1,6 +1,6 @@
 import pytest
 import pytest_asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch
 from uuid import uuid4
 from datetime import datetime
 from fastapi import FastAPI

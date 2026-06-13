@@ -1,7 +1,7 @@
 """Tests for SQLite database layer."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -194,7 +194,7 @@ async def test_total_cost_empty_db(initialized_db: str):
 
 async def test_total_cost_with_since_filter(initialized_db: str):
     yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
-    tomorrow = (datetime.utcnow() + timedelta(days=1)).isoformat()
+    (datetime.utcnow() + timedelta(days=1)).isoformat()
 
     # Insert one in the past (before filter), one in the future (should not happen, but test)
     old_record = _record(cost_usd=0.10)

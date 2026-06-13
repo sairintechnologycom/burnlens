@@ -2,14 +2,11 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime
 from unittest.mock import patch, AsyncMock
-from uuid import uuid4
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
 from burnlens_cloud.deployment.status import StatusChecker, StatusPageRenderer
-from burnlens_cloud.models import ComponentStatus, StatusResponse
 
 
 @pytest_asyncio.fixture

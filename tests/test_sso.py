@@ -1,7 +1,7 @@
 """Tests for Google and GitHub SSO endpoints."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -154,7 +154,7 @@ async def test_google_callback_auto_accepts_pending_invitation(client):
     """Google callback auto-accepts a pending invitation for matching email."""
     ac, mock_conn = client
     new_user_id = str(uuid4())
-    now = datetime.now(timezone.utc)
+    datetime.now(timezone.utc)
 
     call_count = [0]
 

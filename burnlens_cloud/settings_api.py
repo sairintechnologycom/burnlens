@@ -16,7 +16,6 @@ from .models import (
     OtelTestResponse,
     TokenPayload,
     PricingResponse,
-    CustomPricingRequest,
 )
 from .telemetry.forwarder import get_forwarder
 
@@ -54,7 +53,7 @@ async def update_otel_config(
 
     if not ok:
         raise HTTPException(
-            status_code=400, detail=f"Failed to connect to OTEL endpoint"
+            status_code=400, detail="Failed to connect to OTEL endpoint"
         )
 
     # Encrypt API key before storing

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
@@ -13,7 +13,6 @@ import pytest_asyncio
 from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import _reset_dev_identity_cache
 from burnlens.scan.gemini_cli import (
-    GeminiScanResult,
     GeminiSession,
     discover_sessions,
     gemini_sessions_dir,
@@ -234,7 +233,7 @@ def test_parse_session_extracts_turns_with_usage_metadata(tmp_path):
     """JSON-format session yields a record per gemini message with tokens."""
     _reset_dev_identity_cache()
     chats = _make_project(tmp_path, "proj", "/tmp/proj")
-    sf = _write_json_session(chats, "s001", [
+    _write_json_session(chats, "s001", [
         _user_msg(),
         _gemini_msg(msg_id="gm-1", input_tokens=1000, output_tokens=100),
         _gemini_msg(msg_id="gm-2", input_tokens=2000, output_tokens=200),
@@ -258,7 +257,7 @@ def test_parse_session_skips_turns_without_usage_metadata(tmp_path):
         "content": "I have no tokens.",
         "model": "gemini-2.5-flash",
     }
-    sf = _write_json_session(chats, "s001", [_user_msg(), no_tokens_msg])
+    _write_json_session(chats, "s001", [_user_msg(), no_tokens_msg])
     session = discover_sessions(gemini_dir=tmp_path)[0]
     records = list(parse_session(session))
     assert records == []
@@ -299,7 +298,7 @@ def test_parse_session_request_id_is_session_plus_message_id(tmp_path):
     """request_id is '<session_stem>:<message_id>' for dedup."""
     _reset_dev_identity_cache()
     chats = _make_project(tmp_path, "proj", "/tmp/proj")
-    sf = _write_json_session(chats, "myses", [
+    _write_json_session(chats, "myses", [
         _gemini_msg(msg_id="unique-msg-id-123"),
     ])
     session = discover_sessions(gemini_dir=tmp_path)[0]

@@ -4,13 +4,12 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 import httpx
 
 from ..database import execute_insert, execute_query
-from ..config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timezone
-from burnlens.storage.models import RequestRecord, GenAICostEvent, TokenUsageEvent
+from burnlens.storage.models import RequestRecord
 from burnlens.storage.database import init_db, insert_request, aiosqlite
 
 @pytest.mark.asyncio

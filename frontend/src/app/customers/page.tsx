@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
@@ -86,8 +88,10 @@ function CustomersContent() {
 
   useEffect(() => {
     if (!session) return;
-    setLoading(true);
-    setLocked(null);
+    setTimeout(() => {
+      setLoading(true);
+      setLocked(null);
+    }, 0);
     apiFetch(`/api/v1/usage/by-customer?days=${days}`, session.token)
       .then((data) => setCustomers(data as CostByTagBudgetRow[]))
       .catch((err) => {

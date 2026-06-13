@@ -21,7 +21,7 @@ import pytest
 import uvicorn
 from fastapi import FastAPI, Request, Response
 
-from burnlens.cloud.sync import get_unsynced_count, migrate_add_synced_at
+from burnlens.cloud.sync import get_unsynced_count
 from burnlens.config import BurnLensConfig, CloudConfig
 from burnlens.storage.database import init_db
 

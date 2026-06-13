@@ -6,16 +6,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import httpx
-import pytest
 
 from burnlens.doctor import (
-    CheckResult,
     check_anthropic,
     check_database,
-    check_google,
     check_openai,
     check_proxy,
-    check_recent_activity,
     check_token_extraction,
     run_all_checks,
 )

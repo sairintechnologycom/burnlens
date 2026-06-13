@@ -15,8 +15,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest

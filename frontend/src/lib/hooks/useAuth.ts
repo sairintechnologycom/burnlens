@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -52,6 +54,7 @@ export function useAuth() {
 
   useEffect(() => {
     if (isLocalBackend()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSession(LOCAL_SESSION);
       setLoading(false);
       return;

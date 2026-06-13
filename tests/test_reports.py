@@ -1,19 +1,17 @@
 """Tests for weekly report generation."""
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
 
 from burnlens.reports.weekly import (
-    WeeklyReport,
     generate_text_report,
     generate_weekly_report,
     send_report_email,
 )
-from burnlens.storage.database import init_db, insert_request
+from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
 
 

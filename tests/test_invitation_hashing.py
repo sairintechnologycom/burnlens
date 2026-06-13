@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 import pathlib
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 

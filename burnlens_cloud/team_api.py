@@ -8,21 +8,10 @@ from typing import List, Optional
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-
-def _hash_invitation_token(token: str) -> str:
-    """Derive the DB-storage hash for an invitation token.
-
-    Tokens are 128-bit uuid4-derived values, so plain SHA-256 is sufficient —
-    no slow KDF is needed (the attacker cannot dictionary-attack a high-entropy
-    secret). The purpose of hashing is to ensure a DB leak does not yield
-    usable invite-acceptance credentials.
-    """
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
 from .config import settings
 from .database import execute_query, execute_insert
 from .plans import resolve_limits
-from .auth import verify_token, TokenPayload, upsert_user, ensure_workspace_member, require_feature
+from .auth import verify_token, TokenPayload, require_feature
 from .models import (
     WorkspaceMemberResponse,
     InvitationRequest,
@@ -34,6 +23,18 @@ from .models import (
 )
 from .email import send_invitation_email
 from .pii_crypto import decrypt_pii, lookup_hash
+
+
+def _hash_invitation_token(token: str) -> str:
+    """Derive the DB-storage hash for an invitation token.
+
+    Tokens are 128-bit uuid4-derived values, so plain SHA-256 is sufficient —
+    no slow KDF is needed (the attacker cannot dictionary-attack a high-entropy
+    secret). The purpose of hashing is to ensure a DB leak does not yield
+    usable invite-acceptance credentials.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 
 logger = logging.getLogger(__name__)
 

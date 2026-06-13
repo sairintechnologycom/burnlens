@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import pytest
-import pytest_asyncio
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
@@ -15,7 +14,6 @@ from burnlens.detection.anomaly import (
     calculate_mean_std,
 )
 from burnlens.storage.database import (
-    init_db,
     insert_request,
     insert_anomaly_event,
 )

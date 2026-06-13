@@ -7,10 +7,8 @@ that are not covered by the existing test_storage.py suite.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 
 import aiosqlite
-import pytest
 
 from burnlens.storage.database import (
     init_db,

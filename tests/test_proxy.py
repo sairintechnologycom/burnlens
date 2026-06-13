@@ -3,13 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
-import pytest
-from fastapi.testclient import TestClient
 
-from burnlens.config import BurnLensConfig
 from burnlens.proxy.interceptor import handle_request
 from burnlens.proxy.providers import (
     DEFAULT_PROVIDERS,
@@ -17,7 +13,7 @@ from burnlens.proxy.providers import (
     get_provider_for_path,
     strip_proxy_prefix,
 )
-from burnlens.storage.queries import get_assets, get_recent_requests, get_usage_by_model
+from burnlens.storage.queries import get_assets, get_recent_requests
 
 
 # ---------------------------------------------------------------------------

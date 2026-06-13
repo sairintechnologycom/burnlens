@@ -108,7 +108,7 @@ async def client():
 async def test_invite_member_success(client):
     """Test successful member invitation."""
     workspace_id = str(uuid4())
-    user_id = str(uuid4())
+    str(uuid4())
     admin_id = str(uuid4())
 
     with patch("burnlens_cloud.team_api.execute_query") as mock_query:
@@ -147,7 +147,7 @@ async def test_invite_member_success(client):
                     response = await client.post(
                         "/team/invite",
                         json={"email": "new@example.com", "role": "viewer"},
-                        headers={"Authorization": f"Bearer test-token"},
+                        headers={"Authorization": "Bearer test-token"},
                     )
 
                     assert response.status_code == 200
@@ -179,7 +179,7 @@ async def test_invite_requires_admin_role(client):
         response = await client.post(
             "/team/invite",
             json={"email": "new@example.com", "role": "viewer"},
-            headers={"Authorization": f"Bearer test-token"},
+            headers={"Authorization": "Bearer test-token"},
         )
 
         assert response.status_code == 403
@@ -251,7 +251,7 @@ async def test_invite_team_plan_only(client):
                     response = await client.post(
                         "/team/invite",
                         json={"email": "new@example.com", "role": "viewer"},
-                        headers={"Authorization": f"Bearer test-token"},
+                        headers={"Authorization": "Bearer test-token"},
                     )
 
                     assert response.status_code == 402, response.text
@@ -326,7 +326,7 @@ async def test_seat_limit_enforcement(client):
                     response = await client.post(
                         "/team/invite",
                         json={"email": "new@example.com", "role": "viewer"},
-                        headers={"Authorization": f"Bearer test-token"},
+                        headers={"Authorization": "Bearer test-token"},
                     )
 
                     assert response.status_code == 402, response.text
@@ -382,7 +382,7 @@ async def test_list_members(client):
 
                 response = await client.get(
                     "/team/members",
-                    headers={"Authorization": f"Bearer test-token"},
+                    headers={"Authorization": "Bearer test-token"},
                 )
 
                 assert response.status_code == 200
@@ -414,7 +414,7 @@ async def test_remove_member_requires_admin(client):
 
         response = await client.delete(
             f"/team/members/{member_id}",
-            headers={"Authorization": f"Bearer test-token"},
+            headers={"Authorization": "Bearer test-token"},
         )
 
         assert response.status_code == 403
@@ -451,7 +451,7 @@ async def test_dashboard_endpoints_require_viewer_role(client):
 
             response = await client.get(
                 "/api/v1/usage/summary",
-                headers={"Authorization": f"Bearer test-token"},
+                headers={"Authorization": "Bearer test-token"},
             )
 
             assert response.status_code == 200
@@ -493,7 +493,7 @@ async def test_invitation_token_generation(client):
                     response = await client.post(
                         "/team/invite",
                         json={"email": "test@example.com", "role": "admin"},
-                        headers={"Authorization": f"Bearer test-token"},
+                        headers={"Authorization": "Bearer test-token"},
                     )
 
                     assert response.status_code == 200

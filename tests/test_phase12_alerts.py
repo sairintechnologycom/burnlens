@@ -34,8 +34,7 @@ _ps_sources.dotenv_values = _empty_dotenv_values
 # ---------------------------------------------------------------------------
 
 from burnlens_cloud.alert_engine import (
-    _should_fire, _dispatch_slack, _dispatch_email,
-    evaluate_workspace, evaluate_all_workspaces,
+    _should_fire, _dispatch_slack, evaluate_workspace, evaluate_all_workspaces,
 )
 from burnlens_cloud import config as config_mod
 

@@ -5,7 +5,6 @@ import asyncio
 import hashlib
 import json
 import os
-import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -23,7 +22,6 @@ from burnlens.proxy.interceptor import (
     handle_request,
 )
 from burnlens.storage.database import (
-    init_db,
     insert_request,
     migrate_add_canonical_event_fields,
     migrate_add_ttft_column,
@@ -302,7 +300,6 @@ async def test_database_migrations_and_insert(tmp_db):
 async def test_proxy_integration_non_streaming(initialized_db):
     """End-to-end unit test: verify proxy handles request, extracts metadata, and inserts database fields."""
     from burnlens.providers.openai import OpenAIProvider
-    from burnlens.alerts.engine import AlertEngine
 
     mock_client = MagicMock(spec=httpx.AsyncClient)
     mock_response = MagicMock(spec=httpx.Response)

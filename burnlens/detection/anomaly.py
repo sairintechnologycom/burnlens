@@ -1,7 +1,6 @@
 """Anomaly and runaway agent detection engine for BurnLens."""
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
