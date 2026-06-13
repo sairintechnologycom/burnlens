@@ -282,12 +282,10 @@ export default function LandingPage() {
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                The open-source <span className="acc">FinOps proxy</span> for AI spend
+                See your whole <span className="acc">team&apos;s LLM spend</span> in one dashboard
               </h1>
               <p className="lp-subline">
-                Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google today,
-                with Azure, AWS Bedrock, Groq, Mistral, and Together on the roadmap.
-                Hard-cap budgets before the API call, not after the bill arrives.
+                Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/setup?intent=register" className="lp-hero-btn primary">
