@@ -27,6 +27,7 @@ from burnlens.storage.database import (
     insert_request,
     migrate_add_canonical_event_fields,
     migrate_add_ttft_column,
+    migrate_add_prompt_token_fields,
 )
 from burnlens.storage.models import (
     GenAICostEvent,
@@ -253,6 +254,7 @@ async def test_database_migrations_and_insert(tmp_db):
     # 2. Run the migration
     await migrate_add_canonical_event_fields(tmp_db)
     await migrate_add_ttft_column(tmp_db)
+    await migrate_add_prompt_token_fields(tmp_db)
 
     # 3. Check schema columns
     async with aiosqlite.connect(tmp_db) as db:

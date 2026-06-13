@@ -42,7 +42,12 @@ CREATE TABLE IF NOT EXISTS requests (
     branch              TEXT,
     commit_sha          TEXT,
     pricing_version     TEXT,
-    ttft_ms             REAL
+    ttft_ms             REAL,
+    prompt_system_tokens INTEGER NOT NULL DEFAULT 0,
+    prompt_user_tokens   INTEGER NOT NULL DEFAULT 0,
+    prompt_tools_tokens  INTEGER NOT NULL DEFAULT 0,
+    prompt_rag_tokens    INTEGER NOT NULL DEFAULT 0,
+    prompt_history_tokens INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -306,7 +311,41 @@ async def init_db(db_path: str) -> None:
     # Phase 5: Anomaly events table
     await migrate_add_anomaly_events_table(db_path)
 
+    # Phase 6: Prompt section token columns
+    await migrate_add_prompt_token_fields(db_path)
+
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_add_prompt_token_fields(db_path: str) -> None:
+    """Add Phase 6 prompt section token columns to requests table.
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        added = []
+        fields = {
+            "prompt_system_tokens": "INTEGER NOT NULL DEFAULT 0",
+            "prompt_user_tokens": "INTEGER NOT NULL DEFAULT 0",
+            "prompt_tools_tokens": "INTEGER NOT NULL DEFAULT 0",
+            "prompt_rag_tokens": "INTEGER NOT NULL DEFAULT 0",
+            "prompt_history_tokens": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for col, col_type in fields.items():
+            if col not in columns:
+                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} {col_type}")
+                added.append(col)
+
+        await db.commit()
+
+        if added:
+            logger.info(
+                "Migration: added prompt token fields to requests table: %s",
+                ", ".join(added),
+            )
 
 
 async def migrate_add_canonical_event_fields(db_path: str) -> None:
@@ -1101,8 +1140,11 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 event_id, trace_id, workspace_id, org_id,
                 team, feature, customer_hash, app_id,
                 env, repo, branch, commit_sha, pricing_version,
-                ttft_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ttft_ms,
+                prompt_system_tokens, prompt_user_tokens,
+                prompt_tools_tokens, prompt_rag_tokens,
+                prompt_history_tokens
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1144,6 +1186,11 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.commit_sha,
                 record.pricing_version,
                 record.ttft_ms,
+                record.prompt_system_tokens,
+                record.prompt_user_tokens,
+                record.prompt_tools_tokens,
+                record.prompt_rag_tokens,
+                record.prompt_history_tokens,
             ),
         )
         await db.commit()

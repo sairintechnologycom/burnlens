@@ -602,6 +602,22 @@ async def _handle_non_streaming(
     meta = _resolve_canonical_metadata(original_headers or headers, tags)
     pricing_version = get_pricing_version(provider.name)
 
+    # Phase 6: Local tokenization & classification
+    try:
+        from burnlens.analysis.prompt_analyzer import analyze_request_prompt
+        prompt_analysis = analyze_request_prompt(
+            provider.name, model, body_bytes, usage.input_tokens
+        )
+    except Exception as exc:
+        logger.debug("Prompt analysis failed (non-fatal): %s", exc)
+        prompt_analysis = {
+            "prompt_system_tokens": 0,
+            "prompt_user_tokens": usage.input_tokens,
+            "prompt_tools_tokens": 0,
+            "prompt_rag_tokens": 0,
+            "prompt_history_tokens": 0,
+        }
+
     record = RequestRecord(
         provider=provider.name,
         model=model,
@@ -617,6 +633,11 @@ async def _handle_non_streaming(
         status_code=response.status_code,
         tags=tags,
         system_prompt_hash=system_hash,
+        prompt_system_tokens=prompt_analysis["prompt_system_tokens"],
+        prompt_user_tokens=prompt_analysis["prompt_user_tokens"],
+        prompt_tools_tokens=prompt_analysis["prompt_tools_tokens"],
+        prompt_rag_tokens=prompt_analysis["prompt_rag_tokens"],
+        prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
         # Phase 1: Canonical event fields
         event_id=uuid7(),
         request_id=_extract_request_id(provider.name, response.headers, resp_body),
@@ -801,6 +822,7 @@ async def _handle_streaming(
                     original_headers=original_headers or headers,
                     config=config,
                     reservation=reservation,
+                    body_bytes=body_bytes,
                 )
             )
             # Async non-blocking asset upsert after stream completes
@@ -839,6 +861,7 @@ async def _log_streaming_usage(
     original_headers: dict[str, str] | None = None,
     config: "BurnLensConfig | None" = None,
     reservation: dict[str, Any] | None = None,
+    body_bytes: bytes | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks)
@@ -858,6 +881,22 @@ async def _log_streaming_usage(
     if not request_id:
         request_id = _extract_request_id_from_chunks(usage_chunks)
 
+    # Phase 6: Local tokenization & classification
+    try:
+        from burnlens.analysis.prompt_analyzer import analyze_request_prompt
+        prompt_analysis = analyze_request_prompt(
+            provider.name, model, body_bytes, usage.input_tokens
+        )
+    except Exception as exc:
+        logger.debug("Prompt analysis failed (non-fatal): %s", exc)
+        prompt_analysis = {
+            "prompt_system_tokens": 0,
+            "prompt_user_tokens": usage.input_tokens,
+            "prompt_tools_tokens": 0,
+            "prompt_rag_tokens": 0,
+            "prompt_history_tokens": 0,
+        }
+
     record = RequestRecord(
         provider=provider.name,
         model=model,
@@ -873,6 +912,11 @@ async def _log_streaming_usage(
         status_code=status_code,
         tags=tags,
         system_prompt_hash=system_hash,
+        prompt_system_tokens=prompt_analysis["prompt_system_tokens"],
+        prompt_user_tokens=prompt_analysis["prompt_user_tokens"],
+        prompt_tools_tokens=prompt_analysis["prompt_tools_tokens"],
+        prompt_rag_tokens=prompt_analysis["prompt_rag_tokens"],
+        prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
         # Phase 1 fields
         event_id=event_id,
         request_id=request_id,
