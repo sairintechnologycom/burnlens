@@ -59,6 +59,23 @@ Append-only log recording Shadow AI events. Deletes and updates are blocked by D
 - `details` (TEXT DEFAULT '{}') — Serialized JSON metadata
 - `detected_at` (TEXT NOT NULL)
 
+### `anomaly_events`
+Logs detected anomalies (cost spikes and runaway loops).
+- `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
+- `event_type` (TEXT NOT NULL) — cost_spike, runaway_loop
+- `scope` (TEXT NOT NULL) — org, team, app, customer, api_key, model
+- `target` (TEXT NOT NULL) — name of the scope target (e.g. model name or 'engineering')
+- `severity` (TEXT NOT NULL) — warning, critical
+- `detected_at` (TEXT NOT NULL) — ISO 8601 UTC
+- `details` (TEXT DEFAULT '{}') — Serialized JSON containing current values, baseline stats, and description
+
+### `fired_alerts`
+Tracks alert deduplication state to prevent redundant notifications.
+- `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
+- `alert_key` (TEXT NOT NULL UNIQUE) — deduplication key format `anomaly:{event_type}:{scope}:{target}:{window_name}`
+- `alert_type` (TEXT NOT NULL) — cost_spike, runaway_loop
+- `fired_at` (TEXT NOT NULL) — ISO 8601 UTC
+
 ---
 
 ## 2. Cloud Database (PostgreSQL — `burnlens.app` SaaS)

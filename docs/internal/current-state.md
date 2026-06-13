@@ -53,6 +53,7 @@ Served at `http://localhost:3000` (Next.js dev) or `/ui/` on the proxy:
 - `GET /api/budgets` — Budgets vs actual spend.
 - `GET /api/customers` — Customers vs budget.
 - `GET /api/recommendations` — Alternative model savings.
+- `GET /api/anomalies` — Recent anomaly events (spikes, runaway loops).
 
 ### Shadow AI Discovery APIs
 - `GET /api/v1/assets` — List discovered AI endpoints/models.

@@ -11,7 +11,7 @@ BurnLens is an open-source FinOps proxy for AI spend. This document outlines the
 |     2 | Durable Local WAL & Idempotent Sync (Done) | No token/cost event loss during outages                            |
 |     3 | OTel GenAI Compatibility (Done)       | Enterprise observability compatibility                             |
 |     4 | Budget Engine v2 (Done)               | Real-time caps across org/team/app/customer/model                  |
-|     5 | Anomaly & Runaway Agent Detection      | Detect loops, spikes, abusive tenants, bad deploys                 |
+|     5 | Anomaly & Runaway Agent Detection (Done) | Detect loops, spikes, abusive tenants, bad deploys                 |
 |     6 | Prompt Overhead & Compression Analyzer | Identify redundant prompt/system/RAG/tool-schema waste             |
 |     7 | Semantic Cache MVP                     | Reduce duplicate LLM calls safely                                  |
 |     8 | ClickHouse Analytics Plane             | High-cardinality, scalable analytics backend                       |
@@ -97,7 +97,7 @@ Hierarchical, real-time budget enforcement.
 
 ---
 
-# Phase 5 — Anomaly & Runaway Agent Detection
+# Phase 5 — Anomaly & Runaway Agent Detection [COMPLETED]
 
 ## Objective
 Detect loop, spikes, retry storms, and abusive customers.
