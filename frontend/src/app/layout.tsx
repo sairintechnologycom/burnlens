@@ -20,8 +20,8 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnlens.app"),
-  title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
-  description: "Open-source LLM cost tracking proxy. Attribute AI spend per feature, team, and customer. Hard-cap budgets across OpenAI, Anthropic, and Google.",
+  title: "BurnLens — See your whole team's LLM spend in one dashboard",
+  description: "Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.",
   alternates: {
     canonical: "/",
   },
@@ -32,16 +32,16 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
-    description: "The open-source FinOps proxy for AI spend. Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google — with Azure, AWS Bedrock, Groq, Mistral, and Together on the roadmap.",
+    title: "BurnLens — See your whole team's LLM spend in one dashboard",
+    description: "Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.",
     url: "https://burnlens.app",
     siteName: "BurnLens",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "BurnLens — Open-Source FinOps Proxy for AI Spend",
-    description: "The open-source FinOps proxy for AI spend. Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google today. Hard-cap budgets before the API call.",
+    title: "BurnLens — See your whole team's LLM spend in one dashboard",
+    description: "Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.",
   },
 };
 
