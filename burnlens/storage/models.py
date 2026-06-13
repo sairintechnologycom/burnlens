@@ -78,6 +78,8 @@ class GenAICostEvent:
     status_code: int
     pricing_version: str | None
     ttft_ms: float | None = None
+    cache_hit: int = 0
+    cache_saved_usd: float = 0.0
 
 
 @dataclass
@@ -110,6 +112,8 @@ class RequestRecord:
     prompt_tools_tokens: int = 0
     prompt_rag_tokens: int = 0
     prompt_history_tokens: int = 0
+    cache_hit: int = 0
+    cache_saved_usd: float = 0.0
 
     # Phase 1: Canonical event fields
     event_id: str | None = None
@@ -194,6 +198,8 @@ class RequestRecord:
             status_code=self.status_code,
             pricing_version=self.pricing_version,
             ttft_ms=self.ttft_ms,
+            cache_hit=self.cache_hit,
+            cache_saved_usd=self.cache_saved_usd,
         )
 
     @classmethod
@@ -242,6 +248,8 @@ class RequestRecord:
             commit_sha=event.commit_sha,
             pricing_version=event.pricing_version,
             ttft_ms=event.ttft_ms,
+            cache_hit=event.cache_hit,
+            cache_saved_usd=event.cache_saved_usd,
         )
 
 
