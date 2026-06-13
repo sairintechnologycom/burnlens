@@ -129,16 +129,37 @@ class SemanticCacheManager:
                 async with db.execute(sql, (system_prompt_hash, customer_hash, customer_hash)) as cursor:
                     rows = await cursor.fetchall()
 
-                    for row in rows:
+                    if rows:
                         try:
-                            cached_emb = json.loads(row["embedding"])
-                            # Compute dot product (both vectors are normalized)
-                            sim = sum(q * c for q, c in zip(query_norm, cached_emb))
-                            if sim > best_sim:
-                                best_sim = sim
-                                best_row = row
-                        except Exception:
-                            continue
+                            import numpy as np
+                            embeddings_list = []
+                            valid_rows = []
+                            for row in rows:
+                                try:
+                                    embeddings_list.append(json.loads(row["embedding"]))
+                                    valid_rows.append(row)
+                                except Exception:
+                                    continue
+                            
+                            if embeddings_list:
+                                emb_matrix = np.array(embeddings_list, dtype=np.float32)
+                                q_arr = np.array(query_norm, dtype=np.float32)
+                                similarities = np.dot(emb_matrix, q_arr)
+                                best_idx = np.argmax(similarities)
+                                best_sim = float(similarities[best_idx])
+                                best_row = valid_rows[best_idx]
+                        except ImportError:
+                            # Fallback to pure Python
+                            for row in rows:
+                                try:
+                                    cached_emb = json.loads(row["embedding"])
+                                    # Compute dot product (both vectors are normalized)
+                                    sim = sum(q * c for q, c in zip(query_norm, cached_emb))
+                                    if sim > best_sim:
+                                        best_sim = sim
+                                        best_row = row
+                                except Exception:
+                                    continue
 
             if best_sim >= similarity_threshold and best_row is not None:
                 logger.info("Semantic cache hit! Similarity: %.4f (threshold: %.4f)", best_sim, similarity_threshold)
