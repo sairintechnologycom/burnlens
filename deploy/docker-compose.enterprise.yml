@@ -53,9 +53,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redpanda:
+        condition: service_started
     environment:
       # Database
       DATABASE_URL: "postgresql+asyncpg://burnlens:${DB_PASSWORD}@postgres:5432/burnlens"
+
+      # ClickHouse Analytics Plane
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: burnlens
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      
+      # Kafka Ingress Stream
+      STREAMING_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: "redpanda:29092"
+      KAFKA_TOPIC: "burnlens-ingest-records"
 
       # JWT
       JWT_SECRET: ${JWT_SECRET:?Error: JWT_SECRET not set}
@@ -119,10 +135,57 @@ services:
     networks:
       - burnlens-net
 
+  # Redpanda Stream
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.4
+    container_name: burnlens-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 1G
+      - --overprovisioned
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - burnlens-net
+
+  # ClickHouse Server
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: burnlens-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - burnlens-net
+
 volumes:
   postgres_data:
     driver: local
   nginx_cache:
+    driver: local
+  clickhouse_data:
     driver: local
 
 networks:

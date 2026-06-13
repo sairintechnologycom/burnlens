@@ -8,6 +8,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import settings
 from .database import init_db, close_db
+from .clickhouse import init_clickhouse, close_clickhouse
+from .streaming import close_streaming_producer
 from .rate_limit import RateLimitMiddleware, DEFAULT_RULES
 from .auth import router as auth_router
 from .ingest import router as ingest_router
@@ -50,6 +52,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    logger.info("Initializing ClickHouse OLAP schema...")
+    try:
+        await init_clickhouse()
+        logger.info("ClickHouse initialized")
+    except Exception as e:
+        logger.error(f"ClickHouse schema initialization failed: {e}")
+
     # Start background status checker if enabled
     status_checker_task = None
     pii_purge_task = None
@@ -89,6 +98,12 @@ async def lifespan(app: FastAPI):
                 await task
             except asyncio.CancelledError:
                 pass
+
+    logger.info("Closing ClickHouse connection...")
+    await close_clickhouse()
+
+    logger.info("Closing streaming producer...")
+    await close_streaming_producer()
 
     logger.info("Closing database...")
     await close_db()
