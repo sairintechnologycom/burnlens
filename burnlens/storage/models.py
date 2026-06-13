@@ -105,6 +105,11 @@ class RequestRecord:
     downgrade_reason: str | None = None
     budget_remaining_usd: float | None = None
     budget_remaining_pct: float | None = None
+    prompt_system_tokens: int = 0
+    prompt_user_tokens: int = 0
+    prompt_tools_tokens: int = 0
+    prompt_rag_tokens: int = 0
+    prompt_history_tokens: int = 0
 
     # Phase 1: Canonical event fields
     event_id: str | None = None

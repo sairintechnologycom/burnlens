@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -16,6 +17,10 @@ from burnlens.analysis.waste import (
     DuplicateRequestDetector,
     ModelOverkillDetector,
     SystemPromptWasteDetector,
+    PromptCachingOpportunityDetector,
+    OversizedToolSchemaDetector,
+    LowRAGEfficiencyDetector,
+    HistoryBloatDetector,
     run_all_detectors,
 )
 from burnlens.config import AlertsConfig, BudgetConfig, BurnLensConfig
@@ -35,6 +40,11 @@ def _req(
     cost_usd: float = 0.01,
     system_prompt_hash: str | None = None,
     cache_read_tokens: int = 0,
+    prompt_system_tokens: int = 0,
+    prompt_user_tokens: int = 0,
+    prompt_tools_tokens: int = 0,
+    prompt_rag_tokens: int = 0,
+    prompt_history_tokens: int = 0,
 ) -> dict:
     return {
         "id": 1,
@@ -48,6 +58,11 @@ def _req(
         "tags": {},
         "system_prompt_hash": system_prompt_hash,
         "cache_read_tokens": cache_read_tokens,
+        "prompt_system_tokens": prompt_system_tokens,
+        "prompt_user_tokens": prompt_user_tokens,
+        "prompt_tools_tokens": prompt_tools_tokens,
+        "prompt_rag_tokens": prompt_rag_tokens,
+        "prompt_history_tokens": prompt_history_tokens,
     }
 
 
@@ -297,9 +312,9 @@ class TestSystemPromptWasteDetector:
 
 
 class TestRunAllDetectors:
-    def test_returns_four_findings(self):
+    def test_returns_eight_findings(self):
         findings = run_all_detectors([])
-        assert len(findings) == 4
+        assert len(findings) == 8
 
     def test_all_low_severity_on_empty(self):
         findings = run_all_detectors([])
@@ -321,6 +336,10 @@ class TestRunAllDetectors:
         assert "DuplicateRequestDetector" in names
         assert "ModelOverkillDetector" in names
         assert "SystemPromptWasteDetector" in names
+        assert "PromptCachingOpportunityDetector" in names
+        assert "OversizedToolSchemaDetector" in names
+        assert "LowRAGEfficiencyDetector" in names
+        assert "HistoryBloatDetector" in names
 
 
 # ---------------------------------------------------------------------------
@@ -508,3 +527,148 @@ class TestBudgetTracker:
         alerts = await tracker.check_thresholds()
         assert len(alerts) >= 1
         assert any(a.period == "monthly" for a in alerts)
+
+
+# ---------------------------------------------------------------------------
+# Prompt Caching & Overhead Analyzer Tests
+# ---------------------------------------------------------------------------
+
+
+class TestPromptCachingOpportunityDetector:
+    def test_empty_requests_returns_low(self):
+        finding = PromptCachingOpportunityDetector().run([])
+        assert finding.severity == "low"
+
+    def test_below_repeats_not_flagged(self):
+        reqs = [_req(system_prompt_hash="hash-x", prompt_system_tokens=1500, cache_read_tokens=0) for _ in range(4)]
+        finding = PromptCachingOpportunityDetector().run(reqs)
+        assert finding.affected_count == 0
+
+    def test_caching_opportunity_triggers(self):
+        reqs = [_req(system_prompt_hash="hash-x", prompt_system_tokens=1500, cache_read_tokens=0, cost_usd=0.10) for _ in range(5)]
+        finding = PromptCachingOpportunityDetector().run(reqs)
+        assert finding.affected_count == 5
+        assert finding.severity == "medium"
+        assert abs(finding.estimated_waste_usd - 0.15) < 1e-9  # 30% of $0.50
+
+    def test_cache_hits_are_excluded(self):
+        reqs = (
+            [_req(system_prompt_hash="hash-x", prompt_system_tokens=1500, cache_read_tokens=1000) for _ in range(5)]
+        )
+        finding = PromptCachingOpportunityDetector().run(reqs)
+        assert finding.affected_count == 0
+
+
+class TestOversizedToolSchemaDetector:
+    def test_empty_requests_returns_low(self):
+        finding = OversizedToolSchemaDetector().run([])
+        assert finding.severity == "low"
+
+    def test_below_threshold_not_flagged(self):
+        # 500 tool tokens < 1000 threshold
+        reqs = [_req(prompt_tools_tokens=500, input_tokens=1000) for _ in range(5)]
+        finding = OversizedToolSchemaDetector().run(reqs)
+        assert finding.affected_count == 0
+
+    def test_oversized_tools_triggers(self):
+        # 1500 tools tokens > 1000, and 1500/3000 = 50% > 30% ratio
+        reqs = [_req(prompt_tools_tokens=1500, input_tokens=3000, cost_usd=0.10) for _ in range(3)]
+        finding = OversizedToolSchemaDetector().run(reqs)
+        assert finding.affected_count == 3
+        assert finding.severity == "medium"
+        assert abs(finding.estimated_waste_usd - 0.15) < 1e-9  # 50% of $0.30
+
+
+class TestLowRAGEfficiencyDetector:
+    def test_empty_requests_returns_low(self):
+        finding = LowRAGEfficiencyDetector().run([])
+        assert finding.severity == "low"
+
+    def test_efficient_rag_not_flagged(self):
+        # High rag tokens but also high output tokens (200 >= 100 max)
+        reqs = [_req(prompt_rag_tokens=9000, output_tokens=200) for _ in range(5)]
+        finding = LowRAGEfficiencyDetector().run(reqs)
+        assert finding.affected_count == 0
+
+    def test_low_rag_efficiency_triggers(self):
+        # RAG = 9000 > 8000, output = 50 < 100
+        reqs = [_req(prompt_rag_tokens=9000, output_tokens=50, cost_usd=0.20) for _ in range(3)]
+        finding = LowRAGEfficiencyDetector().run(reqs)
+        assert finding.affected_count == 3
+        assert finding.severity == "medium"
+        assert abs(finding.estimated_waste_usd - 0.30) < 1e-9  # 50% of $0.60
+
+
+class TestHistoryBloatDetector:
+    def test_empty_requests_returns_low(self):
+        finding = HistoryBloatDetector().run([])
+        assert finding.severity == "low"
+
+    def test_no_history_bloat_not_flagged(self):
+        # history = 2000 < 5000 threshold
+        reqs = [_req(prompt_history_tokens=2000, input_tokens=3000) for _ in range(5)]
+        finding = HistoryBloatDetector().run(reqs)
+        assert finding.affected_count == 0
+
+    def test_history_bloat_triggers(self):
+        # history = 6000 > 5000, and 6000/10000 = 60% > 50% ratio
+        reqs = [_req(prompt_history_tokens=6000, input_tokens=10000, cost_usd=0.20) for _ in range(3)]
+        finding = HistoryBloatDetector().run(reqs)
+        assert finding.affected_count == 3
+        assert finding.severity == "medium"
+        assert abs(finding.estimated_waste_usd - 0.24) < 1e-9  # 40% of $0.60
+
+
+class TestPromptAnalyzer:
+    def test_count_tokens(self):
+        from burnlens.analysis.prompt_analyzer import count_tokens
+        # Check basic fallback when tiktoken is not available, or standard token counting
+        assert count_tokens("") == 0
+        assert count_tokens("hello world") > 0
+
+    def test_extract_rag_content(self):
+        from burnlens.analysis.prompt_analyzer import extract_rag_content
+        text = "Hello, please answer based on: <doc>this is retrieval text</doc> user query here"
+        remaining, rag = extract_rag_content(text)
+        assert "this is retrieval text" in rag
+        assert "user query here" in remaining
+
+    def test_extract_rag_content_headers(self):
+        from burnlens.analysis.prompt_analyzer import extract_rag_content
+        text = "Search results:\n- Document A: Some information\n- Document B: Other context\n\nMy actual query is..."
+        remaining, rag = extract_rag_content(text)
+        assert "Document A" in rag
+        assert "actual query" in remaining
+
+    def test_parse_messages(self):
+        from burnlens.analysis.prompt_analyzer import parse_messages
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there!"},
+            {"role": "user", "content": "how is the weather?"},
+        ]
+        history, query = parse_messages(messages)
+        assert "user: hello" in history
+        assert "assistant: hi there!" in history
+        assert query == "how is the weather?"
+
+    def test_analyze_request_prompt(self):
+        from burnlens.analysis.prompt_analyzer import analyze_request_prompt
+        # Mock request with system, user, history, and tools
+        body = {
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "hi"},
+                {"role": "user", "content": "Context:\nHere is some RAG data\n\nactual question"}
+            ],
+            "tools": [{"name": "calculator"}]
+        }
+        res = analyze_request_prompt("openai", "gpt-4o", json.dumps(body).encode(), 100)
+        assert res["prompt_system_tokens"] > 0
+        assert res["prompt_user_tokens"] > 0
+        assert res["prompt_tools_tokens"] > 0
+        assert res["prompt_rag_tokens"] > 0
+        assert res["prompt_history_tokens"] > 0
+        assert sum(res.values()) == 100
+

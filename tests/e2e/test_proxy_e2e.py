@@ -248,6 +248,11 @@ class TestOpenAINonStreaming:
         assert row["input_tokens"] == 15
         assert row["output_tokens"] == 10
         assert row["cost_usd"] > 0
+        assert row["prompt_system_tokens"] == 0
+        assert row["prompt_user_tokens"] == 15
+        assert row["prompt_tools_tokens"] == 0
+        assert row["prompt_rag_tokens"] == 0
+        assert row["prompt_history_tokens"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +285,11 @@ class TestOpenAIStreaming:
         assert row["input_tokens"] == 20
         assert row["output_tokens"] == 8
         assert row["cost_usd"] > 0
+        assert row["prompt_system_tokens"] == 0
+        assert row["prompt_user_tokens"] == 20
+        assert row["prompt_tools_tokens"] == 0
+        assert row["prompt_rag_tokens"] == 0
+        assert row["prompt_history_tokens"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -740,3 +750,129 @@ class TestGoogleFragmented:
         assert row["input_tokens"] == 25, f"Expected 25, got {row['input_tokens']}"
         assert row["output_tokens"] == 15, f"Expected 15, got {row['output_tokens']}"
         assert row["cost_usd"] > 0
+
+
+# ---------------------------------------------------------------------------
+# 12. Prompt Segment Analysis (Streaming & Non-Streaming)
+# ---------------------------------------------------------------------------
+
+
+class TestProxyPromptSegmentAnalysis:
+    async def test_complex_prompt_segment_extraction_and_scaling(self, initialized_db):
+        complex_body = json.dumps({
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "system", "content": "You are a helpful translation assistant."},
+                {"role": "user", "content": "Hello assistant!"},
+                {"role": "assistant", "content": "Hello, how can I help you today?"},
+                {"role": "user", "content": "Please translate this text: <doc>This is some retrieval context information.</doc>"}
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "translate_text",
+                        "description": "Translate text from one language to another",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "target_lang": {"type": "string"}
+                            },
+                            "required": ["text", "target_lang"]
+                        }
+                    }
+                }
+            ]
+        }).encode()
+
+        mock_resp = _openai_chat_response(
+            model="gpt-4o", prompt_tokens=150, completion_tokens=30,
+        )
+
+        with respx.mock(assert_all_called=False) as router:
+            router.post("https://api.openai.com/v1/chat/completions").respond(
+                200, json=mock_resp,
+            )
+            status, _, body, stream = await _call_proxy(
+                "/proxy/openai/v1/chat/completions",
+                "/proxy/openai/v1/chat/completions",
+                complex_body,
+                initialized_db,
+            )
+
+        assert status == 200
+        
+        row = await _get_last_row(initialized_db)
+        assert row["provider"] == "openai"
+        assert row["model"] == "gpt-4o"
+        assert row["input_tokens"] == 150
+        assert row["output_tokens"] == 30
+        
+        # Verify prompt segment tokens are captured, greater than 0, and sum to input_tokens (150)
+        assert row["prompt_system_tokens"] > 0
+        assert row["prompt_user_tokens"] > 0
+        assert row["prompt_tools_tokens"] > 0
+        assert row["prompt_rag_tokens"] > 0
+        assert row["prompt_history_tokens"] > 0
+        
+        total_prompt_segments = (
+            row["prompt_system_tokens"]
+            + row["prompt_user_tokens"]
+            + row["prompt_tools_tokens"]
+            + row["prompt_rag_tokens"]
+            + row["prompt_history_tokens"]
+        )
+        assert total_prompt_segments == 150
+
+    async def test_complex_prompt_segment_extraction_streaming(self, initialized_db):
+        complex_body = json.dumps({
+            "model": "gpt-4o",
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "messages": [
+                {"role": "system", "content": "System instruction here"},
+                {"role": "user", "content": "prior query"},
+                {"role": "assistant", "content": "prior response"},
+                {"role": "user", "content": "Reference:\nSome reference info here\n\nlatest query"}
+            ],
+            "tools": [{"type": "function", "function": {"name": "dummy_tool"}}]
+        }).encode()
+
+        sse_text = _openai_streaming_chunks(prompt_tokens=200, completion_tokens=50)
+
+        with respx.mock(assert_all_called=False) as router:
+            router.post("https://api.openai.com/v1/chat/completions").respond(
+                200,
+                text=sse_text,
+                headers={"content-type": "text/event-stream"},
+            )
+            status, _, body, stream = await _call_proxy(
+                "/proxy/openai/v1/chat/completions",
+                "/proxy/openai/v1/chat/completions",
+                complex_body,
+                initialized_db,
+            )
+        assert status == 200
+        assert stream is not None
+        await _drain_stream(stream)
+
+        row = await _get_last_row(initialized_db)
+        assert row["provider"] == "openai"
+        assert row["input_tokens"] == 200
+        assert row["output_tokens"] == 50
+        
+        assert row["prompt_system_tokens"] > 0
+        assert row["prompt_user_tokens"] > 0
+        assert row["prompt_tools_tokens"] > 0
+        assert row["prompt_rag_tokens"] > 0
+        assert row["prompt_history_tokens"] > 0
+
+        total_prompt_segments = (
+            row["prompt_system_tokens"]
+            + row["prompt_user_tokens"]
+            + row["prompt_tools_tokens"]
+            + row["prompt_rag_tokens"]
+            + row["prompt_history_tokens"]
+        )
+        assert total_prompt_segments == 200

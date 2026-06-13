@@ -889,7 +889,10 @@ async def get_requests_for_analysis(
             SELECT
                 id, timestamp, provider, model,
                 input_tokens, output_tokens, cost_usd,
-                duration_ms, tags, system_prompt_hash
+                duration_ms, tags, system_prompt_hash,
+                prompt_system_tokens, prompt_user_tokens,
+                prompt_tools_tokens, prompt_rag_tokens,
+                prompt_history_tokens
             FROM requests
             {where}
             ORDER BY timestamp DESC
