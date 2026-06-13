@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest

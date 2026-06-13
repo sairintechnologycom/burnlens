@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";

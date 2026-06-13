@@ -1,9 +1,7 @@
 """Tests for OpenTelemetry span forwarding."""
 
 import pytest
-from datetime import datetime
-from unittest.mock import patch, AsyncMock, MagicMock
-import httpx
+from unittest.mock import patch, AsyncMock
 
 from burnlens_cloud.telemetry.forwarder import OtelForwarder
 from burnlens_cloud.telemetry.otel_proto import RequestRecordToSpan

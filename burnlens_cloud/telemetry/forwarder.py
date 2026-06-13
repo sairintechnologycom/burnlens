@@ -1,7 +1,6 @@
 """OpenTelemetry span forwarder for enterprise customers."""
 
 import asyncio
-import json
 import logging
 import time
 from datetime import datetime

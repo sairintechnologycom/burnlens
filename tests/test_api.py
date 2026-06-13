@@ -1,8 +1,7 @@
 """Tests for Phase 3: API Layer — extended queries and Pydantic schema validation."""
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -194,7 +193,6 @@ class TestDiscoveryAPI:
     @pytest_asyncio.fixture(autouse=True)
     async def setup(self, tmp_path):
         """Seed a fresh DB and build app for each test."""
-        import httpx
         from fastapi import FastAPI
         from httpx import AsyncClient, ASGITransport
         from burnlens.api.discovery import router as discovery_router

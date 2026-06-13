@@ -5,7 +5,6 @@ import csv
 import io
 import logging
 from datetime import date, datetime, timedelta, timezone
-from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 

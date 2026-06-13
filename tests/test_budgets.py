@@ -1,15 +1,11 @@
 """Tests for per-team budget limits and alerts."""
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
 
-import pytest
 
-from burnlens.alerts.engine import TeamBudgetAlert, check_team_budgets
+from burnlens.alerts.engine import check_team_budgets
 from burnlens.config import (
     AlertsConfig,
-    BudgetConfig,
     BurnLensConfig,
     TeamBudgetsConfig,
 )

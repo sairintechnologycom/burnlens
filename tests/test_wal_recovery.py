@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 from datetime import datetime, timezone
 from burnlens.storage.models import RequestRecord
 from burnlens.storage.wal import WriteAheadLog, recover_wal

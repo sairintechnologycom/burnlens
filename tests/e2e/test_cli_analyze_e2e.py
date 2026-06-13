@@ -1,9 +1,7 @@
 """End-to-end validation of CLI waste analysis for new prompt detectors."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
-import json
 from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner

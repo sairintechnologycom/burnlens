@@ -1,11 +1,10 @@
 """BurnLens doctor: system health checks for proxy, database, and providers."""
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 

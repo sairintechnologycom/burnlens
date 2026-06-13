@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import os
 import random
 import sys
@@ -289,7 +288,7 @@ async def _count_rows(db_path: str) -> int:
 def main() -> None:
     db_path = os.environ.get("BURNLENS_DB_PATH", DB_PATH)
 
-    print(f"BurnLens seed script")
+    print("BurnLens seed script")
     print(f"  DB: {db_path}")
     print()
 

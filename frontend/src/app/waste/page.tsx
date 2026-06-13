@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
@@ -36,6 +38,7 @@ function WasteContent() {
 
   useEffect(() => {
     if (!session) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     Promise.all([
       apiFetch("/api/v1/waste-alerts", session.token).catch(() => []),

@@ -8,7 +8,7 @@ import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 from . import config
 from .auth import _encode_jwt, get_current_workspace, require_role

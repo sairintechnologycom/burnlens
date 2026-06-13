@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +31,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   // Close the mobile nav drawer on route change so tapping a link navigates
   // and dismisses the drawer in one action.
   useEffect(() => {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileMenuOpen(false);
   }, [pathname]);
 

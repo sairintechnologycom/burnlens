@@ -1,6 +1,4 @@
 import pytest
-import json
-from pathlib import Path
 from burnlens.doctor import check_wal
 from burnlens.storage.wal import repair_wal, replay_dlq
 from burnlens.storage.database import init_db

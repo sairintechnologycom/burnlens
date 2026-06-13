@@ -16,7 +16,6 @@ Run with: pytest tests/streaming/test_streaming_integration.py -v -m integration
 """
 
 import asyncio
-import json
 import socket
 import time
 
@@ -27,10 +26,6 @@ import respx
 
 from .conftest import (
     build_openai_stream,
-    build_anthropic_stream,
-    sse_content_chunk,
-    sse_usage_chunk,
-    SSE_DONE,
     fetch_rows,
 )
 

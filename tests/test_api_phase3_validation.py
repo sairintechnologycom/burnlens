@@ -5,14 +5,14 @@ Each test targets a specific requirement behavior not covered by existing tests.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from burnlens.storage.database import init_db, insert_asset, insert_discovery_event
-from burnlens.storage.models import AiAsset, DiscoveryEvent
+from burnlens.storage.database import init_db, insert_asset
+from burnlens.storage.models import AiAsset
 
 
 def _make_asset(

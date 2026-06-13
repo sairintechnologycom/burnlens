@@ -402,7 +402,7 @@ async def ingest(
     # Validate API key and get workspace
     workspace_result = await get_workspace_by_api_key(api_key)
     if not workspace_result:
-        logger.warning(f"Ingest request with invalid API key")
+        logger.warning("Ingest request with invalid API key")
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     workspace_id, plan = workspace_result

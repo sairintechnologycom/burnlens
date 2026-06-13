@@ -6,10 +6,9 @@ import logging
 import hashlib
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, Tuple
+from typing import AsyncIterator, Tuple
 import aiosqlite
 
-from burnlens.config import BurnLensConfig
 
 logger = logging.getLogger(__name__)
 

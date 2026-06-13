@@ -12,8 +12,18 @@ from fastapi.responses import RedirectResponse
 import bcrypt as _bcrypt
 import jwt
 from jwt.exceptions import InvalidTokenError
+from pydantic import BaseModel
 
 from .config import settings
+from .database import execute_query, execute_insert
+from .models import (
+    LoginRequest,
+    LoginResponse,
+    SignupRequest,
+    SignupResponse,
+    TokenPayload,
+    WorkspaceResponse,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +112,6 @@ def _safe_redirect(target: Optional[str]) -> Optional[str]:
     ):
         return target
     return None
-from pydantic import BaseModel
-from .database import execute_query, execute_insert
 
 
 # ---------------------------------------------------------------------------
@@ -127,14 +135,6 @@ def _ws_pii_value(row, _plaintext_col: str, encrypted_col: str):
         return None
     from .pii_crypto import decrypt_pii
     return decrypt_pii(val)
-from .models import (
-    LoginRequest,
-    LoginResponse,
-    SignupRequest,
-    SignupResponse,
-    TokenPayload,
-    WorkspaceResponse,
-)
 
 logger = logging.getLogger(__name__)
 

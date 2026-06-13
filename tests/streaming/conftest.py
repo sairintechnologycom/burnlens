@@ -20,7 +20,6 @@ from typing import AsyncIterator
 
 import httpx
 import pytest
-import pytest_asyncio
 
 from burnlens.storage.database import init_db
 

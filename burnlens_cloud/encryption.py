@@ -1,6 +1,5 @@
 """Encryption utilities for sensitive data (API keys, etc.)."""
 
-import base64
 import logging
 from cryptography.fernet import Fernet, InvalidToken
 

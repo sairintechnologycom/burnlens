@@ -1,14 +1,10 @@
 """Tests for per-customer cost tracking and budget enforcement."""
 from __future__ import annotations
 
-import json
 import time
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
 
-import pytest
 
-from burnlens.alerts.engine import CustomerBudgetAlert, check_customer_budgets
+from burnlens.alerts.engine import check_customer_budgets
 from burnlens.config import (
     AlertsConfig,
     BurnLensConfig,

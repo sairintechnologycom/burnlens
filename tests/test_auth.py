@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -76,7 +75,6 @@ async def test_login_invalid_key_401(client):
 
 @pytest.mark.asyncio
 async def test_jwt_expired_returns_401(client):
-    from api.auth import _encode_jwt
     import jwt as jose_jwt
     import api.config as cfg
 

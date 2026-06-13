@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
@@ -17,6 +19,7 @@ function ModelsContent() {
 
   useEffect(() => {
     if (!session) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     apiFetch(`/api/v1/usage/by-model?days=${days}`, session.token)
       .then((data) => setModels(data as CostByModelRow[]))

@@ -5,7 +5,6 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
-from .database import execute_query
 from .deployment.status import get_status_checker, StatusPageRenderer
 from .models import StatusResponse, ComponentStatus
 
@@ -17,8 +16,6 @@ router = APIRouter(tags=["status"])
 async def status_page():
     """Public status page (no authentication)."""
     try:
-        status_checker = get_status_checker()
-
         # Get status for each component
         components = []
         for name in ["Ingest API", "Dashboard API", "Cloud Sync"]:

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from burnlens.alerts.engine import AlertEngine
     from burnlens.config import ApiKeyBudgetsConfig, BurnLensConfig, CustomerBudgetsConfig
     from burnlens.proxy.router import RouteDecision
+    from burnlens.storage.wal import WriteAheadLog, SQLitePersistenceWorker
 
 logger = logging.getLogger(__name__)
 
@@ -506,7 +507,7 @@ async def handle_request(
     # --- Budget-aware model downgrade routing (per D-04) ---
     decision: "RouteDecision | None" = None
     if config is not None:
-        from burnlens.proxy.router import decide_route, RouteDecision  # type: ignore[assignment]
+        from burnlens.proxy.router import decide_route  # type: ignore[assignment]
         decision = await decide_route(
             model, tags.get("team"), tags.get("customer"), config, db_path
         )

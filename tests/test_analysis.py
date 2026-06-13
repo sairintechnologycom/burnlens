@@ -1,14 +1,11 @@
 """Tests for waste detectors and budget tracking."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
-from unittest.mock import AsyncMock, patch
 
-import pytest
 
 from burnlens.analysis.budget import (
-    BudgetStatus,
     BudgetTracker,
     compute_budget_status,
 )
