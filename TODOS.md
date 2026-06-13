@@ -18,19 +18,15 @@ subline: Per-feature, per-provider, per-developer. Free for solo use. $29/mo for
 
 ---
 
-## Pre-existing test failure — GET /api/v1/assets returns 404
+~~## Pre-existing test failure — GET /api/v1/assets returns 404~~
 
-**What:** `tests/test_api.py::TestAssetAPI::test_list_assets_returns_paginated_response` fails with 404 instead of 200.
-**Why:** The `/api/v1/assets` route appears unregistered or the test is targeting a route that no longer exists. Not caused by this branch — pre-dates fix/dead-static-signup-pages.
-**Priority:** P0 — known broken test in the test suite.
-**File:** `tests/test_api.py:450`, cross-check `burnlens/proxy/server.py` for the asset route registration.
-**Noticed on:** fix/dead-static-signup-pages during /ship (2026-05-04)
+~~**What:** `tests/test_api.py::TestAssetAPI::test_list_assets_returns_paginated_response` fails with 404 instead of 200.~~
 
 ---
 
-## Coverage gap — PUT /settings/slack-webhook (Phase 12)
+~~## Coverage gap — PUT /settings/slack-webhook (Phase 12)~~
 
-**What:** Add 4 missing test cases for the Slack webhook settings endpoint.
-**Why:** The endpoint exists and works but has no unit tests: valid URL set, null clear, invalid URL 422, non-owner 403.
-**Priority:** P2 — not blocking, alert engine paths are tested.
-**File:** `burnlens_cloud/settings_api.py`, add to `tests/test_phase12_alerts.py`.
+~~**What:** Add 4 missing test cases for the Slack webhook settings endpoint.~~
+~~**Why:** The endpoint exists and works but has no unit tests: valid URL set, null clear, invalid URL 422, non-owner 403.~~
+~~**Priority:** P2 — not blocking, alert engine paths are tested.~~
+~~**File:** `burnlens_cloud/settings_api.py`, add to `tests/test_phase12_alerts.py`.~~
