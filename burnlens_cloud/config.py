@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@burnlens.app")
     cron_secret: str = os.getenv("CRON_SECRET", "")
     burnlens_frontend_url: str = os.getenv("BURNLENS_FRONTEND_URL", "https://burnlens.app")
+    burnlens_cloud_api_url: str = os.getenv("BURNLENS_CLOUD_API_URL", "https://api.burnlens.app")
 
     # Company / Legal
     parent_company: str = "Sairin Technology"

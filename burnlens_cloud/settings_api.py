@@ -339,3 +339,62 @@ async def update_slack_webhook(
 
     updated_count = int(result.split()[-1]) if result else 0
     return {"updated_rules": updated_count}
+
+
+# Phase 10 extension: Teams webhook configuration for alert rules.
+class TeamsWebhookRequest(BaseModel):
+    webhook_url: Optional[str] = None  # None to clear
+
+
+@router.put("/teams-webhook")
+async def update_teams_webhook(
+    body: TeamsWebhookRequest,
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """
+    Owner-only. Set or clear the Teams webhook URL for this workspace's alert rules.
+
+    - webhook_url must be a valid Microsoft/Office webhook URL (or null to clear).
+    - Updates all alert_rules for the workspace:
+        - If URL provided: sets teams_webhook_url + channel = 'teams'
+        - If URL is null: clears teams_webhook_url + channel = 'email'
+    """
+    await require_role("owner", token)
+
+    url = body.webhook_url
+    if url is not None:
+        from urllib.parse import urlparse as _urlparse
+        _p = _urlparse(url)
+        valid_subs = ["office.com", "microsoft.com"]
+        if _p.scheme != "https" or not any(s in (_p.hostname or "") for s in valid_subs):
+            raise HTTPException(
+                status_code=422,
+                detail="webhook_url must be a valid Microsoft Teams webhook URL",
+            )
+
+    if url is not None:
+        result = await execute_insert(
+            """
+            UPDATE alert_rules
+            SET teams_webhook_url = $1,
+                channel = 'teams',
+                updated_at = NOW()
+            WHERE workspace_id = $2
+            """,
+            url,
+            token.workspace_id,
+        )
+    else:
+        result = await execute_insert(
+            """
+            UPDATE alert_rules
+            SET teams_webhook_url = NULL,
+                channel = 'email',
+                updated_at = NOW()
+            WHERE workspace_id = $1
+            """,
+            token.workspace_id,
+        )
+
+    updated_count = int(result.split()[-1]) if result else 0
+    return {"updated_rules": updated_count}

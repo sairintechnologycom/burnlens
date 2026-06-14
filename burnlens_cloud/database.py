@@ -962,14 +962,34 @@ async def init_db():
                 workspace_id      UUID        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 threshold_pct     INT         NOT NULL CHECK (threshold_pct IN (80, 100)),
                 channel           TEXT        NOT NULL DEFAULT 'email'
-                                              CHECK (channel IN ('email', 'slack', 'both')),
+                                              CHECK (channel IN ('email', 'slack', 'teams', 'both')),
                 enabled           BOOLEAN     NOT NULL DEFAULT TRUE,
                 slack_webhook_url TEXT,
+                teams_webhook_url TEXT,
                 extra_emails      TEXT[]      NOT NULL DEFAULT '{}',
                 created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
+
+        # Migration: add teams_webhook_url and update channel constraint
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'alert_rules' AND column_name = 'teams_webhook_url'
+                ) THEN
+                    ALTER TABLE alert_rules ADD COLUMN teams_webhook_url TEXT;
+                END IF;
+                
+                -- Update channel constraint to include 'teams'
+                ALTER TABLE alert_rules DROP CONSTRAINT IF EXISTS alert_rules_channel_check;
+                ALTER TABLE alert_rules ADD CONSTRAINT alert_rules_channel_check 
+                    CHECK (channel IN ('email', 'slack', 'teams', 'both'));
+            END $$;
+        """)
+
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_alert_rules_workspace
             ON alert_rules(workspace_id) WHERE enabled = TRUE

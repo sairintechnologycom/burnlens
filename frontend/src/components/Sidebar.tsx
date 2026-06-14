@@ -57,6 +57,7 @@ const GROUPS: SidebarGroup[] = [
     items: [
       { href: "/connections", label: "Connections" },
       { href: "/api-keys", label: "API Keys" },
+      { href: "/activity", label: "Activity Log" },
       { href: "/settings", label: "Settings" },
     ],
   },
