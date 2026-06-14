@@ -140,7 +140,7 @@ def get_app() -> FastAPI:
         allow_origin_regex=_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
         # Shrink browser preflight cache from Starlette's 600s default to 60s so
         # CORS-related deploys don't leave active sessions with stale preflights
         # for ~10 min. See project_billing_summary_cors_regression.md.
@@ -163,6 +163,22 @@ def get_app() -> FastAPI:
 
     # Rate limit auth + ingest paths (per-IP sliding window, in-process).
     app.add_middleware(RateLimitMiddleware, rules=DEFAULT_RULES)
+
+    class CsrfMiddleware(BaseHTTPMiddleware):
+        """Simple CSRF protection: require custom header for state-changing requests."""
+        async def dispatch(self, request: Request, call_next):
+            if request.method not in ("GET", "HEAD", "OPTIONS", "TRACE"):
+                # Browsers don't allow custom headers on cross-origin requests
+                # without preflight, so requiring this header blocks CSRF.
+                if not request.headers.get("X-Requested-With"):
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "CSRF protection: X-Requested-With header missing"},
+                    )
+            return await call_next(request)
+
+    app.add_middleware(CsrfMiddleware)
 
     # Global exception handler — Starlette's outermost ServerErrorMiddleware
     # produces a plain-text 500 that bypasses CORSMiddleware on its way back

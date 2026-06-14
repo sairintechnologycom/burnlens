@@ -220,6 +220,8 @@ CREATE TABLE IF NOT EXISTS semantic_cache (
     provider TEXT NOT NULL,
     model TEXT NOT NULL,
     response_body BLOB NOT NULL,
+    response_hash TEXT,
+    signature TEXT,
     embedding TEXT NOT NULL,
     customer_hash TEXT,
     tags TEXT,
@@ -343,8 +345,28 @@ async def init_db(db_path: str) -> None:
     # Phase 7: Semantic Cache fields and table
     await migrate_add_cache_fields_to_requests(db_path)
     await migrate_create_semantic_cache_table(db_path)
+    await migrate_add_semantic_cache_integrity_fields(db_path)
 
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_add_semantic_cache_integrity_fields(db_path: str) -> None:
+    """Add Phase 2 hardening integrity fields to semantic_cache table.
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(semantic_cache)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        if not columns:
+            return # Table doesn't exist yet
+
+        if "response_hash" not in columns:
+            await db.execute("ALTER TABLE semantic_cache ADD COLUMN response_hash TEXT")
+        if "signature" not in columns:
+            await db.execute("ALTER TABLE semantic_cache ADD COLUMN signature TEXT")
+        await db.commit()
 
 
 async def migrate_add_cache_fields_to_requests(db_path: str) -> None:
@@ -357,14 +379,12 @@ async def migrate_add_cache_fields_to_requests(db_path: str) -> None:
         columns = {row[1] for row in await cursor.fetchall()}
 
         added = []
-        fields = {
-            "cache_hit": "INTEGER NOT NULL DEFAULT 0",
-            "cache_saved_usd": "REAL NOT NULL DEFAULT 0.0",
-        }
-        for col, col_type in fields.items():
-            if col not in columns:
-                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} {col_type}")
-                added.append(col)
+        if "cache_hit" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN cache_hit INTEGER NOT NULL DEFAULT 0")
+            added.append("cache_hit")
+        if "cache_saved_usd" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN cache_saved_usd REAL NOT NULL DEFAULT 0.0")
+            added.append("cache_saved_usd")
 
         await db.commit()
 
@@ -396,17 +416,21 @@ async def migrate_add_prompt_token_fields(db_path: str) -> None:
         columns = {row[1] for row in await cursor.fetchall()}
 
         added = []
-        fields = {
-            "prompt_system_tokens": "INTEGER NOT NULL DEFAULT 0",
-            "prompt_user_tokens": "INTEGER NOT NULL DEFAULT 0",
-            "prompt_tools_tokens": "INTEGER NOT NULL DEFAULT 0",
-            "prompt_rag_tokens": "INTEGER NOT NULL DEFAULT 0",
-            "prompt_history_tokens": "INTEGER NOT NULL DEFAULT 0",
-        }
-        for col, col_type in fields.items():
-            if col not in columns:
-                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} {col_type}")
-                added.append(col)
+        if "prompt_system_tokens" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN prompt_system_tokens INTEGER NOT NULL DEFAULT 0")
+            added.append("prompt_system_tokens")
+        if "prompt_user_tokens" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN prompt_user_tokens INTEGER NOT NULL DEFAULT 0")
+            added.append("prompt_user_tokens")
+        if "prompt_tools_tokens" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN prompt_tools_tokens INTEGER NOT NULL DEFAULT 0")
+            added.append("prompt_tools_tokens")
+        if "prompt_rag_tokens" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN prompt_rag_tokens INTEGER NOT NULL DEFAULT 0")
+            added.append("prompt_rag_tokens")
+        if "prompt_history_tokens" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN prompt_history_tokens INTEGER NOT NULL DEFAULT 0")
+            added.append("prompt_history_tokens")
 
         await db.commit()
 
@@ -427,24 +451,39 @@ async def migrate_add_canonical_event_fields(db_path: str) -> None:
         columns = {row[1] for row in await cursor.fetchall()}
 
         added = []
-        fields = {
-            "event_id": "TEXT",
-            "trace_id": "TEXT",
-            "workspace_id": "TEXT",
-            "org_id": "TEXT",
-            "team": "TEXT",
-            "feature": "TEXT",
-            "customer_hash": "TEXT",
-            "app_id": "TEXT",
-            "env": "TEXT",
-            "repo": "TEXT",
-            "branch": "TEXT",
-            "commit_sha": "TEXT",
-            "pricing_version": "TEXT",
-        }
-        for col, col_type in fields.items():
+        fields = [
+            "event_id", "trace_id", "workspace_id", "org_id",
+            "team", "feature", "customer_hash", "app_id",
+            "env", "repo", "branch", "commit_sha", "pricing_version"
+        ]
+        for col in fields:
             if col not in columns:
-                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} {col_type}")
+                if col == "event_id":
+                    await db.execute("ALTER TABLE requests ADD COLUMN event_id TEXT")
+                elif col == "trace_id":
+                    await db.execute("ALTER TABLE requests ADD COLUMN trace_id TEXT")
+                elif col == "workspace_id":
+                    await db.execute("ALTER TABLE requests ADD COLUMN workspace_id TEXT")
+                elif col == "org_id":
+                    await db.execute("ALTER TABLE requests ADD COLUMN org_id TEXT")
+                elif col == "team":
+                    await db.execute("ALTER TABLE requests ADD COLUMN team TEXT")
+                elif col == "feature":
+                    await db.execute("ALTER TABLE requests ADD COLUMN feature TEXT")
+                elif col == "customer_hash":
+                    await db.execute("ALTER TABLE requests ADD COLUMN customer_hash TEXT")
+                elif col == "app_id":
+                    await db.execute("ALTER TABLE requests ADD COLUMN app_id TEXT")
+                elif col == "env":
+                    await db.execute("ALTER TABLE requests ADD COLUMN env TEXT")
+                elif col == "repo":
+                    await db.execute("ALTER TABLE requests ADD COLUMN repo TEXT")
+                elif col == "branch":
+                    await db.execute("ALTER TABLE requests ADD COLUMN branch TEXT")
+                elif col == "commit_sha":
+                    await db.execute("ALTER TABLE requests ADD COLUMN commit_sha TEXT")
+                elif col == "pricing_version":
+                    await db.execute("ALTER TABLE requests ADD COLUMN pricing_version TEXT")
                 added.append(col)
 
         await db.execute(
@@ -543,10 +582,18 @@ async def migrate_add_git_tags(db_path: str) -> None:
         columns = {row[1] for row in await cursor.fetchall()}
 
         added = []
-        for col in ("tag_repo", "tag_dev", "tag_pr", "tag_branch"):
-            if col not in columns:
-                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} TEXT")
-                added.append(col)
+        if "tag_repo" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN tag_repo TEXT")
+            added.append("tag_repo")
+        if "tag_dev" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN tag_dev TEXT")
+            added.append("tag_dev")
+        if "tag_pr" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN tag_pr TEXT")
+            added.append("tag_pr")
+        if "tag_branch" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN tag_branch TEXT")
+            added.append("tag_branch")
 
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_requests_tag_repo ON requests(tag_repo)"
@@ -1169,12 +1216,12 @@ async def get_routing_events(
 
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            f"SELECT timestamp, model, routed_model, downgrade_reason, "
-            f"budget_remaining_usd, budget_remaining_pct, tags "
-            f"FROM requests WHERE {where} ORDER BY timestamp DESC LIMIT 200",
-            params,
+        sql = (
+            "SELECT timestamp, model, routed_model, downgrade_reason, "
+            "budget_remaining_usd, budget_remaining_pct, tags "
+            "FROM requests WHERE " + where + " ORDER BY timestamp DESC LIMIT 200"
         )
+        cursor = await db.execute(sql, params)
         rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 

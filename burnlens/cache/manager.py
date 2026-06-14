@@ -65,8 +65,46 @@ def extract_query_text(body_bytes: bytes, provider_name: str) -> str:
 class SemanticCacheManager:
     """Manages exact and semantic similarity cache lookup and persistence in SQLite."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, secret_key: str | None = None):
         self.db_path = db_path
+        self.secret_key = secret_key
+
+    async def _verify_integrity(self, row: dict | aiosqlite.Row) -> bool:
+        """Verify the response_hash and signature of a cached row."""
+        body = row["response_body"]
+        # aiosqlite.Row doesn't support .get(), use indexing and handle KeyError
+        try:
+            stored_hash = row["response_hash"]
+        except (KeyError, IndexError):
+            stored_hash = None
+            
+        try:
+            stored_sig = row["signature"]
+        except (KeyError, IndexError):
+            stored_sig = None
+
+        if not body:
+            return False
+
+        # 1. Verify hash
+        actual_hash = hashlib.sha256(body).hexdigest()
+        if stored_hash and actual_hash != stored_hash:
+            logger.warning("Cache integrity failure: response_hash mismatch")
+            return False
+
+        # 2. Verify signature (if secret_key is present)
+        if self.secret_key and stored_sig:
+            import hmac
+            expected_sig = hmac.new(
+                self.secret_key.encode(),
+                body,
+                hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(stored_sig, expected_sig):
+                logger.warning("Cache integrity failure: HMAC signature mismatch")
+                return False
+        
+        return True
 
     async def lookup_exact(
         self,
@@ -79,7 +117,7 @@ class SemanticCacheManager:
         Returns (response_body_bytes, provider, model) or None on miss.
         """
         sql = """
-            SELECT response_body, provider, model FROM semantic_cache
+            SELECT response_body, response_hash, signature, provider, model FROM semantic_cache
             WHERE system_prompt_hash = ?
               AND LOWER(query_text) = LOWER(?)
               AND (customer_hash = ? OR (customer_hash IS NULL AND ? IS NULL))
@@ -92,6 +130,8 @@ class SemanticCacheManager:
                 async with db.execute(sql, (system_prompt_hash, query_text, customer_hash, customer_hash)) as cursor:
                     row = await cursor.fetchone()
                     if row:
+                        if not await self._verify_integrity(row):
+                            return None
                         return row["response_body"], row["provider"], row["model"]
         except Exception as exc:
             logger.warning("Cache exact lookup failed (non-fatal): %s", exc)
@@ -110,7 +150,7 @@ class SemanticCacheManager:
         Returns (response_body_bytes, provider, model) or None on miss.
         """
         sql = """
-            SELECT response_body, embedding, provider, model FROM semantic_cache
+            SELECT response_body, response_hash, signature, embedding, provider, model FROM semantic_cache
             WHERE system_prompt_hash = ?
               AND (customer_hash = ? OR (customer_hash IS NULL AND ? IS NULL))
               AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'));
@@ -132,11 +172,11 @@ class SemanticCacheManager:
                         try:
                             import numpy as np
                             embeddings_list = []
-                            valid_rows = []
+                            potential_rows = []
                             for row in rows:
                                 try:
                                     embeddings_list.append(json.loads(row["embedding"]))
-                                    valid_rows.append(row)
+                                    potential_rows.append(row)
                                 except Exception:
                                     continue
                             
@@ -146,7 +186,7 @@ class SemanticCacheManager:
                                 similarities = np.dot(emb_matrix, q_arr)
                                 best_idx = np.argmax(similarities)
                                 best_sim = float(similarities[best_idx])
-                                best_row = valid_rows[best_idx]
+                                best_row = potential_rows[best_idx]
                         except ImportError:
                             # Fallback to pure Python
                             for row in rows:
@@ -161,6 +201,9 @@ class SemanticCacheManager:
                                     continue
 
             if best_sim >= similarity_threshold and best_row is not None:
+                # Verify integrity only on match to save cycles
+                if not await self._verify_integrity(best_row):
+                    return None
                 logger.info("Semantic cache hit! Similarity: %.4f (threshold: %.4f)", best_sim, similarity_threshold)
                 return best_row["response_body"], best_row["provider"], best_row["model"]
 
@@ -184,13 +227,25 @@ class SemanticCacheManager:
         sql = """
             INSERT OR REPLACE INTO semantic_cache (
                 id, system_prompt_hash, query_text, provider, model,
-                response_body, embedding, customer_hash, tags, expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                response_body, response_hash, signature,
+                embedding, customer_hash, tags, expires_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         try:
             # Generate stable ID from hash of inputs to ensure uniqueness
             inputs = f"{system_prompt_hash}:{customer_hash or ''}:{query_text.lower()}"
             cache_id = hashlib.sha256(inputs.encode()).hexdigest()
+
+            # Integrity fields
+            response_hash = hashlib.sha256(response_body).hexdigest()
+            signature = None
+            if self.secret_key:
+                import hmac
+                signature = hmac.new(
+                    self.secret_key.encode(),
+                    response_body,
+                    hashlib.sha256
+                ).hexdigest()
 
             # Normalize embedding before saving
             normalized_emb = normalize_vector(embedding)
@@ -210,6 +265,8 @@ class SemanticCacheManager:
                         provider,
                         model,
                         response_body,
+                        response_hash,
+                        signature,
                         embedding_json,
                         customer_hash,
                         json.dumps(tags or {}),

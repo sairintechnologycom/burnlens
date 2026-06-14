@@ -184,6 +184,7 @@ class BurnLensConfig:
     google_upstream: str = "https://generativelanguage.googleapis.com"
     openai_admin_key: str | None = None
     anthropic_admin_key: str | None = None
+    secret_key: str | None = None
     dashboard_user: str | None = None
     dashboard_pass: str | None = None
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
@@ -208,6 +209,7 @@ _FIELD_TYPES: dict[str, type] = {
     "google_upstream": str,
     "openai_admin_key": str,
     "anthropic_admin_key": str,
+    "secret_key": str,
     "dashboard_user": str,
     "dashboard_pass": str,
 }
@@ -459,6 +461,10 @@ def _apply_env_overrides(cfg: BurnLensConfig) -> BurnLensConfig:
     dash_pass = os.environ.get("DASHBOARD_PASS")
     if dash_pass:
         cfg.dashboard_pass = dash_pass
+
+    secret_key = os.environ.get("SECRET_KEY")
+    if secret_key:
+        cfg.secret_key = secret_key
 
     return cfg
 
