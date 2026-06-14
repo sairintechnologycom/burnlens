@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiosqlite
 import pytest
@@ -16,9 +16,16 @@ from burnlens.cloud.sync import (
     get_unsynced_count,
     migrate_add_synced_at,
 )
-from burnlens.config import CloudConfig
+from burnlens.config import BurnLensConfig, CloudConfig
 from burnlens.storage.database import init_db, insert_request
 from burnlens.storage.models import RequestRecord
+
+
+@pytest.fixture
+def config(cloud_config) -> BurnLensConfig:
+    cfg = BurnLensConfig()
+    cfg.cloud = cloud_config
+    return cfg
 
 
 @pytest.fixture
@@ -94,9 +101,9 @@ async def test_migration_adds_synced_at_column(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_push_batch_sends_correct_payload(cloud_config):
+async def test_push_batch_sends_correct_payload(config):
     """push_batch POSTs the correct JSON payload."""
-    sync = CloudSync(cloud_config)
+    sync = CloudSync(config)
     records = [
         {
             "ts": "2025-04-08T18:35:46Z",
@@ -113,8 +120,9 @@ async def test_push_batch_sends_correct_payload(cloud_config):
         }
     ]
 
-    mock_resp = AsyncMock()
+    mock_resp = MagicMock()
     mock_resp.status_code = 200
+    mock_resp.json.return_value = {"accepted": 1, "rejected": 0}
 
     with patch.object(sync, "_get_client") as mock_client:
         client = AsyncMock()
@@ -135,9 +143,9 @@ async def test_push_batch_sends_correct_payload(cloud_config):
 
 
 @pytest.mark.asyncio
-async def test_push_batch_returns_false_on_network_error_no_crash(cloud_config):
+async def test_push_batch_returns_false_on_network_error_no_crash(config):
     """Network errors return False, never raise."""
-    sync = CloudSync(cloud_config)
+    sync = CloudSync(config)
 
     with patch.object(sync, "_get_client") as mock_client:
         client = AsyncMock()
@@ -150,9 +158,9 @@ async def test_push_batch_returns_false_on_network_error_no_crash(cloud_config):
 
 
 @pytest.mark.asyncio
-async def test_push_batch_returns_false_on_http_error(cloud_config):
+async def test_push_batch_returns_false_on_http_error(config):
     """Non-200 HTTP responses return False."""
-    sync = CloudSync(cloud_config)
+    sync = CloudSync(config)
 
     mock_resp = AsyncMock()
     mock_resp.status_code = 500
@@ -174,12 +182,13 @@ async def test_push_batch_returns_false_on_http_error(cloud_config):
 
 
 @pytest.mark.asyncio
-async def test_sync_loop_marks_records_synced(cloud_config, db_with_records):
+async def test_sync_loop_marks_records_synced(config, db_with_records):
     """After a successful push, records get a synced_at timestamp."""
-    sync = CloudSync(cloud_config)
+    sync = CloudSync(config)
 
-    mock_resp = AsyncMock()
+    mock_resp = MagicMock()
     mock_resp.status_code = 200
+    mock_resp.json.return_value = {"accepted": 1, "rejected": 0}
 
     with patch.object(sync, "_get_client") as mock_client:
         client = AsyncMock()
@@ -196,13 +205,13 @@ async def test_sync_loop_marks_records_synced(cloud_config, db_with_records):
 
 
 @pytest.mark.asyncio
-async def test_sync_now_pushes_nothing_when_all_synced(cloud_config, db_with_records):
+async def test_sync_now_pushes_nothing_when_all_synced(config, db_with_records):
     """sync_now returns 0 if everything is already synced."""
     # Mark all as synced first
     rows = await _fetch_unsynced(db_with_records, limit=1000)
     await _mark_synced(db_with_records, [r["id"] for r in rows])
 
-    sync = CloudSync(cloud_config)
+    sync = CloudSync(config)
     with patch.object(sync, "push_batch") as mock_push:
         count = await sync.sync_now(db_with_records)
 

@@ -463,6 +463,7 @@ async def ingest(
                     "tag_feature": tags.get("feature", ""),
                     "tag_team": tags.get("team", ""),
                     "tag_customer": tags.get("customer", ""),
+                    "tag_key_label": tags.get("key_label", ""),
                     "system_prompt_hash": r.system_prompt_hash or "",
                 })
             await send_records_to_stream(workspace_id, stream_records)
@@ -529,7 +530,14 @@ async def ingest(
                 logger.warning(f"Failed to queue OTEL forward: {e}")
                 # Don't fail ingest on OTEL error
 
-        return IngestResponse(accepted=len(request.records), rejected=0)
+        limits = await resolve_limits(workspace_id)
+        overrides = limits.routing_overrides if limits else None
+
+        return IngestResponse(
+            accepted=len(request.records),
+            rejected=0,
+            routing_overrides=overrides
+        )
 
     except Exception as e:
         logger.error(f"Failed to ingest records: {e}")

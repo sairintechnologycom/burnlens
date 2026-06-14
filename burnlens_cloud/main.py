@@ -23,6 +23,7 @@ from .deployment_api import router as deployment_router
 from .stubs_api import router as stubs_router
 from .cron_api import router as cron_router
 from .alerts_api import router as alerts_router
+from .actions_api import router as actions_router
 from .deployment.status import get_status_checker
 from .compliance.purge import run_periodic_purge
 from .compliance.retention_prune import run_periodic_retention_prune
@@ -212,6 +213,7 @@ def get_app() -> FastAPI:
     app.include_router(api_keys_router)  # /account/api-keys CRUD (Phase 9 GATE-04, repathed in Phase 16 hotfix to avoid Vercel static collision)
     app.include_router(cron_router)     # /cron/evaluate-alerts (Phase 12)
     app.include_router(alerts_router)   # /api/v1/alert-rules (Phase 13)
+    app.include_router(actions_router)  # /api/v1/actions (Phase 10)
 
     return app
 

@@ -36,6 +36,7 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "tag_feature",
     "tag_team",
     "tag_customer",
+    "tag_key_label",
 })
 
 
@@ -47,8 +48,9 @@ def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
 class CloudSync:
     """Background sync client that pushes cost records to the hosted backend."""
 
-    def __init__(self, config: CloudConfig) -> None:
+    def __init__(self, config: "BurnLensConfig") -> None:
         self.config = config
+        self.cloud_config = config.cloud
         self._client: httpx.AsyncClient | None = None
         self._running = False
         self.last_sync_at = None
@@ -70,6 +72,19 @@ class CloudSync:
             await self._client.aclose()
             self._client = None
 
+    def _apply_routing_overrides(self, overrides: dict[str, Any]) -> None:
+        """Update local routing config with values from cloud (Phase 10)."""
+        try:
+            if "budget_downgrade" in overrides:
+                self.config.routing.budget_downgrade = bool(overrides["budget_downgrade"])
+            if "downgrade_threshold_pct" in overrides:
+                self.config.routing.downgrade_threshold_pct = float(
+                    overrides["downgrade_threshold_pct"]
+                )
+            logger.debug("Cloud sync: applied routing overrides %s", overrides)
+        except (ValueError, TypeError) as exc:
+            logger.warning("Cloud sync: failed to apply routing overrides: %s", exc)
+
     async def push_batch(self, records: list[dict[str, Any]]) -> bool:
         """POST a batch of sanitized records to the cloud ingest endpoint.
 
@@ -88,7 +103,7 @@ class CloudSync:
         client = self._get_client()
         sanitized = [_sanitize_record(r) for r in records]
 
-        endpoint = self.config.endpoint.rstrip("/")
+        endpoint = self.cloud_config.endpoint.rstrip("/")
         if not endpoint.endswith("/v1/ingest"):
             url = endpoint + "/api/v1/ingest"
         else:
@@ -100,11 +115,15 @@ class CloudSync:
                 json={"records": sanitized},
                 headers={
                     "Content-Type": "application/json",
-                    "X-API-Key": self.config.api_key or "",
+                    "X-API-Key": self.cloud_config.api_key or "",
                 },
             )
 
             if resp.status_code == 200:
+                data = resp.json()
+                overrides = data.get("routing_overrides")
+                if overrides:
+                    self._apply_routing_overrides(overrides)
                 return True
 
             if resp.status_code == 401:
@@ -144,13 +163,13 @@ class CloudSync:
         self._running = True
         logger.info(
             "Cloud sync started — interval %ds, endpoint %s",
-            self.config.sync_interval_seconds,
-            self.config.endpoint,
+            self.cloud_config.sync_interval_seconds,
+            self.cloud_config.endpoint,
         )
 
         while self._running:
             try:
-                await asyncio.sleep(self.config.sync_interval_seconds)
+                await asyncio.sleep(self.cloud_config.sync_interval_seconds)
                 await self._sync_once(db_path)
             except asyncio.CancelledError:
                 break
@@ -268,4 +287,5 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         tag_feature=tags.get("feature"),
         tag_team=tags.get("team"),
         tag_customer=tags.get("customer"),
+        tag_key_label=tags.get("key_label"),
     )

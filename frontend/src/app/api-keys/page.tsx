@@ -128,6 +128,34 @@ function ApiKeysContent() {
     }
   };
 
+  const handlePause = async (key: ApiKeyRow) => {
+    if (!session) return;
+    try {
+      const updated = await apiFetch(`/account/api-keys/${key.id}/pause`, session.token, {
+        method: "POST",
+      }) as ApiKeyRow;
+      setKeys((ks) => ks.map((k) => (k.id === key.id ? updated : k)));
+      showToast("Key paused", "success");
+    } catch (err: unknown) {
+      if (err instanceof AuthError) logout();
+      else showToast("Failed to pause key.", "error");
+    }
+  };
+
+  const handleResume = async (key: ApiKeyRow) => {
+    if (!session) return;
+    try {
+      const updated = await apiFetch(`/account/api-keys/${key.id}/resume`, session.token, {
+        method: "POST",
+      }) as ApiKeyRow;
+      setKeys((ks) => ks.map((k) => (k.id === key.id ? updated : k)));
+      showToast("Key resumed", "success");
+    } catch (err: unknown) {
+      if (err instanceof AuthError) logout();
+      else showToast("Failed to resume key.", "error");
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: 16 }}>
@@ -197,6 +225,8 @@ function ApiKeysContent() {
           <ApiKeysTable
             keys={keys}
             onRequestRevoke={(k) => setPendingRevoke(k)}
+            onPause={handlePause}
+            onResume={handleResume}
             onSaveLabel={handleSaveLabel}
             canMutateRow={() => true /* server enforces role/creator scoping */}
           />
