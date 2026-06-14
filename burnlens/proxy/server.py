@@ -69,7 +69,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
             try:
                 from burnlens.cloud.sync import CloudSync
 
-                cloud = CloudSync(config.cloud)
+                cloud = CloudSync(config)
                 app.state.cloud_sync = cloud
                 _cloud_sync_task = asyncio.create_task(
                     cloud.start_sync_loop(config.db_path)

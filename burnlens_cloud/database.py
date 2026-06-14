@@ -713,9 +713,9 @@ async def init_db():
             BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'workspaces' AND column_name = 'limit_overrides'
+                    WHERE table_name = 'workspaces' AND column_name = 'routing_overrides'
                 ) THEN
-                    ALTER TABLE workspaces ADD COLUMN limit_overrides JSONB;
+                    ALTER TABLE workspaces ADD COLUMN routing_overrides JSONB;
                 END IF;
             END $$;
         """)
@@ -901,6 +901,7 @@ async def init_db():
                 name TEXT NOT NULL DEFAULT 'Primary',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 revoked_at TIMESTAMPTZ NULL,
+                paused_at TIMESTAMPTZ NULL,
                 created_by_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL
             )
         """)
@@ -993,6 +994,15 @@ async def init_db():
             ON alert_events(rule_id, fired_at DESC)
         """)
 
+        # Phase 10 (Actionable Alerts): tracking consumed JTIs for single-use tokens.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS used_action_tokens (
+                jti         TEXT        PRIMARY KEY,
+                consumed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        # Optional: cleanup cron could delete rows older than max TTL (e.g. 24h).
+
         # Phase 12: seed default alert rules for existing cloud/teams workspaces.
         # Idempotent: INSERT only when the workspace has no alert_rules yet.
         await conn.execute("""
@@ -1048,7 +1058,8 @@ async def init_db():
                 api_key_count INT,
                 gated_features JSONB,
                 monthly_token_cap BIGINT,
-                monthly_spend_cap_usd NUMERIC
+                monthly_spend_cap_usd NUMERIC,
+                routing_overrides JSONB
             )
             LANGUAGE SQL
             STABLE
@@ -1064,7 +1075,8 @@ async def init_db():
                         || COALESCE(w.limit_overrides->'gated_features', '{}'::jsonb)
                     ) AS gated_features,
                     COALESCE((w.limit_overrides->>'monthly_token_cap')::bigint,   pl.monthly_token_cap)     AS monthly_token_cap,
-                    COALESCE((w.limit_overrides->>'monthly_spend_cap_usd')::numeric, pl.monthly_spend_cap_usd) AS monthly_spend_cap_usd
+                    COALESCE((w.limit_overrides->>'monthly_spend_cap_usd')::numeric, pl.monthly_spend_cap_usd) AS monthly_spend_cap_usd,
+                    w.routing_overrides
                 FROM workspaces w
                 JOIN plan_limits pl ON pl.plan = w.plan
                 WHERE w.id = ws_id

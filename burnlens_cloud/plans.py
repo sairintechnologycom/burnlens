@@ -54,6 +54,11 @@ async def resolve_limits(workspace_id: UUID) -> Optional[ResolvedLimits]:
         import json
         gated = json.loads(gated)
 
+    routing = row["routing_overrides"]
+    if isinstance(routing, str):
+        import json
+        routing = json.loads(routing)
+
     return ResolvedLimits(
         plan=row["plan"],
         monthly_request_cap=row["monthly_request_cap"],
@@ -63,4 +68,5 @@ async def resolve_limits(workspace_id: UUID) -> Optional[ResolvedLimits]:
         monthly_token_cap=row["monthly_token_cap"],
         monthly_spend_cap_usd=row["monthly_spend_cap_usd"],
         gated_features=gated or {},
+        routing_overrides=routing,
     )

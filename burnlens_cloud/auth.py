@@ -595,7 +595,10 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
         SELECT w.id AS id, w.plan AS plan, ak.id AS api_key_id
         FROM api_keys ak
         JOIN workspaces w ON w.id = ak.workspace_id
-        WHERE ak.key_hash = $1 AND ak.revoked_at IS NULL AND w.active = true
+        WHERE ak.key_hash = $1 
+          AND ak.revoked_at IS NULL 
+          AND ak.paused_at IS NULL
+          AND w.active = true
         LIMIT 1
         """,
         key_hash,

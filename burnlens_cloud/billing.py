@@ -889,6 +889,7 @@ async def billing_summary(token: TokenPayload = Depends(verify_token)):
         usage=usage,
         available_plans=available_plans,
         api_keys=api_keys_summary,
+        routing_overrides=resolved.routing_overrides if resolved else None,
     )
 
 
