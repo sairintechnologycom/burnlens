@@ -48,11 +48,58 @@ async def _lookup_workspace(api_key: str) -> tuple[str, str] | None:
 @router.post("/api/v1/ingest", response_model=IngestResponse)
 async def ingest(body: IngestRequest):
     """Bulk ingest cost records from the OSS proxy."""
+    import hmac
+    import hashlib
+    import json
+
     result = await _lookup_workspace(body.api_key)
     if not result:
         raise HTTPException(status_code=401, detail={"error": "invalid_api_key"})
 
     workspace_id, plan = result
+
+    # Verify signature if present (Phase 2 hardening)
+    if body.signature:
+        # Re-calculate signature from records
+        # Use sort_keys=True for consistent JSON serialization
+        record_dicts = [r.model_dump() for r in body.records]
+        # model_dump with dates results in ISO strings which is what we need
+        # but we must match the format used by the client.
+        # CloudSync uses [_sanitize_record(r) for r in records] then json.dumps(..., sort_keys=True)
+        # We need to replicate that exactly.
+        
+        # Helper to match client sanitization
+        from .models import RecordIn
+        allowed_fields = {
+            "timestamp", "provider", "model", "input_tokens", "output_tokens",
+            "reasoning_tokens", "cache_read_tokens", "cache_write_tokens",
+            "cost_usd", "duration_ms", "status_code", "system_prompt_hash",
+            "tag_feature", "tag_team", "tag_customer", "tag_key_label"
+        }
+        
+        def _sanitize(r: RecordIn) -> dict:
+            d = r.model_dump()
+            # ts in body is datetime, but client serialized it to string
+            d["timestamp"] = d.pop("ts").isoformat()
+            return {k: v for k, v in d.items() if k in allowed_fields}
+
+        sanitized = [_sanitize(r) for r in body.records]
+        expected_json = json.dumps(sanitized, sort_keys=True, separators=(',', ':'))
+        
+        # Wait, I need to check if client uses separators. 
+        # CloudSync just uses json.dumps(sanitized, sort_keys=True). 
+        # Python's default json.dumps adds spaces after commas/colons.
+        expected_json_default = json.dumps(sanitized, sort_keys=True)
+        
+        expected_signature = hmac.new(
+            body.api_key.encode(),
+            expected_json_default.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(body.signature, expected_signature):
+            logger.warning("Invalid ingest signature for workspace %s", workspace_id)
+            raise HTTPException(status_code=403, detail={"error": "invalid_signature"})
 
     # Fetch OTEL config (needed after insert)
     otel_config = None

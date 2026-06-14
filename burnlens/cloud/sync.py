@@ -88,9 +88,11 @@ class CloudSync:
     async def push_batch(self, records: list[dict[str, Any]]) -> bool:
         """POST a batch of sanitized records to the cloud ingest endpoint.
 
+        Includes an HMAC-SHA256 signature for integrity validation.
         Returns True on HTTP 200, False on any error.
-        Never raises -- sync failure must not affect proxy.
         """
+        import hmac
+        import hashlib
         import time
 
         if time.monotonic() < self._backoff_until:
@@ -102,6 +104,15 @@ class CloudSync:
 
         client = self._get_client()
         sanitized = [_sanitize_record(r) for r in records]
+        
+        # Calculate signature
+        api_key = self.cloud_config.api_key or ""
+        json_data = json.dumps(sanitized, sort_keys=True)
+        signature = hmac.new(
+            api_key.encode(),
+            json_data.encode(),
+            hashlib.sha256
+        ).hexdigest()
 
         endpoint = self.cloud_config.endpoint.rstrip("/")
         if not endpoint.endswith("/v1/ingest"):
@@ -112,10 +123,14 @@ class CloudSync:
         try:
             resp = await client.post(
                 url,
-                json={"records": sanitized},
+                json={
+                    "api_key": api_key,
+                    "signature": signature,
+                    "records": sanitized
+                },
                 headers={
                     "Content-Type": "application/json",
-                    "X-API-Key": self.cloud_config.api_key or "",
+                    "X-API-Key": api_key,
                 },
             )
 

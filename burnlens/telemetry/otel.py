@@ -52,16 +52,19 @@ def init_tracer(
 
     resource = Resource.create({"service.name": service_name})
     
+    # Determine security from endpoint scheme
+    is_insecure = endpoint.startswith("http://")
+    
     # Tracer setup
     provider = TracerProvider(resource=resource)
-    exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+    exporter = OTLPSpanExporter(endpoint=endpoint, insecure=is_insecure)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     _tracer = trace.get_tracer("burnlens")
     
     # Meter setup
     metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(endpoint=endpoint, insecure=True)
+        OTLPMetricExporter(endpoint=endpoint, insecure=is_insecure)
     )
     meter_provider = MeterProvider(metric_readers=[metric_reader], resource=resource)
     metrics.set_meter_provider(meter_provider)
