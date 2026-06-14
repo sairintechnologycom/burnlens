@@ -18,6 +18,7 @@ class AlertRulePatch(BaseModel):
     enabled: Optional[bool] = None
     threshold_pct: Optional[int] = None   # must be 80 or 100 if provided
     extra_emails: Optional[List[str]] = None  # full-replace semantics
+    teams_webhook_url: Optional[str] = None
 
 
 @router.get("/alert-rules")
@@ -31,6 +32,7 @@ async def list_alert_rules(
             """
             SELECT id, threshold_pct, channel, enabled,
                    slack_webhook_url IS NOT NULL AS has_slack,
+                   teams_webhook_url IS NOT NULL AS has_teams,
                    extra_emails, created_at, updated_at
             FROM alert_rules
             WHERE workspace_id = $1
@@ -73,6 +75,10 @@ async def patch_alert_rule(
     if body.extra_emails is not None:
         fields.append(f"extra_emails = ${idx}")
         params.append(body.extra_emails)
+        idx += 1
+    if body.teams_webhook_url is not None:
+        fields.append(f"teams_webhook_url = ${idx}")
+        params.append(body.teams_webhook_url)
         idx += 1
 
     if not fields:

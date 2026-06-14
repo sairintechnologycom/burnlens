@@ -17,7 +17,8 @@ from pydantic import BaseModel
 
 from .action_tokens import verify_action_token, consume_action_token, ActionTokenPayload
 from .database import execute_query, execute_insert
-from .auth import invalidate_api_key_cache
+from .auth import invalidate_api_key_cache, verify_token, require_role
+from .models import TokenPayload
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/actions", tags=["actions"])
@@ -25,6 +26,11 @@ router = APIRouter(prefix="/api/v1/actions", tags=["actions"])
 
 class ActionExecuteRequest(BaseModel):
     token: str
+
+
+class RevertActionRequest(BaseModel):
+    original_activity_id: str
+    action: str  # unpause_api_key, revert_budget, revert_downgrade
 
 
 @router.get("/confirm")
@@ -118,6 +124,84 @@ async def execute_action(request: Request):
         raise
     except Exception as exc:
         logger.error("actions_api: execution failed: %s", exc)
+        raise HTTPException(status_code=500, detail="internal_error")
+
+
+@router.post("/revert")
+async def revert_action(
+    body: RevertActionRequest,
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """
+    Undo a previous remediation action. Admin/Owner only.
+    """
+    await require_role("admin", token)
+
+    workspace_id = token.workspace_id
+
+    # Fetch original activity to verify ownership and get details
+    try:
+        activity_id = int(body.original_activity_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid_activity_id")
+
+    res = await execute_query(
+        "SELECT action, detail FROM workspace_activity WHERE id = $1 AND workspace_id = $2",
+        activity_id,
+        workspace_id,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="activity_not_found")
+
+    original = res[0]
+    detail = original["detail"]
+
+    success = False
+    try:
+        if body.action == "unpause_api_key":
+            key_id = detail.get("target_id")
+            if not key_id:
+                raise HTTPException(status_code=400, detail="missing_target_key")
+            
+            res_key = await execute_query(
+                "UPDATE api_keys SET paused_at = NULL WHERE id = $1 AND workspace_id = $2 RETURNING key_hash",
+                key_id, workspace_id
+            )
+            if res_key:
+                invalidate_api_key_cache(res_key[0]["key_hash"])
+                success = True
+
+        elif body.action == "revert_budget":
+            # Remove the monthly_request_cap override
+            await execute_insert(
+                "UPDATE workspaces SET limit_overrides = limit_overrides - 'monthly_request_cap' WHERE id = $1",
+                workspace_id
+            )
+            success = True
+
+        elif body.action == "revert_downgrade":
+            # Remove the budget_downgrade overrides
+            await execute_insert(
+                "UPDATE workspaces SET routing_overrides = routing_overrides - 'budget_downgrade' - 'downgrade_threshold_pct' WHERE id = $1",
+                workspace_id
+            )
+            success = True
+        
+        else:
+            raise HTTPException(status_code=400, detail="unsupported_revert_action")
+
+        if not success:
+            raise HTTPException(status_code=500, detail="revert_failed")
+
+        # Log the reversal
+        await _log_action_activity(workspace_id, body.action, {"reverted_id": activity_id})
+
+        return {"ok": True, "message": f"Action {body.action} executed successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("actions_api: revert failed: %s", exc)
         raise HTTPException(status_code=500, detail="internal_error")
 
 

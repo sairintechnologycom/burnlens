@@ -89,6 +89,46 @@ function SettingsContent() {
     }
   };
 
+  const handleUpdateTeamsWebhook = async () => {
+    if (!session) return;
+    const url = prompt("Enter Microsoft Teams Incoming Webhook URL (leave empty to clear):");
+    if (url === null) return;
+    
+    setSyncing(true);
+    try {
+      await apiFetch("/settings/teams-webhook", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ webhook_url: url.trim() || null }),
+      });
+      showToast(url.trim() ? "Teams webhook updated" : "Teams webhook cleared", "success");
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else showToast("Failed: " + err.message, "error");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleUpdateSlackWebhook = async () => {
+    if (!session) return;
+    const url = prompt("Enter Slack Incoming Webhook URL (leave empty to clear):");
+    if (url === null) return;
+    
+    setSyncing(true);
+    try {
+      await apiFetch("/settings/slack-webhook", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ webhook_url: url.trim() || null }),
+      });
+      showToast(url.trim() ? "Slack webhook updated" : "Slack webhook cleared", "success");
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else showToast("Failed: " + err.message, "error");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const maskedKey = session?.apiKey
     ? `${session.apiKey.slice(0, 12)}${"•".repeat(8)}`
     : "—";
@@ -154,6 +194,29 @@ function SettingsContent() {
                 disabled={regenerating}
               >
                 {regenerating ? "..." : "Regenerate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Alert Integrations */}
+      <div className="card" style={{ margin: 16, marginBottom: 0 }}>
+        <div className="section-header">
+          <span className="section-header-title">Alert Integrations</span>
+        </div>
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <label className="form-label">Slack Webhook</label>
+              <button className="btn" style={{ width: "100%" }} onClick={handleUpdateSlackWebhook} disabled={syncing}>
+                Configure Slack
+              </button>
+            </div>
+            <div>
+              <label className="form-label">Teams Webhook</label>
+              <button className="btn" style={{ width: "100%" }} onClick={handleUpdateTeamsWebhook} disabled={syncing}>
+                Configure Teams
               </button>
             </div>
           </div>
