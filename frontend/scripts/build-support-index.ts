@@ -45,14 +45,16 @@ const sources: Source[] = [
   },
 ];
 
-async function loadChunks(): Promise<Chunk[]> {
+async function loadChunks(): Promise<{ chunks: Chunk[]; missingSources: string[] }> {
   const all: Chunk[] = [];
+  const missingSources: string[] = [];
   for (const src of sources) {
     let md: string;
     try {
       md = await readFile(src.absPath, "utf8");
     } catch {
       console.warn(`[build-support-index] skipping missing source: ${src.absPath}`);
+      missingSources.push(src.absPath);
       continue;
     }
     const chunks = chunkMarkdown(
@@ -63,11 +65,25 @@ async function loadChunks(): Promise<Chunk[]> {
     console.log(`[build-support-index] ${src.source}: ${chunks.length} chunks`);
     all.push(...chunks);
   }
-  return all;
+  return { chunks: all, missingSources };
 }
 
 async function main() {
-  const chunks = await loadChunks();
+  const { chunks, missingSources } = await loadChunks();
+  if (missingSources.length > 0) {
+    // Vercel's monorepo root can omit files outside the configured frontend
+    // directory. Keep the complete, reviewed index generated in CI/local
+    // builds instead of silently replacing it with a partial knowledge base.
+    const committed = JSON.parse(await readFile(outPath, "utf8")) as SupportIndex;
+    if (!committed.chunks.length) {
+      throw new Error("Support sources are missing and the committed index is empty");
+    }
+    console.warn(
+      `[build-support-index] preserving committed index (${committed.chunks.length} chunks); ` +
+        `${missingSources.length} source(s) unavailable in this build environment`
+    );
+    return;
+  }
   if (chunks.length === 0) throw new Error("No chunks produced — nothing to index");
 
   const out: SupportIndex = {
