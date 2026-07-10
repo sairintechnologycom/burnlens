@@ -14,7 +14,6 @@ export interface AuthSession {
   workspaceId: string;
   workspaceName: string;
   plan: string;
-  apiKey: string;
   isLocal: boolean;
   emailVerified: boolean;
   /** Owner email stored at login time; used by resend-verification flow. */
@@ -40,7 +39,6 @@ const LOCAL_SESSION: AuthSession = {
   workspaceId: "local",
   workspaceName: "Local",
   plan: "free",
-  apiKey: "local",
   isLocal: true,
   emailVerified: true,
   ownerEmail: "",
@@ -65,7 +63,6 @@ export function useAuth() {
     const workspaceId = localStorage.getItem("burnlens_workspace_id");
     const workspaceName = localStorage.getItem("burnlens_workspace_name");
     const plan = localStorage.getItem("burnlens_plan");
-    const apiKey = localStorage.getItem("burnlens_api_key");
     const ownerEmail = localStorage.getItem("burnlens_owner_email") || "";
     const emailVerifiedRaw = localStorage.getItem("burnlens_email_verified");
     // Default "owner" for sessions predating role storage (backward compat).
@@ -80,6 +77,9 @@ export function useAuth() {
     // from pre-C-3 sessions so an XSS landing later cannot read it.
     if (typeof window !== "undefined") {
       localStorage.removeItem("burnlens_token");
+      // Pre-hardening builds persisted the workspace ingest key here.  It is a
+      // service credential, not session metadata, so purge it on first load.
+      localStorage.removeItem("burnlens_api_key");
     }
 
     if (!workspaceId) {
@@ -92,7 +92,6 @@ export function useAuth() {
       workspaceId,
       workspaceName: workspaceName || "My Organization",
       plan: plan || "free",
-      apiKey: apiKey || "",
       isLocal: false,
       emailVerified,
       ownerEmail,

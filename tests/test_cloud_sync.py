@@ -13,6 +13,7 @@ from burnlens.cloud.sync import (
     _fetch_unsynced,
     _mark_synced,
     _row_to_payload,
+    _pseudonymize_prompt_hash,
     get_unsynced_count,
     migrate_add_synced_at,
 )
@@ -140,6 +141,18 @@ async def test_push_batch_sends_correct_payload(config):
     assert "api_key" not in payload
     assert len(payload["records"]) == 1
     assert payload["records"][0]["model"] == "claude-haiku-4-5-20251001"
+    assert payload["records"][0]["system_prompt_hash"] != "abc123"
+    assert payload["records"][0]["system_prompt_hash"] == _pseudonymize_prompt_hash(
+        "abc123", "bl_live_test123"
+    )
+
+
+def test_prompt_fingerprint_is_workspace_keyed():
+    original = "known-local-sha256"
+    first = _pseudonymize_prompt_hash(original, "bl_live_workspace_a")
+    assert first == _pseudonymize_prompt_hash(original, "bl_live_workspace_a")
+    assert first != _pseudonymize_prompt_hash(original, "bl_live_workspace_b")
+    assert first != original
 
 
 @pytest.mark.asyncio

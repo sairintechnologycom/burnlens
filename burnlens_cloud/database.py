@@ -688,9 +688,9 @@ async def init_db():
                 plan, monthly_request_cap, seat_count, retention_days, api_key_count,
                 paddle_price_id, paddle_product_id, gated_features
             ) VALUES (
-                'cloud', 1000000, 1, 30, 3,
+                'cloud', 1000000, 3, 90, 3,
                 'pri_01kpe2gkbz9w85btadnw8ckkyn', 'pro_01kpe2dxvfmnp3xeaj37krsksm',
-                '{"custom_signatures": true, "team_seats": false, "otel_export": false}'::jsonb
+                '{"custom_signatures": true, "team_seats": true, "otel_export": false}'::jsonb
             )
             ON CONFLICT (plan) DO NOTHING
         """)
@@ -700,11 +700,31 @@ async def init_db():
                 plan, monthly_request_cap, seat_count, retention_days, api_key_count,
                 paddle_price_id, paddle_product_id, gated_features
             ) VALUES (
-                'teams', 10000000, 10, 90, 25,
+                'teams', 10000000, 10, 365, 25,
                 'pri_01kpe4f0aj537x609d6we7qpg7', 'pro_01kpe4etanc8971v5eesj5npn7',
                 '{"custom_signatures": true, "team_seats": true, "otel_export": true}'::jsonb
             )
             ON CONFLICT (plan) DO NOTHING
+        """)
+
+        # Correct legacy defaults so enforcement matches the public plan
+        # contract.  The predicates protect intentional customer overrides.
+        await conn.execute("""
+            UPDATE plan_limits
+            SET seat_count = 3,
+                retention_days = 90,
+                gated_features = jsonb_set(gated_features, '{team_seats}', 'true'::jsonb),
+                updated_at = NOW()
+            WHERE plan = 'cloud'
+              AND seat_count = 1
+              AND retention_days = 30
+        """)
+        await conn.execute("""
+            UPDATE plan_limits
+            SET retention_days = 365,
+                updated_at = NOW()
+            WHERE plan = 'teams'
+              AND retention_days = 90
         """)
 
         # Phase 6: per-workspace sparse override column (merged over plan defaults by resolve_limits)

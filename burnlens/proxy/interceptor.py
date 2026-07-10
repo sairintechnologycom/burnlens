@@ -161,7 +161,8 @@ _ENV_TAG_FALLBACKS: tuple[str, ...] = (
 # Restricting this prevents "tag injection" where malicious headers spoof budget/org context.
 _ALLOWED_TAGS = {
     "team", "feature", "app_id", "env", "repo", "branch", "commit_sha",
-    "workspace_id", "org_id", "trace_id", "customer", "key_label", "dev", "pr"
+    "workspace_id", "org_id", "trace_id", "customer", "key_label", "service",
+    "dev", "pr"
 }
 
 
@@ -1426,5 +1427,4 @@ async def _save_to_cache_bg(
             )
     except Exception as exc:
         logger.debug("Background cache save failed (non-fatal): %s", exc)
-
 

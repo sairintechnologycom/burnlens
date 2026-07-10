@@ -43,7 +43,7 @@ test.describe('B1 — AUTH-06: Forgot password flow on /setup', () => {
 
     // The "Forgot password?" button is only shown in login mode (not register).
     // Ensure we're in login mode — click Sign in tab if available.
-    const signInTab = page.getByRole('button', { name: /sign in/i });
+    const signInTab = page.getByRole('button', { name: /sign in/i }).first();
     if (await signInTab.isVisible()) {
       await signInTab.click();
     }
@@ -72,7 +72,7 @@ test.describe('B1 — AUTH-06: Forgot password flow on /setup', () => {
     await page.goto('/setup');
 
     // Ensure login mode.
-    const signInTab = page.getByRole('button', { name: /sign in/i });
+    const signInTab = page.getByRole('button', { name: /sign in/i }).first();
     if (await signInTab.isVisible()) {
       await signInTab.click();
     }
@@ -227,6 +227,10 @@ test.describe('B4 — AUTH-05: BillingStatusBanner email verification banner', (
 
     await page.goto('/dashboard');
 
+    // Legacy builds persisted the ingest key. Hardened builds purge it while
+    // hydrating the session and never use it for browser authentication.
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('burnlens_api_key'))).toBeNull();
+
     // The BillingStatusBanner renders aria-label="Email verification required"
     // when the banner is shown.
     const banner = page.getByRole('status', { name: /email verification required/i });
@@ -240,7 +244,6 @@ test.describe('B4 — AUTH-05: BillingStatusBanner email verification banner', (
       localStorage.setItem('burnlens_workspace_id', 'test-ws-id');
       localStorage.setItem('burnlens_workspace_name', 'Test Workspace');
       localStorage.setItem('burnlens_plan', 'cloud');
-      localStorage.setItem('burnlens_api_key', 'bl_live_testkey');
       localStorage.setItem('burnlens_owner_email', 'owner@example.com');
       localStorage.setItem('burnlens_email_verified', 'true');
     });

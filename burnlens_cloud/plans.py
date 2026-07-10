@@ -54,7 +54,14 @@ async def resolve_limits(workspace_id: UUID) -> Optional[ResolvedLimits]:
         import json
         gated = json.loads(gated)
 
-    routing = row["routing_overrides"]
+    # Older database functions (and rolling deployments where the app is
+    # updated before the migration completes) do not expose this column yet.
+    # Treat that shape as "no overrides" instead of breaking every feature
+    # gate that resolves plan limits.
+    try:
+        routing = row["routing_overrides"]
+    except (KeyError, IndexError):
+        routing = None
     if isinstance(routing, str):
         import json
         routing = json.loads(routing)

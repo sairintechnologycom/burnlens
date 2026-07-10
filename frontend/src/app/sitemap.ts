@@ -14,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/compare/burnlens-vs-litellm`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${BASE}/compare/burnlens-vs-langfuse`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${BASE}/security`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${BASE}/status`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/privacy`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     { url: `${BASE}/terms`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     { url: `${BASE}/refund`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },

@@ -1,7 +1,8 @@
 """Cloud sync client -- pushes anonymised cost data to burnlens.app backend.
 
 Privacy guarantee: prompt content NEVER leaves the machine.
-Only token counts, costs, model names, tags, and system_prompt_hash (SHA-256) are sent.
+Only token counts, costs, model names, opted-in tags, and a keyed prompt
+fingerprint are sent.
 """
 from __future__ import annotations
 
@@ -43,6 +44,26 @@ SYNC_ALLOWED_FIELDS = frozenset({
 def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
     """Strip a record down to only the privacy-allowed fields."""
     return {k: v for k, v in record.items() if k in SYNC_ALLOWED_FIELDS}
+
+
+def _pseudonymize_prompt_hash(value: Any, api_key: str) -> str | None:
+    """Turn the local SHA-256 prompt hash into a workspace-keyed fingerprint.
+
+    A plain hash of a common system prompt can be matched against a dictionary
+    of likely prompts.  Keying the value with the workspace ingest secret keeps
+    duplicate detection stable within a workspace while preventing offline
+    matching by somebody who sees only the cloud database.
+    """
+    if not value:
+        return None
+    import hashlib
+    import hmac
+
+    return hmac.new(
+        api_key.encode("utf-8"),
+        str(value).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 class CloudSync:
@@ -88,11 +109,8 @@ class CloudSync:
     async def push_batch(self, records: list[dict[str, Any]]) -> bool:
         """POST a batch of sanitized records to the cloud ingest endpoint.
 
-        Includes an HMAC-SHA256 signature for integrity validation.
         Returns True on HTTP 200, False on any error.
         """
-        import hmac
-        import hashlib
         import time
 
         if time.monotonic() < self._backoff_until:
@@ -103,16 +121,12 @@ class CloudSync:
             return False
 
         client = self._get_client()
-        sanitized = [_sanitize_record(r) for r in records]
-        
-        # Calculate signature
         api_key = self.cloud_config.api_key or ""
-        json_data = json.dumps(sanitized, sort_keys=True)
-        signature = hmac.new(
-            api_key.encode(),
-            json_data.encode(),
-            hashlib.sha256
-        ).hexdigest()
+        sanitized = [_sanitize_record(r) for r in records]
+        for record in sanitized:
+            record["system_prompt_hash"] = _pseudonymize_prompt_hash(
+                record.get("system_prompt_hash"), api_key
+            )
 
         endpoint = self.cloud_config.endpoint.rstrip("/")
         if not endpoint.endswith("/v1/ingest"):
@@ -123,11 +137,7 @@ class CloudSync:
         try:
             resp = await client.post(
                 url,
-                json={
-                    "api_key": api_key,
-                    "signature": signature,
-                    "records": sanitized
-                },
+                json={"records": sanitized},
                 headers={
                     "Content-Type": "application/json",
                     "X-API-Key": api_key,
@@ -135,7 +145,13 @@ class CloudSync:
             )
 
             if resp.status_code == 200:
-                data = resp.json()
+                # Older/self-hosted ingest deployments may return an empty 200
+                # body. Routing overrides are optional, so successful delivery
+                # must not be retried merely because no JSON document exists.
+                try:
+                    data = resp.json()
+                except (ValueError, json.JSONDecodeError):
+                    data = {}
                 overrides = data.get("routing_overrides")
                 if overrides:
                     self._apply_routing_overrides(overrides)

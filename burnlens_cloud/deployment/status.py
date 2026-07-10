@@ -87,7 +87,7 @@ class StatusChecker:
                 logger.error(f"Failed to record status check for {name}: {e}")
 
     async def get_component_status(
-        self, days: int = 30
+        self, component: str, days: int = 30
     ) -> tuple[str, float]:
         """
         Calculate component status and uptime %.
@@ -102,8 +102,10 @@ class StatusChecker:
                 SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE ok = true) as ok_count
                 FROM status_checks
                 WHERE checked_at > NOW() - INTERVAL '1 day' * $1
+                  AND endpoint = $2
                 """,
                 days,
+                component,
             )
 
             if not result or result[0]["total"] == 0:

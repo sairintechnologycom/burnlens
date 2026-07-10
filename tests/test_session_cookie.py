@@ -9,6 +9,7 @@ router and a small authed probe route, then exercise:
   3. `Authorization: Bearer <jwt>` still works (CLI compatibility).
   4. `POST /auth/logout` emits a Set-Cookie that clears `burnlens_session`.
   5. Missing both transports returns 401.
+  6. An ingest API key cannot be exchanged for a browser session.
 """
 from __future__ import annotations
 
@@ -154,6 +155,14 @@ async def test_probe_without_any_auth_returns_401(app_client):
     async with await app_client() as ac:
         resp = await ac.get("/_probe")
         assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_ingest_api_key_cannot_mint_browser_session(app_client):
+    async with await app_client() as ac:
+        resp = await ac.post("/auth/login", json={"api_key": "bl_live_stolen"})
+        assert resp.status_code == 422
+        assert "burnlens_session" not in (resp.headers.get("set-cookie") or "")
 
 
 @pytest.mark.asyncio

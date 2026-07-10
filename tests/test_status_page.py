@@ -53,7 +53,7 @@ class TestStatusChecker:
 
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
-            mock_client.post.side_effect = asyncio.TimeoutError()
+            mock_client.get.side_effect = asyncio.TimeoutError()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
             ok, latency_ms = await status_checker.check_endpoint("Ingest API", "/v1/ingest")
@@ -90,7 +90,7 @@ class TestStatusChecker:
                 }
             ]
 
-            status, uptime = await status_checker.get_component_status(days=30)
+            status, uptime = await status_checker.get_component_status("Ingest API", days=30)
 
             assert status == "operational"
             assert uptime == 100.0
@@ -106,7 +106,7 @@ class TestStatusChecker:
                 }
             ]
 
-            status, uptime = await status_checker.get_component_status(days=30)
+            status, uptime = await status_checker.get_component_status("Ingest API", days=30)
 
             assert status == "degraded"
             assert 95.0 <= uptime < 99.5
@@ -122,7 +122,7 @@ class TestStatusChecker:
                 }
             ]
 
-            status, uptime = await status_checker.get_component_status(days=30)
+            status, uptime = await status_checker.get_component_status("Ingest API", days=30)
 
             assert status == "down"
             assert uptime == 90.0
@@ -200,6 +200,18 @@ class TestStatusEndpoints:
             assert response.status_code == 200
             assert "text/html" in response.headers["content-type"]
             assert "BurnLens Status" in response.text
+
+    @pytest.mark.asyncio
+    async def test_status_page_monitor_failure_is_503_unknown(self, client):
+        with patch("burnlens_cloud.deployment_api.get_status_checker") as mock_checker_class:
+            mock_checker = AsyncMock()
+            mock_checker.get_component_status.side_effect = RuntimeError("monitor unavailable")
+            mock_checker_class.return_value = mock_checker
+
+            response = await client.get("/status")
+
+            assert response.status_code == 503
+            assert "health is unknown" in response.text.lower()
 
     @pytest.mark.asyncio
     async def test_status_api_json(self, client):

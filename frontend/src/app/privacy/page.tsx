@@ -41,7 +41,7 @@ export default function PrivacyPage() {
             <li>Your LLM prompts or completions</li>
             <li>Your application code or business logic</li>
             <li>Your AI provider API keys (these pass through the local proxy and are never sent to our servers)</li>
-            <li>Any personally identifiable information from your end users</li>
+            <li>PII from request or response bodies</li>
           </ul>
         </section>
 
@@ -64,15 +64,15 @@ export default function PrivacyPage() {
         <section>
           <h2>4. Cloud Sync Data (Sent to Our Servers)</h2>
           <p>
-            When cloud sync is enabled, BurnLens sends anonymised batches every 60 seconds to our
+            When cloud sync is enabled, BurnLens sends pseudonymous metadata batches every 60 seconds to our
             Railway backend at <code>api.burnlens.app</code>. Each record contains:
           </p>
           <ul>
-            <li>Workspace API key (for routing to your org — no personal identity)</li>
+            <li>Workspace API key in the authenticated request header (for routing to your workspace)</li>
             <li>Provider, model, timestamp</li>
             <li>Token counts and cost in USD</li>
-            <li>Tag keys/values you provided</li>
-            <li>System prompt hash (SHA-256, not reversible)</li>
+            <li>Tag values you provided for feature, team, customer, and key label</li>
+            <li>Workspace-keyed HMAC-SHA256 prompt fingerprint</li>
           </ul>
           <p>Prompt content, completion content, and raw request/response bodies are never synced.</p>
         </section>
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
           <ul>
             <li>Email address</li>
             <li>Hashed password (bcrypt)</li>
-            <li>Workspace name and API key</li>
+            <li>Workspace name, API-key hashes, and key suffixes used for identification</li>
             <li>Paddle customer ID (for billing)</li>
             <li>Plan and subscription status</li>
           </ul>
@@ -94,8 +94,8 @@ export default function PrivacyPage() {
         <section>
           <h2>6. Payment Data</h2>
           <p>
-            Payments are processed by <strong>Stripe</strong>. We do not store credit card numbers
-            or full payment details. Stripe shares only a customer ID and subscription status with us.
+            Payments are processed by <strong>Paddle</strong>. We do not store credit card numbers
+            or full payment details. Paddle shares billing identifiers, transaction details, and subscription status with us.
             Sairin Technology (<a href="https://sairintechnology.com" target="_blank" rel="noopener noreferrer">sairintechnology.com</a>) appears
             as the merchant on your statement.
           </p>
@@ -104,13 +104,22 @@ export default function PrivacyPage() {
         <section>
           <h2>7. Cookies &amp; Tracking</h2>
           <p>
-            The cloud dashboard uses session cookies for authentication only. We do not use
-            third-party advertising trackers, analytics pixels, or fingerprinting.
+            The cloud dashboard uses session cookies for authentication and Plausible for
+            privacy-focused product analytics. We do not use third-party advertising trackers or fingerprinting.
           </p>
         </section>
 
         <section>
-          <h2>8. Data Retention</h2>
+          <h2>8. Service Providers</h2>
+          <p>
+            We use Vercel for the website, Railway for hosted application infrastructure,
+            Paddle for billing, SendGrid for transactional email, and Plausible for product analytics.
+            These providers process only the data required to deliver their service.
+          </p>
+        </section>
+
+        <section>
+          <h2>9. Data Retention</h2>
           <ul>
             <li><strong>Free plan:</strong> 7 days of cloud sync history</li>
             <li><strong>Cloud plan:</strong> 90 days</li>
@@ -121,7 +130,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2>9. Your Rights</h2>
+          <h2>10. Your Rights</h2>
           <p>You may at any time:</p>
           <ul>
             <li>Request a copy of your stored data</li>
@@ -132,7 +141,7 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2>10. Contact</h2>
+          <h2>11. Contact</h2>
           <p>
             Privacy questions:{" "}
             <a href="mailto:contact@sairintechnology.com">contact@sairintechnology.com</a>.
