@@ -26,9 +26,7 @@ function SettingsContent() {
     refresh: refreshBilling,
     setBilling: applyBilling,
   } = useBilling();
-  const [copied, setCopied] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     document.title = "Settings | BurnLens";
@@ -49,31 +47,6 @@ function SettingsContent() {
       window.history.replaceState({}, "", next);
     }
   }, [refreshBilling]);
-
-  const handleCopy = () => {
-    if (!session) return;
-    navigator.clipboard.writeText(session.apiKey);
-    setCopied(true);
-    showToast("API key copied", "success");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleRegenerate = async () => {
-    if (!session) return;
-    if (!confirm("Regenerate your API key? The old key will stop working immediately.")) return;
-    setRegenerating(true);
-    try {
-      const data = await apiFetch("/api/v1/orgs/regenerate-key", session.token, { method: "POST" });
-      localStorage.setItem("burnlens_api_key", data.api_key);
-      showToast("API key regenerated", "success");
-      window.location.reload();
-    } catch (err: any) {
-      if (err instanceof AuthError) logout();
-      else showToast("Failed: " + err.message, "error");
-    } finally {
-      setRegenerating(false);
-    }
-  };
 
   const handleSync = async () => {
     if (!session) return;
@@ -129,10 +102,6 @@ function SettingsContent() {
     }
   };
 
-  const maskedKey = session?.apiKey
-    ? `${session.apiKey.slice(0, 12)}${"•".repeat(8)}`
-    : "—";
-
   return (
     <div>
       {/* Billing — Phase 7 */}
@@ -179,24 +148,10 @@ function SettingsContent() {
             </div>
           </div>
 
-          <div>
-            <label className="form-label">API key</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div className="form-input" style={{ flex: 1, color: "var(--muted)", userSelect: "none" }}>
-                {maskedKey}
-              </div>
-              <button className="btn" onClick={handleCopy}>
-                {copied ? "Copied" : "Copy"}
-              </button>
-              <button
-                className="btn btn-red"
-                onClick={handleRegenerate}
-                disabled={regenerating}
-              >
-                {regenerating ? "..." : "Regenerate"}
-              </button>
-            </div>
-          </div>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>
+            Ingest credentials are managed in the API Keys section above. Full keys are shown only
+            once when created and are never stored in this browser.
+          </p>
         </div>
       </div>
 

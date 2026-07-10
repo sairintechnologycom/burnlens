@@ -66,8 +66,9 @@ export default function TermsPage() {
         <section>
           <h2>5. Data &amp; Privacy</h2>
           <p>
-            The local proxy stores data exclusively on your machine. Cloud sync transmits anonymised
-            metadata only (token counts, cost, model, tags) — never prompt content or completions.
+            The local proxy stores request records on your machine. Optional cloud sync transmits
+            pseudonymous metadata only (token counts, cost, model, opted-in tags, and a keyed prompt
+            fingerprint) — never prompt content or completions.
             See our <Link href="/privacy">Privacy Policy</Link> for full details.
           </p>
         </section>
@@ -75,8 +76,8 @@ export default function TermsPage() {
         <section>
           <h2>6. Subscriptions &amp; Billing</h2>
           <p>
-            Paid plans are billed monthly via Stripe. Sairin Technology (sairintechnology.com) will
-            appear as the merchant on your bank or card statement. Prices are listed in USD.
+            Paid plans are billed monthly via Paddle, our merchant-of-record and payment provider.
+            The descriptor shown on your bank or card statement is determined by Paddle. Prices are listed in USD.
             See our <Link href="/refund">Refund Policy</Link> for cancellation and refund terms.
           </p>
         </section>
@@ -103,7 +104,7 @@ export default function TermsPage() {
         <section>
           <h2>9. Intellectual Property</h2>
           <p>
-            The open-source BurnLens proxy is MIT-licensed. The BurnLens name, logo, and cloud
+            The open-source BurnLens proxy is Apache-2.0 licensed. The BurnLens name, logo, and cloud
             dashboard UI are the intellectual property of Sairin Technology and may not be reproduced
             without written permission.
           </p>

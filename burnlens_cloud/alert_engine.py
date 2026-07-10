@@ -123,6 +123,9 @@ async def _dispatch_slack(
     })
 
     payload = {
+        # Slack uses this as the notification/accessibility fallback when its
+        # rich Block Kit content is unavailable.
+        "text": text,
         "blocks": [
             {
                 "type": "section",
@@ -260,7 +263,12 @@ async def evaluate_workspace(
         threshold_pct: int = rule["threshold_pct"]
         channel: str = rule["channel"]
         slack_webhook_url: str | None = rule["slack_webhook_url"]
-        teams_webhook_url: str | None = rule["teams_webhook_url"]
+        # Remain compatible during rolling migrations from alert rows that
+        # predate Microsoft Teams delivery support.
+        try:
+            teams_webhook_url: str | None = rule["teams_webhook_url"]
+        except (KeyError, IndexError):
+            teams_webhook_url = None
 
         try:
             # Check if threshold is crossed.

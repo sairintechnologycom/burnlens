@@ -52,7 +52,7 @@ Two different mechanisms:
 
 ## Does BurnLens send my prompts to the cloud?
 
-No. The local proxy logs prompts only to your local SQLite at `~/.burnlens/burnlens.db`. Cloud sync sends token counts, costs, model names, tags, and SHA-256 hashes of system prompts — never prompt or response content. See `burnlens/cloud/sync.py` for the exact payload schema.
+No. The normal local request log stores cost metadata and prompt fingerprints, not prompt bodies. Cloud sync sends token counts, costs, model names, opted-in tags, and a workspace-keyed HMAC-SHA256 prompt fingerprint — never prompt or response content. See `burnlens/cloud/sync.py` for the exact payload schema.
 
 ## How do I cancel my plan?
 

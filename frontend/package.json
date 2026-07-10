@@ -19,7 +19,7 @@
     "chart.js": "^4.5.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.7.0",
-    "next": "^16.2.4",
+    "next": "16.2.10",
     "react": "19.2.4",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "19.2.4",
@@ -30,11 +30,14 @@
     "@types/node": "^20.19.39",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "4.1.10",
     "eslint": "^9",
-    "eslint-config-next": "^16.2.4",
+    "eslint-config-next": "16.2.10",
     "tsx": "^4.22.1",
     "typescript": "^5",
-    "vitest": "^2.1.9"
+    "vitest": "4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.16"
   }
 }

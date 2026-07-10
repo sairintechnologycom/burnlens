@@ -1,5 +1,11 @@
 # BurnLens v1.0 — Architecture & Onboarding Specification
 
+> **Historical design document.** This draft predates the current HttpOnly-cookie
+> authentication, scoped ingest credentials, Paddle billing, and current plan
+> entitlements. It is retained for design history and must not be used as an
+> operational or security reference. Use the code, `README.md`, `/security`, and
+> `/privacy` as the current sources of truth.
+
 **Version:** 1.0  
 **Status:** Draft  
 **Replaces:** burnlens_mvp_technical_spec.md (v0.1.1)

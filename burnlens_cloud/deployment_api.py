@@ -11,29 +11,31 @@ from .models import StatusResponse, ComponentStatus
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["status"])
 
+COMPONENTS = ("Ingest API", "Dashboard API", "Cloud Sync")
+
+
+async def _component_rows() -> list[dict]:
+    checker = get_status_checker()
+    rows = []
+    for name in COMPONENTS:
+        status, uptime = await checker.get_component_status(name, days=30)
+        rows.append({"name": name, "status": status, "uptime_30d": uptime})
+    return rows
+
 
 @router.get("/status", response_class=HTMLResponse)
 async def status_page():
     """Public status page (no authentication)."""
     try:
-        # Get status for each component
-        components = []
-        for name in ["Ingest API", "Dashboard API", "Cloud Sync"]:
-            # For now, hardcode to all operational
-            # In production, these would be fetched from database
-            components.append({
-                "name": name,
-                "status": "operational",
-                "uptime_30d": 99.97,
-            })
-
+        components = await _component_rows()
         html = StatusPageRenderer.render(components)
-        return html
+        return HTMLResponse(content=html, status_code=200)
 
     except Exception as e:
         logger.error(f"Failed to render status page: {e}")
-        # Return a simple fallback status page
-        return """
+        # Fail closed: an unavailable monitor must never claim the service is
+        # operational.  A 503 also makes external probes detect the problem.
+        return HTMLResponse(content="""
         <!DOCTYPE html>
         <html>
         <head>
@@ -45,27 +47,23 @@ async def status_page():
         </head>
         <body>
             <h1>🔥 BurnLens Status</h1>
-            <p>Status page unavailable. All services appear to be operational.</p>
+            <p>Status data is currently unavailable. Service health is unknown.</p>
         </body>
         </html>
-        """
+        """, status_code=503)
 
 
 @router.get("/api/status")
 async def status_api() -> StatusResponse:
     """Public status API endpoint (JSON, no authentication)."""
     try:
-        status_checker = get_status_checker()
-
-        # Fetch component status
         components = []
-        for name in ["Ingest API", "Dashboard API", "Cloud Sync"]:
-            status, uptime = await status_checker.get_component_status(days=30)
+        for row in await _component_rows():
             components.append(
                 ComponentStatus(
-                    name=name,
-                    uptime_30d=uptime,
-                    status=status,
+                    name=row["name"],
+                    uptime_30d=row["uptime_30d"],
+                    status=row["status"],
                 )
             )
 

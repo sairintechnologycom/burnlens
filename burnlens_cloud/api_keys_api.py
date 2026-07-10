@@ -133,7 +133,7 @@ async def list_api_keys(
     creator_filter = _viewer_creator_filter(token)
     rows = await execute_query(
         """
-        SELECT id, name, last4, created_at, revoked_at, paused_at, last_used_at
+        SELECT id, name, last4, created_at, revoked_at, last_used_at, paused_at
         FROM api_keys
         WHERE workspace_id = $1
           AND ($2::uuid IS NULL OR created_by_user_id = $2)

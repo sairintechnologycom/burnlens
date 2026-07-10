@@ -4,12 +4,12 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Security & Privacy — what BurnLens sees, what it never sends · BurnLens",
   description:
-    "BurnLens runs on your machine. Prompts, responses, and code never leave. Cloud sync uploads only anonymized token counts, costs, and SHA-256 hashes — never request or response bodies.",
+    "BurnLens runs on your machine. Prompts, responses, and code never leave. Cloud sync uploads selected cost metadata and keyed prompt fingerprints — never request or response bodies.",
   alternates: { canonical: "/security" },
   openGraph: {
     title: "Security & Privacy — what BurnLens sees, what it never sends",
     description:
-      "Local-first by design. Prompts and responses stay on your machine. Cloud sync uploads anonymized counts and costs only — never bodies.",
+      "Local-first by design. Prompts and responses stay on your machine. Cloud sync uploads selected metadata only — never bodies.",
     url: "https://burnlens.app/security",
     siteName: "BurnLens",
     type: "article",
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Security & Privacy — what BurnLens sees, what it never sends",
     description:
-      "Local-first by design. Prompts and responses stay on your machine. Cloud sync uploads anonymized counts and costs only — never bodies.",
+      "Local-first by design. Prompts and responses stay on your machine. Cloud sync uploads selected metadata only — never bodies.",
   },
 };
 
@@ -31,7 +31,7 @@ const faqStructuredData = {
       name: "Does BurnLens see my prompts?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "BurnLens runs locally on your machine and reads the request body to extract the model name and tag headers. Prompts and responses are written only to a local SQLite database at ~/.burnlens/burnlens.db. They never leave your machine. Cloud sync, if you enable it, uploads only anonymized token counts, costs, model names, and a SHA-256 hash of the system prompt — never the prompt text itself.",
+        text: "BurnLens runs locally and reads the request body to proxy and analyze the call. Request and response bodies are not written to the normal request log. Cloud sync uploads selected cost metadata and a workspace-keyed prompt fingerprint, never prompt text.",
       },
     },
     {
@@ -47,7 +47,7 @@ const faqStructuredData = {
       name: "What exactly gets uploaded if I turn on cloud sync?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Per request: timestamp, provider, model, input/output/reasoning/cache token counts, USD cost, duration, HTTP status, optional tag values (feature/team/customer), and a SHA-256 hash of the system prompt for duplicate detection. There is no field in the payload for the prompt body, response body, tool calls, or any user-supplied content.",
+        text: "Per request: timestamp, provider, model, input/output/reasoning/cache token counts, USD cost, duration, HTTP status, optional tag values (feature/team/customer/key label), and a workspace-keyed HMAC-SHA256 prompt fingerprint. There is no field for prompt bodies, response bodies, or tool calls.",
       },
     },
     {
@@ -55,7 +55,7 @@ const faqStructuredData = {
       name: "Is BurnLens open source?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. The proxy, CLI, dashboard, scan readers, and cost engine are Apache-2.0 licensed and live at github.com/sairintechnologycom/burnlens. You can audit the sync payload, run BurnLens entirely offline, or fork it. The cloud backend that receives sync batches is not open source; it is a managed service for the hosted dashboard.",
+        text: "Yes. The proxy, CLI, dashboards, scan readers, cost engine, and cloud backend source are Apache-2.0 licensed at github.com/sairintechnologycom/burnlens. The burnlens.app hosted service is operated by Sairin Technology.",
       },
     },
     {
@@ -78,8 +78,8 @@ const SENT_FIELDS = [
   { field: "cost_usd", purpose: "Already-computed cost (you don't have to trust ours)" },
   { field: "duration_ms", purpose: "Latency rollups" },
   { field: "status_code", purpose: "Error-rate rollups" },
-  { field: "system_prompt_hash (SHA-256)", purpose: "Duplicate-system-prompt detection" },
-  { field: "tag_feature / tag_team / tag_customer", purpose: "Optional rollup dimensions you opted into" },
+  { field: "system_prompt_hash (workspace-keyed HMAC-SHA256)", purpose: "Duplicate-system-prompt detection" },
+  { field: "tag_feature / tag_team / tag_customer / tag_key_label", purpose: "Optional rollup dimensions you opted into" },
 ];
 
 const NEVER_SENT = [
@@ -129,8 +129,8 @@ export default function SecurityPage() {
           </p>
           <p>
             <strong>Prompts and responses never leave your machine.</strong> If you choose to enable
-            cloud sync for a team dashboard, BurnLens uploads only anonymized counts, costs, and
-            hashes — never the bodies of requests or responses.
+            cloud sync for a team dashboard, BurnLens uploads selected cost metadata, opted-in
+            tags, and a keyed prompt fingerprint — never request or response bodies.
           </p>
         </section>
 
@@ -144,8 +144,8 @@ export default function SecurityPage() {
             <li>The full response body returned by the provider (model output, tool calls)</li>
             <li>Your provider API keys — BurnLens passes them through; it does not store them</li>
             <li>
-              SQLite database at <code>~/.burnlens/burnlens.db</code> (rows include token counts,
-              cost, model, tags, and a SHA-256 hash of the system prompt; not the prompt text)
+              SQLite database at <code>~/.burnlens/burnlens.db</code> (the normal request log includes
+              token counts, cost, model, tags, and a SHA-256 system-prompt hash; not prompt text)
             </li>
             <li>
               Any data <code>burnlens scan</code> reads from your local coding-agent log
@@ -236,8 +236,8 @@ export default function SecurityPage() {
             <code>BURNLENS_TAG_TEAM=payments</code>) <em>are</em> uploaded by cloud sync — they are
             the rollup dimensions for the team dashboard. Treat tag values like log labels: don&apos;t
             put PII or secrets in them. The supported tag keys are <code>feature</code>,{" "}
-            <code>team</code>, and <code>customer</code>; everything else stays in the local
-            database but is not forwarded to the cloud.
+            <code>team</code>, <code>customer</code>, and <code>key_label</code>. Treat every tag value
+            as potentially identifiable metadata.
           </p>
         </section>
 
@@ -277,8 +277,8 @@ export default function SecurityPage() {
             >
               GitHub
             </a>
-            . The cloud ingest backend that receives opt-in sync batches is not open source — it is
-            a managed service for the hosted dashboard at <code>burnlens.app</code>.
+            . The cloud backend source is also present in the repository, while the hosted service
+            at <code>burnlens.app</code> is operated by Sairin Technology.
           </p>
         </section>
 
@@ -295,9 +295,9 @@ export default function SecurityPage() {
           <h2>FAQ</h2>
           <p>
             <strong>Does BurnLens see my prompts?</strong> BurnLens reads the request body locally
-            to extract the model name and to forward it to the provider. Prompt content is written
-            only to the local SQLite database. Cloud sync, if enabled, uploads counts and hashes —
-            never prompt text.
+            to extract the model name and to forward it to the provider. Prompt content is not written
+            to the normal request log. Cloud sync, if enabled, uploads selected metadata and a keyed
+            fingerprint — never prompt text.
           </p>
           <p>
             <strong>Can the BurnLens cloud see who my customers are?</strong> Only if you put
@@ -311,8 +311,8 @@ export default function SecurityPage() {
           </p>
           <p>
             <strong>Is BurnLens SOC 2 / HIPAA / ISO 27001 certified?</strong> Not today. The
-            hosted backend follows standard cloud-security practices (encrypted transport,
-            scoped API keys, principle of least privilege). For regulated workloads, run BurnLens
+            hosted backend uses encrypted transport and separate browser and ingest credentials.
+            For regulated workloads, run BurnLens
             self-hosted with cloud sync disabled — that keeps every byte of LLM traffic inside your
             own infrastructure.
           </p>

@@ -10,5 +10,5 @@ python-dotenv==1.0.0
 cryptography==49.0.0
 sendgrid==6.11.0
 python-dateutil==2.9.0
-requests==2.32.0
+requests==2.34.2
 clickhouse-connect==0.7.19

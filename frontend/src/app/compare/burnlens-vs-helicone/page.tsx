@@ -52,7 +52,7 @@ const faqStructuredData = {
       name: "Does BurnLens send my prompts to a third party?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. BurnLens is local-first. Prompts and responses pass through your machine to the AI provider directly. Only anonymized token counts and costs are optionally synced to the cloud dashboard.",
+        text: "No. BurnLens is local-first. Prompts and responses pass through your machine to the AI provider directly. Only selected pseudonymous cost metadata is optionally synced to the cloud dashboard.",
       },
     },
   ],
@@ -111,14 +111,14 @@ export default function CompareHelicone() {
 
           <p><strong>2. Prompts stay on your machine.</strong> Helicone&apos;s default deployment proxies your traffic
           through their cloud. BurnLens runs on <code>localhost:8420</code>. The full request body never leaves your
-          infrastructure; only anonymized usage counts sync to the optional cloud dashboard.</p>
+          infrastructure; only selected pseudonymous usage metadata syncs to the optional cloud dashboard.</p>
 
           <p><strong>3. New providers ship in days, not never.</strong> Adding a provider to BurnLens is one new file
           in <code>burnlens/providers/</code> plus a pricing JSON — Groq, Bedrock, and Azure all shipped this way.
           Helicone&apos;s frozen integration list has not expanded since maintenance mode began.</p>
 
           <p><strong>4. CLI-native workflow.</strong> <code>burnlens top</code> shows live spend in your terminal.
-          <code>burnlens report</code> reconciles against your provider invoice. <code>burnlens analyze</code> finds
+          <code>burnlens report</code> exports records for comparison with provider invoices. <code>burnlens analyze</code> finds
           waste — prompt bloat, duplicate calls, over-spec models. None of this requires a web login.</p>
         </section>
 

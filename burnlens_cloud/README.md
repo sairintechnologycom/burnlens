@@ -1,5 +1,11 @@
 # BurnLens Cloud Backend
 
+> **Notice:** sections below describe an earlier Stripe-based deployment and
+> are retained temporarily for migration history. The current implementation
+> uses Paddle, HttpOnly browser sessions, and `/v1/ingest`. Refer to
+> `burnlens_cloud/billing.py`, `burnlens_cloud/auth.py`, the generated OpenAPI
+> schema, and the root release checklist for current operational behavior.
+
 Cloud aggregation and billing service for BurnLens — enables multi-tenant cost tracking, dashboard access, and Stripe billing integration.
 
 ## Overview

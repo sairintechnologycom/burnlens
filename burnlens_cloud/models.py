@@ -103,10 +103,14 @@ class IngestResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Schema for login request — API key OR email+password."""
-    api_key: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    """Interactive browser login request.
+
+    Ingest API keys are intentionally not accepted here.  They are scoped to
+    ``/v1/ingest`` and must never be exchangeable for an interactive dashboard
+    session.
+    """
+    email: str
+    password: str
 
 
 class LoginResponse(BaseModel):

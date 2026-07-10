@@ -361,7 +361,11 @@ async def _record_usage_and_maybe_notify(
         )
 
 
-@router.post("/v1/ingest", response_model=IngestResponse)
+@router.post(
+    "/v1/ingest",
+    response_model=IngestResponse,
+    response_model_exclude_none=True,
+)
 async def ingest(
     request: IngestRequest,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
@@ -530,8 +534,19 @@ async def ingest(
                 logger.warning(f"Failed to queue OTEL forward: {e}")
                 # Don't fail ingest on OTEL error
 
-        limits = await resolve_limits(workspace_id)
-        overrides = limits.routing_overrides if limits else None
+        # Routing hints are optional response metadata. A temporary limits DB
+        # failure must not turn an already-persisted ingest batch into a 500,
+        # which would encourage clients to retry and duplicate usage records.
+        try:
+            limits = await resolve_limits(workspace_id)
+            overrides = limits.routing_overrides if limits else None
+        except Exception as exc:
+            logger.warning(
+                "ingest.routing_overrides_unavailable workspace=%s err=%s",
+                workspace_id,
+                exc,
+            )
+            overrides = None
 
         return IngestResponse(
             accepted=len(request.records),

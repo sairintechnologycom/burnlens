@@ -24,11 +24,6 @@ const sources: Source[] = [
     baseUrl: "https://github.com/sairintechnologycom/burnlens/blob/main/README.md",
   },
   {
-    absPath: resolve(repoRoot, "docs/ARCHITECTURE.md"),
-    source: "docs/ARCHITECTURE.md",
-    baseUrl: "https://github.com/sairintechnologycom/burnlens/blob/main/docs/ARCHITECTURE.md",
-  },
-  {
     absPath: resolve(repoRoot, "docs/PROVIDERS.md"),
     source: "docs/PROVIDERS.md",
     baseUrl: "https://github.com/sairintechnologycom/burnlens/blob/main/docs/PROVIDERS.md",
