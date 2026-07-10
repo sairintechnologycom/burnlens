@@ -53,12 +53,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    logger.info("Initializing ClickHouse OLAP schema...")
-    try:
-        await init_clickhouse()
-        logger.info("ClickHouse initialized")
-    except Exception as e:
-        logger.error(f"ClickHouse schema initialization failed: {e}")
+    if settings.streaming_enabled:
+        logger.info("Initializing ClickHouse OLAP schema...")
+        try:
+            await init_clickhouse()
+            logger.info("ClickHouse initialized")
+        except Exception as e:
+            logger.error(f"ClickHouse schema initialization failed: {e}")
+    else:
+        logger.info("ClickHouse OLAP plane disabled (STREAMING_ENABLED=false)")
 
     # Start background status checker if enabled
     status_checker_task = None
@@ -100,11 +103,12 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
-    logger.info("Closing ClickHouse connection...")
-    await close_clickhouse()
+    if settings.streaming_enabled:
+        logger.info("Closing ClickHouse connection...")
+        await close_clickhouse()
 
-    logger.info("Closing streaming producer...")
-    await close_streaming_producer()
+        logger.info("Closing streaming producer...")
+        await close_streaming_producer()
 
     logger.info("Closing database...")
     await close_db()
