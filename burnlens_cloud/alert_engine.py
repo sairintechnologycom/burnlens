@@ -17,10 +17,12 @@ import httpx
 
 from .email import send_usage_warning_email
 from .config import settings
+from .action_tokens import create_action_token
 
 log = logging.getLogger(__name__)
 
 _SLACK_VALID_HOST = "hooks.slack.com"
+_TEAMS_VALID_SUBSTRINGS = ["office.com", "microsoft.com"]
 
 
 async def _should_fire(conn: Any, rule_id: str, now: datetime) -> bool:
@@ -67,13 +69,10 @@ async def _dispatch_slack(
     threshold_pct: int,
     current: int,
     limit: int,
+    top_key_id: str | None = None,
 ) -> bool:
     """
-    POST a Slack notification to the configured webhook URL.
-
-    Validates URL prefix before making any HTTP request.
-    Returns True on 2xx, False on any error. Never raises.
-    NOTE: webhook_url is not logged — it is a secret.
+    POST a Slack notification with interactive action buttons (Phase 10).
     """
     parsed = urlparse(webhook_url) if webhook_url else None
     if not parsed or parsed.scheme != "https" or parsed.hostname != _SLACK_VALID_HOST:
@@ -83,18 +82,151 @@ async def _dispatch_slack(
         )
         return False
 
+    base_url = settings.burnlens_cloud_api_url
+
     text = (
         f"BurnLens Alert: Your workspace has used {threshold_pct}% of its monthly "
         f"request quota ({current:,} / {limit:,} requests). "
-        f"Manage at {settings.burnlens_frontend_url}/settings"
     )
+
+    # Generate action tokens (Phase 10)
+    inc_token = await create_action_token("increase_budget", workspace_id)
+    dwn_token = await create_action_token("downgrade_model", workspace_id)
+    
+    actions = [
+        {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Increase Budget (50%)"},
+            "url": f"{base_url}/api/v1/actions/confirm?token={inc_token}",
+            "style": "primary"
+        },
+        {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Downgrade Model"},
+            "url": f"{base_url}/api/v1/actions/confirm?token={dwn_token}"
+        }
+    ]
+
+    if top_key_id:
+        pause_token = await create_action_token("pause_api_key", workspace_id, top_key_id)
+        actions.insert(0, {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Pause Top API Key"},
+            "url": f"{base_url}/api/v1/actions/confirm?token={pause_token}",
+            "style": "danger"
+        })
+
+    actions.append({
+        "type": "button",
+        "text": {"type": "plain_text", "text": "View Dashboard"},
+        "url": f"{base_url}/dashboard"
+    })
+
+    payload = {
+        # Slack uses this as the notification/accessibility fallback when its
+        # rich Block Kit content is unavailable.
+        "text": text,
+        "blocks": [
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f":warning: *{text}*"}
+            },
+            {
+                "type": "actions",
+                "elements": actions
+            }
+        ]
+    }
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(webhook_url, json={"text": text})
+            resp = await client.post(webhook_url, json=payload)
             resp.raise_for_status()
             return True
     except Exception as exc:
         log.warning("alert_engine: Slack dispatch failed for workspace %s: %s", workspace_id, exc)
+        return False
+
+
+async def _dispatch_teams(
+    webhook_url: str,
+    workspace_id: str,
+    threshold_pct: int,
+    current: int,
+    limit: int,
+    top_key_id: str | None = None,
+) -> bool:
+    """
+    POST a Microsoft Teams notification with interactive action buttons (Phase 10).
+    Uses the MessageCard format (Office 365 Connector).
+    """
+    parsed = urlparse(webhook_url) if webhook_url else None
+    is_valid = parsed and parsed.scheme == "https" and any(s in (parsed.hostname or "") for s in _TEAMS_VALID_SUBSTRINGS)
+    if not is_valid:
+        log.warning(
+            "alert_engine: invalid Teams webhook URL for workspace %s",
+            workspace_id,
+        )
+        return False
+
+    base_url = settings.burnlens_cloud_api_url
+
+    text = (
+        f"Your workspace has used **{threshold_pct}%** of its monthly "
+        f"request quota ({current:,} / {limit:,} requests)."
+    )
+
+    # Generate action tokens (Phase 10)
+    inc_token = await create_action_token("increase_budget", workspace_id)
+    dwn_token = await create_action_token("downgrade_model", workspace_id)
+    
+    potential_actions = [
+        {
+            "@type": "OpenUri",
+            "name": "Increase Budget (50%)",
+            "targets": [{"os": "default", "uri": f"{base_url}/api/v1/actions/confirm?token={inc_token}"}]
+        },
+        {
+            "@type": "OpenUri",
+            "name": "Downgrade Model",
+            "targets": [{"os": "default", "uri": f"{base_url}/api/v1/actions/confirm?token={dwn_token}"}]
+        }
+    ]
+
+    if top_key_id:
+        pause_token = await create_action_token("pause_api_key", workspace_id, top_key_id)
+        potential_actions.insert(0, {
+            "@type": "OpenUri",
+            "name": "Pause Top API Key",
+            "targets": [{"os": "default", "uri": f"{base_url}/api/v1/actions/confirm?token={pause_token}"}]
+        })
+
+    potential_actions.append({
+        "@type": "OpenUri",
+        "name": "View Dashboard",
+        "targets": [{"os": "default", "uri": f"{base_url}/dashboard"}]
+    })
+
+    payload = {
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "themeColor": "E81123" if threshold_pct >= 100 else "F8D147",
+        "summary": "BurnLens Usage Alert",
+        "sections": [{
+            "activityTitle": "BurnLens Alert",
+            "activitySubtitle": f"Threshold {threshold_pct}% crossed",
+            "text": text,
+            "potentialAction": potential_actions
+        }]
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json=payload)
+            resp.raise_for_status()
+            return True
+    except Exception as exc:
+        log.warning("alert_engine: Teams dispatch failed for workspace %s: %s", workspace_id, exc)
         return False
 
 
@@ -118,7 +250,7 @@ async def evaluate_workspace(
 
     rules = await conn.fetch(
         """
-        SELECT id, threshold_pct, channel, slack_webhook_url, extra_emails
+        SELECT id, threshold_pct, channel, slack_webhook_url, teams_webhook_url, extra_emails
         FROM alert_rules
         WHERE workspace_id = $1 AND enabled = TRUE
         ORDER BY threshold_pct
@@ -131,11 +263,34 @@ async def evaluate_workspace(
         threshold_pct: int = rule["threshold_pct"]
         channel: str = rule["channel"]
         slack_webhook_url: str | None = rule["slack_webhook_url"]
+        # Remain compatible during rolling migrations from alert rows that
+        # predate Microsoft Teams delivery support.
+        try:
+            teams_webhook_url: str | None = rule["teams_webhook_url"]
+        except (KeyError, IndexError):
+            teams_webhook_url = None
 
         try:
             # Check if threshold is crossed.
             if monthly_cap <= 0 or (current_count / monthly_cap) < (threshold_pct / 100):
                 continue
+
+            # Phase 10: identify top API key for the current cycle to allow 'pause' action
+            top_key_row = await conn.fetchrow(
+                """
+                SELECT ak.id, ak.name, COUNT(rr.id) as req_count
+                FROM api_keys ak
+                JOIN request_records rr ON rr.tags->>'key_label' = ak.name
+                INNER JOIN workspace_usage_cycles wuc ON wuc.workspace_id = ak.workspace_id AND wuc.cycle_end >= NOW()
+                WHERE ak.workspace_id = $1 AND ak.revoked_at IS NULL AND ak.paused_at IS NULL
+                  AND rr.ts >= wuc.cycle_start
+                GROUP BY ak.id, ak.name
+                ORDER BY req_count DESC
+                LIMIT 1
+                """,
+                workspace_id
+            )
+            top_key_id = str(top_key_row["id"]) if top_key_row else None
 
             # 24h dedup check.
             if not await _should_fire(conn, rule_id, now):
@@ -147,6 +302,7 @@ async def evaluate_workspace(
             # Dispatch based on channel.
             email_ok = False
             slack_ok = False
+            teams_ok = False
             recipient = ""
 
             if channel in ("email", "both"):
@@ -167,11 +323,23 @@ async def evaluate_workspace(
                     threshold_pct=threshold_pct,
                     current=current_count,
                     limit=monthly_cap,
+                    top_key_id=top_key_id,
                 )
                 recipient = "slack" if channel == "slack" else recipient
 
+            if channel == "teams" and teams_webhook_url:
+                teams_ok = await _dispatch_teams(
+                    webhook_url=teams_webhook_url,
+                    workspace_id=workspace_id,
+                    threshold_pct=threshold_pct,
+                    current=current_count,
+                    limit=monthly_cap,
+                    top_key_id=top_key_id,
+                )
+                recipient = "teams"
+
             # Record in audit log (even on dispatch failure — status reflects outcome).
-            dispatched_ok = email_ok or slack_ok
+            dispatched_ok = email_ok or slack_ok or teams_ok
             status = "sent" if dispatched_ok else "failed"
             await conn.execute(
                 """

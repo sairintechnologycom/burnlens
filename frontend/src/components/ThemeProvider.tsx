@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 
@@ -23,6 +25,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Respect an explicit user choice from localStorage; otherwise dark.
     const stored = localStorage.getItem("bl-theme") as Theme | null;
     const initial: Theme = stored === "light" || stored === "dark" ? stored : "dark";
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(initial);
     document.documentElement.className = `theme-${initial}`;
   }, []);

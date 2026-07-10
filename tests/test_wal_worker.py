@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from burnlens.storage.wal import WriteAheadLog, SQLitePersistenceWorker
 from burnlens.storage.models import RequestRecord
 from burnlens.storage.database import init_db

@@ -1,9 +1,7 @@
 """End-to-end test fixtures: proxy lifecycle, test DB, and synthetic seed data."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import json
 import random
 import signal
 import socket
@@ -13,7 +11,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import aiosqlite
 import pytest
 import pytest_asyncio
 

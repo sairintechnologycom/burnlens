@@ -17,8 +17,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from burnlens.alerts.email import EmailSender
-    from burnlens.alerts.slack import SlackWebhookAlert
+    pass
 
 from burnlens.alerts.types import DiscoveryAlert, SpendSpikeAlert
 from burnlens.storage.database import mark_alert_fired, was_alert_fired

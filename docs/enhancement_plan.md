@@ -12,12 +12,12 @@ BurnLens is an open-source FinOps proxy for AI spend. This document outlines the
 |     3 | OTel GenAI Compatibility (Done)       | Enterprise observability compatibility                             |
 |     4 | Budget Engine v2 (Done)               | Real-time caps across org/team/app/customer/model                  |
 |     5 | Anomaly & Runaway Agent Detection (Done) | Detect loops, spikes, abusive tenants, bad deploys                 |
-|     6 | Prompt Overhead & Compression Analyzer | Identify redundant prompt/system/RAG/tool-schema waste             |
-|     7 | Semantic Cache MVP                     | Reduce duplicate LLM calls safely                                  |
-|     8 | ClickHouse Analytics Plane             | High-cardinality, scalable analytics backend                       |
-|     9 | Day-to-Day Mission Control Dashboard   | Action cockpit for engineers and finance                           |
+|     6 | Prompt Overhead & Compression Analyzer (Done) | Identify redundant prompt/system/RAG/tool-schema waste             |
+|     7 | Semantic Cache MVP (Done)              | Reduce duplicate LLM calls safely                                  |
+|     8 | ClickHouse Analytics Plane (Done)      | High-cardinality, scalable analytics backend                       |
+|     9 | Day-to-Day Mission Control Dashboard (Done) | Action cockpit for engineers and finance                           |
 |    10 | Alerting + Click-to-Optimize Workflows | Slack/Teams/Jira/SNOW actions                                      |
-|    11 | Optional Dynamic Model Routing         | Cost-aware fallback/degradation                                    |
+|    11 | Optional Dynamic Model Routing (Done)  | Cost-aware fallback/degradation                                    |
 |    12 | Enterprise Hardening                   | RBAC, SSO, audit, retention, compliance posture                    |
 
 ---

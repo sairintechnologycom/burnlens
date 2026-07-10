@@ -13,14 +13,12 @@ Covers the fire-and-forget gap:
 
 import asyncio
 import json
-import time
 
 import httpx
 import pytest
 
 from burnlens.interceptor import handle_request
 from burnlens.proxy.providers import get_provider_for_path
-from burnlens.cost.calculator import TokenUsage
 
 from .conftest import (
     build_openai_stream,
@@ -92,7 +90,7 @@ class TestHandleRequestDispatch:
 
     @pytest.mark.asyncio
     async def test_non_streaming_returns_body_not_stream(self, db_path):
-        body_bytes = build_openai_stream(["Hello"])
+        build_openai_stream(["Hello"])
         # Replace with non-streaming response
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={

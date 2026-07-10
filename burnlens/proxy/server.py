@@ -69,7 +69,7 @@ def get_app(config: BurnLensConfig) -> FastAPI:
             try:
                 from burnlens.cloud.sync import CloudSync
 
-                cloud = CloudSync(config.cloud)
+                cloud = CloudSync(config)
                 app.state.cloud_sync = cloud
                 _cloud_sync_task = asyncio.create_task(
                     cloud.start_sync_loop(config.db_path)
@@ -148,11 +148,9 @@ def get_app(config: BurnLensConfig) -> FastAPI:
     # ------------------------------------------------------------------ proxy
 
     @app.api_route(
-        "/proxy/{path:path}",
-        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+        "/proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
     )
     async def proxy_handler(request: Request, path: str) -> Response:
-        full_path = f"/{path}"
         provider = get_provider_for_path(f"/proxy/{path}")
 
         if provider is None:

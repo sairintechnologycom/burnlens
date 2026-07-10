@@ -26,6 +26,17 @@
         ],
         "title": "Extra Emails"
       },
+      "teams_webhook_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Teams Webhook Url"
+      },
       "threshold_pct": {
         "anyOf": [
           {
@@ -73,6 +84,18 @@
       "name": {
         "title": "Name",
         "type": "string"
+      },
+      "paused_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Paused At"
       },
       "revoked_at": {
         "anyOf": [
@@ -151,6 +174,18 @@
       "name": {
         "title": "Name",
         "type": "string"
+      },
+      "paused_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Paused At"
       },
       "revoked_at": {
         "anyOf": [
@@ -240,7 +275,6 @@
         "type": "string"
       },
       "detail": {
-        "additionalProperties": true,
         "title": "Detail",
         "type": "object"
       },
@@ -409,6 +443,17 @@
           }
         ],
         "title": "Price Cents"
+      },
+      "routing_overrides": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Routing Overrides"
       },
       "scheduled_change_at": {
         "anyOf": [
@@ -696,6 +741,17 @@
       "rejected": {
         "title": "Rejected",
         "type": "integer"
+      },
+      "routing_overrides": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Routing Overrides"
       }
     },
     "required": [
@@ -840,42 +896,21 @@
     "type": "object"
   },
   "LoginRequest": {
-    "description": "Schema for login request \u2014 API key OR email+password.",
+    "description": "Interactive browser login request.\n\nIngest API keys are intentionally not accepted here.  They are scoped to\n``/v1/ingest`` and must never be exchangeable for an interactive dashboard\nsession.",
     "properties": {
-      "api_key": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "title": "Api Key"
-      },
       "email": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "title": "Email"
+        "title": "Email",
+        "type": "string"
       },
       "password": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "title": "Password"
+        "title": "Password",
+        "type": "string"
       }
     },
+    "required": [
+      "email",
+      "password"
+    ],
     "title": "LoginRequest",
     "type": "object"
   },
@@ -1093,7 +1128,6 @@
         "title": "System Prompt Hash"
       },
       "tags": {
-        "additionalProperties": true,
         "title": "Tags",
         "type": "object"
       },
@@ -1183,7 +1217,6 @@
         "title": "System Prompt Hash"
       },
       "tags": {
-        "additionalProperties": true,
         "title": "Tags",
         "type": "object"
       },
@@ -1238,6 +1271,24 @@
       "email"
     ],
     "title": "ResetPasswordRequest",
+    "type": "object"
+  },
+  "RevertActionRequest": {
+    "properties": {
+      "action": {
+        "title": "Action",
+        "type": "string"
+      },
+      "original_activity_id": {
+        "title": "Original Activity Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "original_activity_id",
+      "action"
+    ],
+    "title": "RevertActionRequest",
     "type": "object"
   },
   "SignupRequest": {
@@ -1388,7 +1439,6 @@
       },
       "incidents": {
         "items": {
-          "additionalProperties": true,
           "type": "object"
         },
         "title": "Incidents",
@@ -1400,6 +1450,23 @@
       "incidents"
     ],
     "title": "StatusResponse",
+    "type": "object"
+  },
+  "TeamsWebhookRequest": {
+    "properties": {
+      "webhook_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Webhook Url"
+      }
+    },
+    "title": "TeamsWebhookRequest",
     "type": "object"
   },
   "UsageCurrentCycle": {
@@ -1494,13 +1561,6 @@
   },
   "ValidationError": {
     "properties": {
-      "ctx": {
-        "title": "Context",
-        "type": "object"
-      },
-      "input": {
-        "title": "Input"
-      },
       "loc": {
         "items": {
           "anyOf": [

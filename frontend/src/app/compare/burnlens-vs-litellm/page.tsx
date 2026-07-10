@@ -121,7 +121,7 @@ export default function CompareLiteLLM() {
 
           <p><strong>4. Prompts must not leave your machine.</strong> Compliance teams reject any architecture that
           routes prompts through a third party. BurnLens runs on <code>localhost:8420</code> and stores in local
-          SQLite by default; cloud sync is opt-in and only ships anonymized token counts.</p>
+          SQLite by default; cloud sync is opt-in and only ships selected pseudonymous cost metadata.</p>
         </section>
 
         <section>

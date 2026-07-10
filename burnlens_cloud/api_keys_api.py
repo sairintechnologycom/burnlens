@@ -101,7 +101,7 @@ async def create_api_key(
         """
         INSERT INTO api_keys (workspace_id, key_hash, last4, name, created_by_user_id)
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, name, last4, created_at, revoked_at
+        RETURNING id, name, last4, created_at, revoked_at, paused_at
         """,
         str(token.workspace_id),
         key_hash_value,
@@ -133,7 +133,7 @@ async def list_api_keys(
     creator_filter = _viewer_creator_filter(token)
     rows = await execute_query(
         """
-        SELECT id, name, last4, created_at, revoked_at, last_used_at
+        SELECT id, name, last4, created_at, revoked_at, last_used_at, paused_at
         FROM api_keys
         WHERE workspace_id = $1
           AND ($2::uuid IS NULL OR created_by_user_id = $2)
@@ -170,7 +170,7 @@ async def update_api_key(
           AND workspace_id = $3
           AND revoked_at IS NULL
           AND ($4::uuid IS NULL OR created_by_user_id = $4)
-        RETURNING id, name, last4, created_at, revoked_at, last_used_at
+        RETURNING id, name, last4, created_at, revoked_at, paused_at, last_used_at
         """,
         body.name,
         str(key_id),
@@ -234,3 +234,61 @@ async def revoke_api_key(
 
     logger.info("api_key.revoked workspace=%s id=%s", token.workspace_id, key_id)
     return {"ok": True, "id": str(key_id)}
+
+
+@router.post("/{key_id}/pause", response_model=ApiKey)
+async def pause_api_key(
+    key_id: UUID,
+    token: TokenPayload = Depends(verify_token),
+) -> ApiKey:
+    """Pause an API key: sets paused_at = now()."""
+    creator_filter = _viewer_creator_filter(token)
+    result = await execute_query(
+        """
+        UPDATE api_keys
+        SET paused_at = NOW()
+        WHERE id = $1
+          AND workspace_id = $2
+          AND revoked_at IS NULL
+          AND ($3::uuid IS NULL OR created_by_user_id = $3)
+        RETURNING id, name, last4, created_at, revoked_at, paused_at, last_used_at, key_hash
+        """,
+        str(key_id),
+        str(token.workspace_id),
+        creator_filter,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail={"error": "api_key_not_found"})
+
+    invalidate_api_key_cache(result[0]["key_hash"])
+    logger.info("api_key.paused workspace=%s id=%s", token.workspace_id, key_id)
+    return ApiKey(**result[0])
+
+
+@router.post("/{key_id}/resume", response_model=ApiKey)
+async def resume_api_key(
+    key_id: UUID,
+    token: TokenPayload = Depends(verify_token),
+) -> ApiKey:
+    """Resume a paused API key: sets paused_at = NULL."""
+    creator_filter = _viewer_creator_filter(token)
+    result = await execute_query(
+        """
+        UPDATE api_keys
+        SET paused_at = NULL
+        WHERE id = $1
+          AND workspace_id = $2
+          AND revoked_at IS NULL
+          AND ($3::uuid IS NULL OR created_by_user_id = $3)
+        RETURNING id, name, last4, created_at, revoked_at, paused_at, last_used_at, key_hash
+        """,
+        str(key_id),
+        str(token.workspace_id),
+        creator_filter,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail={"error": "api_key_not_found"})
+
+    # No need to invalidate cache if resuming, as it wasn't in cache while paused (or expired)
+    logger.info("api_key.resumed workspace=%s id=%s", token.workspace_id, key_id)
+    return ApiKey(**result[0])

@@ -1,4 +1,7 @@
+/* eslint-disable react-hooks/purity */
 "use client";
+ 
+
 
 import Link from "next/link";
 import BarChart from "@/components/charts/BarChart";

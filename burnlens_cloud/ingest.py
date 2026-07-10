@@ -361,7 +361,11 @@ async def _record_usage_and_maybe_notify(
         )
 
 
-@router.post("/v1/ingest", response_model=IngestResponse)
+@router.post(
+    "/v1/ingest",
+    response_model=IngestResponse,
+    response_model_exclude_none=True,
+)
 async def ingest(
     request: IngestRequest,
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
@@ -402,7 +406,7 @@ async def ingest(
     # Validate API key and get workspace
     workspace_result = await get_workspace_by_api_key(api_key)
     if not workspace_result:
-        logger.warning(f"Ingest request with invalid API key")
+        logger.warning("Ingest request with invalid API key")
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     workspace_id, plan = workspace_result
@@ -463,6 +467,7 @@ async def ingest(
                     "tag_feature": tags.get("feature", ""),
                     "tag_team": tags.get("team", ""),
                     "tag_customer": tags.get("customer", ""),
+                    "tag_key_label": tags.get("key_label", ""),
                     "system_prompt_hash": r.system_prompt_hash or "",
                 })
             await send_records_to_stream(workspace_id, stream_records)
@@ -529,7 +534,25 @@ async def ingest(
                 logger.warning(f"Failed to queue OTEL forward: {e}")
                 # Don't fail ingest on OTEL error
 
-        return IngestResponse(accepted=len(request.records), rejected=0)
+        # Routing hints are optional response metadata. A temporary limits DB
+        # failure must not turn an already-persisted ingest batch into a 500,
+        # which would encourage clients to retry and duplicate usage records.
+        try:
+            limits = await resolve_limits(workspace_id)
+            overrides = limits.routing_overrides if limits else None
+        except Exception as exc:
+            logger.warning(
+                "ingest.routing_overrides_unavailable workspace=%s err=%s",
+                workspace_id,
+                exc,
+            )
+            overrides = None
+
+        return IngestResponse(
+            accepted=len(request.records),
+            rejected=0,
+            routing_overrides=overrides
+        )
 
     except Exception as e:
         logger.error(f"Failed to ingest records: {e}")

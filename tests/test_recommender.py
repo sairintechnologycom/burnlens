@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
-from burnlens.storage.database import init_db, insert_request
+from burnlens.storage.database import insert_request
 from burnlens.storage.models import RequestRecord
 from burnlens.analysis.recommender import (
-    ModelRecommendation,
     analyse_model_fit,
     _project_cost,
 )

@@ -23,6 +23,7 @@ from .deployment_api import router as deployment_router
 from .stubs_api import router as stubs_router
 from .cron_api import router as cron_router
 from .alerts_api import router as alerts_router
+from .actions_api import router as actions_router
 from .deployment.status import get_status_checker
 from .compliance.purge import run_periodic_purge
 from .compliance.retention_prune import run_periodic_retention_prune
@@ -52,12 +53,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    logger.info("Initializing ClickHouse OLAP schema...")
-    try:
-        await init_clickhouse()
-        logger.info("ClickHouse initialized")
-    except Exception as e:
-        logger.error(f"ClickHouse schema initialization failed: {e}")
+    if settings.streaming_enabled:
+        logger.info("Initializing ClickHouse OLAP schema...")
+        try:
+            await init_clickhouse()
+            logger.info("ClickHouse initialized")
+        except Exception as e:
+            logger.error(f"ClickHouse schema initialization failed: {e}")
+    else:
+        logger.info("ClickHouse OLAP plane disabled (STREAMING_ENABLED=false)")
 
     # Start background status checker if enabled
     status_checker_task = None
@@ -99,11 +103,12 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
-    logger.info("Closing ClickHouse connection...")
-    await close_clickhouse()
+    if settings.streaming_enabled:
+        logger.info("Closing ClickHouse connection...")
+        await close_clickhouse()
 
-    logger.info("Closing streaming producer...")
-    await close_streaming_producer()
+        logger.info("Closing streaming producer...")
+        await close_streaming_producer()
 
     logger.info("Closing database...")
     await close_db()
@@ -139,7 +144,7 @@ def get_app() -> FastAPI:
         allow_origin_regex=_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
         # Shrink browser preflight cache from Starlette's 600s default to 60s so
         # CORS-related deploys don't leave active sessions with stale preflights
         # for ~10 min. See project_billing_summary_cors_regression.md.
@@ -162,6 +167,22 @@ def get_app() -> FastAPI:
 
     # Rate limit auth + ingest paths (per-IP sliding window, in-process).
     app.add_middleware(RateLimitMiddleware, rules=DEFAULT_RULES)
+
+    class CsrfMiddleware(BaseHTTPMiddleware):
+        """Simple CSRF protection: require custom header for state-changing requests."""
+        async def dispatch(self, request: Request, call_next):
+            if request.method not in ("GET", "HEAD", "OPTIONS", "TRACE"):
+                # Browsers don't allow custom headers on cross-origin requests
+                # without preflight, so requiring this header blocks CSRF.
+                if not request.headers.get("X-Requested-With"):
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "CSRF protection: X-Requested-With header missing"},
+                    )
+            return await call_next(request)
+
+    app.add_middleware(CsrfMiddleware)
 
     # Global exception handler — Starlette's outermost ServerErrorMiddleware
     # produces a plain-text 500 that bypasses CORSMiddleware on its way back
@@ -212,6 +233,7 @@ def get_app() -> FastAPI:
     app.include_router(api_keys_router)  # /account/api-keys CRUD (Phase 9 GATE-04, repathed in Phase 16 hotfix to avoid Vercel static collision)
     app.include_router(cron_router)     # /cron/evaluate-alerts (Phase 12)
     app.include_router(alerts_router)   # /api/v1/alert-rules (Phase 13)
+    app.include_router(actions_router)  # /api/v1/actions (Phase 10)
 
     return app
 

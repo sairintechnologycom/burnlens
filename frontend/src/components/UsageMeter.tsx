@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 // Phase 10 D-12..D-17: sidebar-footer usage meter.
 // Reads from BillingContext, which polls /billing/summary at 60s
@@ -58,6 +60,7 @@ export default function UsageMeter() {
   const isEmptyCycle =
     current === 0 &&
     !Number.isNaN(cycleStartMs) &&
+      // eslint-disable-next-line react-hooks/purity
     Date.now() - cycleStartMs < ONE_DAY_MS;
 
   const resetDate = formatResetDate(cycle.end);

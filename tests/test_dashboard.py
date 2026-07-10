@@ -1,10 +1,8 @@
 """Tests for dashboard API endpoints."""
 from __future__ import annotations
 
-import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
-from uuid import uuid4
 
 import pytest
 

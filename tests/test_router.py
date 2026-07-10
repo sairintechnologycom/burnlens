@@ -10,9 +10,9 @@ import json
 import pytest
 import aiosqlite
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-from burnlens.proxy.router import decide_route, RouteDecision
+from burnlens.proxy.router import decide_route
 from burnlens.config import (
     BurnLensConfig,
     RoutingConfig,
@@ -273,7 +273,7 @@ def test_routing_stats_api_returns_correct_counts(tmp_path):
     db_path = str(tmp_path / "test.db")
     asyncio.run(init_db(db_path))
 
-    today_str = date.today().isoformat() + "T00:00:00"
+    date.today().isoformat() + "T00:00:00"
 
     def _record(downgraded: bool) -> RequestRecord:
         return RequestRecord(

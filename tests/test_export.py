@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from burnlens.export import CSV_COLUMNS, export_to_csv
-from burnlens.storage.database import get_requests_for_export, init_db, insert_request
+from burnlens.storage.database import get_requests_for_export, insert_request
 from burnlens.storage.models import RequestRecord
 
 

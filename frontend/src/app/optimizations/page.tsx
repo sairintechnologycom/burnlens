@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
+
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
@@ -43,7 +45,7 @@ function OptimizationsContent() {
 
   const handleApply = async (id: string) => {
     try {
-      await apiFetch(`/api/v1/optimizations/${id}/apply`, session!.apiKey, { method: "POST" });
+      await apiFetch(`/api/v1/optimizations/${id}/apply`, session!.token, { method: "POST" });
       setOpts(opts.filter(o => o.id !== id));
       showToast("Applied", "success");
     } catch (err: any) {
@@ -53,7 +55,7 @@ function OptimizationsContent() {
 
   const handleDismiss = async (id: string) => {
     try {
-      await apiFetch(`/api/v1/optimizations/${id}/dismiss`, session!.apiKey, { method: "POST" });
+      await apiFetch(`/api/v1/optimizations/${id}/dismiss`, session!.token, { method: "POST" });
       setOpts(opts.filter(o => o.id !== id));
       showToast("Dismissed", "info");
     } catch (err: any) {

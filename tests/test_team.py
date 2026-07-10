@@ -1,9 +1,8 @@
 """Tests for team management endpoints."""
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -39,7 +38,6 @@ async def test_invite_creates_invitation_record(client):
     expires = datetime.now(timezone.utc) + timedelta(hours=48)
 
     call_count = [0]
-    original_fetchrow = mock_conn.fetchrow
 
     async def _fetchrow_side(*args, **kwargs):
         call_count[0] += 1

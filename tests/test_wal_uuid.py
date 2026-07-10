@@ -1,4 +1,3 @@
-import pytest
 import threading
 from burnlens.storage.models import uuid7
 

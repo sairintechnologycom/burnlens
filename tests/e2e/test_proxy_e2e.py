@@ -16,7 +16,7 @@ import respx
 
 from burnlens.proxy.interceptor import handle_request
 from burnlens.proxy.providers import get_provider_for_path
-from burnlens.proxy.streaming import extract_usage_from_stream, split_sse_events
+from burnlens.proxy.streaming import split_sse_events
 from burnlens.storage.database import init_db
 from burnlens.storage.queries import get_recent_requests
 

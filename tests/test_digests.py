@@ -1,12 +1,10 @@
 """Tests for burnlens.alerts.digests — daily and weekly digest emails."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 from burnlens.alerts.digests import send_daily_digest, send_weekly_digest
 from burnlens.alerts.discovery import DiscoveryAlertEngine

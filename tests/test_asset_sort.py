@@ -8,7 +8,7 @@ import pytest
 
 from burnlens.storage.database import init_db, insert_asset
 from burnlens.storage.models import AiAsset
-from burnlens.storage.queries import get_assets, get_assets_count
+from burnlens.storage.queries import get_assets
 
 
 @pytest.fixture

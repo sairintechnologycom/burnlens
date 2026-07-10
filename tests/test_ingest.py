@@ -1,7 +1,6 @@
 """Tests for ingest endpoint."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
 

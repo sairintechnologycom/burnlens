@@ -33,6 +33,7 @@ interface ApiKeyRow {
   last4: string;
   created_at: string;
   revoked_at?: string | null;
+  paused_at?: string | null;
 }
 
 interface CapInfo {
@@ -176,7 +177,7 @@ export default function ApiKeysCard() {
     if (!session?.token) return;
     setRevokingInFlight(true);
     try {
-      await apiFetch(`/api-keys/${encodeURIComponent(id)}`, session.token, {
+      await apiFetch(`/account/api-keys/${encodeURIComponent(id)}`, session.token, {
         method: "DELETE",
       });
       setRevokingId(null);
@@ -190,6 +191,32 @@ export default function ApiKeysCard() {
       setError("Failed to revoke key. Please try again.");
     } finally {
       setRevokingInFlight(false);
+    }
+  };
+
+  const handlePause = async (id: string) => {
+    if (!session?.token) return;
+    try {
+      await apiFetch(`/account/api-keys/${encodeURIComponent(id)}/pause`, session.token, {
+        method: "POST",
+      });
+      await fetchKeys();
+    } catch (e) {
+      if (e instanceof AuthError) logout();
+      else setError("Failed to pause key.");
+    }
+  };
+
+  const handleResume = async (id: string) => {
+    if (!session?.token) return;
+    try {
+      await apiFetch(`/account/api-keys/${encodeURIComponent(id)}/resume`, session.token, {
+        method: "POST",
+      });
+      await fetchKeys();
+    } catch (e) {
+      if (e instanceof AuthError) logout();
+      else setError("Failed to resume key.");
     }
   };
 
@@ -315,35 +342,56 @@ export default function ApiKeysCard() {
             </thead>
             <tbody>
               {keys.map((k) => (
-                <tr key={k.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <tr key={k.id} style={{ borderTop: "1px solid var(--border)", opacity: k.revoked_at ? 0.55 : 1 }}>
                   <td style={{ padding: "10px 12px" }}>{k.name}</td>
                   <td style={{ padding: "10px 12px" }}>
                     <span className="api-keys-last4">····{k.last4}</span>
                   </td>
                   <td style={{ padding: "10px 12px" }}>{formatDate(k.created_at)}</td>
                   <td style={{ padding: "10px 12px" }}>
-                    {isActive(k) ? (
-                      <span className="api-keys-status-active">Active</span>
-                    ) : (
+                    {k.revoked_at ? (
                       <span className="api-keys-status-revoked">
-                        Revoked {k.revoked_at ? formatDate(k.revoked_at) : ""}
+                        Revoked {formatDate(k.revoked_at)}
                       </span>
+                    ) : k.paused_at ? (
+                      <span style={{ color: "var(--orange)", fontWeight: 500 }}>Paused</span>
+                    ) : (
+                      <span className="api-keys-status-active">Active</span>
                     )}
                   </td>
                   <td style={{ padding: "10px 12px" }}>
-                    {isActive(k) && revokingId !== k.id && (
-                      <button
-                        className="btn btn-red"
-                        onClick={() => {
-                          setRevokingId(k.id);
-                          setRevokeConfirmText("");
-                        }}
-                        type="button"
-                      >
-                        Revoke
-                      </button>
+                    {!k.revoked_at && revokingId !== k.id && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {k.paused_at ? (
+                          <button
+                            className="btn btn-cyan"
+                            onClick={() => handleResume(k.id)}
+                            type="button"
+                          >
+                            Resume
+                          </button>
+                        ) : (
+                          <button
+                            className="btn"
+                            onClick={() => handlePause(k.id)}
+                            type="button"
+                          >
+                            Pause
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-red"
+                          onClick={() => {
+                            setRevokingId(k.id);
+                            setRevokeConfirmText("");
+                          }}
+                          type="button"
+                        >
+                          Revoke
+                        </button>
+                      </div>
                     )}
-                    {isActive(k) && revokingId === k.id && (
+                    {!k.revoked_at && revokingId === k.id && (
                       <div className="api-keys-revoke-form">
                         <input
                           className="form-input api-keys-revoke-input"

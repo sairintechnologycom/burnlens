@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from burnlens.alerts.engine import AlertEngine
     from burnlens.config import ApiKeyBudgetsConfig, BurnLensConfig, CustomerBudgetsConfig
     from burnlens.proxy.router import RouteDecision
+    from burnlens.storage.wal import WriteAheadLog, SQLitePersistenceWorker
 
 logger = logging.getLogger(__name__)
 
@@ -156,28 +157,43 @@ _ENV_TAG_FALLBACKS: tuple[str, ...] = (
 )
 
 
+# Canonical tags allowed for extraction from headers and environment.
+# Restricting this prevents "tag injection" where malicious headers spoof budget/org context.
+_ALLOWED_TAGS = {
+    "team", "feature", "app_id", "env", "repo", "branch", "commit_sha",
+    "workspace_id", "org_id", "trace_id", "customer", "key_label", "service",
+    "dev", "pr"
+}
+
+
 def _extract_tags(headers: dict[str, str]) -> dict[str, str]:
     """Pull X-BurnLens-Tag-* headers into a plain dict.
 
-    For the tag keys in :data:`_ENV_TAG_FALLBACKS`, fall back to
-    ``BURNLENS_TAG_<KEY>`` env vars when the header is absent. Env vars
-    are read per-request (not cached at startup) so multiple concurrent
-    ``burnlens run`` sessions in different shells route correctly.
+    Only tags in :data:`_ALLOWED_TAGS` are extracted. Values are truncated
+    to 100 chars for safety.
     """
     import os
 
     prefix = "x-burnlens-tag-"
-    tags: dict[str, str] = {
-        key[len(prefix):]: value
-        for key, value in headers.items()
-        if key.lower().startswith(prefix)
-    }
-    for tag in _ENV_TAG_FALLBACKS:
+    tags: dict[str, str] = {}
+    
+    # 1. Extract from headers (case-insensitive keys)
+    for key, value in headers.items():
+        k_lower = key.lower()
+        if k_lower.startswith(prefix):
+            tag_name = k_lower[len(prefix):]
+            if tag_name in _ALLOWED_TAGS:
+                # Basic value sanitization: truncate and strip
+                tags[tag_name] = value.strip()[:100]
+
+    # 2. Fall back to environment for missing allowed tags
+    for tag in _ALLOWED_TAGS:
         if tag in tags:
             continue
         env_value = os.environ.get(f"BURNLENS_TAG_{tag.upper()}")
         if env_value:
-            tags[tag] = env_value
+            tags[tag] = env_value.strip()[:100]
+
     return tags
 
 
@@ -448,7 +464,7 @@ async def handle_request(
             import hashlib
             customer_hash = hashlib.sha256(customer.encode()).hexdigest() if customer else None
             
-            cache_manager = SemanticCacheManager(db_path)
+            cache_manager = SemanticCacheManager(db_path, secret_key=config.secret_key)
             
             # Stage 1: Exact Match Check
             cache_hit_res = await cache_manager.lookup_exact(system_hash or "", query_text, customer_hash)
@@ -506,7 +522,7 @@ async def handle_request(
     # --- Budget-aware model downgrade routing (per D-04) ---
     decision: "RouteDecision | None" = None
     if config is not None:
-        from burnlens.proxy.router import decide_route, RouteDecision  # type: ignore[assignment]
+        from burnlens.proxy.router import decide_route  # type: ignore[assignment]
         decision = await decide_route(
             model, tags.get("team"), tags.get("customer"), config, db_path
         )
@@ -1397,7 +1413,7 @@ async def _save_to_cache_bg(
         )
         if embedding:
             from burnlens.cache.manager import SemanticCacheManager
-            cache_manager = SemanticCacheManager(db_path)
+            cache_manager = SemanticCacheManager(db_path, secret_key=config.secret_key)
             await cache_manager.save(
                 system_prompt_hash=system_hash or "",
                 query_text=query_text,
@@ -1411,5 +1427,4 @@ async def _save_to_cache_bg(
             )
     except Exception as exc:
         logger.debug("Background cache save failed (non-fatal): %s", exc)
-
 

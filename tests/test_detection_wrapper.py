@@ -7,12 +7,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-import pytest_asyncio
 
 from burnlens.detection.wrapper import BurnLensTransport, wrap
 
@@ -64,7 +63,7 @@ async def test_burnlens_transport_logs_metadata(tmp_path: Path) -> None:
         new_callable=AsyncMock,
     ) as mock_upsert:
         request = make_request("https://api.openai.com/v1/chat/completions")
-        response = await transport.handle_async_request(request)
+        await transport.handle_async_request(request)
 
         # Allow background task to complete
         await asyncio.sleep(0.05)
@@ -92,7 +91,7 @@ async def test_transport_does_not_read_body(tmp_path: Path) -> None:
         new_callable=AsyncMock,
     ):
         request = make_request()
-        response = await transport.handle_async_request(request)
+        await transport.handle_async_request(request)
         await asyncio.sleep(0.05)
 
         # The transport must not have touched the stream attribute
@@ -211,7 +210,7 @@ async def test_wrap_default_db_path(tmp_path: Path) -> None:
     client = MagicMock()
     client._client = inner_client
 
-    result = wrap(client)
+    wrap(client)
 
     transport = client._client._transport
     assert isinstance(transport, BurnLensTransport)

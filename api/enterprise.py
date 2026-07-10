@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .auth import get_current_workspace, require_role
+from .auth import require_role
 from .crypto import encrypt, decrypt, mask_api_key
 from .models import OtelConfig, OtelConfigResponse, OtelTestResponse
 from .telemetry.forwarder import get_forwarder
