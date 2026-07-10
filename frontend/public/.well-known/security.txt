@@ -1,0 +1,5 @@
+Contact: mailto:security@burnlens.app
+Canonical: https://burnlens.app/.well-known/security.txt
+Policy: https://burnlens.app/security
+Preferred-Languages: en
+Expires: 2027-07-10T00:00:00Z

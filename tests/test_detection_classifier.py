@@ -4,8 +4,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 
-from burnlens.storage.database import init_db, insert_asset
-from burnlens.storage.models import AiAsset, DiscoveryEvent
+from burnlens.storage.database import init_db
 from burnlens.storage.queries import get_assets, get_discovery_events
 
 

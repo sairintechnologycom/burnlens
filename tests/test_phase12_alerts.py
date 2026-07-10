@@ -34,8 +34,7 @@ _ps_sources.dotenv_values = _empty_dotenv_values
 # ---------------------------------------------------------------------------
 
 from burnlens_cloud.alert_engine import (
-    _should_fire, _dispatch_slack, _dispatch_email,
-    evaluate_workspace, evaluate_all_workspaces,
+    _should_fire, _dispatch_slack, evaluate_workspace, evaluate_all_workspaces,
 )
 from burnlens_cloud import config as config_mod
 
@@ -322,3 +321,70 @@ def test_alert_rules_seeding_sql_present():
     assert "CROSS JOIN (VALUES (80), (100)) AS t(threshold_pct)" in src
     assert "WHERE w.plan IN ('cloud', 'teams')" in src
     assert "AND NOT EXISTS" in src, "Idempotent NOT EXISTS guard must be present"
+
+# --- Slack Webhook Settings Tests ---
+
+def _make_settings_app(role="owner"):
+    from fastapi import FastAPI
+    from burnlens_cloud.settings_api import router as settings_router
+    from burnlens_cloud.auth import verify_token
+    from burnlens_cloud.models import TokenPayload
+    from uuid import uuid4
+
+    app = FastAPI()
+    app.include_router(settings_router)
+    
+    async def override_verify_token():
+        return TokenPayload(
+            workspace_id=uuid4(),
+            user_id=uuid4(),
+            role=role,
+            plan="teams",
+            email_verified=True,
+            iat=0,
+            exp=9999999999,
+        )
+    
+    app.dependency_overrides[verify_token] = override_verify_token
+    return app
+
+def test_slack_webhook_valid_url():
+    from fastapi.testclient import TestClient
+    app = _make_settings_app(role="owner")
+    with TestClient(app) as client:
+        with patch("burnlens_cloud.settings_api.execute_insert", new=AsyncMock(return_value="UPDATE 2")) as mock_insert:
+            resp = client.put("/settings/slack-webhook", json={"webhook_url": "https://hooks.slack.com/services/T00/B00/XXX"})
+            assert resp.status_code == 200
+            assert resp.json() == {"updated_rules": 2}
+            mock_insert.assert_called_once()
+            args = mock_insert.call_args[0]
+            assert "channel = 'both'" in args[0]
+
+def test_slack_webhook_null_clear():
+    from fastapi.testclient import TestClient
+    app = _make_settings_app(role="owner")
+    with TestClient(app) as client:
+        with patch("burnlens_cloud.settings_api.execute_insert", new=AsyncMock(return_value="UPDATE 1")) as mock_insert:
+            resp = client.put("/settings/slack-webhook", json={"webhook_url": None})
+            assert resp.status_code == 200
+            assert resp.json() == {"updated_rules": 1}
+            mock_insert.assert_called_once()
+            args = mock_insert.call_args[0]
+            assert "channel = 'email'" in args[0]
+            assert "slack_webhook_url = NULL" in args[0]
+
+def test_slack_webhook_invalid_url_422():
+    from fastapi.testclient import TestClient
+    app = _make_settings_app(role="owner")
+    with TestClient(app) as client:
+        resp = client.put("/settings/slack-webhook", json={"webhook_url": "https://example.com/webhook"})
+        assert resp.status_code == 422
+        assert "hooks.slack.com" in resp.json()["detail"]
+
+def test_slack_webhook_non_owner_403():
+    from fastapi.testclient import TestClient
+    app = _make_settings_app(role="admin")
+    with TestClient(app) as client:
+        resp = client.put("/settings/slack-webhook", json={"webhook_url": "https://hooks.slack.com/services/T00/B00/XXX"})
+        assert resp.status_code == 403
+

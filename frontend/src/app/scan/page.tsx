@@ -40,7 +40,7 @@ const faqStructuredData = {
       name: "Does scanning send my prompts or code anywhere?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. burnlens scan reads files on your machine and writes cost rows to a local SQLite database at ~/.burnlens/burnlens.db. Nothing leaves your machine unless you opt in to cloud sync, and cloud sync only ever uploads anonymized token counts — never prompt or response content.",
+        text: "No. burnlens scan reads files on your machine and writes cost rows to a local SQLite database at ~/.burnlens/burnlens.db. Nothing leaves your machine unless you opt in to cloud sync, which uploads selected pseudonymous cost metadata — never prompt or response content.",
       },
     },
     {
@@ -200,7 +200,7 @@ burnlens top    # live spend by model, session, repo`}
           <p>
             <strong>Everything stays on your machine.</strong> burnlens scan reads local files and writes to a local
             SQLite database at <code>~/.burnlens/burnlens.db</code>. No prompts, no code, no session content ever
-            leaves your machine. If you enable cloud sync later for team dashboards, only anonymized token counts and
+            leaves your machine. If you enable cloud sync later for team dashboards, only selected pseudonymous cost metadata and
             costs are uploaded — never prompt or response bodies.
           </p>
         </section>

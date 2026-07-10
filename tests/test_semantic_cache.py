@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
-from pathlib import Path
 import httpx
 import pytest
 import respx
@@ -17,7 +15,6 @@ from burnlens.cache.manager import (
     reconstruct_streaming_chunks,
     SemanticCacheManager,
 )
-from burnlens.cache.embeddings import get_embedding
 from burnlens.proxy.interceptor import handle_request
 from burnlens.providers.openai import openai_provider
 from burnlens.storage.database import init_db

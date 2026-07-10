@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, react/no-unescaped-entities */
+
 
 import { useState, useEffect, Suspense, useCallback } from "react";
 import Link from "next/link";
@@ -18,7 +20,7 @@ function isLocalBackend(): boolean {
 
 function storeSession(data: {
   token: string;
-  workspace: { id: string; name: string; plan: string; api_key: string; owner_email?: string };
+  workspace: { id: string; name: string; plan: string; owner_email?: string };
   email_verified?: boolean;
   role?: string;
 }) {
@@ -29,7 +31,6 @@ function storeSession(data: {
   localStorage.setItem("burnlens_workspace_id", data.workspace.id);
   localStorage.setItem("burnlens_workspace_name", data.workspace.name);
   localStorage.setItem("burnlens_plan", data.workspace.plan);
-  localStorage.setItem("burnlens_api_key", data.workspace.api_key);
   // owner_email is needed by BillingStatusBanner to call /auth/resend-verification.
   if (data.workspace.owner_email) {
     localStorage.setItem("burnlens_owner_email", data.workspace.owner_email);
@@ -59,6 +60,8 @@ function SetupContent() {
   const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
 
   // Forgot password flow
   const [showForgotPw, setShowForgotPw] = useState(false);
@@ -145,7 +148,9 @@ function SetupContent() {
       const data = await resp.json();
       trackEvent("Signup Success");
       storeSession(data);
-      router.push(nextPath);
+      // Keep the one-time ingest credential in React memory only.  It must not
+      // be persisted in localStorage/sessionStorage or placed in a URL.
+      setCreatedApiKey(data.api_key || data.workspace?.api_key || null);
     } catch (err: any) {
       trackEvent("Signup Error", { message: String(err?.message || "unknown").slice(0, 120) });
       setError(err.message);
@@ -379,15 +384,49 @@ function SetupContent() {
 
               {error && <div className="sp-error">{error}</div>}
 
-              {mode === "login" ? (
+              {createdApiKey ? (
+                <div role="status" aria-live="polite">
+                  <div className="sp-form-title">Save your ingest key</div>
+                  <div className="sp-form-sub">
+                    This key is shown once. Store it in your password manager, then use it with
+                    <code> burnlens login --api-key ...</code>.
+                  </div>
+                  <div className="sp-input" style={{ overflowWrap: "anywhere", marginBottom: 12 }}>
+                    {createdApiKey}
+                  </div>
+                  <button
+                    type="button"
+                    className="sp-btn-primary"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(createdApiKey);
+                      setKeyCopied(true);
+                    }}
+                  >
+                    {keyCopied ? "Copied" : "Copy key"}
+                  </button>
+                  <button
+                    type="button"
+                    className="sp-btn-primary"
+                    style={{ marginTop: 8, background: "var(--bg3)", color: "var(--s-text)" }}
+                    onClick={() => {
+                      setCreatedApiKey(null);
+                      router.push(nextPath);
+                    }}
+                  >
+                    I saved it — continue
+                  </button>
+                </div>
+              ) : mode === "login" ? (
                 <>
                   <div className="sp-form-title">Welcome back</div>
                   <div className="sp-form-sub">Sign in to access your dashboard.</div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Email</label>
+                    <label className="sp-label" htmlFor="login-email">Email</label>
                     <input
+                      id="login-email"
                       type="email"
+                      autoComplete="email"
                       className="sp-input"
                       placeholder="you@company.com"
                       value={email}
@@ -397,9 +436,11 @@ function SetupContent() {
                   </div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Password</label>
+                    <label className="sp-label" htmlFor="login-password">Password</label>
                     <input
+                      id="login-password"
                       type="password"
+                      autoComplete="current-password"
                       className="sp-input"
                       placeholder="••••••••"
                       value={password}
@@ -430,7 +471,9 @@ function SetupContent() {
                         Enter your email and we'll send a reset link.
                       </p>
                       <input
+                        aria-label="Password reset email"
                         type="email"
+                        autoComplete="email"
                         value={forgotEmail}
                         onChange={e => setForgotEmail(e.target.value)}
                         placeholder="you@example.com"
@@ -458,9 +501,11 @@ function SetupContent() {
                   <div className="sp-form-sub">Start tracking LLM costs in under a minute.</div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Workspace name</label>
+                    <label className="sp-label" htmlFor="register-workspace">Workspace name</label>
                     <input
+                      id="register-workspace"
                       type="text"
+                      autoComplete="organization"
                       required
                       className="sp-input"
                       placeholder="Acme Engineering"
@@ -471,9 +516,11 @@ function SetupContent() {
                   </div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Email</label>
+                    <label className="sp-label" htmlFor="register-email">Email</label>
                     <input
+                      id="register-email"
                       type="email"
+                      autoComplete="email"
                       required
                       className="sp-input"
                       placeholder="you@company.com"
@@ -483,9 +530,11 @@ function SetupContent() {
                   </div>
 
                   <div className="sp-field">
-                    <label className="sp-label">Password</label>
+                    <label className="sp-label" htmlFor="register-password">Password</label>
                     <input
+                      id="register-password"
                       type="password"
+                      autoComplete="new-password"
                       required
                       minLength={8}
                       className="sp-input"

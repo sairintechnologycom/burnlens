@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
@@ -24,9 +26,7 @@ function SettingsContent() {
     refresh: refreshBilling,
     setBilling: applyBilling,
   } = useBilling();
-  const [copied, setCopied] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     document.title = "Settings | BurnLens";
@@ -48,31 +48,6 @@ function SettingsContent() {
     }
   }, [refreshBilling]);
 
-  const handleCopy = () => {
-    if (!session) return;
-    navigator.clipboard.writeText(session.apiKey);
-    setCopied(true);
-    showToast("API key copied", "success");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleRegenerate = async () => {
-    if (!session) return;
-    if (!confirm("Regenerate your API key? The old key will stop working immediately.")) return;
-    setRegenerating(true);
-    try {
-      const data = await apiFetch("/api/v1/orgs/regenerate-key", session.token, { method: "POST" });
-      localStorage.setItem("burnlens_api_key", data.api_key);
-      showToast("API key regenerated", "success");
-      window.location.reload();
-    } catch (err: any) {
-      if (err instanceof AuthError) logout();
-      else showToast("Failed: " + err.message, "error");
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
   const handleSync = async () => {
     if (!session) return;
     setSyncing(true);
@@ -87,9 +62,45 @@ function SettingsContent() {
     }
   };
 
-  const maskedKey = session?.apiKey
-    ? `${session.apiKey.slice(0, 12)}${"•".repeat(8)}`
-    : "—";
+  const handleUpdateTeamsWebhook = async () => {
+    if (!session) return;
+    const url = prompt("Enter Microsoft Teams Incoming Webhook URL (leave empty to clear):");
+    if (url === null) return;
+    
+    setSyncing(true);
+    try {
+      await apiFetch("/settings/teams-webhook", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ webhook_url: url.trim() || null }),
+      });
+      showToast(url.trim() ? "Teams webhook updated" : "Teams webhook cleared", "success");
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else showToast("Failed: " + err.message, "error");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleUpdateSlackWebhook = async () => {
+    if (!session) return;
+    const url = prompt("Enter Slack Incoming Webhook URL (leave empty to clear):");
+    if (url === null) return;
+    
+    setSyncing(true);
+    try {
+      await apiFetch("/settings/slack-webhook", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ webhook_url: url.trim() || null }),
+      });
+      showToast(url.trim() ? "Slack webhook updated" : "Slack webhook cleared", "success");
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else showToast("Failed: " + err.message, "error");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div>
@@ -137,21 +148,30 @@ function SettingsContent() {
             </div>
           </div>
 
-          <div>
-            <label className="form-label">API key</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div className="form-input" style={{ flex: 1, color: "var(--muted)", userSelect: "none" }}>
-                {maskedKey}
-              </div>
-              <button className="btn" onClick={handleCopy}>
-                {copied ? "Copied" : "Copy"}
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: 0 }}>
+            Ingest credentials are managed in the API Keys section above. Full keys are shown only
+            once when created and are never stored in this browser.
+          </p>
+        </div>
+      </div>
+
+      {/* Alert Integrations */}
+      <div className="card" style={{ margin: 16, marginBottom: 0 }}>
+        <div className="section-header">
+          <span className="section-header-title">Alert Integrations</span>
+        </div>
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <label className="form-label">Slack Webhook</label>
+              <button className="btn" style={{ width: "100%" }} onClick={handleUpdateSlackWebhook} disabled={syncing}>
+                Configure Slack
               </button>
-              <button
-                className="btn btn-red"
-                onClick={handleRegenerate}
-                disabled={regenerating}
-              >
-                {regenerating ? "..." : "Regenerate"}
+            </div>
+            <div>
+              <label className="form-label">Teams Webhook</label>
+              <button className="btn" style={{ width: "100%" }} onClick={handleUpdateTeamsWebhook} disabled={syncing}>
+                Configure Teams
               </button>
             </div>
           </div>

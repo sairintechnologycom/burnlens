@@ -20,7 +20,7 @@ import { test, expect } from '@playwright/test';
 //
 // Why these specific keys:
 //   - burnlens_workspace_id: required — useAuth pushes to /setup if absent (L82-85).
-//   - burnlens_workspace_name / _plan / _api_key / _owner_email / _role: cosmetic but
+//   - burnlens_workspace_name / _plan / _owner_email / _role: cosmetic but
 //     mirror what /setup writes on a real successful login.
 //   - burnlens_email_verified='false': drives session.emailVerified === false,
 //     which is half of the `showVerify` predicate in BillingStatusBanner.tsx:29.
@@ -37,7 +37,6 @@ async function seedUnverifiedSession(page: import('@playwright/test').Page) {
     window.localStorage.setItem('burnlens_workspace_id', 'ws-test-fixture');
     window.localStorage.setItem('burnlens_workspace_name', 'Test WS');
     window.localStorage.setItem('burnlens_plan', 'cloud');
-    window.localStorage.setItem('burnlens_api_key', 'bl_live_test');
     window.localStorage.setItem('burnlens_owner_email', 'unverified@example.com');
     window.localStorage.setItem('burnlens_email_verified', 'false');
     window.localStorage.setItem('burnlens_role', 'owner');

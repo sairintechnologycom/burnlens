@@ -60,6 +60,7 @@ class RequestRecordBase(BaseModel):
             ("tag_feature", "feature"),
             ("tag_team", "team"),
             ("tag_customer", "customer"),
+            ("tag_key_label", "key_label"),
         ):
             v = data.get(src)
             if v is not None:
@@ -98,13 +99,18 @@ class IngestResponse(BaseModel):
     """Schema for ingest endpoint response."""
     accepted: int
     rejected: int
+    routing_overrides: Optional[dict] = None
 
 
 class LoginRequest(BaseModel):
-    """Schema for login request — API key OR email+password."""
-    api_key: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    """Interactive browser login request.
+
+    Ingest API keys are intentionally not accepted here.  They are scoped to
+    ``/v1/ingest`` and must never be exchangeable for an interactive dashboard
+    session.
+    """
+    email: str
+    password: str
 
 
 class LoginResponse(BaseModel):
@@ -282,6 +288,7 @@ class BillingSummary(BaseModel):
     usage: Optional[UsageCurrentCycle] = None
     available_plans: list[AvailablePlan] = Field(default_factory=list)
     api_keys: Optional[ApiKeysSummary] = None
+    routing_overrides: Optional[dict] = None
 
 
 # Teams models
@@ -478,6 +485,7 @@ class ResolvedLimits(BaseModel):
     monthly_token_cap: Optional[int] = None
     monthly_spend_cap_usd: Optional[float] = None
     gated_features: dict = Field(default_factory=dict)
+    routing_overrides: Optional[dict] = None
 
 
 # Phase 8: billing self-service models
@@ -556,6 +564,7 @@ class ApiKey(BaseModel):
     last4: str
     created_at: datetime
     revoked_at: Optional[datetime] = None
+    paused_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None  # Phase 16 D-05
 
 

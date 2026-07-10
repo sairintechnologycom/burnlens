@@ -54,6 +54,7 @@ export async function apiFetch(endpoint: string, token: string, options: Request
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
     "Content-Type": "application/json",
+    "X-Requested-With": "XMLHttpRequest",
   };
 
   // C-3: auth is transported via the `burnlens_session` HttpOnly cookie set at

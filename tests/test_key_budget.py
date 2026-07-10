@@ -6,7 +6,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import aiosqlite
 import httpx
 import pytest
 

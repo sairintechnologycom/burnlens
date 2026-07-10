@@ -1,7 +1,8 @@
 """Cloud sync client -- pushes anonymised cost data to burnlens.app backend.
 
 Privacy guarantee: prompt content NEVER leaves the machine.
-Only token counts, costs, model names, tags, and system_prompt_hash (SHA-256) are sent.
+Only token counts, costs, model names, opted-in tags, and a keyed prompt
+fingerprint are sent.
 """
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "tag_feature",
     "tag_team",
     "tag_customer",
+    "tag_key_label",
 })
 
 
@@ -44,11 +46,32 @@ def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in record.items() if k in SYNC_ALLOWED_FIELDS}
 
 
+def _pseudonymize_prompt_hash(value: Any, api_key: str) -> str | None:
+    """Turn the local SHA-256 prompt hash into a workspace-keyed fingerprint.
+
+    A plain hash of a common system prompt can be matched against a dictionary
+    of likely prompts.  Keying the value with the workspace ingest secret keeps
+    duplicate detection stable within a workspace while preventing offline
+    matching by somebody who sees only the cloud database.
+    """
+    if not value:
+        return None
+    import hashlib
+    import hmac
+
+    return hmac.new(
+        api_key.encode("utf-8"),
+        str(value).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 class CloudSync:
     """Background sync client that pushes cost records to the hosted backend."""
 
-    def __init__(self, config: CloudConfig) -> None:
+    def __init__(self, config: "BurnLensConfig") -> None:
         self.config = config
+        self.cloud_config = config.cloud
         self._client: httpx.AsyncClient | None = None
         self._running = False
         self.last_sync_at = None
@@ -70,11 +93,23 @@ class CloudSync:
             await self._client.aclose()
             self._client = None
 
+    def _apply_routing_overrides(self, overrides: dict[str, Any]) -> None:
+        """Update local routing config with values from cloud (Phase 10)."""
+        try:
+            if "budget_downgrade" in overrides:
+                self.config.routing.budget_downgrade = bool(overrides["budget_downgrade"])
+            if "downgrade_threshold_pct" in overrides:
+                self.config.routing.downgrade_threshold_pct = float(
+                    overrides["downgrade_threshold_pct"]
+                )
+            logger.debug("Cloud sync: applied routing overrides %s", overrides)
+        except (ValueError, TypeError) as exc:
+            logger.warning("Cloud sync: failed to apply routing overrides: %s", exc)
+
     async def push_batch(self, records: list[dict[str, Any]]) -> bool:
         """POST a batch of sanitized records to the cloud ingest endpoint.
 
         Returns True on HTTP 200, False on any error.
-        Never raises -- sync failure must not affect proxy.
         """
         import time
 
@@ -86,9 +121,14 @@ class CloudSync:
             return False
 
         client = self._get_client()
+        api_key = self.cloud_config.api_key or ""
         sanitized = [_sanitize_record(r) for r in records]
+        for record in sanitized:
+            record["system_prompt_hash"] = _pseudonymize_prompt_hash(
+                record.get("system_prompt_hash"), api_key
+            )
 
-        endpoint = self.config.endpoint.rstrip("/")
+        endpoint = self.cloud_config.endpoint.rstrip("/")
         if not endpoint.endswith("/v1/ingest"):
             url = endpoint + "/api/v1/ingest"
         else:
@@ -100,11 +140,21 @@ class CloudSync:
                 json={"records": sanitized},
                 headers={
                     "Content-Type": "application/json",
-                    "X-API-Key": self.config.api_key or "",
+                    "X-API-Key": api_key,
                 },
             )
 
             if resp.status_code == 200:
+                # Older/self-hosted ingest deployments may return an empty 200
+                # body. Routing overrides are optional, so successful delivery
+                # must not be retried merely because no JSON document exists.
+                try:
+                    data = resp.json()
+                except (ValueError, json.JSONDecodeError):
+                    data = {}
+                overrides = data.get("routing_overrides")
+                if overrides:
+                    self._apply_routing_overrides(overrides)
                 return True
 
             if resp.status_code == 401:
@@ -144,13 +194,13 @@ class CloudSync:
         self._running = True
         logger.info(
             "Cloud sync started — interval %ds, endpoint %s",
-            self.config.sync_interval_seconds,
-            self.config.endpoint,
+            self.cloud_config.sync_interval_seconds,
+            self.cloud_config.endpoint,
         )
 
         while self._running:
             try:
-                await asyncio.sleep(self.config.sync_interval_seconds)
+                await asyncio.sleep(self.cloud_config.sync_interval_seconds)
                 await self._sync_once(db_path)
             except asyncio.CancelledError:
                 break
@@ -268,4 +318,5 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         tag_feature=tags.get("feature"),
         tag_team=tags.get("team"),
         tag_customer=tags.get("customer"),
+        tag_key_label=tags.get("key_label"),
     )

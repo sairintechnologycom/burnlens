@@ -1,7 +1,6 @@
 import pytest
 import uuid
 from burnlens_cloud.streaming import send_records_to_stream, get_streaming_producer
-from burnlens_cloud.config import settings
 
 @pytest.mark.asyncio
 async def test_streaming_producer_singleton():

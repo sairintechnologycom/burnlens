@@ -1,5 +1,4 @@
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from burnlens.telemetry import otel
 from burnlens.storage.models import RequestRecord
 

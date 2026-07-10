@@ -1,4 +1,6 @@
 "use client";
+ 
+
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -13,17 +15,15 @@ function CheckoutFallback() {
   const router = useRouter();
   const params = useSearchParams();
   const transactionId = params.get("_ptxn");
-  const [status, setStatus] = useState<"loading" | "launching" | "missing" | "failed">("loading");
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"loading" | "launching" | "missing" | "failed">(
+    !transactionId ? "missing" : !PADDLE_TOKEN ? "failed" : "loading"
+  );
+  const [error, setError] = useState<string | null>(
+    !PADDLE_TOKEN && transactionId ? "Paddle client token not configured." : null
+  );
 
   useEffect(() => {
-    if (!transactionId) {
-      setStatus("missing");
-      return;
-    }
-    if (!PADDLE_TOKEN) {
-      setStatus("failed");
-      setError("Paddle client token not configured.");
+    if (!transactionId || !PADDLE_TOKEN) {
       return;
     }
 

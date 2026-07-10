@@ -57,6 +57,7 @@ class RecordIn(BaseModel):
 
 class IngestRequest(BaseModel):
     api_key: str
+    signature: Optional[str] = None
     # Bound list size — a single batch above this is rejected to prevent
     # memory/DB exhaustion from a misbehaving or stolen-key client.
     records: list[RecordIn] = Field(..., max_length=10_000)

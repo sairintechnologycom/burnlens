@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -255,24 +253,26 @@ def test_dashboard_api_returns_valid_json(tmp_path):
     config.db_path = db_path
 
     app = get_app(config)
-    client = TestClient(app)
+    # TestClient only runs the app lifespan (including SQLite schema creation)
+    # when used as a context manager. Keep this test independent of any schema
+    # state left by earlier tests.
+    with TestClient(app) as client:
+        # 1. Health check
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
 
-    # 1. Health check
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+        # 2. Stats API (Summary)
+        resp = client.get("/api/summary")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_cost_usd" in data
+        assert "total_requests" in data
 
-    # 2. Stats API (Summary)
-    resp = client.get("/api/summary")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "total_cost_usd" in data
-    assert "total_requests" in data
-
-    # 3. Timeline API
-    resp = client.get("/api/costs/timeline")
-    assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+        # 3. Timeline API
+        resp = client.get("/api/costs/timeline")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
 
 
 # ---------------------------------------------------------------------------

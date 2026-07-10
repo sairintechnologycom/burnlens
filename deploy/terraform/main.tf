@@ -391,6 +391,10 @@ resource "aws_ecs_task_definition" "burnlens" {
         name      = "JWT_SECRET"
         valueFrom = aws_secretsmanager_secret.jwt_secret.arn
       },
+      {
+        name      = "SECRET_KEY"
+        valueFrom = aws_secretsmanager_secret.proxy_secret.arn
+      },
     ]
     logConfiguration = {
       logDriver = "awslogs"
@@ -436,6 +440,22 @@ resource "random_password" "jwt_secret" {
   special = true
 }
 
+resource "aws_secretsmanager_secret" "proxy_secret" {
+  name = "burnlens/${var.customer_name}/proxy-secret"
+
+  tags = { Name = "burnlens-proxy-secret" }
+}
+
+resource "aws_secretsmanager_secret_version" "proxy_secret" {
+  secret_id     = aws_secretsmanager_secret.proxy_secret.id
+  secret_string = random_password.proxy_secret.result
+}
+
+resource "random_password" "proxy_secret" {
+  length  = 32
+  special = true
+}
+
 # ============================================================================
 # Application Load Balancer
 # ============================================================================
@@ -452,6 +472,69 @@ resource "aws_lb" "burnlens" {
     Name        = "burnlens-${var.customer_name}"
     Environment = "production"
   }
+}
+
+# ============================================================================
+# AWS WAF (Web Application Firewall)
+# ============================================================================
+
+resource "aws_wafv2_web_acl" "burnlens" {
+  name        = "burnlens-${var.customer_name}-waf"
+  description = "WAF for BurnLens ALB"
+  scope       = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 10
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AWSManagedRulesCommonRuleSet"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesKnownBadInputsRuleSet"
+    priority = 20
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AWSManagedRulesKnownBadInputsRuleSet"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "burnlens-waf"
+    sampled_requests_enabled   = true
+  }
+}
+
+resource "aws_wafv2_web_acl_association" "burnlens" {
+  resource_arn = aws_lb.burnlens.arn
+  web_acl_arn  = aws_wafv2_web_acl.burnlens.arn
 }
 
 resource "aws_lb_target_group" "burnlens" {

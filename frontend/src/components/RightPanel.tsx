@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
+
 
 import { useEffect, useState } from "react";
 import { usePeriod } from "@/lib/contexts/PeriodContext";

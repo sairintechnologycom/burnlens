@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 
 import { useEffect, useState, useCallback } from "react";
 import { BellIcon } from "lucide-react";
@@ -14,6 +16,7 @@ interface AlertRule {
   channel: string;
   enabled: boolean;
   has_slack: boolean;
+  has_teams: boolean;
   extra_emails: string[];
   created_at: string;
   updated_at: string;
@@ -209,7 +212,7 @@ function AlertsContent() {
               <tr>
                 <th>Threshold</th>
                 <th>Channel</th>
-                <th>Slack</th>
+                <th>Integrations</th>
                 <th>Recipients</th>
                 <th>Enabled</th>
                 {isOwner && <th></th>}
@@ -243,25 +246,45 @@ function AlertsContent() {
                     <span className="provider-badge">{rule.channel}</span>
                   </td>
 
-                  {/* Slack */}
+                  {/* Integrations (Slack/Teams) */}
                   <td>
-                    {rule.has_slack ? (
-                      <span
-                        style={{
-                          background: "rgba(224,120,64,0.1)",
-                          border: "1px solid rgba(224,120,64,0.3)",
-                          color: "var(--cyan)",
-                          fontFamily: "var(--font-mono)",
-                          fontSize: 12,
-                          borderRadius: 3,
-                          padding: "2px 8px",
-                        }}
-                      >
-                        webhook set
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--dim)" }}>—</span>
-                    )}
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {rule.has_slack && (
+                        <span
+                          title="Slack webhook configured"
+                          style={{
+                            background: "rgba(224,120,64,0.1)",
+                            border: "1px solid rgba(224,120,64,0.3)",
+                            color: "var(--cyan)",
+                            fontFamily: "var(--font-mono)",
+                            fontSize: 10,
+                            borderRadius: 3,
+                            padding: "1px 6px",
+                          }}
+                        >
+                          SLACK
+                        </span>
+                      )}
+                      {rule.has_teams && (
+                        <span
+                          title="Teams webhook configured"
+                          style={{
+                            background: "rgba(0,120,212,0.1)",
+                            border: "1px solid rgba(0,120,212,0.3)",
+                            color: "#0078d4",
+                            fontFamily: "var(--font-mono)",
+                            fontSize: 10,
+                            borderRadius: 3,
+                            padding: "1px 6px",
+                          }}
+                        >
+                          TEAMS
+                        </span>
+                      )}
+                      {!rule.has_slack && !rule.has_teams && (
+                        <span style={{ color: "var(--dim)" }}>—</span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Recipients count */}
@@ -437,19 +460,31 @@ function AlertsContent() {
                 </div>
               )}
 
-              {/* Slack link */}
-              <div style={{ marginTop: 12 }}>
+              {/* Integrations links */}
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>
                 <a
                   href="/settings"
                   style={{
                     fontFamily: "var(--font-mono)",
-                    fontSize: 12,
+                    fontSize: 11,
                     color: "var(--cyan)",
                     textDecoration: "underline",
                   }}
                   onClick={() => setEditingRule(null)}
                 >
                   Manage Slack webhook in Settings →
+                </a>
+                <a
+                  href="/settings"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "#0078d4",
+                    textDecoration: "underline",
+                  }}
+                  onClick={() => setEditingRule(null)}
+                >
+                  Manage Teams webhook in Settings →
                 </a>
               </div>
 

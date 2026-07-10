@@ -12,8 +12,18 @@ from fastapi.responses import RedirectResponse
 import bcrypt as _bcrypt
 import jwt
 from jwt.exceptions import InvalidTokenError
+from pydantic import BaseModel
 
 from .config import settings
+from .database import execute_query, execute_insert
+from .models import (
+    LoginRequest,
+    LoginResponse,
+    SignupRequest,
+    SignupResponse,
+    TokenPayload,
+    WorkspaceResponse,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +112,6 @@ def _safe_redirect(target: Optional[str]) -> Optional[str]:
     ):
         return target
     return None
-from pydantic import BaseModel
-from .database import execute_query, execute_insert
 
 
 # ---------------------------------------------------------------------------
@@ -127,14 +135,6 @@ def _ws_pii_value(row, _plaintext_col: str, encrypted_col: str):
         return None
     from .pii_crypto import decrypt_pii
     return decrypt_pii(val)
-from .models import (
-    LoginRequest,
-    LoginResponse,
-    SignupRequest,
-    SignupResponse,
-    TokenPayload,
-    WorkspaceResponse,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -595,7 +595,10 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
         SELECT w.id AS id, w.plan AS plan, ak.id AS api_key_id
         FROM api_keys ak
         JOIN workspaces w ON w.id = ak.workspace_id
-        WHERE ak.key_hash = $1 AND ak.revoked_at IS NULL AND w.active = true
+        WHERE ak.key_hash = $1 
+          AND ak.revoked_at IS NULL 
+          AND ak.paused_at IS NULL
+          AND w.active = true
         LIMIT 1
         """,
         key_hash,
@@ -626,99 +629,63 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest, response: Response):
     """
-    Login with email+password or API key.
+    Login with email and password.
+
+    Workspace ingest keys are deliberately not accepted here: allowing an
+    ingest credential to mint an owner JWT collapses the service-to-service
+    and interactive-user trust boundaries.
     Returns JWT token and workspace details.
     """
-    if request.email and request.password:
-        # Email + password login — normalize email to lowercase so mixed-case
-        # typing (e.g. iPhone auto-capitalize) matches the stored row.
-        if len(request.password) > 128:
-            raise HTTPException(status_code=400, detail="Password too long")
-        email_norm = request.email.strip().lower()
-        from .pii_crypto import lookup_hash as _lh
-        user_result = await execute_query(
-            "SELECT id, password_hash FROM users WHERE email_hash = $1",
-            _lh(email_norm),
-        )
-        if not user_result or not user_result[0]["password_hash"]:
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+    # Normalize email to lowercase so mixed-case typing (e.g. iPhone
+    # auto-capitalize) matches the stored row.
+    if len(request.password) > 128:
+        raise HTTPException(status_code=400, detail="Password too long")
+    email_norm = request.email.strip().lower()
+    from .pii_crypto import lookup_hash as _lh
+    user_result = await execute_query(
+        "SELECT id, password_hash FROM users WHERE email_hash = $1",
+        _lh(email_norm),
+    )
+    if not user_result or not user_result[0]["password_hash"]:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        user_row = user_result[0]
-        if not _bcrypt.checkpw(
-            request.password.encode("utf-8"),
-            user_row["password_hash"].encode("utf-8"),
-        ):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+    user_row = user_result[0]
+    if not _bcrypt.checkpw(
+        request.password.encode("utf-8"),
+        user_row["password_hash"].encode("utf-8"),
+    ):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        user_id = str(user_row["id"])
+    user_id = str(user_row["id"])
 
-        # Update last_login
-        await execute_insert(
-            "UPDATE users SET last_login = $1 WHERE id = $2",
-            datetime.utcnow(), user_id,
-        )
+    # Update last_login
+    await execute_insert(
+        "UPDATE users SET last_login = $1 WHERE id = $2",
+        datetime.utcnow(), user_id,
+    )
 
-        # Find user's workspace membership. Phase 2c: plaintext owner_email
-        # and plaintext api_key columns were dropped; read the encrypted
-        # owner_email + the api_key_last4 column needed for masked display.
-        member_result = await execute_query(
-            """
-            SELECT wm.workspace_id, wm.role, w.id, w.name,
-                   w.owner_email_encrypted,
-                   w.plan, w.api_key_last4, w.created_at, w.active
-            FROM workspace_members wm
-            JOIN workspaces w ON w.id = wm.workspace_id
-            WHERE wm.user_id = $1 AND wm.active = true AND w.active = true
-            ORDER BY wm.joined_at ASC
-            LIMIT 1
-            """,
-            user_id,
-        )
-        if not member_result:
-            raise HTTPException(status_code=401, detail="No workspace found for this account")
+    # Find user's workspace membership. Phase 2c: plaintext owner_email
+    # and plaintext api_key columns were dropped; read the encrypted
+    # owner_email + the api_key_last4 column needed for masked display.
+    member_result = await execute_query(
+        """
+        SELECT wm.workspace_id, wm.role, w.id, w.name,
+               w.owner_email_encrypted,
+               w.plan, w.api_key_last4, w.created_at, w.active
+        FROM workspace_members wm
+        JOIN workspaces w ON w.id = wm.workspace_id
+        WHERE wm.user_id = $1 AND wm.active = true AND w.active = true
+        ORDER BY wm.joined_at ASC
+        LIMIT 1
+        """,
+        user_id,
+    )
+    if not member_result:
+        raise HTTPException(status_code=401, detail="No workspace found for this account")
 
-        row = member_result[0]
-        workspace_id = str(row["workspace_id"])
-        role = row["role"]
-
-    elif request.api_key:
-        # API key login (legacy / CLI flow) — look up by hash. Phase 2c:
-        # plaintext api_key and owner_email columns are gone; read
-        # api_key_last4 for the masked display and decrypt owner_email
-        # for the auto-migration seed.
-        result = await execute_query(
-            """
-            SELECT id, name, owner_email_encrypted,
-                   plan, api_key_last4, created_at, active
-            FROM workspaces WHERE api_key_hash = $1 AND active = true
-            """,
-            hash_api_key(request.api_key),
-        )
-        if not result:
-            logger.warning("Failed login attempt with invalid API key")
-            raise HTTPException(status_code=401, detail="Invalid API key")
-
-        row = result[0]
-        workspace_id = str(row["id"])
-
-        owner_email_resolved = _ws_pii_value(
-            row, "owner_email", "owner_email_encrypted"
-        )
-        user_id, role = await auto_migrate_user_for_workspace(
-            workspace_id, owner_email_resolved
-        )
-
-        if user_id is None:
-            member_result = await execute_query(
-                "SELECT user_id, role FROM workspace_members WHERE workspace_id = $1 AND active = true LIMIT 1",
-                workspace_id,
-            )
-            if not member_result:
-                raise HTTPException(status_code=500, detail="Failed to get user role")
-            user_id = str(member_result[0]["user_id"])
-            role = member_result[0]["role"]
-    else:
-        raise HTTPException(status_code=400, detail="Provide email+password or api_key")
+    row = member_result[0]
+    workspace_id = str(row["workspace_id"])
+    role = row["role"]
 
     # Determine email_verified by querying the users table explicitly.
     # Neither the email+password branch nor the api_key branch includes

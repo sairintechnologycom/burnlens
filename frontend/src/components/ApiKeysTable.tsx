@@ -11,12 +11,15 @@ export interface ApiKeyRow {
   last4: string;
   created_at: string;
   revoked_at: string | null;
+  paused_at: string | null;
   last_used_at: string | null;
 }
 
 interface ApiKeysTableProps {
   keys: ApiKeyRow[];
   onRequestRevoke: (key: ApiKeyRow) => void;
+  onPause: (key: ApiKeyRow) => Promise<void>;
+  onResume: (key: ApiKeyRow) => Promise<void>;
   onSaveLabel: (id: string, newName: string) => Promise<void>;
   canMutateRow: (key: ApiKeyRow) => boolean;
 }
@@ -43,17 +46,20 @@ function PencilGlyph() {
 export default function ApiKeysTable({
   keys,
   onRequestRevoke,
+  onPause,
+  onResume,
   onSaveLabel,
   canMutateRow,
 }: ApiKeysTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
 
-  // Active first (created_at DESC), revoked at bottom (revoked_at DESC)
+  // Active first (created_at DESC), paused next, revoked at bottom (revoked_at DESC)
   const sorted = [...keys].sort((a, b) => {
-    const aRev = a.revoked_at ? 1 : 0;
-    const bRev = b.revoked_at ? 1 : 0;
+    const aRev = a.revoked_at ? 2 : a.paused_at ? 1 : 0;
+    const bRev = b.revoked_at ? 2 : b.paused_at ? 1 : 0;
     if (aRev !== bRev) return aRev - bRev;
-    if (aRev === 1) {
+    if (aRev === 2) {
       return (b.revoked_at ?? "").localeCompare(a.revoked_at ?? "");
     }
     return (b.created_at ?? "").localeCompare(a.created_at ?? "");
@@ -137,7 +143,7 @@ export default function ApiKeysTable({
                   <span style={{ color: "var(--muted)", fontSize: 12 }}>
                     Revoked {formatDate(k.revoked_at!)}
                   </span>
-                ) : editable ? (
+                ) : (
                   <div
                     style={{
                       display: "flex",
@@ -145,26 +151,63 @@ export default function ApiKeysTable({
                       alignItems: "center",
                     }}
                   >
-                    {editingId !== k.id && (
-                      <button
-                        className="btn"
-                        type="button"
-                        aria-label={`Edit label for ${k.name}`}
-                        onClick={() => setEditingId(k.id)}
-                        style={{ padding: 4, color: "var(--muted)" }}
-                      >
-                        <PencilGlyph />
-                      </button>
+                    {k.paused_at && (
+                      <span style={{ color: "var(--orange)", fontSize: 12, marginRight: 4 }}>
+                        Paused
+                      </span>
                     )}
-                    <button
-                      className="btn btn-red"
-                      onClick={() => onRequestRevoke(k)}
-                      type="button"
-                    >
-                      Revoke
-                    </button>
+                    {editable && (
+                      <>
+                        {editingId !== k.id && (
+                          <button
+                            className="btn"
+                            type="button"
+                            aria-label={`Edit label for ${k.name}`}
+                            onClick={() => setEditingId(k.id)}
+                            style={{ padding: 4, color: "var(--muted)" }}
+                          >
+                            <PencilGlyph />
+                          </button>
+                        )}
+                        {k.paused_at ? (
+                          <button
+                            className="btn btn-cyan"
+                            onClick={async () => {
+                              setActionInFlight(k.id);
+                              await onResume(k);
+                              setActionInFlight(null);
+                            }}
+                            disabled={actionInFlight === k.id}
+                            type="button"
+                          >
+                            Resume
+                          </button>
+                        ) : (
+                          <button
+                            className="btn"
+                            onClick={async () => {
+                              setActionInFlight(k.id);
+                              await onPause(k);
+                              setActionInFlight(null);
+                            }}
+                            disabled={actionInFlight === k.id}
+                            type="button"
+                          >
+                            Pause
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-red"
+                          onClick={() => onRequestRevoke(k)}
+                          disabled={actionInFlight === k.id}
+                          type="button"
+                        >
+                          Revoke
+                        </button>
+                      </>
+                    )}
                   </div>
-                ) : null}
+                )}
               </td>
             </tr>
           );

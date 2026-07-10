@@ -10,12 +10,10 @@ from typing import Any, Optional
 
 import typer
 import uvicorn
-from rich.columns import Columns
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from burnlens.config import load_config
 from burnlens.proxy.providers import build_env_exports
@@ -1209,7 +1207,7 @@ def sync_cmd(
         if status:
             unsynced = await get_unsynced_count(cfg.db_path)
             console.print()
-            console.print(f"[bold]Cloud Sync Status[/bold]")
+            console.print("[bold]Cloud Sync Status[/bold]")
             console.print(f"  Endpoint:  [cyan]{cfg.cloud.endpoint}[/cyan]")
             console.print(f"  Interval:  {cfg.cloud.sync_interval_seconds}s")
             console.print(f"  Un-synced: [yellow]{unsynced}[/yellow] record(s)")

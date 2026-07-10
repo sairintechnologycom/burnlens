@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, Depends, Query, HTTPException
 from dateutil import tz
 

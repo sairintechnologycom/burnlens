@@ -21,8 +21,7 @@ import asyncio
 import inspect
 import os
 import pathlib
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -161,7 +160,6 @@ class TestA2EmailFailOpen:
         and asserting it was called at least once."""
         from burnlens_cloud import config as config_mod
         from burnlens_cloud.email import send_welcome_email
-        import burnlens_cloud.email as email_mod
 
         tasks_created: list = []
 
@@ -215,7 +213,8 @@ class TestA3ModelAndRateLimitSchema:
 
     def test_token_payload_has_email_verified_field_defaulting_true(self):
         from burnlens_cloud.models import TokenPayload
-        import uuid, time
+        import uuid
+        import time
         payload = TokenPayload(
             workspace_id=uuid.uuid4(),
             user_id=uuid.uuid4(),
@@ -230,7 +229,8 @@ class TestA3ModelAndRateLimitSchema:
 
     def test_token_payload_email_verified_can_be_set_false(self):
         from burnlens_cloud.models import TokenPayload
-        import uuid, time
+        import uuid
+        import time
         payload = TokenPayload(
             workspace_id=uuid.uuid4(),
             user_id=uuid.uuid4(),
@@ -324,7 +324,7 @@ class TestA4ResetPasswordRequest:
         """Happy path: known email also returns 200 and fires send_reset_password_email."""
         app = self._build_app()
 
-        from burnlens_cloud.pii_crypto import encrypt_pii, lookup_hash
+        from burnlens_cloud.pii_crypto import encrypt_pii
         recipient = "owner@example.com"
         encrypted_email = encrypt_pii(recipient)
 

@@ -342,12 +342,7 @@ class GoogleBillingParser:
                 payload = resp.json()
 
                 for sku in payload.get("skus", []):
-                    service_id = (
-                        sku.get("category", {}).get("serviceDisplayName", "")
-                    )
-                    sku_service_name = sku.get("serviceProviderName", "")
                     # Check if the SKU belongs to a known AI service
-                    resource_family = sku.get("category", {}).get("resourceFamily", "")
                     service_display = sku.get("category", {}).get("serviceDisplayName", "")
                     description = sku.get("description", "").lower()
 

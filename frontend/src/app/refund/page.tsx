@@ -94,7 +94,7 @@ export default function RefundPage() {
             <li>Email <a href="mailto:contact@sairintechnology.com">contact@sairintechnology.com</a></li>
             <li>Include your account email and the reason for the refund request</li>
             <li>We will respond within 2 business days</li>
-            <li>Approved refunds are processed via Stripe and typically appear within 5–10 business days</li>
+            <li>Approved refunds are processed via Paddle and typically appear within 5–10 business days</li>
           </ol>
         </section>
 

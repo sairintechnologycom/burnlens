@@ -17,8 +17,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    from apscheduler.triggers.cron import CronTrigger
-    from apscheduler.triggers.interval import IntervalTrigger
 
 from burnlens.detection.billing import run_all_parsers
 from burnlens.detection.classifier import classify_new_assets

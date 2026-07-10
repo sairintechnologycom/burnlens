@@ -97,6 +97,7 @@ def _init_clickhouse_sync() -> None:
             tag_feature String,
             tag_team String,
             tag_customer String,
+            tag_key_label String,
             system_prompt_hash FixedString(64),
             received_at DateTime('UTC')
         ) ENGINE = MergeTree()
@@ -123,6 +124,7 @@ def _init_clickhouse_sync() -> None:
             tag_feature String,
             tag_team String,
             tag_customer String,
+            tag_key_label String,
             system_prompt_hash String
         ) ENGINE = Kafka
         SETTINGS kafka_broker_list = '{settings.kafka_bootstrap_servers}',
@@ -152,6 +154,7 @@ def _init_clickhouse_sync() -> None:
             tag_feature,
             tag_team,
             tag_customer,
+            tag_key_label,
             system_prompt_hash,
             now() AS received_at
         FROM request_records_queue;
@@ -167,6 +170,7 @@ def _init_clickhouse_sync() -> None:
             tag_feature String,
             tag_team String,
             tag_customer String,
+            tag_key_label String,
             request_count SimpleAggregateFunction(sum, UInt64),
             input_tokens SimpleAggregateFunction(sum, UInt64),
             output_tokens SimpleAggregateFunction(sum, UInt64),
@@ -178,7 +182,7 @@ def _init_clickhouse_sync() -> None:
             status_code_ok_count SimpleAggregateFunction(sum, UInt64)
         ) ENGINE = SummingMergeTree()
         PARTITION BY toYYYYMM(day)
-        ORDER BY (workspace_id, day, provider, model, tag_feature, tag_team, tag_customer);
+        ORDER BY (workspace_id, day, provider, model, tag_feature, tag_team, tag_customer, tag_key_label);
     """)
 
     # 5. Rollup Materialized View
@@ -192,6 +196,7 @@ def _init_clickhouse_sync() -> None:
             tag_feature,
             tag_team,
             tag_customer,
+            tag_key_label,
             count() AS request_count,
             sum(input_tokens) AS input_tokens,
             sum(output_tokens) AS output_tokens,
@@ -202,7 +207,7 @@ def _init_clickhouse_sync() -> None:
             avg(duration_ms) AS duration_ms,
             sum(status_code = 200 OR status_code = 201) AS status_code_ok_count
         FROM request_records_raw
-        GROUP BY workspace_id, day, provider, model, tag_feature, tag_team, tag_customer;
+        GROUP BY workspace_id, day, provider, model, tag_feature, tag_team, tag_customer, tag_key_label;
     """)
 
     logger.info("ClickHouse tables and materialized views initialized.")

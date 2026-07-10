@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,7 +12,6 @@ import pytest_asyncio
 from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import _reset_dev_identity_cache
 from burnlens.scan.codex import (
-    CodexScanResult,
     CodexSession,
     codex_sessions_dir,
     discover_sessions,

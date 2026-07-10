@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
+
 
 import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
@@ -48,7 +50,7 @@ function ConnectionsContent() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await apiFetch("/api/v1/connections", session!.apiKey, {
+      await apiFetch("/api/v1/connections", session!.token, {
         method: "POST",
         body: JSON.stringify(form),
       });

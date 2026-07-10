@@ -1,7 +1,6 @@
 """End-to-end validation of dashboard /api/waste endpoint for new prompt detectors."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI

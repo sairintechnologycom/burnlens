@@ -3,20 +3,16 @@ from __future__ import annotations
 
 import pytest
 
-import burnlens.providers as providers_pkg
-from burnlens.providers.base import Provider, ProviderConfig
+from burnlens.providers.base import Provider
 from burnlens.providers.registry import (
     get,
     get_by_proxy_path,
     all_providers,
-    register,
-    _PROVIDERS,
 )
 from burnlens.providers.anthropic import anthropic_provider
 from burnlens.providers.google import google_provider
 from burnlens.providers.openai import openai_provider
 from burnlens.providers.downgrade import get_downgrade_model
-from burnlens.cost.calculator import TokenUsage
 
 
 # ---------------------------------------------------------------------------

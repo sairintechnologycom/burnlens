@@ -1,4 +1,6 @@
 "use client";
+/* eslint-disable react-hooks/exhaustive-deps */
+
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -6,10 +8,10 @@ import { useEffect, useRef, useState } from "react";
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
   { prompt: false, text: "Collecting burnlens", delay: 800 },
-  { prompt: false, text: "  Downloading burnlens-1.0.1.tar.gz (42 kB)", delay: 1200 },
-  { prompt: false, text: "Successfully installed burnlens-1.0.1", delay: 1800 },
+  { prompt: false, text: "  Downloading burnlens-1.4.0-py3-none-any.whl", delay: 1200 },
+  { prompt: false, text: "Successfully installed burnlens-1.4.0", delay: 1800 },
   { prompt: true,  text: "burnlens start", delay: 2400 },
-  { prompt: false, text: "BurnLens v1.0.1 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
+  { prompt: false, text: "BurnLens v1.4.0 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
   { prompt: false, text: "Intercepting: OPENAI_BASE_URL, ANTHROPIC_BASE_URL", delay: 3400 },
   { prompt: false, text: "Ready. Waiting for requests...", delay: 3800, highlight: true },
 ];
@@ -280,12 +282,10 @@ export default function LandingPage() {
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                The open-source <span className="acc">FinOps proxy</span> for AI spend
+                See your whole <span className="acc">team&apos;s LLM spend</span> in one dashboard
               </h1>
               <p className="lp-subline">
-                Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google today,
-                with Azure, AWS Bedrock, Groq, Mistral, and Together on the roadmap.
-                Hard-cap budgets before the API call, not after the bill arrives.
+                Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/setup?intent=register" className="lp-hero-btn primary">
@@ -390,7 +390,7 @@ export default function LandingPage() {
                 BurnLens runs a local proxy on <code>:8420</code>. Set{" "}
                 <code>OPENAI_BASE_URL</code> or <code>ANTHROPIC_BASE_URL</code> and
                 your existing SDK code routes through automatically.
-                Less than 20ms overhead. Full streaming passthrough.
+                Designed for low overhead with full streaming passthrough.
               </p>
             </div>
           </div>
@@ -427,7 +427,7 @@ export default function LandingPage() {
               <p>
                 OpenAI, Anthropic, and Google spend in one view today.
                 Azure, AWS Bedrock, Groq, Mistral, and Together are on the v0.2 / v0.3 roadmap.
-                Model breakdowns, waste detection, and budget tracking — all reconciled to the provider bill.
+                Model breakdowns, waste detection, and budget tracking using versioned provider pricing.
               </p>
             </div>
           </div>
@@ -454,11 +454,11 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-usecase-card">
-              <h3>Customer-facing AI: per-customer spend with 429 enforcement</h3>
+              <h3>Customer-facing AI: per-customer spend and controls</h3>
               <p>
                 Tag each request with a customer ID. See which customers drive the
-                most cost. Enforce per-customer monthly spend limits — BurnLens
-                returns 429 before the call is forwarded.
+                most cost. Alert on per-customer budget thresholds and configure
+                cheaper-model routing.
               </p>
             </div>
             <div className="lp-usecase-card">
@@ -470,11 +470,10 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-usecase-card">
-              <h3>Internal tools: per-team budgets that reconcile to the bill</h3>
+              <h3>Internal tools: per-team budgets with exportable cost records</h3>
               <p>
                 Set per-team monthly budgets, get Slack alerts at 80% and 100%,
-                and export monthly reports that reconcile line-by-line to the
-                actual provider invoice.
+                and export monthly records for comparison with provider invoices.
               </p>
             </div>
           </div>
@@ -624,6 +623,8 @@ export default function LandingPage() {
             <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
           <div className="lp-footer-legal">
+            <a href="/status">Status</a>
+            <span>·</span>
             <a href="/security">Security</a>
             <span>·</span>
             <a href="/terms">Terms &amp; Conditions</a>
