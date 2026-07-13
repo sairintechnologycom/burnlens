@@ -127,9 +127,12 @@ def test_request_record_mapping():
 
 def test_pricing_version():
     """Verify get_pricing_version successfully retrieves versions from files."""
-    assert get_pricing_version("openai") == "2025-01-01"
-    assert get_pricing_version("anthropic") == "2026-05-03"
-    assert get_pricing_version("google") == "2025-01-01"
+    for provider in ("openai", "anthropic", "google"):
+        version = get_pricing_version(provider)
+        assert version is not None
+        # ISO date from the pricing file's "updated" field — don't pin the
+        # exact date or every pricing refresh breaks this test
+        datetime.strptime(version, "%Y-%m-%d")
     assert get_pricing_version("nonexistent") is None
 
 
@@ -351,5 +354,5 @@ async def test_proxy_integration_non_streaming(initialized_db):
         assert row["org_id"] == "org-test-999"
         assert row["team"] == "qa"
         assert row["customer_hash"] == hashlib.sha256(b"customer-acme").hexdigest()
-        assert row["pricing_version"] == "2025-01-01"
+        assert row["pricing_version"] == get_pricing_version("openai")
         assert row["event_id"] is not None
