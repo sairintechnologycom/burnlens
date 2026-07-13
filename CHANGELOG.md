@@ -6,6 +6,20 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.4.1] — 2026-07-13
+
+### Changed
+- **Accurate provider claims on PyPI.** The published package description
+  said Azure OpenAI, AWS Bedrock, and Groq appear "in one unified view";
+  those providers are on the roadmap, not shipped. The description now
+  matches the provider support table: OpenAI, Anthropic, and Google are
+  the supported providers today.
+- **Added `CONTRIBUTING.md`** (the README already linked to it) covering
+  dev setup, the fail-open / streaming-passthrough ground rules, and the
+  provider plugin guide.
+- Repo hygiene: internal planning and handoff documents are no longer
+  tracked in the public repository.
+
 ## [OSS `burnlens` v1.4.0] — 2026-05-27
 
 ### Added
