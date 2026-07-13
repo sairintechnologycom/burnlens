@@ -282,10 +282,10 @@ export default function LandingPage() {
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                See your whole <span className="acc">team&apos;s LLM spend</span> in one dashboard
+                Hard-cap your AI spend across every provider — <span className="acc">before the call</span>, not after the bill
               </h1>
               <p className="lp-subline">
-                Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.
+                One local-first proxy for OpenAI, Anthropic, and Google. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/setup?intent=register" className="lp-hero-btn primary">

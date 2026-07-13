@@ -20,8 +20,8 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnlens.app"),
-  title: "BurnLens — See your whole team's LLM spend in one dashboard",
-  description: "Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.",
+  title: "BurnLens — Hard-cap your AI spend across every provider",
+  description: "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cross-provider cost attribution for OpenAI, Anthropic, and Google.",
   alternates: {
     canonical: "/",
   },
@@ -32,16 +32,16 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "BurnLens — See your whole team's LLM spend in one dashboard",
-    description: "Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.",
+    title: "BurnLens — Hard-cap your AI spend across every provider",
+    description: "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cross-provider cost attribution for OpenAI, Anthropic, and Google.",
     url: "https://burnlens.app",
     siteName: "BurnLens",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "BurnLens — See your whole team's LLM spend in one dashboard",
-    description: "Per-feature, per-provider, per-developer. Free for solo use. $29/mo for teams.",
+    title: "BurnLens — Hard-cap your AI spend across every provider",
+    description: "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cross-provider cost attribution for OpenAI, Anthropic, and Google.",
   },
 };
 
