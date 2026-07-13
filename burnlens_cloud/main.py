@@ -168,10 +168,19 @@ def get_app() -> FastAPI:
     # Rate limit auth + ingest paths (per-IP sliding window, in-process).
     app.add_middleware(RateLimitMiddleware, rules=DEFAULT_RULES)
 
+    # Machine-to-machine endpoints authenticate via their own credential
+    # (X-API-Key, Bearer CRON_SECRET, or the Paddle webhook signature) and
+    # are never cookie-authenticated, so CSRF does not apply — and their
+    # non-browser callers don't send X-Requested-With.
+    csrf_exempt_prefixes = ("/v1/ingest", "/cron/", "/billing/webhook")
+
     class CsrfMiddleware(BaseHTTPMiddleware):
         """Simple CSRF protection: require custom header for state-changing requests."""
         async def dispatch(self, request: Request, call_next):
-            if request.method not in ("GET", "HEAD", "OPTIONS", "TRACE"):
+            if (
+                request.method not in ("GET", "HEAD", "OPTIONS", "TRACE")
+                and not request.url.path.startswith(csrf_exempt_prefixes)
+            ):
                 # Browsers don't allow custom headers on cross-origin requests
                 # without preflight, so requiring this header blocks CSRF.
                 if not request.headers.get("X-Requested-With"):

@@ -6,6 +6,31 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.4.2] — 2026-07-13
+
+### Fixed
+- **Cloud sync never reached the backend.** The default (and documented)
+  ingest endpoint was `https://api.burnlens.app/api/v1/ingest` — a path
+  that has never existed on the backend, so every sync batch 404'd
+  (silently, by fail-open design). The default is now the real route
+  (`/v1/ingest`), and `push_batch` rewrites the stale `/api/v1/ingest`
+  suffix from existing user configs.
+- Sync requests now send `X-Requested-With`, so they pass backends
+  running the CSRF middleware without the machine-endpoint exemption.
+
+### Cloud (`burnlens-cloud`, deployed only)
+- **CSRF middleware no longer blocks machine-to-machine endpoints.**
+  The hardening middleware 403'd any POST without `X-Requested-With`,
+  which broke `/v1/ingest` (OSS sync), `/cron/evaluate-alerts` (the
+  hourly GitHub Actions cron failed with 403 for days), and would have
+  broken `/billing/webhook` (Paddle). Those paths carry their own
+  credential and are never cookie-authenticated, so CSRF does not apply.
+- **`api_keys.paused_at` schema drift repaired.** Production tables
+  created before `paused_at` joined the CREATE statement lacked the
+  column, making every API-key lookup raise `UndefinedColumnError` —
+  ingest returned 500 for all keys. Startup migration now adds the
+  column idempotently.
+
 ## [OSS `burnlens` v1.4.1] — 2026-07-13
 
 ### Changed

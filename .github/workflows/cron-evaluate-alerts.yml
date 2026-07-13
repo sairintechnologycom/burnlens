@@ -17,7 +17,8 @@ jobs:
           response=$(curl -s -w "\n%{http_code}" -X POST \
             https://api.burnlens.app/cron/evaluate-alerts \
             -H "Authorization: Bearer $CRON_SECRET" \
-            -H "Content-Type: application/json")
+            -H "Content-Type: application/json" \
+            -H "X-Requested-With: burnlens-cron")
           body=$(echo "$response" | head -n -1)
           status=$(echo "$response" | tail -n 1)
           echo "status=$status body=$body"
