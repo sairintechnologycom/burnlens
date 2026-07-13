@@ -101,7 +101,7 @@ class CloudConfig:
 
     enabled: bool = False
     api_key: str | None = None
-    endpoint: str = "https://api.burnlens.app/api/v1/ingest"
+    endpoint: str = "https://api.burnlens.app/v1/ingest"
     sync_interval_seconds: int = 60
     anonymise_prompts: bool = True
 
@@ -358,7 +358,7 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         cloud = CloudConfig(
             enabled=bool(cloud_data.get("enabled", False)),
             api_key=cloud_data.get("api_key"),
-            endpoint=str(cloud_data.get("endpoint", "https://api.burnlens.app/api/v1/ingest")),
+            endpoint=str(cloud_data.get("endpoint", "https://api.burnlens.app/v1/ingest")),
             sync_interval_seconds=int(cloud_data.get("sync_interval_seconds", 60)),
             anonymise_prompts=bool(cloud_data.get("anonymise_prompts", True)),
         )

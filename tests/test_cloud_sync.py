@@ -147,6 +147,42 @@ async def test_push_batch_sends_correct_payload(config):
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint,expected_url",
+    [
+        # Canonical route, used as-is.
+        ("https://api.burnlens.app/v1/ingest", "https://api.burnlens.app/v1/ingest"),
+        # Pre-1.4.2 default pointed at a path that never existed on the
+        # backend (404); it must be rewritten, not preserved.
+        ("https://api.burnlens.app/api/v1/ingest", "https://api.burnlens.app/v1/ingest"),
+        # Bare host gets the route appended.
+        ("https://api.burnlens.app", "https://api.burnlens.app/v1/ingest"),
+        ("https://selfhosted.example.com/", "https://selfhosted.example.com/v1/ingest"),
+    ],
+)
+async def test_push_batch_resolves_ingest_url(config, endpoint, expected_url):
+    """push_batch normalizes the configured endpoint to the real ingest route."""
+    config.cloud.endpoint = endpoint
+    sync = CloudSync(config)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"accepted": 0, "rejected": 0}
+
+    with patch.object(sync, "_get_client") as mock_client:
+        client = AsyncMock()
+        client.post.return_value = mock_resp
+        mock_client.return_value = client
+
+        assert await sync.push_batch([{"ts": "2025-01-01T00:00:00Z"}]) is True
+
+    assert client.post.call_args.args[0] == expected_url
+    # Sent for backends running the CSRF middleware without the
+    # machine-endpoint exemption.
+    assert client.post.call_args.kwargs["headers"]["X-Requested-With"] == "burnlens-sync"
+
+
 def test_prompt_fingerprint_is_workspace_keyed():
     original = "known-local-sha256"
     first = _pseudonymize_prompt_hash(original, "bl_live_workspace_a")

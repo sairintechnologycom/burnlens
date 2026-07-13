@@ -129,10 +129,15 @@ class CloudSync:
             )
 
         endpoint = self.cloud_config.endpoint.rstrip("/")
-        if not endpoint.endswith("/v1/ingest"):
-            url = endpoint + "/api/v1/ingest"
-        else:
+        if endpoint.endswith("/api/v1/ingest"):
+            # Configs written before 1.4.2 (including the old default)
+            # pointed at /api/v1/ingest — a path that never existed on the
+            # backend (404). Rewrite to the real route.
+            url = endpoint[: -len("/api/v1/ingest")] + "/v1/ingest"
+        elif endpoint.endswith("/v1/ingest"):
             url = endpoint
+        else:
+            url = endpoint + "/v1/ingest"
 
         try:
             resp = await client.post(
@@ -141,6 +146,9 @@ class CloudSync:
                 headers={
                     "Content-Type": "application/json",
                     "X-API-Key": api_key,
+                    # Backends running the CSRF middleware without the
+                    # machine-endpoint exemption 403 requests lacking this.
+                    "X-Requested-With": "burnlens-sync",
                 },
             )
 
