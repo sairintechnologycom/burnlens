@@ -940,6 +940,15 @@ async def init_db():
             ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ
         """)
 
+        # Schema-drift repair (2026-07-13): api_keys tables created before
+        # paused_at joined the CREATE statement above lack the column, which
+        # made every auth.get_workspace_by_api_key lookup raise
+        # UndefinedColumnError (500 on all ingest). Idempotent, same pattern
+        # as last_used_at.
+        await conn.execute("""
+            ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS paused_at TIMESTAMPTZ
+        """)
+
         # Phase 9 (D-12): backfill existing workspaces.api_key_hash rows into api_keys.
         # Set-based INSERT ... SELECT ... WHERE NOT EXISTS so second run inserts zero rows
         # (UNIQUE(key_hash) + the NOT EXISTS guard make this idempotent by construction).
