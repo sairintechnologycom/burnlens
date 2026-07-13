@@ -39,7 +39,7 @@ export default function TermsPage() {
           <p>
             BurnLens provides an open-source LLM cost monitoring proxy and a cloud dashboard service
             at <a href="https://burnlens.app">burnlens.app</a>. The open-source proxy is free to use
-            under the MIT License. Cloud features require a paid subscription.
+            under the Apache License 2.0. Cloud features require a paid subscription.
           </p>
         </section>
 
