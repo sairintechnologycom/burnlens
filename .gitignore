@@ -28,19 +28,26 @@ test-results/
 # Vercel
 .vercel/
 
-# GSD / Planning
-# .planning/ is mostly local working notes (intel, codebase maps, research,
-# session artefacts). backlog/ is the exception — those scoping docs are
-# durable team-visible artefacts, so re-include them explicitly. Everything
-# else at .planning/ root that should be tracked (PROJECT.md, ROADMAP.md,
-# STATE.md, REQUIREMENTS.md, phases/*) was force-added once and stays tracked
-# because .gitignore doesn't affect already-indexed files.
-.planning/*
-!.planning/backlog/
-!.planning/backlog/**
-!.planning/milestones/
-!.planning/milestones/**
+# Internal working files — kept local, never published to the public repo
+.planning/
 graphify-out/
+landing/
+.codex/
+.playwright-cli/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+HANDOFF.md
+PHASE10_HANDOFF.md
+TODOS.md
+TEAMS_IMPLEMENTATION.md
+FRONTEND_INTEGRATION.md
+CONTRIBUTING_AI.md
+docs/internal/
+docs/plans/
+docs/superpowers/
+docs/enhancement_plan.md
+test_providers.py
 
 # Data exports
 burnlens_export.csv
