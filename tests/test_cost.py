@@ -71,7 +71,7 @@ class TestPricingLookup:
     def test_o3_has_reasoning_rate(self):
         p = get_model_pricing("openai", "o3")
         assert p is not None
-        assert p["reasoning_per_million"] == 40.0
+        assert p["reasoning_per_million"] == 8.0
 
     def test_anthropic_opus_exists(self):
         p = get_model_pricing("anthropic", "claude-3-opus-20240229")
@@ -138,10 +138,10 @@ class TestCostCalculation:
         assert abs(cost - 60.0) < 1e-4
 
     def test_reasoning_tokens_o3_dedicated_rate(self):
-        # o3: reasoning=$40/M
+        # o3: reasoning=$8/M
         usage = TokenUsage(reasoning_tokens=1_000_000)
         cost = calculate_cost("openai", "o3", usage)
-        assert abs(cost - 40.0) < 1e-4
+        assert abs(cost - 8.0) < 1e-4
 
     def test_reasoning_tokens_fall_back_to_output_rate(self):
         # gpt-4o has no reasoning_per_million — falls back to output_per_million=$10/M

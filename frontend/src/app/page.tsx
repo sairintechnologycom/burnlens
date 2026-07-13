@@ -310,7 +310,7 @@ export default function LandingPage() {
                 {["OpenAI", "Anthropic", "Google"].map((p) => (
                   <span key={p} className="lp-provider-chip">{p}</span>
                 ))}
-                <span className="lp-provider-more">Azure · AWS Bedrock · Groq · Mistral · Together — coming in v0.2 / v0.3</span>
+                <span className="lp-provider-more">Azure · AWS Bedrock · Groq · Mistral · Together — on the roadmap</span>
               </div>
             </div>
             <div className="lp-hero-right">
@@ -426,7 +426,7 @@ export default function LandingPage() {
               <h3>Every provider, unified.</h3>
               <p>
                 OpenAI, Anthropic, and Google spend in one view today.
-                Azure, AWS Bedrock, Groq, Mistral, and Together are on the v0.2 / v0.3 roadmap.
+                Azure, AWS Bedrock, Groq, Mistral, and Together are on the roadmap.
                 Model breakdowns, waste detection, and budget tracking using versioned provider pricing.
               </p>
             </div>
@@ -519,7 +519,7 @@ export default function LandingPage() {
                 </tr>
                 <tr>
                   <td>Multi-cloud (Azure / AWS / GCP)</td>
-                  <td className="partial">Roadmap (v0.2 / v0.3)</td>
+                  <td className="partial">Roadmap</td>
                   <td className="partial">Partial</td>
                   <td className="yes">✓</td>
                 </tr>

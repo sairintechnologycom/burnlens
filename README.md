@@ -73,12 +73,12 @@ Tags are stripped before the request reaches OpenAI. They never appear in any AP
 |----------|--------|-------|
 | OpenAI | Stable | All models, streaming, reasoning tokens |
 | Anthropic | Stable | All models, streaming, prompt caching tokens |
-| Google | Stable | Gemini 1.5/2.0, requires `patch_google()` |
-| Azure OpenAI | Roadmap v0.3 | |
-| AWS Bedrock | Roadmap v0.3 | |
-| Groq | Roadmap v0.2 | |
-| Together | Roadmap v0.2 | |
-| Mistral | Roadmap v0.2 | |
+| Google | Stable | Gemini 1.5–2.5 (+ 3.x previews), requires `patch_google()` |
+| Azure OpenAI | Roadmap | |
+| AWS Bedrock | Roadmap | |
+| Groq | Roadmap | |
+| Together | Roadmap | |
+| Mistral | Roadmap | |
 
 ---
 
