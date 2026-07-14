@@ -51,6 +51,18 @@ def test_model_from_path_when_body_empty():
     assert model == "my-gpt4o"
 
 
+def test_cost_resolves_via_provider_name():
+    # The interceptor calls calculate_cost(provider.name, ...) — for azure the
+    # name ("azure") differs from the pricing_key ("openai"). Regression guard:
+    # this must NOT silently cost $0.
+    from burnlens.cost.calculator import calculate_cost, TokenUsage
+    from burnlens.cost.pricing import get_model_pricing
+
+    assert get_model_pricing("azure", "gpt-4o") is not None
+    cost = calculate_cost("azure", "gpt-4o", TokenUsage(input_tokens=1_000_000, output_tokens=0))
+    assert cost > 0
+
+
 def test_stream_usage_extraction_inherited():
     provider = get("azure")
     chunk = b'data: {"usage":{"prompt_tokens":100,"completion_tokens":25}}\n\n'

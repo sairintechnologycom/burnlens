@@ -6,6 +6,17 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.6.1] — 2026-07-14
+
+### Fixed
+- **Azure requests no longer cost $0.** Pricing lookups (`get_model_pricing`,
+  `get_pricing_version`) received `provider.name`, but pricing files are keyed
+  by `pricing_key`. For the six providers where those match it worked by
+  accident; Azure (name `azure`, pricing_key `openai`) had no `azure.json`, so
+  every Azure request/record cost $0. The pricing layer now resolves
+  name→pricing_key via the provider registry, with pass-through for scan
+  providers (`cursor`, etc.) that aren't registered.
+
 ## [OSS `burnlens` v1.6.0] — 2026-07-14
 
 ### Added
