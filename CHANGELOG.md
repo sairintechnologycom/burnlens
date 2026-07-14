@@ -6,7 +6,7 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
-## [Unreleased]
+## [OSS `burnlens` v1.5.0] — 2026-07-14
 
 ### Added
 - **Groq, Together, and Mistral proxy providers (beta).** All three speak

@@ -285,7 +285,7 @@ export default function LandingPage() {
                 Hard-cap your AI spend across every provider — <span className="acc">before the call</span>, not after the bill
               </h1>
               <p className="lp-subline">
-                One local-first proxy for OpenAI, Anthropic, and Google. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
+                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, and Together. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/setup?intent=register" className="lp-hero-btn primary">
@@ -307,10 +307,10 @@ export default function LandingPage() {
                 </a>
               </div>
               <div className="lp-provider-strip lp-provider-strip-left">
-                {["OpenAI", "Anthropic", "Google"].map((p) => (
+                {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together"].map((p) => (
                   <span key={p} className="lp-provider-chip">{p}</span>
                 ))}
-                <span className="lp-provider-more">Azure · AWS Bedrock · Groq · Mistral · Together — on the roadmap</span>
+                <span className="lp-provider-more">Azure · AWS Bedrock — on the roadmap</span>
               </div>
             </div>
             <div className="lp-hero-right">
@@ -425,8 +425,8 @@ export default function LandingPage() {
             <div className="lp-ed-content">
               <h3>Every provider, unified.</h3>
               <p>
-                OpenAI, Anthropic, and Google spend in one view today.
-                Azure, AWS Bedrock, Groq, Mistral, and Together are on the roadmap.
+                OpenAI, Anthropic, Google, Groq, Mistral, and Together spend in one view today.
+                Azure and AWS Bedrock are on the roadmap.
                 Model breakdowns, waste detection, and budget tracking using versioned provider pricing.
               </p>
             </div>
