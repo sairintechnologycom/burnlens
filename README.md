@@ -74,11 +74,11 @@ Tags are stripped before the request reaches OpenAI. They never appear in any AP
 | OpenAI | Stable | All models, streaming, reasoning tokens |
 | Anthropic | Stable | All models, streaming, prompt caching tokens |
 | Google | Stable | Gemini 1.5–2.5 (+ 3.x previews), requires `patch_google()` |
+| Groq | Beta | OpenAI-compatible: point `GROQ_BASE_URL` at `/proxy/groq` |
+| Together | Beta | OpenAI-compatible: set client `base_url` to `/proxy/together` |
+| Mistral | Beta | OpenAI-compatible: set client `base_url` to `/proxy/mistral` |
 | Azure OpenAI | Roadmap | |
 | AWS Bedrock | Roadmap | |
-| Groq | Roadmap | |
-| Together | Roadmap | |
-| Mistral | Roadmap | |
 
 ---
 
