@@ -309,9 +309,9 @@ def test_codex_uses_openai_pricing_for_known_model():
 
 
 def test_codex_unknown_model_returns_zero_cost():
-    """Unknown models (e.g. gpt-5.2-codex not in pricing) return 0 — not an error."""
+    """Unknown models (no exact or prefix match in pricing) return 0 — not an error."""
     usage = TokenUsage(input_tokens=10_000, output_tokens=1_000)
-    cost = calculate_cost("openai", "gpt-5.2-codex", usage)
+    cost = calculate_cost("openai", "gpt-99-ultra", usage)
     assert cost == 0.0
 
 
