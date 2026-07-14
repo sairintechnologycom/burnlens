@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.6.0] — 2026-07-14
+
+### Added
+- **Azure OpenAI proxy provider (beta).** Azure serves the OpenAI models
+  over the same chat-completions wire format, so it reuses the OpenAI
+  parser via `/proxy/azure`. Point the `AzureOpenAI` client's
+  `azure_endpoint` at the proxy path (`burnlens start` exports
+  `AZURE_OPENAI_ENDPOINT`) and set `BURNLENS_AZURE_ENDPOINT` to your real
+  resource URL (`https://<resource>.openai.azure.com`). The request's
+  deployment name is used as the model; pricing reuses `openai.json`, so
+  a deployment named after its model (e.g. `gpt-4o`) resolves cost —
+  arbitrarily-named deployments price at $0 until a name→model map lands.
+
 ## [OSS `burnlens` v1.5.0] — 2026-07-14
 
 ### Added
