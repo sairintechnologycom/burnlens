@@ -51,6 +51,28 @@ def test_model_from_path_when_body_empty():
     assert model == "my-gpt4o"
 
 
+def test_gpt35_spelling_aliased_and_prices():
+    from burnlens.cost.calculator import calculate_cost, TokenUsage
+    provider = get("azure")
+    # Azure spells it without dots; extract_model maps to the canonical key,
+    # and the interceptor costs off that extracted value.
+    model = provider.extract_model({"model": "gpt-35-turbo"}, "")
+    assert model == "gpt-3.5-turbo"
+    assert calculate_cost("azure", model, TokenUsage(input_tokens=1_000_000)) > 0
+
+
+def test_arbitrary_deployment_maps_via_env(monkeypatch):
+    from burnlens.cost.calculator import calculate_cost, TokenUsage
+    monkeypatch.setenv("BURNLENS_AZURE_DEPLOYMENTS", "prod-gpt4o=gpt-4o, cheap=gpt-4o-mini")
+    provider = get("azure")
+    assert provider.extract_model({"model": "prod-gpt4o"}, "") == "gpt-4o"
+    assert provider.extract_model({"model": "cheap"}, "") == "gpt-4o-mini"
+    # unmapped deployment falls through to its own name (resolves if == a model)
+    assert provider.extract_model({"model": "gpt-4o"}, "") == "gpt-4o"
+    assert calculate_cost("azure", provider.extract_model({"model": "prod-gpt4o"}, ""),
+                          TokenUsage(input_tokens=1_000_000)) > 0
+
+
 def test_cost_resolves_via_provider_name():
     # The interceptor calls calculate_cost(provider.name, ...) — for azure the
     # name ("azure") differs from the pricing_key ("openai"). Regression guard:

@@ -6,6 +6,15 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.6.2] — 2026-07-14
+
+### Added
+- **Azure OpenAI deployment mapping.** Resolve custom/arbitrary Azure deployment names
+  to OpenAI models for accurate pricing using the `BURNLENS_AZURE_DEPLOYMENTS` environment
+  variable (e.g. `prod-gpt4o=gpt-4o,cheap=gpt-4o-mini`).
+- **Azure OpenAI aliases.** Automatically map Azure's dotless `gpt-35-turbo` deployment name family
+  to canonical `gpt-3.5-turbo` pricing keys in `openai.json`.
+
 ## [OSS `burnlens` v1.6.1] — 2026-07-14
 
 ### Fixed
