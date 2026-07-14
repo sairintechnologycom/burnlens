@@ -13,9 +13,10 @@ OpenAIProvider.  Only two things differ:
   It's forwarded to upstream untouched, so this is only metadata.
 
 The model in a request is the Azure *deployment* name (in both the URL path
-and the body).  Pricing reuses ``openai.json``: when a deployment is named
-after its model (the common convention, e.g. ``gpt-4o``) costs resolve; a
-deployment named arbitrarily prices at $0 until a name→model map is added.
+and the body).  Pricing reuses ``openai.json``: a deployment named after its
+model (the common convention, e.g. ``gpt-4o``) resolves directly; Azure's
+dotless ``gpt-35-turbo`` spellings are aliased; and arbitrarily-named
+deployments resolve via a user-supplied ``BURNLENS_AZURE_DEPLOYMENTS`` map.
 """
 from __future__ import annotations
 
@@ -26,6 +27,29 @@ from burnlens.providers.base import ProviderConfig
 from burnlens.providers.openai import OpenAIProvider
 
 UPSTREAM_ENV = "BURNLENS_AZURE_ENDPOINT"
+DEPLOYMENTS_ENV = "BURNLENS_AZURE_DEPLOYMENTS"
+
+# Azure deployment names can't contain dots, so its gpt-3.5 family is spelled
+# without them — map back to the canonical pricing keys in openai.json.
+_AZURE_ALIASES = {
+    "gpt-35-turbo": "gpt-3.5-turbo",
+    "gpt-35-turbo-16k": "gpt-3.5-turbo-16k",
+    "gpt-35-turbo-instruct": "gpt-3.5-turbo-instruct",
+}
+
+
+def _deployment_map() -> dict[str, str]:
+    """User-supplied deployment->model map for deployments not named after
+    their model, e.g. BURNLENS_AZURE_DEPLOYMENTS="prod-gpt4o=gpt-4o,cheap=gpt-4o-mini".
+    Read at request time so it can be set without restarting the proxy.
+    """
+    out: dict[str, str] = {}
+    for pair in os.environ.get(DEPLOYMENTS_ENV, "").split(","):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            if k.strip() and v.strip():
+                out[k.strip()] = v.strip()
+    return out
 
 
 class AzureOpenAIProvider(OpenAIProvider):
@@ -55,14 +79,20 @@ class AzureOpenAIProvider(OpenAIProvider):
     def extract_model(self, request_body: dict, request_path: str) -> Optional[str]:
         # AzureOpenAI SDK sends the deployment name in the body as "model".
         # Fall back to the /deployments/{name}/ segment for clients that don't.
-        model = request_body.get("model")
-        if model:
-            return model
-        parts = request_path.split("?", 1)[0].split("/")
-        for i, part in enumerate(parts):
-            if part == "deployments" and i + 1 < len(parts):
-                return parts[i + 1] or None
-        return None
+        deployment = request_body.get("model")
+        if not deployment:
+            parts = request_path.split("?", 1)[0].split("/")
+            for i, part in enumerate(parts):
+                if part == "deployments" and i + 1 < len(parts):
+                    deployment = parts[i + 1]
+                    break
+        if not deployment:
+            return None
+        # Map the deployment name to a pricing key: user env map wins, then
+        # Azure's dotless spellings, else the deployment name as-is (which
+        # resolves when the deployment is named after its model, e.g. gpt-4o).
+        mapping = {**_AZURE_ALIASES, **_deployment_map()}
+        return mapping.get(deployment, deployment)
 
 
 azure_provider = AzureOpenAIProvider()
