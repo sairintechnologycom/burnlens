@@ -8,11 +8,11 @@ import { useEffect, useRef, useState } from "react";
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
   { prompt: false, text: "Collecting burnlens", delay: 800 },
-  { prompt: false, text: "  Downloading burnlens-1.4.0-py3-none-any.whl", delay: 1200 },
-  { prompt: false, text: "Successfully installed burnlens-1.4.0", delay: 1800 },
+  { prompt: false, text: "  Downloading burnlens-1.6.2-py3-none-any.whl", delay: 1200 },
+  { prompt: false, text: "Successfully installed burnlens-1.6.2", delay: 1800 },
   { prompt: true,  text: "burnlens start", delay: 2400 },
-  { prompt: false, text: "BurnLens v1.4.0 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
-  { prompt: false, text: "Intercepting: OPENAI_BASE_URL, ANTHROPIC_BASE_URL", delay: 3400 },
+  { prompt: false, text: "BurnLens v1.6.2 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
+  { prompt: false, text: "Intercepting: OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure", delay: 3400 },
   { prompt: false, text: "Ready. Waiting for requests...", delay: 3800, highlight: true },
 ];
 
@@ -285,7 +285,7 @@ export default function LandingPage() {
                 Hard-cap your AI spend across every provider — <span className="acc">before the call</span>, not after the bill
               </h1>
               <p className="lp-subline">
-                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, and Together. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
+                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, Together, and Azure OpenAI. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/setup?intent=register" className="lp-hero-btn primary">
@@ -307,10 +307,10 @@ export default function LandingPage() {
                 </a>
               </div>
               <div className="lp-provider-strip lp-provider-strip-left">
-                {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together"].map((p) => (
+                {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "Azure OpenAI"].map((p) => (
                   <span key={p} className="lp-provider-chip">{p}</span>
                 ))}
-                <span className="lp-provider-more">Azure · AWS Bedrock — on the roadmap</span>
+                <span className="lp-provider-more">AWS Bedrock — on the roadmap</span>
               </div>
             </div>
             <div className="lp-hero-right">
@@ -425,8 +425,8 @@ export default function LandingPage() {
             <div className="lp-ed-content">
               <h3>Every provider, unified.</h3>
               <p>
-                OpenAI, Anthropic, Google, Groq, Mistral, and Together spend in one view today.
-                Azure and AWS Bedrock are on the roadmap.
+                OpenAI, Anthropic, Google, Groq, Mistral, Together, and Azure OpenAI spend in one view today.
+                AWS Bedrock is on the roadmap.
                 Model breakdowns, waste detection, and budget tracking using versioned provider pricing.
               </p>
             </div>
@@ -479,6 +479,45 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* BEYOND THE DASHBOARD */}
+        <section className="lp-usecases">
+          <h2>Beyond the dashboard</h2>
+          <div className="lp-usecases-grid">
+            <div className="lp-usecase-card">
+              <h3>Semantic cache: skip the call, save the cost</h3>
+              <p>
+                BurnLens caches repeated prompts using exact match and cosine-similarity
+                embedding search. Identical or near-identical queries are served from
+                cache — the upstream API call never happens and you pay nothing.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <h3>Model recommendations: find the cheaper path</h3>
+              <p>
+                <code>burnlens recommend</code> analyses your usage and suggests cheaper
+                model alternatives with confidence scores and projected savings.
+                Switch from gpt-4o to gpt-4o-mini where output tokens stay short.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <h3>Anomaly detection: catch runaways in real time</h3>
+              <p>
+                Sliding-window statistical analysis (MAD / Z-score) across 1-minute,
+                5-minute, 15-minute, and 1-hour windows. Cost spikes and runaway
+                agent loops fire alerts before the damage compounds.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <h3>Automatic model routing: degrade gracefully</h3>
+              <p>
+                When a budget threshold is hit, BurnLens can silently route requests
+                to a cheaper model instead of hard-blocking with 429. Your app stays
+                live — it just gets more cost-efficient.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* WHY BURNLENS */}
         <section className="lp-compare">
           <h2>Why BurnLens</h2>
@@ -519,7 +558,7 @@ export default function LandingPage() {
                 </tr>
                 <tr>
                   <td>Multi-cloud (Azure / AWS / GCP)</td>
-                  <td className="partial">Roadmap</td>
+                  <td className="partial">Partial</td>
                   <td className="partial">Partial</td>
                   <td className="yes">✓</td>
                 </tr>
@@ -538,9 +577,9 @@ export default function LandingPage() {
               <div className="lp-plan-price">$0<span>/mo</span></div>
               <ul className="lp-plan-features">
                 <li>Local proxy + dashboard</li>
-                <li>All 3 providers</li>
-                <li>5 waste detection rules</li>
-                <li>Budget alerts</li>
+                <li>All 7 providers</li>
+                <li>Waste detection + recommendations</li>
+                <li>Budget alerts + anomaly detection</li>
                 <li>7-day history</li>
               </ul>
               <a href="#install" className="lp-plan-cta outline">Install free</a>

@@ -106,7 +106,7 @@ export default function ScanLandingPage() {
             marginBottom: 8,
           }}
         >
-          burnlens scan · v1.2
+          burnlens scan · v1.6
         </p>
         <h1>See what your AI coding agents actually cost</h1>
         <p className="legal-updated">
@@ -221,7 +221,7 @@ burnlens top    # live spend by model, session, repo`}
           <p><strong>What about Cline, Windsurf, Aider?</strong> Not yet — they&apos;re tracked in{" "}
           <a href="https://github.com/sairintechnologycom/burnlens/issues" target="_blank" rel="noopener noreferrer">
             GitHub issues
-          </a>. Each new reader is one file in <code>burnlens/readers/</code> plus a pricing entry; PRs welcome.</p>
+          </a>. Each new reader is one file in <code>burnlens/scan/</code> plus a pricing entry; PRs welcome.</p>
         </section>
 
         <section>
