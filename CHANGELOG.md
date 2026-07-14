@@ -6,6 +6,25 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.4.3] — 2026-07-14
+
+### Fixed
+- **Anthropic pricing corrected.** All Claude Opus 4.x entries carried
+  Claude-3-Opus-era rates ($15/$75 per MTok) instead of the actual
+  $5/$25 — Opus 4.x requests were over-costed 3×. Claude Haiku 4.5
+  corrected from $0.80/$4 to $1/$5.
+- **Missing models no longer cost $0.** Added `claude-fable-5`,
+  `claude-opus-4-8`, `claude-sonnet-5`, the gpt-5 family
+  (`gpt-5` / `gpt-5-mini` / `gpt-5-nano`), the gpt-4.1 family, and
+  `o3-pro`. Previously these resolved to no pricing entry and every
+  request/scan record for them showed $0.
+- `o3` updated to its post-cut $2/$8 rates; `gemini-2.5-flash` corrected
+  to $0.30/$2.50; added `gemini-2.5-flash-lite`.
+
+### Changed
+- README and landing-page roadmap wording no longer references
+  long-obsolete "v0.2 / v0.3" milestones.
+
 ## [OSS `burnlens` v1.4.2] — 2026-07-13
 
 ### Fixed
