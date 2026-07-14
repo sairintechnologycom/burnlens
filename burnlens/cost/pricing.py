@@ -31,10 +31,29 @@ def _load_provider(provider: str) -> dict[str, dict[str, Any]]:
     return _PRICING_CACHE[provider]
 
 
+def _resolve_pricing_key(provider: str) -> str:
+    """Map a provider *name* to its pricing_key (the pricing_data JSON stem).
+
+    Most providers use their own name as the key; some reuse another's table
+    (e.g. ``azure`` -> ``openai``). Callers pass ``provider.name``, but the
+    JSON files are keyed by pricing_key. Scan providers (``cursor``, etc.) and
+    direct pricing_key callers aren't in the registry and pass through as-is.
+    """
+    try:
+        from burnlens.providers.registry import all_providers
+        p = all_providers().get(provider)
+        if p is not None:
+            return p.config.pricing_key
+    except Exception:
+        pass
+    return provider
+
+
 def get_pricing_version(provider: str) -> str | None:
     """Return the pricing version (updated date) for the provider."""
-    _load_provider(provider)
-    return _PRICING_UPDATED_CACHE.get(provider)
+    key = _resolve_pricing_key(provider)
+    _load_provider(key)
+    return _PRICING_UPDATED_CACHE.get(key)
 
 
 
@@ -44,6 +63,7 @@ def get_model_pricing(provider: str, model: str) -> dict[str, Any] | None:
     Tries exact match first, then prefix match to handle versioned model IDs
     (e.g. ``gpt-4o-2024-11-20`` matches ``gpt-4o``).
     """
+    provider = _resolve_pricing_key(provider)
     models = _load_provider(provider)
     if not models:
         return None
