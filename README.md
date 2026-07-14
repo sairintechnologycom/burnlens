@@ -1,6 +1,6 @@
 # BurnLens — The open-source FinOps proxy for AI spend
 
-Track every dollar by feature, team, and customer across OpenAI, Anthropic, and Google. Hard-cap budgets before the API call — not after the bill arrives. Additional providers are on the roadmap.
+Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Groq, Mistral, and Together. Hard-cap budgets before the API call — not after the bill arrives. Additional providers are on the roadmap.
 
 [![PyPI](https://img.shields.io/pypi/v/burnlens?label=pypi&color=00e5c8)](https://pypi.org/project/burnlens)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
@@ -33,7 +33,7 @@ burnlens start
 
 3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts.
 
-4. **One dashboard for supported providers.** OpenAI, Anthropic, and Google spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
+4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, and Together spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
 
 ---
 
