@@ -1,0 +1,30 @@
+{
+  "provider": "together",
+  "updated": "2026-07-14",
+  "models": {
+    "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+      "input_per_million": 0.88,
+      "output_per_million": 0.88
+    },
+    "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo": {
+      "input_per_million": 0.18,
+      "output_per_million": 0.18
+    },
+    "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {
+      "input_per_million": 3.50,
+      "output_per_million": 3.50
+    },
+    "deepseek-ai/DeepSeek-V3": {
+      "input_per_million": 1.25,
+      "output_per_million": 1.25
+    },
+    "deepseek-ai/DeepSeek-R1": {
+      "input_per_million": 3.00,
+      "output_per_million": 7.00
+    },
+    "Qwen/Qwen2.5-72B-Instruct-Turbo": {
+      "input_per_million": 1.20,
+      "output_per_million": 1.20
+    }
+  }
+}

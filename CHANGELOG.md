@@ -6,6 +6,16 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Unreleased]
+
+### Added
+- **Groq, Together, and Mistral proxy providers (beta).** All three speak
+  the OpenAI wire format, so they reuse the OpenAI parser with their own
+  proxy paths (`/proxy/groq`, `/proxy/together`, `/proxy/mistral`),
+  upstream URLs, and pricing tables. `burnlens start` now also exports
+  `GROQ_BASE_URL`; Together and Mistral clients point their `base_url`
+  at the proxy path.
+
 ## [OSS `burnlens` v1.4.3] — 2026-07-14
 
 ### Fixed
