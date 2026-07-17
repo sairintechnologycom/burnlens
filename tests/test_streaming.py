@@ -4,39 +4,53 @@ from __future__ import annotations
 import json
 
 from burnlens.cost.calculator import TokenUsage
+from burnlens.providers import get
 from burnlens.proxy.streaming import (
     extract_usage_from_stream,
-    should_buffer_chunk,
+    split_sse_events,
 )
 
 
 # ---------------------------------------------------------------------------
-# should_buffer_chunk
+# Usage-event gating — now owned by provider.should_buffer_chunk() and reached
+# through split_sse_events(buffer, provider). The module-level
+# should_buffer_chunk() duplicate was deleted: it was never called by the proxy,
+# so it tested nothing the pipeline actually ran.
 # ---------------------------------------------------------------------------
 
-class TestShouldBufferChunk:
+class TestUsageEventGating:
+    def _kept(self, chunk: str, provider_name: str) -> bool:
+        return bool(split_sse_events(chunk, get(provider_name)))
+
     def test_openai_usage_chunk(self):
         chunk = 'data: {"id":"chatcmpl-1","usage":{"prompt_tokens":10,"completion_tokens":5}}\n\n'
-        assert should_buffer_chunk(chunk) is True
+        assert self._kept(chunk, "openai") is True
 
     def test_google_usage_chunk(self):
         chunk = '{"usageMetadata":{"promptTokenCount":10}}\n'
-        assert should_buffer_chunk(chunk) is True
+        assert self._kept(chunk, "google") is True
 
     def test_anthropic_message_start(self):
         chunk = 'data: {"type":"message_start","message":{"usage":{"input_tokens":20}}}\n\n'
-        assert should_buffer_chunk(chunk) is True
+        assert self._kept(chunk, "anthropic") is True
 
     def test_anthropic_message_delta(self):
         chunk = 'data: {"type":"message_delta","usage":{"output_tokens":30}}\n\n'
-        assert should_buffer_chunk(chunk) is True
+        assert self._kept(chunk, "anthropic") is True
 
     def test_plain_content_chunk_not_buffered(self):
         chunk = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n'
-        assert should_buffer_chunk(chunk) is False
+        assert self._kept(chunk, "anthropic") is False
 
     def test_done_chunk_not_buffered(self):
-        assert should_buffer_chunk("data: [DONE]\n\n") is False
+        assert self._kept("data: [DONE]\n\n", "openai") is False
+
+    def test_legacy_fallback_without_provider_still_gates(self):
+        """No provider in hand → the USAGE_EVENT_INDICATORS union, which
+        over-matches rather than dropping usage."""
+        chunk = 'data: {"usage":{"prompt_tokens":10}}\n\n'
+        assert bool(split_sse_events(chunk)) is True
+        assert bool(split_sse_events('data: {"delta":{"text":"hi"}}\n\n')) is False
 
 
 # ---------------------------------------------------------------------------
@@ -190,3 +204,52 @@ class TestUnknownProvider:
     def test_unknown_provider_returns_zeros(self):
         usage = extract_usage_from_stream("unknown_provider", ['data: {"usage": {"tokens": 5}}\n\n'])
         assert usage == TokenUsage()
+
+
+# ---------------------------------------------------------------------------
+# Regression: the usage gate must consult the PROVIDER, not a hardcoded list.
+# Until v1.8.3 split_sse_events matched a fixed USAGE_EVENT_INDICATORS tuple, so
+# any provider whose usage key wasn't in that union had its usage silently
+# dropped and its requests cost $0. Provider.should_buffer_chunk existed and was
+# never called.
+# ---------------------------------------------------------------------------
+
+
+class TestGateConsultsProvider:
+    def test_provider_specific_key_not_in_legacy_union_is_kept(self):
+        from burnlens.providers.base import Provider, ProviderConfig
+        from burnlens.cost.calculator import TokenUsage as _TU
+        from burnlens.proxy.streaming import USAGE_EVENT_INDICATORS
+
+        class _OddProvider(Provider):
+            config = ProviderConfig(
+                name="odd", proxy_path="/proxy/odd", upstream_url="https://x",
+                auth_header="Authorization", streaming_format="sse-openai",
+                pricing_key="odd",
+            )
+            def resolve_upstream_url(self, request_path, headers): return "https://x"
+            def extract_model(self, request_body, request_path): return "m"
+            def extract_usage(self, response_body): return _TU()
+            def extract_usage_from_stream_chunk(self, chunk, accumulator): return None
+            def should_buffer_chunk(self, chunk): return b"tokenTally" in chunk
+
+        event = 'data: {"tokenTally":{"in":10,"out":5}}\n\n'
+        # Precondition: the legacy hardcoded union cannot see this event.
+        assert not any(i in event for i in USAGE_EVENT_INDICATORS)
+        assert split_sse_events(event) == []          # legacy path drops it -> $0
+        assert split_sse_events(event, _OddProvider())  # provider path keeps it
+
+    def test_provider_gate_is_actually_invoked(self):
+        """Guard the wiring itself: if split_sse_events stops consulting the
+        provider, this fails even when the fallback would coincidentally match."""
+        calls: list[bytes] = []
+        provider = get("openai")
+
+        class _Spy:
+            config = provider.config
+            def should_buffer_chunk(self, chunk):
+                calls.append(chunk)
+                return provider.should_buffer_chunk(chunk)
+
+        split_sse_events('data: {"usage":{"prompt_tokens":1}}\n\n', _Spy())
+        assert calls, "split_sse_events did not consult provider.should_buffer_chunk"
