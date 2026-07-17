@@ -36,13 +36,14 @@ class ModelRecommendation:
 _CHEAPER_EQUIVALENT: dict[str, str] = {
     "gpt-4o": "gpt-4o-mini",
     "gpt-5.2": "gpt-5-mini",
+    "gpt-5.6": "gpt-5.6-terra",
     "claude-sonnet-5": "claude-haiku-4-5",
     "gemini-1.5-pro": "gemini-1.5-flash",
     "gemini-3.1-pro-preview": "gemini-3.1-flash-lite",
 }
 
 _OVERKILL_MODELS = set(_CHEAPER_EQUIVALENT.keys())
-_REASONING_MODELS = {"o1", "o3", "o1-mini"}
+_REASONING_MODELS = {"o1", "o3", "o1-mini", "gpt-5.6"}
 
 def _get_pricing(model: str) -> dict[str, float] | None:
     """Look up projection pricing from the provider's bundled price table."""

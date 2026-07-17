@@ -25,6 +25,7 @@ class WasteFinding:
 # Maps model name substrings → cost tier (lower is cheaper)
 _MODEL_TIERS: list[tuple[str, str]] = [
     # Expensive
+    ("gpt-5.6-sol", "expensive"),
     ("gpt-5.2-pro", "expensive"),
     ("o1", "expensive"),
     ("o3", "expensive"),
@@ -35,6 +36,7 @@ _MODEL_TIERS: list[tuple[str, str]] = [
     ("gpt-4o-mini", "cheap"),
     ("gpt-5-mini", "cheap"),
     ("gpt-5-nano", "cheap"),
+    ("gpt-5.6-luna", "cheap"),
     ("gpt-3.5", "cheap"),
     ("haiku", "cheap"),
     ("flash", "cheap"),

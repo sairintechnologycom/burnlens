@@ -80,6 +80,10 @@ Tags are stripped before the request reaches OpenAI. They never appear in any AP
 | Azure OpenAI | Beta | Point client `azure_endpoint` at `/proxy/azure`; set `BURNLENS_AZURE_ENDPOINT` to your resource URL |
 | AWS Bedrock | Roadmap | |
 
+Pricing covers current text/chat models for the supported providers. Image, audio,
+per-request, and other non-token rates are not represented by the current pricing
+schema. Gemini 3.1 Pro's higher rate above 200K input tokens is likewise excluded.
+
 ---
 
 ## Why BurnLens

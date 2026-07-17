@@ -12,6 +12,9 @@ DOWNGRADE_MAP: dict[str, str] = {
     "o1-mini":                    "gpt-4o-mini",
     "gpt-5.2":                    "gpt-5-mini",
     "gpt-5.2-pro":                "gpt-5-mini",
+    "gpt-5.6":                    "gpt-5.6-terra",
+    "gpt-5.6-sol":                "gpt-5.6-terra",
+    "gpt-5.6-terra":              "gpt-5.6-luna",
     # Anthropic
     "claude-opus-4-6":            "claude-haiku-4-5-20251001",
     "claude-sonnet-4-6":          "claude-haiku-4-5-20251001",

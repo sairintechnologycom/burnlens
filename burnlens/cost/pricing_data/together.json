@@ -3,8 +3,8 @@
   "updated": "2026-07-17",
   "models": {
     "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
-      "input_per_million": 0.88,
-      "output_per_million": 0.88
+      "input_per_million": 1.04,
+      "output_per_million": 1.04
     },
     "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo": {
       "input_per_million": 0.18,
@@ -33,6 +33,86 @@
     "openai/gpt-oss-20b": {
       "input_per_million": 0.05,
       "output_per_million": 0.20
+    },
+    "thinkingmachines/Inkling": {
+      "input_per_million": 1.00,
+      "output_per_million": 4.05,
+      "cache_read_per_million": 0.17
+    },
+    "MiniMaxAI/MiniMax-M3": {
+      "input_per_million": 0.30,
+      "output_per_million": 1.20,
+      "cache_read_per_million": 0.06
+    },
+    "MiniMaxAI/MiniMax-M2.7": {
+      "input_per_million": 0.30,
+      "output_per_million": 1.20,
+      "cache_read_per_million": 0.06
+    },
+    "Qwen/Qwen3.7-Max": {
+      "input_per_million": 1.25,
+      "output_per_million": 3.75
+    },
+    "Qwen/Qwen3.6-Plus": {
+      "input_per_million": 0.50,
+      "output_per_million": 3.00
+    },
+    "Qwen/Qwen3.5-9B": {
+      "input_per_million": 0.17,
+      "output_per_million": 0.25
+    },
+    "moonshotai/Kimi-K2.7-Code": {
+      "input_per_million": 0.95,
+      "output_per_million": 4.00,
+      "cache_read_per_million": 0.19
+    },
+    "moonshotai/Kimi-K2.6": {
+      "input_per_million": 1.20,
+      "output_per_million": 4.50,
+      "cache_read_per_million": 0.20
+    },
+    "zai-org/GLM-5.2": {
+      "input_per_million": 1.40,
+      "output_per_million": 4.40,
+      "cache_read_per_million": 0.26
+    },
+    "deepseek-ai/DeepSeek-V4-Pro": {
+      "input_per_million": 1.74,
+      "output_per_million": 3.48,
+      "cache_read_per_million": 0.20
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b": {
+      "input_per_million": 0.60,
+      "output_per_million": 3.60,
+      "cache_read_per_million": 0.20
+    },
+    "Qwen/Qwen2.5-7B-Instruct-Turbo": {
+      "input_per_million": 0.30,
+      "output_per_million": 0.30
+    },
+    "google/gemma-4-31B-it": {
+      "input_per_million": 0.39,
+      "output_per_million": 0.97
+    },
+    "pearl-ai/gemma-4-31b-it": {
+      "input_per_million": 0.28,
+      "output_per_million": 0.86
+    },
+    "deepcogito/cogito-v2-1-671b": {
+      "input_per_million": 1.25,
+      "output_per_million": 1.25
+    },
+    "Qwen/Qwen3.7-Plus": {
+      "input_per_million": 0.32,
+      "output_per_million": 1.28
+    },
+    "google/gemma-3n-E4B-it": {
+      "input_per_million": 0.06,
+      "output_per_million": 0.12
+    },
+    "LiquidAI/LFM2.5-8B-A1B": {
+      "input_per_million": 0.03,
+      "output_per_million": 0.12
     }
   }
 }
