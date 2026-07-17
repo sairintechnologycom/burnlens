@@ -496,7 +496,7 @@ export default function LandingPage() {
               <p>
                 <code>burnlens recommend</code> analyses your usage and suggests cheaper
                 model alternatives with confidence scores and projected savings.
-                Switch from gpt-4o to gpt-4o-mini where output tokens stay short.
+                Switch from gpt-5.6-sol to gpt-5.6-terra where output tokens stay short.
               </p>
             </div>
             <div className="lp-usecase-card">
