@@ -447,6 +447,57 @@ def export(
     asyncio.run(_run())
 
 
+_PRICING_COLUMNS = (
+    "input_per_million",
+    "output_per_million",
+    "cache_read_per_million",
+    "cache_write_per_million",
+    "reasoning_per_million",
+    "audio_input_per_million",
+    "audio_output_per_million",
+)
+
+
+@app.command()
+def pricing(
+    csv: bool = typer.Option(False, "--csv", help="Output as CSV instead of a table"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Write CSV to this file instead of stdout"
+    ),
+) -> None:
+    """Show the bundled model pricing table ($/1M tokens), or export it as CSV."""
+    from burnlens.cost.pricing import all_pricing
+
+    rows = all_pricing()
+
+    if csv or output is not None:
+        import csv as _csv
+        import io
+
+        buf = io.StringIO()
+        writer = _csv.writer(buf)
+        writer.writerow(["provider", "model", *_PRICING_COLUMNS])
+        for provider, model, p in rows:
+            writer.writerow([provider, model, *(p.get(c, "") for c in _PRICING_COLUMNS)])
+        if output is not None:
+            output.write_text(buf.getvalue())
+            console.print(f"Exported {len(rows)} models to {output}. [green]done.[/green]")
+        else:
+            print(buf.getvalue(), end="")
+        return
+
+    table = Table(title="BurnLens model pricing — USD per 1M tokens")
+    table.add_column("provider")
+    table.add_column("model")
+    for c in _PRICING_COLUMNS:
+        table.add_column(c.replace("_per_million", ""), justify="right")
+    for provider, model, p in rows:
+        table.add_row(
+            provider, model, *[("" if p.get(c) is None else f"{p[c]:g}") for c in _PRICING_COLUMNS]
+        )
+    console.print(table)
+
+
 _SCAN_PROVIDERS = ("claude", "cursor", "codex", "gemini")
 
 

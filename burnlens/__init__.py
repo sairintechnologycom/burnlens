@@ -1,6 +1,6 @@
 """BurnLens — See where your LLM money goes."""
 
-__version__ = "1.7.5"
+__version__ = "1.8.0"
 
 from burnlens.detection.wrapper import wrap  # noqa: F401  re-exported for `import burnlens; burnlens.wrap(client)`
 

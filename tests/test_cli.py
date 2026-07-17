@@ -14,6 +14,25 @@ def test_help():
     assert "burnlens" in result.output.lower()
 
 
+def test_pricing_csv():
+    from burnlens.cost.pricing import all_pricing
+
+    result = runner.invoke(app, ["pricing", "--csv"])
+    assert result.exit_code == 0
+    lines = [ln for ln in result.output.splitlines() if ln.strip()]
+    assert lines[0].startswith("provider,model,input_per_million")
+    # header + one row per priced model
+    assert len(lines) == 1 + len(all_pricing())
+    assert any(ln.startswith("openai,gpt-5.6-sol,") for ln in lines)
+
+
+def test_pricing_csv_to_file(tmp_path):
+    out = tmp_path / "prices.csv"
+    result = runner.invoke(app, ["pricing", "--output", str(out)])
+    assert result.exit_code == 0
+    assert out.read_text().startswith("provider,model,input_per_million")
+
+
 def test_top_no_db(tmp_path):
     """top command should not crash even with no database."""
     import asyncio
