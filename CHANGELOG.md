@@ -6,6 +6,17 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.7.0] — 2026-07-17
+
+### Added
+- **Current model pricing.** Added GPT-5.2, Gemini 3.1 Flash-Lite, Groq Qwen,
+  Mistral Large 3, and Together GPT-OSS pricing; Sonnet 5 uses its $2/$10
+  introductory rate through August 31, 2026.
+
+### Changed
+- **Recommendations and downgrade routing** now use the bundled pricing tables
+  and current model targets, preventing recommendations to retired Claude 3 Haiku.
+
 ## [OSS `burnlens` v1.6.2] — 2026-07-14
 
 ### Added

@@ -107,7 +107,6 @@ requests, log every call with real cost, and show it in the dashboard.
 | `extract_usage(response_body)` | Yes | Non-streaming token extraction |
 | `extract_usage_from_stream_chunk(chunk, accumulator)` | Yes | Accumulate streaming usage into dict |
 | `should_buffer_chunk(chunk)` | Yes | Filter chunks containing usage data |
-| `normalize_model_name(raw_model)` | No | Map API model name to pricing key |
 
 ### accumulator keys
 

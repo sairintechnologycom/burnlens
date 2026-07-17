@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 import aiosqlite
 
+from burnlens.cost.pricing import get_model_pricing
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,35 +35,22 @@ class ModelRecommendation:
 
 _CHEAPER_EQUIVALENT: dict[str, str] = {
     "gpt-4o": "gpt-4o-mini",
-    "claude-3-5-sonnet": "claude-3-haiku",
+    "gpt-5.2": "gpt-5-mini",
+    "claude-sonnet-5": "claude-haiku-4-5",
     "gemini-1.5-pro": "gemini-1.5-flash",
+    "gemini-3.1-pro-preview": "gemini-3.1-flash-lite",
 }
 
 _OVERKILL_MODELS = set(_CHEAPER_EQUIVALENT.keys())
 _REASONING_MODELS = {"o1", "o3", "o1-mini"}
 
-# Pricing used for cost projections (per million tokens)
-_PROJECTION_PRICING: dict[str, dict[str, float]] = {
-    "gpt-4o":            {"input": 2.50,  "output": 10.00},
-    "gpt-4o-mini":       {"input": 0.15,  "output": 0.60},
-    "claude-3-5-sonnet":  {"input": 3.00,  "output": 15.00},
-    "claude-3-haiku":     {"input": 0.25,  "output": 1.25},
-    "gemini-1.5-pro":     {"input": 1.25,  "output": 5.00},
-    "gemini-1.5-flash":   {"input": 0.075, "output": 0.30},
-    "o1":                 {"input": 15.00, "output": 60.00},
-    "o3":                 {"input": 10.00, "output": 40.00},
-    "o1-mini":            {"input": 1.10,  "output": 4.40},
-}
-
-
 def _get_pricing(model: str) -> dict[str, float] | None:
-    """Look up projection pricing for a model (exact or prefix match)."""
-    if model in _PROJECTION_PRICING:
-        return _PROJECTION_PRICING[model]
-    for key in _PROJECTION_PRICING:
-        if model.startswith(key):
-            return _PROJECTION_PRICING[key]
-    return None
+    """Look up projection pricing from the provider's bundled price table."""
+    provider = "anthropic" if model.startswith("claude-") else "google" if model.startswith("gemini-") else "openai"
+    pricing = get_model_pricing(provider, model)
+    if pricing is None:
+        return None
+    return {"input": pricing["input_per_million"], "output": pricing["output_per_million"]}
 
 
 def _project_cost(

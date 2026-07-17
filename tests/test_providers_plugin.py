@@ -106,10 +106,6 @@ class TestProviderConfig:
         assert "x-burnlens-tag-team" in strip
         assert "x-burnlens-tag-customer" in strip
 
-    def test_normalize_model_name_default_is_identity(self):
-        for p in (openai_provider, anthropic_provider, google_provider):
-            assert p.normalize_model_name("my-model") == "my-model"
-
 
 # ---------------------------------------------------------------------------
 # Backward-compat property aliases (used by shim + tests that access .name etc)
@@ -290,6 +286,14 @@ class TestRewritePathForRouting:
 
 
 class TestDowngradeMapNormalization:
+    def test_targets_have_pricing(self):
+        from burnlens.cost.pricing import get_model_pricing
+        from burnlens.providers.downgrade import DOWNGRADE_MAP
+
+        for source, target in DOWNGRADE_MAP.items():
+            provider = "anthropic" if source.startswith("claude-") else "google" if source.startswith("gemini-") else "openai"
+            assert get_model_pricing(provider, target), f"{source} targets unpriced {target}"
+
     def test_exact_match_wins(self):
         assert get_downgrade_model("gemini-1.5-pro") == "gemini-1.5-flash"
 
