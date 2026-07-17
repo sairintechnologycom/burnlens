@@ -6,6 +6,18 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.8.1] — 2026-07-17
+
+### Added
+- **Date-scheduled pricing.** A model entry can carry a `scheduled` list of dated
+  rate changes (`{"effective": "YYYY-MM-DD", ...}`); the resolver applies the
+  active tier against the current date automatically — no code edit or release
+  needed when the date arrives. Used for **Claude Sonnet 5**, which now switches
+  from its introductory $2/$10 to the $3/$15 sticker rate on 2026-09-01 on its
+  own (previously a manual follow-up that would silently under-report ~33% if
+  forgotten). Scans of old logs price at the current tier (the wheel carries one
+  live rate anyway).
+
 ## [OSS `burnlens` v1.8.0] — 2026-07-17
 
 ### Added

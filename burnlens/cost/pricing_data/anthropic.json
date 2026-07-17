@@ -42,7 +42,16 @@
       "input_per_million": 2.00,
       "output_per_million": 10.00,
       "cache_read_per_million": 0.20,
-      "cache_write_per_million": 2.50
+      "cache_write_per_million": 2.50,
+      "scheduled": [
+        {
+          "effective": "2026-09-01",
+          "input_per_million": 3.00,
+          "output_per_million": 15.00,
+          "cache_read_per_million": 0.30,
+          "cache_write_per_million": 3.75
+        }
+      ]
     },
     "claude-sonnet-4-6": {
       "input_per_million": 3.00,
