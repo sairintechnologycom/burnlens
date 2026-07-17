@@ -304,6 +304,21 @@ class TestCostCalculation:
         )
         assert cost == pytest.approx(expected)
 
+    def test_gpt_realtime_21_audio_rates(self):
+        # gpt-realtime-2.1: text $4/$24, audio $32/$64. 1M audio in + 1M audio out.
+        usage = TokenUsage(
+            input_tokens=1_000_000, output_tokens=1_000_000,
+            audio_input_tokens=1_000_000, audio_output_tokens=1_000_000,
+        )
+        cost = calculate_cost("openai", "gpt-realtime-2.1", usage)
+        # all input/output tokens are audio → billed at audio rate only
+        assert cost == pytest.approx(32.00 + 64.00)
+
+    def test_gpt_realtime_21_mini_priced_not_zero(self):
+        # regression: the GA realtime model must not resolve to $0
+        usage = TokenUsage(audio_input_tokens=1_000_000)
+        assert calculate_cost("openai", "gpt-realtime-2.1-mini", usage) == pytest.approx(10.00)
+
     def test_audio_tokens_fall_back_to_text_rate(self):
         # A model with no audio rate must not regress: audio tokens bill at the
         # text rate (same total as before this feature existed).

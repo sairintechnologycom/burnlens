@@ -6,6 +6,17 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.7.5] — 2026-07-17
+
+### Added
+- **Current GA realtime-audio models.** `gpt-realtime-2.1` (text $4/$24, audio
+  $32/$64, cached $0.40) and `gpt-realtime-2.1-mini` (text $0.60/$2.40, audio
+  $10/$20, cached $0.30), verified against OpenAI's live pricing page. These
+  replaced the `*-audio-preview` / `gpt-4o-realtime-preview` entries on OpenAI's
+  side and previously matched no pricing entry — i.e. all `gpt-realtime-2.1*`
+  traffic was silently tracked at $0. Legacy preview entries are retained for
+  historical scan data.
+
 ## [OSS `burnlens` v1.7.4] — 2026-07-17
 
 ### Fixed
