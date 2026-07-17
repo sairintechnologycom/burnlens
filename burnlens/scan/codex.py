@@ -197,6 +197,13 @@ def parse_session(session: CodexSession) -> Iterator[RequestRecord]:
                 if in_tok + out_tok + reasoning == 0:
                     continue
 
+                # Codex mirrors the OpenAI Responses API: output_tokens INCLUDES
+                # reasoning_output_tokens (verified against real sessions:
+                # total_tokens == input + output). The rest of burnlens keeps
+                # output and reasoning disjoint (they sum to total), so subtract
+                # to avoid billing reasoning twice.
+                out_tok = max(0, out_tok - reasoning)
+
                 if current_model is None:
                     logger.debug(
                         "token_count at ordinal %d in %s has no preceding turn_context — skipping",
