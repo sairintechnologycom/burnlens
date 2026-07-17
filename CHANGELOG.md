@@ -6,6 +6,18 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.7.4] — 2026-07-17
+
+### Fixed
+- **Codex scan double-billed reasoning tokens** (same class of bug as v1.7.3, in
+  the `codex` scanner). Verified against real `~/.codex` sessions that Codex
+  mirrors the OpenAI Responses API — `output_tokens` is *inclusive* of
+  `reasoning_output_tokens` (`total_tokens == input + output`). The scanner set
+  `output_tokens` to the inclusive value and also billed reasoning separately, so
+  every scanned Codex turn with reasoning over-charged. The reader now stores
+  `output` disjoint from `reasoning` (`output = output − reasoning`). Verified on
+  live sessions (e.g. raw output 237 / reasoning 81 → stored 156 + 81).
+
 ## [OSS `burnlens` v1.7.3] — 2026-07-17
 
 ### Fixed

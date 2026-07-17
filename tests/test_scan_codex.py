@@ -60,7 +60,9 @@ def _token_count_event(
                     "cached_input_tokens": cached_input_tokens,
                     "output_tokens": output_tokens,
                     "reasoning_output_tokens": reasoning_output_tokens,
-                    "total_tokens": input_tokens + output_tokens + reasoning_output_tokens,
+                    # Real Codex/Responses accounting: output_tokens already
+                    # includes reasoning, so total == input + output.
+                    "total_tokens": input_tokens + output_tokens,
                 },
                 "total_token_usage": {},
             },
@@ -228,7 +230,7 @@ def test_parse_session_extracts_reasoning_tokens(tmp_path):
         _token_count_event(
             input_tokens=2000,
             cached_input_tokens=0,
-            output_tokens=400,
+            output_tokens=1900,          # includes the 1500 reasoning tokens
             reasoning_output_tokens=1500,
         ),
     ])
@@ -236,6 +238,8 @@ def test_parse_session_extracts_reasoning_tokens(tmp_path):
     records = list(parse_session(session))
     assert len(records) == 1
     assert records[0].reasoning_tokens == 1500
+    # output stored disjoint from reasoning: 1900 - 1500 = 400
+    assert records[0].output_tokens == 400
     assert records[0].model == "o3"
 
 
@@ -322,6 +326,26 @@ def test_codex_reasoning_tokens_included_in_o3_cost():
     cost_with = calculate_cost("openai", "o3", usage_with)
     cost_without = calculate_cost("openai", "o3", usage_without)
     assert cost_with > cost_without
+
+
+def test_codex_reasoning_not_double_billed(tmp_path):
+    """Codex output_tokens includes reasoning; the reader must not bill it twice.
+
+    o3: input=$2/M, output=$8/M, reasoning=$8/M. A turn with output_tokens=1000
+    (200 of them reasoning) should cost 1000*$8/M for output-side tokens, once —
+    i.e. the record's output (800) + reasoning (200) both bill at $8/M, summing to
+    the full 1000, not 1200.
+    """
+    path = tmp_path / "2026" / "01" / "11" / "rollout-s6.jsonl"
+    _write_session(path, [
+        _session_meta("/tmp/app"),
+        _turn_context("o3"),
+        _token_count_event(input_tokens=0, output_tokens=1000, reasoning_output_tokens=200),
+    ])
+    session = CodexSession(session_id="s6", file_path=path, date=None)
+    rec = list(parse_session(session))[0]
+    assert rec.output_tokens == 800 and rec.reasoning_tokens == 200
+    assert rec.cost_usd == pytest.approx(1000 * 8.0 / 1e6)
 
 
 # ---------------------------------------------------------------------------
