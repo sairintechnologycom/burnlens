@@ -529,48 +529,22 @@ class TestHandleRequest:
 
 
 class TestInterceptorHelpers:
-    def test_extract_model_from_openai_body(self):
-        from burnlens.proxy.interceptor import _extract_model
+    def test_safe_json_parses_object(self):
+        from burnlens.proxy.interceptor import _safe_json
 
         body = json.dumps({"model": "gpt-4o-mini", "messages": []}).encode()
-        assert _extract_model(body, "openai") == "gpt-4o-mini"
+        assert _safe_json(body)["model"] == "gpt-4o-mini"
 
-    def test_extract_model_missing_returns_unknown(self):
-        from burnlens.proxy.interceptor import _extract_model
+    def test_safe_json_invalid_json_returns_empty_dict(self):
+        from burnlens.proxy.interceptor import _safe_json
 
-        body = json.dumps({"messages": []}).encode()
-        assert _extract_model(body, "openai") == "unknown"
+        assert _safe_json(b"not-json") == {}
 
-    def test_extract_model_invalid_json_returns_unknown(self):
-        from burnlens.proxy.interceptor import _extract_model
+    def test_safe_json_non_object_returns_empty_dict(self):
+        from burnlens.proxy.interceptor import _safe_json
 
-        assert _extract_model(b"not-json", "openai") == "unknown"
-
-    def test_extract_model_from_google_path(self):
-        from burnlens.proxy.interceptor import _extract_model_from_path
-
-        model = _extract_model_from_path(
-            "/v1beta/models/gemini-1.5-pro:generateContent", "google"
-        )
-        assert model == "gemini-1.5-pro"
-
-    def test_extract_model_from_google_path_strips_method_suffix(self):
-        from burnlens.proxy.interceptor import _extract_model_from_path
-
-        model = _extract_model_from_path(
-            "/v1beta/models/gemini-2.0-flash:streamGenerateContent", "google"
-        )
-        assert model == "gemini-2.0-flash"
-
-    def test_extract_model_from_non_google_path_returns_none(self):
-        from burnlens.proxy.interceptor import _extract_model_from_path
-
-        assert _extract_model_from_path("/v1/chat/completions", "openai") is None
-
-    def test_extract_model_from_google_path_no_models_segment_returns_none(self):
-        from burnlens.proxy.interceptor import _extract_model_from_path
-
-        assert _extract_model_from_path("/v1beta/generateContent", "google") is None
+        assert _safe_json(b"[1, 2, 3]") == {}
+        assert _safe_json(b'"a string"') == {}
 
     def test_hash_system_prompt_list_content(self):
         from burnlens.proxy.interceptor import _hash_system_prompt

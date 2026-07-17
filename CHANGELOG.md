@@ -6,6 +6,32 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.8.2] — 2026-07-17
+
+### Fixed
+- **Azure deployments priced at $0 through the proxy.** The interceptor never
+  called `Provider.extract_model()` — it used a private helper whose path
+  extraction was hardcoded to Google, so `providers/azure.py`'s deployment-name
+  mapping was dead code on the proxy path. Azure's dotless `gpt-35-turbo`
+  spelling and any deployment mapped via `BURNLENS_AZURE_DEPLOYMENTS` (e.g.
+  `prod-gpt4o=gpt-4o`) reached the pricing lookup unmapped and cost **$0.00**
+  per request instead of $0.50 and $2.50/MTok respectively. The provider-level
+  unit tests passed throughout because they called the provider object directly
+  and never routed through the interceptor.
+
+  These two behaviours were previously documented as known ceilings of the Azure
+  provider. They were not ceilings — the code to handle them shipped in v1.6.1
+  and was simply never wired up.
+
+  The interceptor now calls `provider.extract_model(...)`, so each provider owns
+  its own extraction (body, path, or alias map) as the plugin interface always
+  intended. `_extract_model` and `_extract_model_from_path` are deleted.
+  Regression tests drive `handle_request` end-to-end and assert exact costs.
+
+  Same class of bug as the v1.6.1 `pricing_key` fix: an abstraction existed, the
+  interceptor bypassed it, and it worked by accident for the providers where the
+  model sits in the request body.
+
 ## [OSS `burnlens` v1.8.1] — 2026-07-17
 
 ### Added
