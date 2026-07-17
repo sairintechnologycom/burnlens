@@ -46,9 +46,11 @@ class OpenAIProvider(Provider):
                     continue
                 details = u.get("completion_tokens_details") or {}
                 prompt_details = u.get("prompt_tokens_details") or {}
+                reasoning = details.get("reasoning_tokens", 0)
                 accumulator["input_tokens"] = u.get("prompt_tokens", 0)
-                accumulator["output_tokens"] = u.get("completion_tokens", 0)
-                accumulator["reasoning_tokens"] = details.get("reasoning_tokens", 0)
+                # completion_tokens includes reasoning; keep them disjoint
+                accumulator["output_tokens"] = max(0, u.get("completion_tokens", 0) - reasoning)
+                accumulator["reasoning_tokens"] = reasoning
                 accumulator["cache_read_tokens"] = prompt_details.get("cached_tokens", 0)
                 accumulator["audio_input_tokens"] = prompt_details.get("audio_tokens", 0)
                 accumulator["audio_output_tokens"] = details.get("audio_tokens", 0)

@@ -63,7 +63,9 @@ class TestOpenAIStreamExtraction:
         ]
         usage = extract_usage_from_stream("openai", chunks)
         assert usage.input_tokens == 15
-        assert usage.output_tokens == 8
+        # completion_tokens (8) includes the 2 reasoning tokens; output is the
+        # disjoint remainder so reasoning isn't billed twice.
+        assert usage.output_tokens == 6
         assert usage.reasoning_tokens == 2
         assert usage.cache_read_tokens == 5
 
