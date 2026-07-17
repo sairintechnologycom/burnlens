@@ -17,20 +17,20 @@ const TERMINAL_LINES = [
 ];
 
 const MOCK_MODELS = [
-  { name: "claude-sonnet-4", cost: 12.47, pct: 100, calls: 1243 },
-  { name: "gpt-4o", cost: 8.92, pct: 71, calls: 891 },
-  { name: "gemini-2.0-flash", cost: 3.21, pct: 26, calls: 2104 },
-  { name: "gpt-4o-mini", cost: 1.84, pct: 15, calls: 3421 },
+  { name: "claude-sonnet-5", cost: 12.47, pct: 100, calls: 1243 },
+  { name: "gpt-5.2", cost: 8.92, pct: 71, calls: 891 },
+  { name: "gemini-3.1-flash-lite", cost: 3.21, pct: 26, calls: 2104 },
+  { name: "gpt-5-mini", cost: 1.84, pct: 15, calls: 3421 },
 ];
 
 const MOCK_DAILY = [0.8, 1.2, 2.1, 1.6, 3.4, 2.8, 4.1, 3.2, 2.9, 3.8, 4.6, 3.1, 5.2, 4.8];
 
 const HEATBAR_ROWS = [
-  { model: "gpt-4o",          value: 342, pct: 100, tier: "hot"   },
-  { model: "claude-sonnet-4", value: 218, pct: 64,  tier: "warm"  },
-  { model: "gpt-4o-mini",     value: 94,  pct: 27,  tier: "mid"   },
+  { model: "gpt-5.2",         value: 342, pct: 100, tier: "hot"   },
+  { model: "claude-sonnet-5", value: 218, pct: 64,  tier: "warm"  },
+  { model: "gpt-5-mini",      value: 94,  pct: 27,  tier: "mid"   },
   { model: "haiku-4.5",       value: 41,  pct: 12,  tier: "muted" },
-  { model: "gemini-1.5",      value: 22,  pct: 6,   tier: "muted" },
+  { model: "gemini-3.1",      value: 22,  pct: 6,   tier: "muted" },
 ] as const;
 
 function HeatBars() {
@@ -38,7 +38,7 @@ function HeatBars() {
     <div
       className="lp-heatbars"
       role="img"
-      aria-label="Example dashboard: gpt-4o burning $342 of the $1,000 daily cap, total $717 used."
+      aria-label="Example dashboard: gpt-5.2 burning $342 of the $1,000 daily cap, total $717 used."
     >
       <div className="lp-heatbars-head">
         <span>Spend by model</span>
