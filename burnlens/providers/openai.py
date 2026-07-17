@@ -50,6 +50,8 @@ class OpenAIProvider(Provider):
                 accumulator["output_tokens"] = u.get("completion_tokens", 0)
                 accumulator["reasoning_tokens"] = details.get("reasoning_tokens", 0)
                 accumulator["cache_read_tokens"] = prompt_details.get("cached_tokens", 0)
+                accumulator["audio_input_tokens"] = prompt_details.get("audio_tokens", 0)
+                accumulator["audio_output_tokens"] = details.get("audio_tokens", 0)
             except Exception:
                 pass
         return None

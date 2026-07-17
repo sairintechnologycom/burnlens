@@ -6,6 +6,23 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.7.2] — 2026-07-17
+
+### Added
+- **Non-token billing.** The cost calculator now prices multiple line items per
+  request beyond plain text tokens:
+  - **Audio-modality tokens** are repriced at a dedicated `audio_input_per_million`
+    / `audio_output_per_million` rate instead of the text rate (they're a subset of
+    the reported input/output tokens). Wired end-to-end through the OpenAI
+    extractor and both streaming paths; added `gpt-4o-audio-preview`,
+    `gpt-4o-mini-audio-preview`, and `gpt-4o-realtime-preview` with audio rates.
+    Fixes ~16× under-reporting of audio traffic on those models.
+  - **Flat per-unit fees** via an optional `unit_prices` map on any model entry
+    (USD-per-unit) paired with `TokenUsage.units` — e.g. per web-search / tool
+    call, per image, per audio-second. Prices any non-token line item a caller
+    populates. Models with no audio/unit rates are unchanged (audio falls back to
+    the text rate; no `units` → no extra cost).
+
 ## [OSS `burnlens` v1.7.1] — 2026-07-17
 
 ### Added

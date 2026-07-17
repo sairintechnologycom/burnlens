@@ -80,9 +80,13 @@ Tags are stripped before the request reaches OpenAI. They never appear in any AP
 | Azure OpenAI | Beta | Point client `azure_endpoint` at `/proxy/azure`; set `BURNLENS_AZURE_ENDPOINT` to your resource URL |
 | AWS Bedrock | Roadmap | |
 
-Pricing covers current text/chat models for the supported providers. Image, audio,
-per-request, and other non-token rates are not represented by the current pricing
-schema. Gemini 3.1 Pro's higher rate above 200K input tokens is likewise excluded.
+Pricing covers current text/chat models for the supported providers, plus
+audio-modality tokens (OpenAI `*-audio-preview` / `*-realtime-preview`, billed at
+their own per-million rate) and arbitrary flat per-unit fees via each model's
+optional `unit_prices` (e.g. per web-search call). Image and video generation are
+still out of scope. Gemini 3.1 Pro's higher rate above 200K input tokens is
+excluded (flat-rate schema uses the ≤200K rate). Audio rates should be re-checked
+against the provider pricing page — they change less often than text but do move.
 
 ---
 
