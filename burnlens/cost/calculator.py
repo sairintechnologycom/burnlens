@@ -138,10 +138,15 @@ def extract_usage_openai(response_json: dict) -> TokenUsage:
     u = response_json.get("usage") or {}
     details = u.get("completion_tokens_details") or {}
     prompt_details = u.get("prompt_tokens_details") or {}
+    reasoning = details.get("reasoning_tokens", 0)
+    # OpenAI's completion_tokens INCLUDES reasoning tokens; the rest of the
+    # codebase treats output_tokens and reasoning_tokens as disjoint (they sum
+    # to total). Subtract so reasoning isn't billed twice — once via output,
+    # once via reasoning_cost.
     return TokenUsage(
         input_tokens=u.get("prompt_tokens", 0),
-        output_tokens=u.get("completion_tokens", 0),
-        reasoning_tokens=details.get("reasoning_tokens", 0),
+        output_tokens=max(0, u.get("completion_tokens", 0) - reasoning),
+        reasoning_tokens=reasoning,
         cache_read_tokens=prompt_details.get("cached_tokens", 0),
         audio_input_tokens=prompt_details.get("audio_tokens", 0),
         audio_output_tokens=details.get("audio_tokens", 0),

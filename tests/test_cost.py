@@ -322,6 +322,19 @@ class TestCostCalculation:
         assert cost == pytest.approx(1.0 + 3 * 0.01)
         del _PRICING_CACHE["_test_units"]
 
+    def test_reasoning_not_double_billed_from_response(self):
+        # completion_tokens=1000 already includes reasoning_tokens=200.
+        # Correct o1 cost = 1000 * $60/M (reasoning billed at output rate,
+        # once), NOT 1200 * $60/M.
+        body = {"usage": {
+            "prompt_tokens": 0, "completion_tokens": 1000,
+            "completion_tokens_details": {"reasoning_tokens": 200},
+        }}
+        u = extract_usage_openai(body)
+        assert u.output_tokens == 800 and u.reasoning_tokens == 200
+        cost = calculate_cost("openai", "o1", u)
+        assert cost == pytest.approx(1000 * 60.0 / 1e6)
+
     def test_openai_extracts_audio_tokens(self):
         body = {"usage": {
             "prompt_tokens": 100, "completion_tokens": 50,
@@ -350,7 +363,9 @@ class TestUsageExtraction:
         }
         u = extract_usage_openai(body)
         assert u.input_tokens == 100
-        assert u.output_tokens == 50
+        # completion_tokens (50) includes the 10 reasoning tokens; extractor
+        # keeps output disjoint from reasoning (50 - 10 = 40).
+        assert u.output_tokens == 40
         assert u.reasoning_tokens == 10
         assert u.cache_read_tokens == 20
 

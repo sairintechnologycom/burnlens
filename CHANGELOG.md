@@ -6,6 +6,18 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.7.3] — 2026-07-17
+
+### Fixed
+- **Reasoning tokens double-billed on OpenAI.** OpenAI reports `completion_tokens`
+  *inclusive* of `reasoning_tokens`, but the proxy extractors set
+  `output_tokens = completion_tokens` while also billing `reasoning_tokens`
+  separately — so reasoning was charged twice (e.g. an o1 call with 200 of 1000
+  output tokens as reasoning cost `$0.072` instead of `$0.060`). Extractors now
+  keep `output_tokens` disjoint from `reasoning_tokens` (matching the Gemini/Codex
+  scanners and the storage schema, where the two sum to the total). Fixed on the
+  non-streaming, streaming, and stream-chunk paths.
+
 ## [OSS `burnlens` v1.7.2] — 2026-07-17
 
 ### Added
