@@ -1,6 +1,8 @@
 """Tests for cost calculation, pricing lookup, and usage extraction."""
 from __future__ import annotations
 
+import pytest
+
 from burnlens.cost.calculator import (
     TokenUsage,
     calculate_cost,
@@ -96,6 +98,21 @@ class TestPricingLookup:
 
 
 class TestCostCalculation:
+    @pytest.mark.parametrize(
+        ("provider", "model", "expected"),
+        [
+            ("openai", "gpt-5.2", 15.75),
+            ("anthropic", "claude-sonnet-5", 12.00),
+            ("google", "gemini-3.1-flash-lite", 1.75),
+            ("groq", "qwen/qwen3.6-27b", 3.60),
+            ("mistral", "mistral-large-2512", 2.00),
+            ("together", "openai/gpt-oss-120b", 0.75),
+        ],
+    )
+    def test_refreshed_model_costs(self, provider: str, model: str, expected: float):
+        usage = TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000)
+        assert calculate_cost(provider, model, usage) == pytest.approx(expected)
+
     def test_basic_openai_cost(self):
         usage = TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000)
         cost = calculate_cost("openai", "gpt-4o", usage)
