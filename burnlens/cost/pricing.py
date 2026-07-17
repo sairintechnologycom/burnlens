@@ -87,6 +87,22 @@ def get_model_pricing(provider: str, model: str) -> dict[str, Any] | None:
     return None
 
 
+def all_pricing() -> list[tuple[str, str, dict[str, Any]]]:
+    """Return ``(provider, model, pricing_dict)`` for every priced model.
+
+    Reads the bundled pricing_data JSON files directly (sorted by provider),
+    for CLI export and inspection.
+    """
+    rows: list[tuple[str, str, dict[str, Any]]] = []
+    for path in sorted(_PRICING_DIR.glob("*.json")):
+        with open(path) as f:
+            data = json.load(f)
+        provider = data.get("provider") or path.stem
+        for model, pricing in data.get("models", {}).items():
+            rows.append((provider, model, pricing))
+    return rows
+
+
 def get_pricing(pricing_key: str, model_name: str) -> dict[str, Any] | None:
     """Look up pricing by pricing_key (Provider.config.pricing_key) and model name.
 

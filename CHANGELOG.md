@@ -6,6 +6,14 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.8.0] — 2026-07-17
+
+### Added
+- **`burnlens pricing` command.** Shows the bundled model pricing table
+  ($/1M tokens) for all providers, or exports it: `--csv` writes CSV to stdout,
+  `--output/-o FILE` writes to a file. Backed by a new `cost.pricing.all_pricing()`
+  helper so the table and CSV share one source.
+
 ## [OSS `burnlens` v1.7.5] — 2026-07-17
 
 ### Added
