@@ -1,6 +1,6 @@
 {
   "provider": "groq",
-  "updated": "2026-07-14",
+  "updated": "2026-07-17",
   "models": {
     "llama-3.3-70b-versatile": {
       "input_per_million": 0.59,
@@ -20,6 +20,14 @@
     },
     "moonshotai/kimi-k2-instruct": {
       "input_per_million": 1.00,
+      "output_per_million": 3.00
+    },
+    "qwen/qwen3-32b": {
+      "input_per_million": 0.29,
+      "output_per_million": 0.59
+    },
+    "qwen/qwen3.6-27b": {
+      "input_per_million": 0.60,
       "output_per_million": 3.00
     }
   }

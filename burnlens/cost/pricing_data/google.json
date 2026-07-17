@@ -1,6 +1,6 @@
 {
   "provider": "google",
-  "updated": "2026-07-13",
+  "updated": "2026-07-17",
   "models": {
     "gemini-2.5-pro": {
       "input_per_million": 1.25,
@@ -45,6 +45,10 @@
     "gemini-3.1-pro-preview": {
       "input_per_million": 2.00,
       "output_per_million": 12.00
+    },
+    "gemini-3.1-flash-lite": {
+      "input_per_million": 0.25,
+      "output_per_million": 1.50
     }
   }
 }
