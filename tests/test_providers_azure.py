@@ -2,10 +2,16 @@
 deployment-name model extraction, and inherited OpenAI wire-format handling."""
 from __future__ import annotations
 
+import asyncio
+import json
+
+import httpx
 import pytest
 
 from burnlens.providers import get, get_by_proxy_path
 from burnlens.providers.azure import UPSTREAM_ENV, AzureOpenAIProvider
+from burnlens.proxy.interceptor import handle_request
+from burnlens.storage.queries import get_recent_requests
 
 
 def test_registered():
@@ -54,8 +60,9 @@ def test_model_from_path_when_body_empty():
 def test_gpt35_spelling_aliased_and_prices():
     from burnlens.cost.calculator import calculate_cost, TokenUsage
     provider = get("azure")
-    # Azure spells it without dots; extract_model maps to the canonical key,
-    # and the interceptor costs off that extracted value.
+    # Azure spells it without dots; extract_model maps to the canonical key.
+    # NOTE: this tests the provider object only — see TestAzureCostsThroughProxy
+    # for the interceptor path, which is where this mapping was dead until v1.8.2.
     model = provider.extract_model({"model": "gpt-35-turbo"}, "")
     assert model == "gpt-3.5-turbo"
     assert calculate_cost("azure", model, TokenUsage(input_tokens=1_000_000)) > 0
@@ -91,3 +98,72 @@ def test_stream_usage_extraction_inherited():
     acc: dict = {}
     provider.extract_usage_from_stream_chunk(chunk, acc)
     assert acc["input_tokens"] == 100 and acc["output_tokens"] == 25
+
+
+# ---------------------------------------------------------------------------
+# v1.8.2 regression: cost must be correct through the INTERCEPTOR, not just the
+# provider object.  Until v1.8.2 the interceptor never called
+# provider.extract_model(), so _AZURE_ALIASES and _deployment_map() were dead
+# code in the proxy path and every such request logged $0.  The tests above pass
+# against the provider object and did NOT catch it — these drive handle_request.
+# ---------------------------------------------------------------------------
+
+
+class _CannedTransport(httpx.AsyncBaseTransport):
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code=200,
+            content=json.dumps(self._payload).encode(),
+            headers={"content-type": "application/json"},
+        )
+
+
+async def _logged_row(deployment: str, db_path: str) -> dict:
+    """Route one Azure request through the interceptor; return its logged row."""
+    transport = _CannedTransport({
+        "id": "chatcmpl-test",
+        "model": deployment,
+        "choices": [{"message": {"role": "assistant", "content": "Hi"}}],
+        "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 0},
+    })
+    await handle_request(
+        client=httpx.AsyncClient(transport=transport),
+        provider=get("azure"),
+        path=f"/proxy/azure/openai/deployments/{deployment}/chat/completions",
+        method="POST",
+        headers={"content-type": "application/json"},
+        body_bytes=json.dumps({"model": deployment, "messages": []}).encode(),
+        query_string="",
+        db_path=db_path,
+        alert_engine=None,
+    )
+    for _ in range(10):
+        await asyncio.sleep(0.05)
+    rows = await get_recent_requests(db_path, limit=5)
+    assert len(rows) == 1
+    return rows[0]
+
+
+class TestAzureCostsThroughProxy:
+    async def test_dotless_gpt35_deployment_costs_nonzero(self, initialized_db, monkeypatch):
+        monkeypatch.setenv(UPSTREAM_ENV, "https://myres.openai.azure.com")
+        row = await _logged_row("gpt-35-turbo", initialized_db)
+        assert row["model"] == "gpt-3.5-turbo"
+        assert row["cost_usd"] == pytest.approx(0.50)  # $0.50/MTok in
+
+    async def test_mapped_deployment_name_costs_nonzero(self, initialized_db, monkeypatch):
+        monkeypatch.setenv(UPSTREAM_ENV, "https://myres.openai.azure.com")
+        monkeypatch.setenv("BURNLENS_AZURE_DEPLOYMENTS", "prod-gpt4o=gpt-4o")
+        row = await _logged_row("prod-gpt4o", initialized_db)
+        assert row["model"] == "gpt-4o"
+        assert row["cost_usd"] == pytest.approx(2.50)  # $2.50/MTok in
+
+    async def test_google_model_in_path_still_extracted(self, initialized_db):
+        """The deleted _extract_model_from_path was google-only; guard the
+        behaviour it used to provide now that the provider owns it."""
+        assert get("google").extract_model(
+            {}, "/v1beta/models/gemini-1.5-pro:generateContent"
+        ) == "gemini-1.5-pro"

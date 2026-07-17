@@ -211,31 +211,13 @@ def _burnlens_header_prefix_check() -> str:
     return _BURNLENS_HEADER_PREFIX
 
 
-def _extract_model(body_bytes: bytes, provider_name: str) -> str:
-    """Best-effort extraction of model name from request body."""
+def _safe_json(body_bytes: bytes) -> dict:
+    """Parse a request body into a dict; {} when it isn't a JSON object."""
     try:
         data = json.loads(body_bytes)
-        if provider_name == "google":
-            # Google: model is in the URL path, not the body.
-            # We fall back to the model field if present.
-            return data.get("model", "unknown")
-        return data.get("model", "unknown")
     except Exception:
-        return "unknown"
-
-
-def _extract_model_from_path(path: str, provider_name: str) -> str | None:
-    """Extract model from URL path for Google (models/gemini-1.5-pro/...)."""
-    if provider_name != "google":
-        return None
-    # Google path: /v1beta/models/{model}:generateContent
-    parts = path.split("/")
-    for i, part in enumerate(parts):
-        if part == "models" and i + 1 < len(parts):
-            model_part = parts[i + 1]
-            # Strip method suffix like :generateContent
-            return model_part.split(":")[0]
-    return None
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _hash_system_prompt(body_bytes: bytes) -> str | None:
@@ -441,8 +423,7 @@ async def handle_request(
     clean_headers = _clean_request_headers(headers)
     streaming = _is_streaming(body_bytes, upstream_path)
 
-    model_from_path = _extract_model_from_path(upstream_path, provider.name)
-    model = model_from_path or _extract_model(body_bytes, provider.name)
+    model = provider.extract_model(_safe_json(body_bytes), upstream_path) or "unknown"
     system_hash = _hash_system_prompt(body_bytes)
 
     # --- Phase 7: Semantic Cache Check ---
