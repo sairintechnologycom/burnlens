@@ -49,6 +49,11 @@
     "gemini-3.1-flash-lite": {
       "input_per_million": 0.25,
       "output_per_million": 1.50
+    },
+    "gemini-3.5-flash": {
+      "input_per_million": 1.50,
+      "output_per_million": 9.00,
+      "cache_read_per_million": 0.15
     }
   }
 }

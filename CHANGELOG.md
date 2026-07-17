@@ -6,6 +6,17 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.7.1] — 2026-07-17
+
+### Added
+- **Current text/chat model pricing.** Added OpenAI GPT-5.4 through GPT-5.6,
+  Gemini 3.5 Flash, Claude Mythos 5, Mistral Medium 3.5 and Small 4, and the
+  current Together chat catalog.
+
+### Fixed
+- **Provider aliases and rates.** Refreshed Mistral `-latest` aliases, Groq
+  GPT-OSS 20B, and Together Llama 3.3 70B pricing against provider catalogs.
+
 ## [OSS `burnlens` v1.7.0] — 2026-07-17
 
 ### Added
