@@ -287,6 +287,51 @@ class TestCostCalculation:
         cost = calculate_cost("openai", "gpt-3.5-turbo", usage)
         assert abs(cost - (0.50 + 1.50)) < 1e-6
 
+    # -- non-token line items ------------------------------------------------
+
+    def test_audio_tokens_billed_at_audio_rate(self):
+        # gpt-4o-audio-preview: text in/out $2.50/$10, audio in/out $40/$80.
+        # input_tokens counts INCLUDE the audio subset, so audio is repriced,
+        # not added on top: 1M input (0.5M audio) + 1M output (0.5M audio).
+        usage = TokenUsage(
+            input_tokens=1_000_000, output_tokens=1_000_000,
+            audio_input_tokens=500_000, audio_output_tokens=500_000,
+        )
+        cost = calculate_cost("openai", "gpt-4o-audio-preview", usage)
+        expected = (
+            500_000 * 2.50 / 1e6 + 500_000 * 10.00 / 1e6   # text half
+            + 500_000 * 40.00 / 1e6 + 500_000 * 80.00 / 1e6  # audio half
+        )
+        assert cost == pytest.approx(expected)
+
+    def test_audio_tokens_fall_back_to_text_rate(self):
+        # A model with no audio rate must not regress: audio tokens bill at the
+        # text rate (same total as before this feature existed).
+        usage = TokenUsage(input_tokens=1_000_000, audio_input_tokens=400_000)
+        cost = calculate_cost("openai", "gpt-4o", usage)
+        assert cost == pytest.approx(1_000_000 * 2.50 / 1e6)
+
+    def test_flat_unit_line_items(self):
+        # unit_prices are USD-per-unit flat fees, summed as extra line items.
+        from burnlens.cost.pricing import _PRICING_CACHE
+        _PRICING_CACHE["_test_units"] = {
+            "m": {"input_per_million": 1.0, "unit_prices": {"web_search_calls": 0.01}}
+        }
+        usage = TokenUsage(input_tokens=1_000_000, units={"web_search_calls": 3})
+        cost = calculate_cost("_test_units", "m", usage)
+        assert cost == pytest.approx(1.0 + 3 * 0.01)
+        del _PRICING_CACHE["_test_units"]
+
+    def test_openai_extracts_audio_tokens(self):
+        body = {"usage": {
+            "prompt_tokens": 100, "completion_tokens": 50,
+            "prompt_tokens_details": {"audio_tokens": 40, "cached_tokens": 10},
+            "completion_tokens_details": {"audio_tokens": 30},
+        }}
+        u = extract_usage_openai(body)
+        assert u.audio_input_tokens == 40
+        assert u.audio_output_tokens == 30
+
 
 # ---------------------------------------------------------------------------
 # Usage extraction — OpenAI

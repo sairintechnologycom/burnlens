@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from burnlens.cost.pricing import get_model_pricing
 
@@ -18,6 +18,11 @@ class TokenUsage:
     reasoning_tokens: int = 0      # OpenAI o-series
     cache_read_tokens: int = 0     # cached/prompt-cache-read tokens
     cache_write_tokens: int = 0    # Anthropic cache-write tokens
+    audio_input_tokens: int = 0    # audio-modality input tokens (subset of input_tokens, billed at audio rate)
+    audio_output_tokens: int = 0   # audio-modality output tokens (subset of output_tokens)
+    # Non-token line items: {unit_name: count}, priced flat via pricing["unit_prices"]
+    # (e.g. {"web_search_calls": 3}, {"images": 2}, {"audio_seconds": 30}).
+    units: dict[str, float] = field(default_factory=dict)
 
 
 # Current Sonnet model used to estimate cost for Cursor's 'Auto' mode, which
@@ -67,12 +72,18 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
 
     per_million = 1_000_000.0
 
-    # Base input cost (exclude cache-read tokens from regular input)
-    billable_input = max(0, usage.input_tokens - usage.cache_read_tokens)
+    # Base input cost — cache-read and audio tokens are subsets of input_tokens
+    # billed at their own rates, so exclude both from the text-input count.
+    # ponytail: if a token is both cached and audio the double-subtract under-counts
+    # text slightly; max(0, …) floors it. Split by modality if that ever matters.
+    billable_input = max(
+        0, usage.input_tokens - usage.cache_read_tokens - usage.audio_input_tokens
+    )
     input_cost = billable_input * pricing.get("input_per_million", 0.0) / per_million
 
-    # Output cost (reasoning tokens billed at output rate unless separate entry)
-    output_cost = usage.output_tokens * pricing.get("output_per_million", 0.0) / per_million
+    # Text output cost (audio-output tokens billed separately below)
+    billable_output = max(0, usage.output_tokens - usage.audio_output_tokens)
+    output_cost = billable_output * pricing.get("output_per_million", 0.0) / per_million
 
     # Reasoning tokens — use dedicated rate if present, else output rate
     reasoning_rate = pricing.get("reasoning_per_million", pricing.get("output_per_million", 0.0))
@@ -86,7 +97,28 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
         usage.cache_write_tokens * pricing.get("cache_write_per_million", 0.0) / per_million
     )
 
-    total = input_cost + output_cost + reasoning_cost + cache_read_cost + cache_write_cost
+    # Audio-modality tokens billed at their own per-million rate (fall back to
+    # the text rate when a model has no separate audio rate).
+    audio_input_cost = (
+        usage.audio_input_tokens
+        * pricing.get("audio_input_per_million", pricing.get("input_per_million", 0.0))
+        / per_million
+    )
+    audio_output_cost = (
+        usage.audio_output_tokens
+        * pricing.get("audio_output_per_million", pricing.get("output_per_million", 0.0))
+        / per_million
+    )
+
+    # Non-token line items — flat per-unit fees (per request, per image, per
+    # tool call, per audio-second, …). Prices are USD-per-unit, not per-million.
+    unit_prices = pricing.get("unit_prices", {})
+    units_cost = sum(count * unit_prices.get(name, 0.0) for name, count in usage.units.items())
+
+    total = (
+        input_cost + output_cost + reasoning_cost + cache_read_cost + cache_write_cost
+        + audio_input_cost + audio_output_cost + units_cost
+    )
     logger.debug(
         "Cost for %s/%s: $%.6f  (in=%d out=%d reason=%d cache_r=%d cache_w=%d)",
         provider,
@@ -111,6 +143,8 @@ def extract_usage_openai(response_json: dict) -> TokenUsage:
         output_tokens=u.get("completion_tokens", 0),
         reasoning_tokens=details.get("reasoning_tokens", 0),
         cache_read_tokens=prompt_details.get("cached_tokens", 0),
+        audio_input_tokens=prompt_details.get("audio_tokens", 0),
+        audio_output_tokens=details.get("audio_tokens", 0),
     )
 
 

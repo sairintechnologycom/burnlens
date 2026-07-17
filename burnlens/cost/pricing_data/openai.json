@@ -171,6 +171,25 @@
       "output_per_million": 4.40,
       "cache_read_per_million": 0.275,
       "reasoning_per_million": 4.40
+    },
+    "gpt-4o-audio-preview": {
+      "input_per_million": 2.50,
+      "output_per_million": 10.00,
+      "audio_input_per_million": 40.00,
+      "audio_output_per_million": 80.00
+    },
+    "gpt-4o-mini-audio-preview": {
+      "input_per_million": 0.15,
+      "output_per_million": 0.60,
+      "audio_input_per_million": 10.00,
+      "audio_output_per_million": 20.00
+    },
+    "gpt-4o-realtime-preview": {
+      "input_per_million": 5.00,
+      "output_per_million": 20.00,
+      "cache_read_per_million": 2.50,
+      "audio_input_per_million": 40.00,
+      "audio_output_per_million": 80.00
     }
   }
 }

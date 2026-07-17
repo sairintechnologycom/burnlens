@@ -84,6 +84,8 @@ def extract_usage_from_stream(provider_name: str, usage_chunks: list[str]) -> To
         reasoning_tokens=acc.get("reasoning_tokens", 0),
         cache_read_tokens=acc.get("cache_read_tokens", 0),
         cache_write_tokens=acc.get("cache_write_tokens", 0),
+        audio_input_tokens=acc.get("audio_input_tokens", 0),
+        audio_output_tokens=acc.get("audio_output_tokens", 0),
     )
 
 
@@ -114,6 +116,8 @@ def _extract_openai_stream(chunks: list[str]) -> TokenUsage:
                     output_tokens=u.get("completion_tokens", 0),
                     reasoning_tokens=details.get("reasoning_tokens", 0),
                     cache_read_tokens=prompt_details.get("cached_tokens", 0),
+                    audio_input_tokens=prompt_details.get("audio_tokens", 0),
+                    audio_output_tokens=details.get("audio_tokens", 0),
                 )
             except Exception:
                 pass
