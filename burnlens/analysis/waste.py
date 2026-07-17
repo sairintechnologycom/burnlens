@@ -24,24 +24,30 @@ class WasteFinding:
 
 # Maps model name substrings → cost tier (lower is cheaper)
 _MODEL_TIERS: list[tuple[str, str]] = [
-    # Cheap / small
-    ("gpt-4o-mini", "cheap"),
-    ("gpt-3.5", "cheap"),
-    ("haiku", "cheap"),
-    ("flash", "cheap"),
-    ("gemini-1.5-flash", "cheap"),
-    ("gemini-2.0-flash", "cheap"),
-    # Mid
-    ("gpt-4o", "mid"),
-    ("sonnet", "mid"),
-    ("gemini-1.5-pro", "mid"),
-    ("gemini-2.0-pro", "mid"),
     # Expensive
+    ("gpt-5.2-pro", "expensive"),
     ("o1", "expensive"),
     ("o3", "expensive"),
     ("opus", "expensive"),
     ("gpt-4-turbo", "expensive"),
     ("gpt-4 ", "expensive"),
+    # Cheap / small
+    ("gpt-4o-mini", "cheap"),
+    ("gpt-5-mini", "cheap"),
+    ("gpt-5-nano", "cheap"),
+    ("gpt-3.5", "cheap"),
+    ("haiku", "cheap"),
+    ("flash", "cheap"),
+    ("gemini-1.5-flash", "cheap"),
+    ("gemini-2.0-flash", "cheap"),
+    ("gemini-3.1-flash-lite", "cheap"),
+    # Mid
+    ("gpt-4o", "mid"),
+    ("gpt-5", "mid"),
+    ("sonnet", "mid"),
+    ("gemini-1.5-pro", "mid"),
+    ("gemini-2.0-pro", "mid"),
+    ("gemini-3.1-pro", "mid"),
 ]
 
 

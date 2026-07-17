@@ -81,10 +81,6 @@ class Provider(ABC):
     # Optional overrides
     # ------------------------------------------------------------------
 
-    def normalize_model_name(self, raw_model: str) -> str:
-        """Map raw provider model name to pricing key. Default: identity."""
-        return raw_model
-
     def headers_to_strip(self) -> set[str]:
         """BurnLens tag headers to remove before forwarding upstream."""
         return {

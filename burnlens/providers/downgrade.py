@@ -10,13 +10,17 @@ DOWNGRADE_MAP: dict[str, str] = {
     "o1":                         "gpt-4o-mini",
     "o3":                         "gpt-4o-mini",
     "o1-mini":                    "gpt-4o-mini",
+    "gpt-5.2":                    "gpt-5-mini",
+    "gpt-5.2-pro":                "gpt-5-mini",
     # Anthropic
     "claude-opus-4-6":            "claude-haiku-4-5-20251001",
     "claude-sonnet-4-6":          "claude-haiku-4-5-20251001",
     "claude-3-5-sonnet-20241022": "claude-haiku-4-5-20251001",
+    "claude-sonnet-5":            "claude-haiku-4-5",
     # Google
     "gemini-1.5-pro":             "gemini-1.5-flash",
     "gemini-2.0-pro":             "gemini-1.5-flash",
+    "gemini-3.1-pro-preview":     "gemini-3.1-flash-lite",
 }
 
 # Strip trailing version/alias suffixes: -latest, -001, -002, or any -NNN
