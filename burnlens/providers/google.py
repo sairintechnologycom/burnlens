@@ -55,6 +55,12 @@ class GoogleProvider(Provider):
             rf"\g<1>{routed_model}\g<3>", path, count=1
         )
 
+    def is_streaming(self, request_body: dict, request_path: str) -> bool:
+        """Google signals streaming via the URL endpoint, not the body."""
+        return ":streamGenerateContent" in request_path or super().is_streaming(
+            request_body, request_path
+        )
+
     def extract_usage(self, response_body: dict) -> TokenUsage:
         return extract_usage_google(response_body)
 

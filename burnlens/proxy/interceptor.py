@@ -197,12 +197,23 @@ def _extract_tags(headers: dict[str, str]) -> dict[str, str]:
     return tags
 
 
-def _clean_request_headers(headers: dict[str, str]) -> dict[str, str]:
-    """Remove BurnLens-specific and hop-by-hop headers before forwarding."""
+def _clean_request_headers(
+    headers: dict[str, str], provider: Provider | None = None
+) -> dict[str, str]:
+    """Remove BurnLens-specific and hop-by-hop headers before forwarding.
+
+    The ``x-burnlens-*`` prefix rule is the authoritative one: it covers every tag
+    header (including tag_repo/tag_dev/tag_pr, which must never reach an upstream).
+    ``provider.headers_to_strip()`` is unioned on top for provider-specific extras
+    that don't carry the prefix — it does NOT replace the prefix rule, since a set
+    can't express a prefix and swapping them would leak the git-context tags.
+    """
+    extra = {h.lower() for h in provider.headers_to_strip()} if provider else set()
     return {
         k: v
         for k, v in headers.items()
         if k.lower() not in _STRIP_REQUEST_HEADERS
+        and k.lower() not in extra
         and not k.lower().startswith(_burnlens_header_prefix_check())
     }
 
@@ -246,18 +257,17 @@ def _hash_system_prompt(body_bytes: bytes) -> str | None:
 
 
 def _is_streaming(body_bytes: bytes, upstream_path: str = "") -> bool:
-    """Return True if this request will produce a streaming response.
+    """Deprecated shim — use ``provider.is_streaming()``.
 
-    OpenAI/Anthropic signal streaming via ``"stream": true`` in the request body.
-    Google signals streaming via the URL endpoint (`:streamGenerateContent`), not
-    the body, so we check the upstream path as well.
+    Kept for the pre-plugin call sites and tests that predate the Provider
+    interface. Providers own streaming detection now, because it is per-provider:
+    body ``"stream": true`` (OpenAI/Anthropic), a URL suffix (Google's
+    ``:streamGenerateContent``), or a distinct operation (Bedrock's
+    ``/converse-stream``).
     """
-    if ":streamGenerateContent" in upstream_path:
-        return True
-    try:
-        return bool(json.loads(body_bytes).get("stream", False))
-    except Exception:
-        return False
+    from burnlens.providers.google import google_provider
+
+    return google_provider.is_streaming(_safe_json(body_bytes), upstream_path)
 
 
 def _extract_usage_for_provider(
@@ -420,10 +430,11 @@ async def handle_request(
             }).encode()
             return 429, {"content-type": "application/json"}, reject_body, None
 
-    clean_headers = _clean_request_headers(headers)
-    streaming = _is_streaming(body_bytes, upstream_path)
+    clean_headers = _clean_request_headers(headers, provider)
+    body_json = _safe_json(body_bytes)
+    streaming = provider.is_streaming(body_json, upstream_path)
 
-    model = provider.extract_model(_safe_json(body_bytes), upstream_path) or "unknown"
+    model = provider.extract_model(body_json, upstream_path) or "unknown"
     system_hash = _hash_system_prompt(body_bytes)
 
     # --- Phase 7: Semantic Cache Check ---
@@ -567,7 +578,7 @@ async def handle_request(
         except Exception as exc:
             logger.debug("Budget policy check failed (fail-open): %s", exc)
 
-    upstream_url = f"{provider.upstream_base}{upstream_path}"
+    upstream_url = provider.resolve_upstream_url(upstream_path, clean_headers)
     start_ms = time.monotonic()
 
     if streaming:
@@ -651,7 +662,7 @@ async def _handle_non_streaming(
     usage = TokenUsage()
     try:
         resp_json = response.json()
-        usage = _extract_usage_for_provider(provider.name, resp_json)
+        usage = provider.extract_usage(resp_json)
     except Exception:
         pass
 
@@ -899,7 +910,7 @@ async def _handle_streaming(
             # Split the accumulated buffer into complete SSE events,
             # keeping only those that contain usage data.  This handles
             # TCP chunk fragmentation that previously lost tokens.
-            usage_events = split_sse_events(raw_buffer)
+            usage_events = split_sse_events(raw_buffer, provider)
             asyncio.create_task(
                 _log_streaming_usage(
                     usage_chunks=usage_events,
@@ -965,7 +976,7 @@ async def _log_streaming_usage(
     body_bytes: bytes | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
-    usage = extract_usage_from_stream(provider.name, usage_chunks)
+    usage = extract_usage_from_stream(provider.name, usage_chunks, provider)
 
     cost = calculate_cost(provider.name, model, usage)
 

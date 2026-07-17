@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from burnlens.cost.calculator import TokenUsage
+
+if TYPE_CHECKING:
+    from burnlens.providers.base import Provider
 
 # Strings that indicate a *complete* SSE event may contain usage data.
 # Applied to whole events (after reassembly), not raw TCP chunks.
@@ -18,53 +22,60 @@ USAGE_EVENT_INDICATORS: tuple[str, ...] = (
 USAGE_CHUNK_INDICATORS = USAGE_EVENT_INDICATORS
 
 
-def should_buffer_chunk(chunk_str: str) -> bool:
-    """Return True if this chunk should be saved for usage extraction.
+def split_sse_events(raw_buffer: str, provider: "Provider | None" = None) -> list[str]:
+    """Split a raw SSE buffer into complete events, keeping the usage-bearing ones.
 
-    Avoids storing every SSE chunk in memory — only the subset that
-    contains token counts.
+    SSE events are delimited by ``\\n\\n``.
 
-    .. note::
-       This checks raw TCP chunks and may miss usage data split across
-       chunk boundaries.  Prefer :func:`split_sse_events` for robust
-       extraction.
+    Which events carry usage is per-provider, so the decision belongs to
+    ``provider.should_buffer_chunk()``. ``USAGE_EVENT_INDICATORS`` is the legacy
+    fallback for callers with no provider in hand (and for providers absent from
+    the registry, e.g. in tests): it is the *union* of every bundled provider's
+    indicators, so it over-matches rather than under-matches.
+
+    Passing the provider matters for any provider whose usage key isn't in that
+    hardcoded union — without it, usage is silently dropped and the request
+    costs $0.
     """
-    return any(indicator in chunk_str for indicator in USAGE_EVENT_INDICATORS)
-
-
-def split_sse_events(raw_buffer: str) -> list[str]:
-    """Split a raw SSE buffer into complete events.
-
-    SSE events are delimited by ``\\n\\n``.  Returns only events that
-    contain usage-related data (per USAGE_EVENT_INDICATORS).
-    """
+    gate = (
+        (lambda e: provider.should_buffer_chunk(e.encode("utf-8", errors="ignore")))
+        if provider is not None
+        else (lambda e: any(i in e for i in USAGE_EVENT_INDICATORS))
+    )
     events: list[str] = []
     for event in raw_buffer.split("\n\n"):
         event = event.strip()
         if not event:
             continue
-        if any(indicator in event for indicator in USAGE_EVENT_INDICATORS):
+        if gate(event):
             events.append(event + "\n\n")
     return events
 
 
-def extract_usage_from_stream(provider_name: str, usage_chunks: list[str]) -> TokenUsage:
+def extract_usage_from_stream(
+    provider_name: str,
+    usage_chunks: list[str],
+    provider: "Provider | None" = None,
+) -> TokenUsage:
     """Parse token usage from buffered streaming chunks for a given provider.
 
-    Dispatches to the registered Provider plugin for the given name.
-    Falls back to the built-in private extractors if the provider is not
-    in the registry (e.g. in tests that don't trigger registration).
+    Prefers the ``provider`` instance when the caller has one (the proxy always
+    does) — re-resolving it from the registry by name would discard the very
+    object being asked to do the work. Falls back to a registry lookup by name,
+    then to the built-in private extractors when the registry isn't populated
+    (e.g. tests that don't trigger registration).
 
     Args:
         provider_name: "openai", "anthropic", or "google"
         usage_chunks: complete SSE event strings (reassembled from raw chunks)
+        provider: the Provider instance, when the caller already holds one
 
     Returns:
         TokenUsage with whatever counts could be extracted (zeros if none found)
     """
     from burnlens.providers.registry import get as _get_provider
     try:
-        provider = _get_provider(provider_name)
+        provider = provider if provider is not None else _get_provider(provider_name)
     except KeyError:
         # Registry not populated — fall back to built-in extractors
         if provider_name == "openai":

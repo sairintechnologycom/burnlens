@@ -97,3 +97,12 @@ class Provider(ABC):
         path (e.g. Google: /v1beta/models/{model}:generateContent).
         """
         return path
+
+    def is_streaming(self, request_body: dict, request_path: str) -> bool:
+        """Return True if this request will produce a streaming response.
+
+        Default: OpenAI/Anthropic-style ``"stream": true`` in the body. Override
+        for providers that signal streaming via the URL instead (Google's
+        ``:streamGenerateContent``, Bedrock's ``/converse-stream``).
+        """
+        return bool(request_body.get("stream", False))

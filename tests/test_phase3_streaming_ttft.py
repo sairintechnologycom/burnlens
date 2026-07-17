@@ -15,6 +15,9 @@ async def test_streaming_ttft_capture(tmp_path):
     provider = MagicMock(spec=Provider)
     provider.name = "openai"
     provider.upstream_base = "https://api.openai.com"
+    provider.resolve_upstream_url.side_effect = (
+        lambda path, headers: f"https://api.openai.com{path}"
+    )
     provider.rewrite_path_for_routing.side_effect = lambda path, model: path
 
     # Mock client and response

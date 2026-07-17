@@ -6,6 +6,37 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.8.3] — 2026-07-17
+
+### Fixed
+- **The proxy bypassed most of the `Provider` interface.** An audit prompted by
+  the v1.8.2 Azure bug found that six of the plugin's hooks were implemented and
+  unit-tested but never actually called by `handle_request` — the interceptor
+  inlined equivalent logic or re-resolved the provider from the registry by name.
+  For the bundled providers the inlined behaviour matched, so there was no live
+  mispricing (unlike v1.8.2), but any future provider overriding these hooks
+  would have been silently ignored. Now wired to the provider instance in hand:
+  - `resolve_upstream_url()` — was `f"{provider.upstream_base}{path}"`.
+  - `is_streaming()` — new hook; streaming detection had Google's
+    `:streamGenerateContent` hardcoded in a module helper.
+  - `should_buffer_chunk()` — the streaming usage gate matched a hardcoded
+    `USAGE_EVENT_INDICATORS` tuple; `split_sse_events()` now consults the
+    provider, with that tuple as the no-provider fallback.
+  - `headers_to_strip()` — unioned onto the `x-burnlens-*` prefix rule (the
+    prefix rule stays authoritative, so git-context tags never leak upstream).
+  - `extract_usage()` and `extract_usage_from_stream()` — used the provider
+    instance instead of re-looking-it-up by name.
+
+  The duplicate module-level `should_buffer_chunk()` in `streaming.py` (never
+  called by the proxy) is deleted.
+
+### Tests
+- `test_provider_hooks_wired.py` drives `handle_request` with a recording
+  provider and asserts each hook is actually reached, plus a meta-test that fails
+  if a new `Provider` hook is added without coverage here. Verified to fail when
+  a hook is un-wired. This is the class of bug that caused v1.6.1, v1.8.2, and
+  this release; the guard exists so it stops recurring.
+
 ## [OSS `burnlens` v1.8.2] — 2026-07-17
 
 ### Fixed
