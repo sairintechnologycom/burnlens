@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -57,34 +58,65 @@ def get_pricing_version(provider: str) -> str | None:
 
 
 
-def get_model_pricing(provider: str, model: str) -> dict[str, Any] | None:
+def _apply_scheduled(pricing: dict[str, Any], today: date) -> dict[str, Any]:
+    """Apply a dated price change if one has taken effect.
+
+    A pricing entry may carry ``"scheduled": [{"effective": "YYYY-MM-DD", ...}]``
+    for a known future rate change (e.g. an introductory price expiring). The
+    latest tier whose ``effective`` date has arrived is merged over the base,
+    so the correct rate applies automatically with no code edit or release.
+
+    Evaluated against the current date — right for the live proxy (request time
+    == now). ponytail: scans of old logs price at today's tier, not the request
+    date's; acceptable since the wheel only ever carries one live rate anyway.
+    """
+    sched = pricing.get("scheduled")
+    if not sched:
+        return pricing
+    active: dict[str, Any] | None = None
+    for tier in sched:
+        eff = date.fromisoformat(tier["effective"])
+        if eff <= today and (active is None or eff >= date.fromisoformat(active["effective"])):
+            active = tier
+    merged = {k: v for k, v in pricing.items() if k != "scheduled"}
+    if active is not None:
+        merged.update({k: v for k, v in active.items() if k != "effective"})
+    return merged
+
+
+def get_model_pricing(
+    provider: str, model: str, today: date | None = None
+) -> dict[str, Any] | None:
     """Return pricing dict for a model, or None if not found.
 
     Tries exact match first, then prefix match to handle versioned model IDs
-    (e.g. ``gpt-4o-2024-11-20`` matches ``gpt-4o``).
+    (e.g. ``gpt-4o-2024-11-20`` matches ``gpt-4o``). Applies any dated price
+    change (see ``_apply_scheduled``); pass ``today`` to override the date.
     """
     provider = _resolve_pricing_key(provider)
     models = _load_provider(provider)
     if not models:
         return None
 
-    # Exact match
-    if model in models:
-        return models[model]
+    base = models.get(model)
+    if base is None:
+        # Prefix match — longest matching prefix wins
+        best: str | None = None
+        for known in models:
+            if model.startswith(known):
+                if best is None or len(known) > len(best):
+                    best = known
+        if best:
+            logger.debug("Model %r matched pricing entry %r (prefix)", model, best)
+            base = models[best]
 
-    # Prefix match — longest matching prefix wins
-    best: str | None = None
-    for known in models:
-        if model.startswith(known):
-            if best is None or len(known) > len(best):
-                best = known
+    if base is None:
+        logger.warning(
+            "No pricing found for provider=%r model=%r — cost will be $0", provider, model
+        )
+        return None
 
-    if best:
-        logger.debug("Model %r matched pricing entry %r (prefix)", model, best)
-        return models[best]
-
-    logger.warning("No pricing found for provider=%r model=%r — cost will be $0", provider, model)
-    return None
+    return _apply_scheduled(base, today or date.today())
 
 
 def all_pricing() -> list[tuple[str, str, dict[str, Any]]]:
@@ -94,12 +126,13 @@ def all_pricing() -> list[tuple[str, str, dict[str, Any]]]:
     for CLI export and inspection.
     """
     rows: list[tuple[str, str, dict[str, Any]]] = []
+    today = date.today()
     for path in sorted(_PRICING_DIR.glob("*.json")):
         with open(path) as f:
             data = json.load(f)
         provider = data.get("provider") or path.stem
         for model, pricing in data.get("models", {}).items():
-            rows.append((provider, model, pricing))
+            rows.append((provider, model, _apply_scheduled(pricing, today)))
     return rows
 
 

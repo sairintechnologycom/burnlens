@@ -48,6 +48,27 @@ class TestPricingLookup:
         assert p["output_per_million"] == 15.00
         assert p["cache_write_per_million"] == 3.75
 
+    def test_sonnet5_scheduled_price_switches_on_date(self):
+        from datetime import date
+
+        # Intro rate ($2/$10) before 2026-09-01...
+        before = get_model_pricing("anthropic", "claude-sonnet-5", today=date(2026, 8, 31))
+        assert before["input_per_million"] == 2.00
+        assert before["output_per_million"] == 10.00
+        assert "scheduled" not in before  # resolver strips the schedule key
+        # ...sticker rate ($3/$15) on and after the effective date.
+        after = get_model_pricing("anthropic", "claude-sonnet-5", today=date(2026, 9, 1))
+        assert after["input_per_million"] == 3.00
+        assert after["output_per_million"] == 15.00
+        assert after["cache_write_per_million"] == 3.75
+
+    def test_scheduled_price_is_noop_without_schedule(self):
+        from datetime import date
+
+        # A normal entry is unchanged regardless of date.
+        p = get_model_pricing("anthropic", "claude-opus-4-8", today=date(2027, 1, 1))
+        assert p["input_per_million"] == 5.00
+
     def test_anthropic_prefix_match(self):
         p = get_model_pricing("anthropic", "claude-3-5-sonnet-20241022-extra")
         assert p is not None
@@ -113,7 +134,8 @@ class TestCostCalculation:
             ("openai", "gpt-5.6-sol", 35.00),
             ("openai", "gpt-5.6-terra", 17.50),
             ("openai", "gpt-5.6-luna", 7.00),
-            ("anthropic", "claude-sonnet-5", 12.00),
+            # claude-sonnet-5 omitted here — its rate is date-scheduled
+            # (intro $2/$10 → $3/$15 on 2026-09-01); covered date-pinned below.
             ("anthropic", "claude-mythos-5", 60.00),
             ("google", "gemini-3.1-flash-lite", 1.75),
             ("google", "gemini-3.5-flash", 10.50),
