@@ -8,6 +8,7 @@ from burnlens.providers.registry import (  # noqa: F401
 )
 from burnlens.providers.anthropic import anthropic_provider
 from burnlens.providers.azure import azure_provider
+from burnlens.providers.bedrock import bedrock_provider
 from burnlens.providers.google import google_provider
 from burnlens.providers.openai import openai_provider
 from burnlens.providers.openai_compatible import (
@@ -23,3 +24,4 @@ register(groq_provider)
 register(together_provider)
 register(mistral_provider)
 register(azure_provider)
+register(bedrock_provider)
