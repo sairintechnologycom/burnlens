@@ -291,12 +291,11 @@ async def drain(stream: AsyncIterator[bytes]) -> list[bytes]:
     return [chunk async for chunk in stream]
 
 
+from ..conftest import settle_background_tasks  # noqa: E402  (shared flush helper)
+
+
 async def drain_and_settle(stream: AsyncIterator[bytes], settle: float = 0.15) -> list[bytes]:
-    """
-    Drain stream then sleep to let asyncio.create_task() background tasks flush.
-    The interceptor fires _log_streaming_usage via create_task() in the finally
-    block — we need the event loop to run before asserting DB state.
-    """
+    """Drain the stream, then wait for its background logging tasks to flush."""
     chunks = await drain(stream)
-    await asyncio.sleep(settle)
+    await settle_background_tasks(ceiling=max(settle, 5.0))
     return chunks

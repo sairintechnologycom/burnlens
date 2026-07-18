@@ -27,6 +27,7 @@ import respx
 from .conftest import (
     build_openai_stream,
     fetch_rows,
+    settle_background_tasks,
 )
 
 
@@ -209,7 +210,7 @@ class TestServerSideLogging:
         _openai_mock(mock, sse_body)
 
         await proxy_stream(base_url)
-        await asyncio.sleep(0.3)  # background create_task in server loop
+        await settle_background_tasks()  # background create_task in server loop
 
         rows = fetch_rows(db_path)
         assert len(rows) == 1
@@ -226,7 +227,7 @@ class TestServerSideLogging:
         _openai_mock(mock, sse_body)
 
         await proxy_stream(base_url)
-        await asyncio.sleep(0.3)
+        await settle_background_tasks()
 
         rows = fetch_rows(db_path)
         assert rows[0]["cost_usd"] > 0.0
@@ -239,7 +240,7 @@ class TestServerSideLogging:
         _openai_mock(mock, sse_body)
 
         await proxy_stream(base_url, tag_feature="search", tag_team="infra")
-        await asyncio.sleep(0.3)
+        await settle_background_tasks()
 
         rows = fetch_rows(db_path)
         assert rows[0]["tag_feature"] == "search"
@@ -289,7 +290,7 @@ class TestConcurrentIntegration:
         await asyncio.gather(*[
             proxy_stream(base_url, tag_feature=f"f{i}") for i in range(10)
         ])
-        await asyncio.sleep(0.5)
+        await settle_background_tasks()
 
         rows = fetch_rows(db_path)
         assert len(rows) == 10
@@ -320,7 +321,7 @@ class TestConcurrentIntegration:
             proxy_stream(base_url, tag_feature="cheap"),
             proxy_stream(base_url, tag_feature="expensive"),
         )
-        await asyncio.sleep(0.3)
+        await settle_background_tasks()
 
         rows = fetch_rows(db_path)
         costs = sorted(r["cost_usd"] for r in rows)
@@ -343,7 +344,7 @@ class TestLargeStream:
         _openai_mock(mock, sse_body)
 
         await proxy_stream(base_url)
-        await asyncio.sleep(0.3)
+        await settle_background_tasks()
 
         rows = fetch_rows(db_path)
         assert len(rows) == 1
@@ -419,7 +420,7 @@ class TestGracefulShutdown:
         await stream_task
         await serve_task
         await server_client.aclose()
-        await asyncio.sleep(0.3)  # background tasks complete
+        await settle_background_tasks()  # background tasks complete
 
         rows = fetch_rows(db_path)
         assert len(rows) == 1

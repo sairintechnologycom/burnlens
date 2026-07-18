@@ -165,6 +165,24 @@ def running_proxy(e2e_config: BurnLensConfig) -> str:
 # ---------------------------------------------------------------------------
 
 
+def wait_for_unsynced_zero(db_path: str, timeout: float = 10.0) -> int:
+    """Poll the un-synced count until it hits 0 or the timeout expires.
+
+    A batch arriving at the mock cloud (received_batches growing) does NOT mean
+    the DB has been marked synced — that write happens after the cloud POST
+    returns 200. Asserting unsynced==0 the instant the batch shows up races that
+    final write, so poll on the true completion signal instead.
+    """
+    deadline = time.time() + timeout
+    while True:
+        loop = asyncio.new_event_loop()
+        unsynced = loop.run_until_complete(get_unsynced_count(db_path))
+        loop.close()
+        if unsynced == 0 or time.time() >= deadline:
+            return unsynced
+        time.sleep(0.25)
+
+
 def test_proxy_request_syncs_to_cloud(
     running_proxy: str,
     e2e_config: BurnLensConfig,
@@ -225,9 +243,7 @@ def test_proxy_request_syncs_to_cloud(
     assert "request_path" not in payload_str
 
     # 4. Verify records are marked as synced in the DB
-    loop = asyncio.new_event_loop()
-    unsynced = loop.run_until_complete(get_unsynced_count(e2e_config.db_path))
-    loop.close()
+    unsynced = wait_for_unsynced_zero(e2e_config.db_path)
     assert unsynced == 0, f"Expected 0 un-synced records, got {unsynced}"
 
 
@@ -272,9 +288,7 @@ def test_sync_recovers_from_cloud_failure(
     )
 
     # All records should be synced
-    loop = asyncio.new_event_loop()
-    unsynced = loop.run_until_complete(get_unsynced_count(e2e_config.db_path))
-    loop.close()
+    unsynced = wait_for_unsynced_zero(e2e_config.db_path)
     assert unsynced == 0, f"Expected 0 un-synced after retry, got {unsynced}"
 
 

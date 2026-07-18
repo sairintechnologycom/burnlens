@@ -33,6 +33,7 @@ from .conftest import (
     fetch_rows,
     drain,
     drain_and_settle,
+    settle_background_tasks,
 )
 
 
@@ -117,7 +118,7 @@ class TestHandleRequestDispatch:
         assert stream is None
         assert body is not None
         assert status == 200
-        await asyncio.sleep(0.1)  # let create_task log
+        await settle_background_tasks()  # let create_task log
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +492,7 @@ class TestUpstreamErrors:
             )
             if stream:
                 await drain_and_settle(stream)
-            await asyncio.sleep(0.1)
+            await settle_background_tasks()
 
         assert status == 401
 
@@ -802,7 +803,7 @@ class TestConcurrentStreams:
                 await drain(stream)
 
         await asyncio.gather(*[single_stream(f"feature-{i}") for i in range(10)])
-        await asyncio.sleep(0.5)  # all 10 background tasks flush
+        await settle_background_tasks()  # all 10 background tasks flush
 
         rows = fetch_rows(db_path)
         assert len(rows) == 10
@@ -843,7 +844,7 @@ class TestConcurrentStreams:
             stream_with_tokens(100, 50, "cheap"),
             stream_with_tokens(10000, 5000, "expensive"),
         )
-        await asyncio.sleep(0.3)
+        await settle_background_tasks()
 
         rows = fetch_rows(db_path)
         assert len(rows) == 2
