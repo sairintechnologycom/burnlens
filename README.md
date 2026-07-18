@@ -1,6 +1,6 @@
 # BurnLens — The open-source FinOps proxy for AI spend
 
-Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Groq, Mistral, Together, and Azure OpenAI. Hard-cap budgets before the API call — not after the bill arrives. Additional providers are on the roadmap.
+Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock. Hard-cap budgets before the API call — not after the bill arrives.
 
 [![PyPI](https://img.shields.io/pypi/v/burnlens?label=pypi&color=00e5c8)](https://pypi.org/project/burnlens)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
@@ -33,7 +33,7 @@ burnlens start
 
 3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts.
 
-4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, and Azure OpenAI spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
+4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
 
 ---
 
@@ -78,7 +78,7 @@ Tags are stripped before the request reaches OpenAI. They never appear in any AP
 | Together | Beta | OpenAI-compatible: set client `base_url` to `/proxy/together` |
 | Mistral | Beta | OpenAI-compatible: set client `base_url` to `/proxy/mistral` |
 | Azure OpenAI | Beta | Point client `azure_endpoint` at `/proxy/azure`; set `BURNLENS_AZURE_ENDPOINT` to your resource URL |
-| AWS Bedrock | Roadmap | |
+| AWS Bedrock | Beta | Claude models; Bedrock API key (`Authorization: Bearer`, no SigV4); set `BURNLENS_BEDROCK_REGION`; Global cross-region pricing |
 
 Pricing covers current text/chat models for the supported providers, plus
 audio-modality tokens (OpenAI `*-audio-preview` / `*-realtime-preview`, billed at
@@ -98,7 +98,7 @@ against the provider pricing page — they change less often than text but do mo
 | Local-first (prompts stay local) | ✓ | ✗ | ✗ |
 | Hard caps before API call | ✓ | ✗ | ✗ |
 | Per-customer attribution | ✓ | ✓ | ✗ |
-| Multi-cloud (Azure / AWS / GCP) | Roadmap | Partial | ✓ |
+| Multi-cloud (Azure / AWS / GCP) | Partial | Partial | ✓ |
 
 ---
 
