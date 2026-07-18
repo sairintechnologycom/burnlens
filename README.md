@@ -33,7 +33,7 @@ burnlens start
 
 3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts.
 
-4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, and Azure OpenAI spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
+4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
 
 ---
 
@@ -98,7 +98,7 @@ against the provider pricing page — they change less often than text but do mo
 | Local-first (prompts stay local) | ✓ | ✗ | ✗ |
 | Hard caps before API call | ✓ | ✗ | ✗ |
 | Per-customer attribution | ✓ | ✓ | ✗ |
-| Multi-cloud (Azure / AWS / GCP) | Roadmap | Partial | ✓ |
+| Multi-cloud (Azure / AWS / GCP) | Partial | Partial | ✓ |
 
 ---
 
