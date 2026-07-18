@@ -559,6 +559,11 @@
   },
   "CheckoutBody": {
     "properties": {
+      "period": {
+        "default": "monthly",
+        "title": "Period",
+        "type": "string"
+      },
       "plan": {
         "default": "cloud",
         "title": "Plan",
