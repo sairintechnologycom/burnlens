@@ -13,9 +13,11 @@ const PADDLE_ENV = (process.env.NEXT_PUBLIC_PADDLE_ENV || "sandbox") as
 const PADDLE_TOKEN = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || "";
 
 export type CheckoutPlan = "cloud" | "teams";
+export type CheckoutPeriod = "monthly" | "annual";
 
 export interface StartCheckoutOptions {
   plan: CheckoutPlan;
+  period?: CheckoutPeriod;
 }
 
 export interface UsePaddleCheckout {
@@ -67,13 +69,13 @@ export function usePaddleCheckout(): UsePaddleCheckout {
   }, []);
 
   const startCheckout = useCallback(
-    async ({ plan }: StartCheckoutOptions) => {
+    async ({ plan, period = "monthly" }: StartCheckoutOptions) => {
       if (!session || loading) return;
       setLoading(true);
       try {
         const data = await apiFetch("/billing/checkout", session.token, {
           method: "POST",
-          body: JSON.stringify({ plan }),
+          body: JSON.stringify({ plan, period }),
         });
 
         if (data?.transaction_id && paddleRef.current) {

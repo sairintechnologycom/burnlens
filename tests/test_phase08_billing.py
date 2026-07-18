@@ -1110,3 +1110,59 @@ async def test_plans_gated_features_str_jsonb(app_client):
     # Implementation normalises the JSON string to a dict
     assert isinstance(plan["gated_features"], dict)
     assert plan["gated_features"]["sso"] is False
+
+
+# ---------------------------------------------------------------------------
+# Annual billing — price-id round-trip (period → price id → plan)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_annual_price_id_roundtrip(monkeypatch):
+    """The invariant that keeps annual billing from misassigning plans:
+    plan+period → price id (forward), and every price id → correct plan (reverse).
+    Annual ids resolve via the env fallback since they aren't seeded in plan_limits.
+    """
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud import billing
+
+    config_mod.settings.paddle_cloud_price_id = "pri_cloud_m"
+    config_mod.settings.paddle_teams_price_id = "pri_teams_m"
+    config_mod.settings.paddle_cloud_annual_price_id = "pri_cloud_y"
+    config_mod.settings.paddle_teams_annual_price_id = "pri_teams_y"
+
+    # forward
+    assert billing._plan_to_price_id("cloud", "monthly") == "pri_cloud_m"
+    assert billing._plan_to_price_id("cloud", "annual") == "pri_cloud_y"
+    assert billing._plan_to_price_id("teams", "annual") == "pri_teams_y"
+    assert billing._plan_to_price_id("cloud") == "pri_cloud_m"  # defaults to monthly
+    assert billing._plan_to_price_id("free", "annual") is None
+
+    # reverse — no DB row, so the env fallback decides
+    async def _no_rows(*a, **k):
+        return []
+
+    monkeypatch.setattr(billing, "execute_query", _no_rows)
+    assert await billing._plan_from_price_id("pri_cloud_y") == "cloud"
+    assert await billing._plan_from_price_id("pri_teams_y") == "teams"
+    assert await billing._plan_from_price_id("pri_cloud_m") == "cloud"
+    assert await billing._plan_from_price_id("pri_unknown") == "free"
+
+
+@pytest.mark.asyncio
+async def test_unset_annual_price_id_never_matches_empty(monkeypatch):
+    """A blank annual env var must not swallow an unrelated price id as 'cloud'."""
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud import billing
+
+    config_mod.settings.paddle_cloud_price_id = "pri_cloud_m"
+    config_mod.settings.paddle_teams_price_id = "pri_teams_m"
+    config_mod.settings.paddle_cloud_annual_price_id = ""
+    config_mod.settings.paddle_teams_annual_price_id = ""
+
+    async def _no_rows(*a, **k):
+        return []
+
+    monkeypatch.setattr(billing, "execute_query", _no_rows)
+    assert await billing._plan_from_price_id("pri_something_else") == "free"
+    assert billing._plan_to_price_id("cloud", "annual") is None

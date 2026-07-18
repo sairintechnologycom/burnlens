@@ -92,11 +92,14 @@ def _paddle_headers() -> dict[str, str]:
     }
 
 
-def _plan_to_price_id(plan: str) -> Optional[str]:
+def _plan_to_price_id(plan: str, period: str = "monthly") -> Optional[str]:
+    annual = period == "annual"
     if plan == "cloud":
-        return settings.paddle_cloud_price_id or None
+        pid = settings.paddle_cloud_annual_price_id if annual else settings.paddle_cloud_price_id
+        return pid or None
     if plan == "teams":
-        return settings.paddle_teams_price_id or None
+        pid = settings.paddle_teams_annual_price_id if annual else settings.paddle_teams_price_id
+        return pid or None
     return None
 
 
@@ -115,10 +118,13 @@ async def _plan_from_price_id(price_id: str) -> str:
     )
     if rows:
         return rows[0]["plan"]
-    # Legacy env fallback — matches pre-Phase-7 behaviour.
-    if price_id == settings.paddle_cloud_price_id:
+    # Legacy env fallback — matches pre-Phase-7 behaviour. Annual price IDs are
+    # not seeded in plan_limits (that column holds the monthly id), so annual
+    # subscriptions resolve here. price_id is guaranteed non-empty above, so an
+    # unset ("") annual env var can never spuriously match.
+    if price_id in (settings.paddle_cloud_price_id, settings.paddle_cloud_annual_price_id):
         return "cloud"
-    if price_id == settings.paddle_teams_price_id:
+    if price_id in (settings.paddle_teams_price_id, settings.paddle_teams_annual_price_id):
         return "teams"
     return "free"
 
@@ -202,6 +208,7 @@ def _extract_price_id(data: dict) -> Optional[str]:
 
 class CheckoutBody(BaseModel):
     plan: str = "cloud"
+    period: str = "monthly"  # "monthly" | "annual"
 
 
 @router.post("/checkout")
@@ -219,11 +226,15 @@ async def create_checkout(
         raise HTTPException(status_code=500, detail="Paddle not configured")
 
     plan = (body.plan if body else "cloud").lower()
-    price_id = _plan_to_price_id(plan)
+    period = (body.period if body else "monthly").lower()
+    if period not in ("monthly", "annual"):
+        raise HTTPException(status_code=400, detail="period must be 'monthly' or 'annual'")
+    price_id = _plan_to_price_id(plan, period)
     if not price_id:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported plan; set PADDLE_CLOUD_PRICE_ID / PADDLE_TEAMS_PRICE_ID",
+            detail="Unsupported plan/period; set PADDLE_CLOUD_PRICE_ID / PADDLE_TEAMS_PRICE_ID"
+            " (and PADDLE_CLOUD_ANNUAL_PRICE_ID / PADDLE_TEAMS_ANNUAL_PRICE_ID for annual)",
         )
 
     rows = await execute_query(

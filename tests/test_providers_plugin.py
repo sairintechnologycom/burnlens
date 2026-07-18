@@ -9,6 +9,7 @@ from burnlens.providers.registry import (
     get_by_proxy_path,
     all_providers,
 )
+from burnlens.proxy.providers import strip_proxy_prefix
 from burnlens.providers.anthropic import anthropic_provider
 from burnlens.providers.google import google_provider
 from burnlens.providers.openai import openai_provider
@@ -49,6 +50,28 @@ class TestRegistry:
 
     def test_get_by_proxy_path_returns_none_empty(self):
         assert get_by_proxy_path("/") is None
+
+
+class TestStripProxyPrefix:
+    def test_normal_path(self):
+        p = get_by_proxy_path("/proxy/openai/v1/chat/completions")
+        assert strip_proxy_prefix("/proxy/openai/v1/chat/completions", p) == "/v1/chat/completions"
+
+    def test_exact_prefix_yields_empty(self):
+        p = get_by_proxy_path("/proxy/openai")
+        assert strip_proxy_prefix("/proxy/openai", p) == ""
+
+    def test_host_injection_via_userinfo_rejected(self):
+        # /proxy/openai@evil.com/x strips to @evil.com/x -> https://api.openai.com@evil.com/x
+        # would make evil.com the upstream host. Must be rejected.
+        p = get_by_proxy_path("/proxy/openai@evil.com/v1/chat")
+        with pytest.raises(ValueError, match="malformed proxy path"):
+            strip_proxy_prefix("/proxy/openai@evil.com/v1/chat", p)
+
+    def test_host_injection_via_suffix_rejected(self):
+        p = get_by_proxy_path("/proxy/openaievil.com/v1")
+        with pytest.raises(ValueError, match="malformed proxy path"):
+            strip_proxy_prefix("/proxy/openaievil.com/v1", p)
 
 
 # ---------------------------------------------------------------------------

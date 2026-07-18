@@ -183,6 +183,9 @@ def get_app(config: BurnLensConfig) -> FastAPI:
                 wal=getattr(request.app.state, "wal", None),
                 worker=getattr(request.app.state, "wal_worker", None),
             )
+        except ValueError as exc:
+            logger.warning("Rejected malformed proxy path: %s", exc)
+            return Response(content="Malformed proxy path", status_code=400)
         except httpx.RequestError as exc:
             logger.error("Upstream request failed: %s", exc)
             return Response(

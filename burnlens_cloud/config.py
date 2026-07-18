@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     paddle_webhook_secret: str = os.getenv("PADDLE_WEBHOOK_SECRET", "")
     paddle_cloud_price_id: str = os.getenv("PADDLE_CLOUD_PRICE_ID", "")
     paddle_teams_price_id: str = os.getenv("PADDLE_TEAMS_PRICE_ID", "")
+    paddle_cloud_annual_price_id: str = os.getenv("PADDLE_CLOUD_ANNUAL_PRICE_ID", "")
+    paddle_teams_annual_price_id: str = os.getenv("PADDLE_TEAMS_ANNUAL_PRICE_ID", "")
     paddle_environment: str = os.getenv("PADDLE_ENVIRONMENT", "production")  # "sandbox" | "production"
 
     # App
