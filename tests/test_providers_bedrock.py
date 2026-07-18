@@ -277,3 +277,32 @@ def test_env_export_points_sdk_at_proxy():
     exports = build_env_exports("127.0.0.1", 8000)
     assert exports["AWS_ENDPOINT_URL_BEDROCK_RUNTIME"] == "http://127.0.0.1:8000/proxy/bedrock"
     assert REGION_ENV not in exports
+
+
+class TestPricing:
+    """Bedrock Claude costs at the Global cross-region rate (= Anthropic first-party).
+
+    calculate_cost strips the geo prefix; bedrock.json keys start at ``anthropic.``.
+    """
+
+    def _cost(self, model):
+        from burnlens.cost.calculator import calculate_cost, TokenUsage
+        return calculate_cost("bedrock", model, TokenUsage(input_tokens=1_000_000))
+
+    def test_versioned_geo_prefixed_id_prices_at_input_rate(self):
+        # us. prefix + date/version suffix, priced via prefix-match on the stem.
+        assert self._cost("us.anthropic.claude-opus-4-8-20260101-v1:0") == 5.00
+
+    def test_all_geos_and_bare_price_identically(self):
+        mid = "anthropic.claude-sonnet-4-6-20250929-v1:0"
+        rate = 3.00
+        for geo in ("", "us.", "eu.", "apac.", "global.", "somefuturegeo."):
+            assert self._cost(geo + mid) == rate, geo
+
+    def test_sonnet4_not_confused_with_sonnet45(self):
+        # `anthropic.claude-sonnet-4` must NOT swallow 4-5/4-6 and vice versa.
+        assert self._cost("global.anthropic.claude-sonnet-4-20250514-v1:0") == 3.00
+        assert self._cost("global.anthropic.claude-sonnet-4-5-20250929-v1:0") == 3.00
+
+    def test_unknown_model_is_zero(self):
+        assert self._cost("us.anthropic.claude-nonexistent-9") == 0.0

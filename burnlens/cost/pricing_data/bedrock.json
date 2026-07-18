@@ -1,0 +1,76 @@
+{
+  "provider": "bedrock",
+  "updated": "2026-07-18",
+  "_note": "Anthropic Claude on Amazon Bedrock, Global cross-region inference rates (https://aws.amazon.com/bedrock/pricing/). These equal Anthropic first-party pricing. Keys omit the geo prefix (us./eu./apac./global.) — calculate_cost strips it before lookup (global-only billing). cache_write_per_million is the 5-minute write rate. Per-geo/regional (+~10%) rates are intentionally not modeled; add them if AWS diverges regional pricing.",
+  "models": {
+    "anthropic.claude-sonnet-5": {
+      "input_per_million": 2.00,
+      "output_per_million": 10.00,
+      "cache_read_per_million": 0.20,
+      "cache_write_per_million": 2.50,
+      "scheduled": [
+        {
+          "effective": "2026-09-01",
+          "input_per_million": 3.00,
+          "output_per_million": 15.00,
+          "cache_read_per_million": 0.30,
+          "cache_write_per_million": 3.75
+        }
+      ]
+    },
+    "anthropic.claude-fable-5": {
+      "input_per_million": 10.00,
+      "output_per_million": 50.00,
+      "cache_read_per_million": 1.00,
+      "cache_write_per_million": 12.50
+    },
+    "anthropic.claude-opus-4-8": {
+      "input_per_million": 5.00,
+      "output_per_million": 25.00,
+      "cache_read_per_million": 0.50,
+      "cache_write_per_million": 6.25
+    },
+    "anthropic.claude-opus-4-7": {
+      "input_per_million": 5.00,
+      "output_per_million": 25.00,
+      "cache_read_per_million": 0.50,
+      "cache_write_per_million": 6.25
+    },
+    "anthropic.claude-opus-4-6": {
+      "input_per_million": 5.00,
+      "output_per_million": 25.00,
+      "cache_read_per_million": 0.50,
+      "cache_write_per_million": 6.25
+    },
+    "anthropic.claude-opus-4-5": {
+      "input_per_million": 5.00,
+      "output_per_million": 25.00,
+      "cache_read_per_million": 0.50,
+      "cache_write_per_million": 6.25
+    },
+    "anthropic.claude-sonnet-4-6": {
+      "input_per_million": 3.00,
+      "output_per_million": 15.00,
+      "cache_read_per_million": 0.30,
+      "cache_write_per_million": 3.75
+    },
+    "anthropic.claude-sonnet-4-5": {
+      "input_per_million": 3.00,
+      "output_per_million": 15.00,
+      "cache_read_per_million": 0.30,
+      "cache_write_per_million": 3.75
+    },
+    "anthropic.claude-sonnet-4": {
+      "input_per_million": 3.00,
+      "output_per_million": 15.00,
+      "cache_read_per_million": 0.30,
+      "cache_write_per_million": 3.75
+    },
+    "anthropic.claude-haiku-4-5": {
+      "input_per_million": 1.00,
+      "output_per_million": 5.00,
+      "cache_read_per_million": 0.10,
+      "cache_write_per_million": 1.25
+    }
+  }
+}

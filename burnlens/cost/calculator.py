@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from burnlens.cost.pricing import get_model_pricing
@@ -65,6 +66,15 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
             )
             return 0.0
         return calculate_cost(underlying[0], underlying[1], usage)
+
+    if provider == "bedrock":
+        # Bedrock model IDs carry a geo prefix (us./eu./apac./global.) selecting
+        # an inference profile; all geos bill at the global rate, so strip the
+        # prefix before pricing. bedrock.json keys start at the `anthropic.`
+        # vendor segment. Any leading `<segment>.` before it is stripped, so a
+        # new geo prefix Just Works instead of silently costing $0.
+        # ponytail: global-only billing; model per-geo (+~10%) rates if AWS diverges.
+        model = re.sub(r"^[a-z0-9-]+\.(?=anthropic\.)", "", model)
 
     pricing = get_model_pricing(provider, model)
     if pricing is None:
