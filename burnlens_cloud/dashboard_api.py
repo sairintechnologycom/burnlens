@@ -480,12 +480,15 @@ async def get_budget(token: TokenPayload = Depends(verify_token)):
     )
     spent_usd = float(spend_rows[0]["spent"]) if spend_rows else 0.0
 
-    resolved = await resolve_limits(token.workspace_id)
-    budget_usd = (
-        float(resolved.monthly_spend_cap_usd)
-        if resolved and resolved.monthly_spend_cap_usd is not None
-        else None
-    )
+    # A limits-resolution failure must not 500 the budget page — degrade to
+    # "no budget set" (the forecast still renders on spend alone).
+    budget_usd = None
+    try:
+        resolved = await resolve_limits(token.workspace_id)
+        if resolved and resolved.monthly_spend_cap_usd is not None:
+            budget_usd = float(resolved.monthly_spend_cap_usd)
+    except Exception:
+        logger.warning("resolve_limits failed in get_budget; forecasting without a budget", exc_info=True)
 
     return _budget_forecast(spent_usd, elapsed_days_frac, period_days, budget_usd)
 
