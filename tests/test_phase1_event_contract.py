@@ -34,6 +34,8 @@ from burnlens.storage.models import (
     TokenUsageEvent,
 )
 
+from .conftest import settle_background_tasks
+
 
 def test_event_dataclasses():
     """Verify that the TokenUsageEvent and GenAICostEvent dataclasses can be instantiated."""
@@ -337,8 +339,8 @@ async def test_proxy_integration_non_streaming(initialized_db):
     assert status_code == 200
     assert resp_body == mock_response.content
 
-    # Yield to let background _log_record complete
-    await asyncio.sleep(0.1)
+    # Wait for background _log_record to complete
+    await settle_background_tasks()
 
     # Query DB and verify all fields were saved
     async with aiosqlite.connect(initialized_db) as db:

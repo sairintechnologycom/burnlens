@@ -19,6 +19,8 @@ from burnlens.storage.database import (
 )
 from burnlens.storage.models import RequestRecord, AnomalyEvent
 from burnlens.storage.queries import get_recent_anomaly_events
+
+from .conftest import settle_background_tasks
 from burnlens.config import BurnLensConfig, AlertsConfig
 
 
@@ -219,8 +221,8 @@ async def test_interceptor_anomaly_bg_task(initialized_db: str):
     # Run check
     _run_anomaly_detection(record, config, initialized_db)
 
-    # Wait briefly for the asyncio background task to finish executing
-    await asyncio.sleep(0.1)
+    # Wait for the asyncio background task to finish executing
+    await settle_background_tasks()
 
     events = await get_recent_anomaly_events(initialized_db)
     assert len(events) == 4

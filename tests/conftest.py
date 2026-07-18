@@ -1,6 +1,7 @@
 """Shared test fixtures for burnlens-cloud."""
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 
@@ -22,6 +23,31 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient, ASGITransport
+
+
+async def settle_background_tasks(ceiling: float = 5.0) -> None:
+    """Deterministically await the fire-and-forget tasks the interceptor spawns
+    via create_task() (background logging, WAL flush, anomaly checks) so their DB
+    writes land before the caller asserts. Replaces fixed `asyncio.sleep()` waits
+    that raced under CI load and flaked (short row counts, rows[0] IndexError,
+    "Event loop is closed").
+
+    Waits round-by-round until no pending task *completes* within a short window
+    — i.e. the loggers have drained and only idle/long-lived tasks (e.g. a live
+    test server sharing the loop) remain. `ceiling` is a safety-net upper bound.
+    """
+    me = asyncio.current_task()
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + ceiling
+    while loop.time() < deadline:
+        pending = [t for t in asyncio.all_tasks() if t is not me and not t.done()]
+        if not pending:
+            break
+        done, _ = await asyncio.wait(
+            pending, timeout=0.1, return_when=asyncio.FIRST_COMPLETED
+        )
+        if not done:  # nothing completed → remaining tasks are idle; loggers flushed
+            break
 
 
 @pytest_asyncio.fixture
