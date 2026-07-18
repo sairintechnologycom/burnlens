@@ -28,8 +28,18 @@ def strip_proxy_prefix(path: str, provider: Provider) -> str:
 
     Works with both the old ProviderConfig (via .proxy_prefix) and new
     Provider instances (which expose .proxy_prefix as a property alias).
+
+    The remainder must be empty or start with ``/``. ``get_by_proxy_path``
+    matches by ``startswith``, so ``/proxy/openai@evil.com/x`` matches the
+    openai provider and strips to ``@evil.com/x``; concatenated onto the
+    upstream base (``https://api.openai.com@evil.com/x``) that makes ``evil.com``
+    the host (userinfo trick), turning the proxy into a host-controlling SSRF.
+    Rejecting a non-slash remainder closes it for every provider.
     """
-    return path[len(provider.proxy_prefix):]
+    rest = path[len(provider.proxy_prefix):]
+    if rest and not rest.startswith("/"):
+        raise ValueError(f"malformed proxy path: {path!r}")
+    return rest
 
 
 def build_env_exports(host: str, port: int) -> dict[str, str]:
