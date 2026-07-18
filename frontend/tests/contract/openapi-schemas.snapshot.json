@@ -512,6 +512,23 @@
     "title": "BillingSummary",
     "type": "object"
   },
+  "BudgetSettingRequest": {
+    "properties": {
+      "monthly_budget_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Monthly Budget Usd"
+      }
+    },
+    "title": "BudgetSettingRequest",
+    "type": "object"
+  },
   "CancelBody": {
     "description": "Request body for POST /billing/cancel.\n\nBoth fields are optional (D-10). When both are None/missing, no\nsurvey row is inserted. Free-text is length-capped at schema level\nto prevent storage abuse from an authenticated but hostile user.",
     "properties": {

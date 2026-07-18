@@ -1,5 +1,6 @@
 """Settings API endpoints for enterprise features (OTEL, custom pricing, etc.)."""
 
+import json
 import logging
 from typing import Optional
 
@@ -281,6 +282,74 @@ async def update_pricing(
     except Exception as e:
         logger.error(f"Failed to update pricing: {e}")
         raise HTTPException(status_code=500, detail="Failed to update pricing")
+
+
+# ============ Monthly spend budget ============
+
+
+class BudgetSettingRequest(BaseModel):
+    monthly_budget_usd: Optional[float] = None  # None to clear the override
+
+
+@router.put("/budget")
+async def update_budget(
+    body: BudgetSettingRequest,
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """Admin+. Set or clear this workspace's monthly spend cap (USD).
+
+    Writes `limit_overrides.monthly_spend_cap_usd` — the same value
+    `resolve_limits()` resolves and `ingest.py` hard-enforces (429 at the cap)
+    and `/api/v1/budget` forecasts against. `null` clears the override so the
+    plan default applies again.
+    """
+    await require_role("admin", token)
+
+    amount = body.monthly_budget_usd
+    if amount is not None and amount <= 0:
+        raise HTTPException(
+            status_code=422, detail="monthly_budget_usd must be greater than 0"
+        )
+
+    if amount is not None:
+        await execute_insert(
+            """
+            UPDATE workspaces
+            SET limit_overrides =
+                COALESCE(limit_overrides, '{}'::jsonb)
+                || jsonb_build_object('monthly_spend_cap_usd', $1::numeric)
+            WHERE id = $2
+            """,
+            amount,
+            token.workspace_id,
+        )
+    else:
+        await execute_insert(
+            """
+            UPDATE workspaces
+            SET limit_overrides =
+                COALESCE(limit_overrides, '{}'::jsonb) - 'monthly_spend_cap_usd'
+            WHERE id = $1
+            """,
+            token.workspace_id,
+        )
+
+    # Best-effort audit trail (money-affecting setting). Must never block the write.
+    try:
+        await execute_insert(
+            """
+            INSERT INTO workspace_activity (workspace_id, user_id, action, detail)
+            VALUES ($1, $2, $3, $4::jsonb)
+            """,
+            token.workspace_id,
+            token.user_id,
+            "update_monthly_budget",
+            json.dumps({"monthly_spend_cap_usd": amount}),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("budget audit-log write failed (ignored): %s", e)
+
+    return {"monthly_budget_usd": amount}
 
 
 # Phase 12: Slack webhook configuration for alert rules.

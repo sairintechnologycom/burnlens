@@ -44,6 +44,8 @@ function BudgetsContent() {
   const [teams, setTeams] = useState<TeamBudget[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [budgetInput, setBudgetInput] = useState("");
+  const [savingBudget, setSavingBudget] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!session) return;
@@ -65,6 +67,32 @@ function BudgetsContent() {
   }, [session, logout]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const canEditBudget = session?.role === "owner" || session?.role === "admin";
+
+  const saveBudget = useCallback(async (clear: boolean) => {
+    if (!session) return;
+    setError("");
+    const value = clear ? null : parseFloat(budgetInput);
+    if (!clear && (!Number.isFinite(value as number) || (value as number) <= 0)) {
+      setError("Enter a budget amount greater than 0.");
+      return;
+    }
+    setSavingBudget(true);
+    try {
+      await apiFetch("/settings/budget", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ monthly_budget_usd: value }),
+      });
+      setBudgetInput("");
+      await fetchData();
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else setError(err.message || "Couldn't save budget.");
+    } finally {
+      setSavingBudget(false);
+    }
+  }, [session, budgetInput, fetchData, logout]);
 
   if (loading) {
     return (
@@ -109,6 +137,41 @@ function BudgetsContent() {
               </div>
             </div>
           </div>
+
+          {canEditBudget && (
+            <div className="card" style={{ margin: 16 }}>
+              <div className="section-header">
+                <span className="section-header-title">
+                  {budget.budget_usd != null ? "Monthly budget" : "Set a monthly budget"}
+                </span>
+              </div>
+              <div style={{ padding: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ color: "var(--muted)" }}>$</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="decimal"
+                  aria-label="Monthly budget in USD"
+                  placeholder={budget.budget_usd != null ? String(budget.budget_usd) : "500"}
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  style={{ width: 120 }}
+                />
+                <button className="btn btn-cyan" disabled={savingBudget} onClick={() => saveBudget(false)}>
+                  {savingBudget ? "Saving…" : "Save"}
+                </button>
+                {budget.budget_usd != null && (
+                  <button className="btn" disabled={savingBudget} onClick={() => saveBudget(true)}>
+                    Clear
+                  </button>
+                )}
+                <span style={{ color: "var(--muted)", fontSize: 11 }}>
+                  Enforced at 100% — ingest is blocked past the cap.
+                </span>
+              </div>
+            </div>
+          )}
 
           {budget.budget_usd != null && (
             <div className="card" style={{ margin: 16 }}>
