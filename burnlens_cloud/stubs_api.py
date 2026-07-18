@@ -53,16 +53,5 @@ async def list_team_budgets(
     return []
 
 
-@router.get("/api/budget")
-async def get_budget_alias(token: TokenPayload = Depends(verify_token)):
-    return {
-        "budget_usd": None,
-        "spent_usd": 0.0,
-        "remaining_usd": None,
-        "forecast_usd": 0.0,
-        "pct_used": 0.0,
-        "is_over_budget": False,
-        "is_on_pace_to_exceed": False,
-        "period_days": 30,
-        "elapsed_days": 0,
-    }
+# /api/budget graduated out of stubs → real impl at dashboard_api.py
+# GET /api/v1/budget (monthly spend + burn-rate forecast). Frontend repointed.

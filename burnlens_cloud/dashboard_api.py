@@ -1,12 +1,14 @@
 import logging
+from calendar import monthrange
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from dateutil import tz
 
 from .auth import verify_token, TokenPayload, require_feature
 from .config import settings
 from .database import execute_query
+from .plans import resolve_limits
 from .clickhouse import (
     get_spend_summary,
     get_spend_by_model,
@@ -404,20 +406,91 @@ async def get_waste_alerts(token: TokenPayload = Depends(verify_token)):
     return []
 
 
+def _budget_forecast(
+    spent_usd: float,
+    elapsed_days_frac: float,
+    period_days: int,
+    budget_usd: Optional[float],
+) -> dict:
+    """Pure forecast math for the monthly spend budget. Kept side-effect-free so
+    it's unit-testable without a DB or the request cycle.
+
+    `forecast_usd` is a naive linear run-rate: spend-so-far scaled to the full
+    month. The pace alarm (`is_on_pace_to_exceed`) is suppressed until a full day
+    of data exists, so an hour-1 spike doesn't cry wolf.
+    # ponytail: linear run-rate; swap for a trailing-window/EWMA projection only
+    # if first-days forecasts prove too noisy in practice.
+    """
+    if elapsed_days_frac > 0:
+        forecast_usd = spent_usd / elapsed_days_frac * period_days
+    else:
+        forecast_usd = spent_usd
+
+    if budget_usd and budget_usd > 0:
+        remaining_usd: Optional[float] = max(0.0, budget_usd - spent_usd)
+        pct_used: Optional[float] = round(spent_usd / budget_usd * 100, 1)
+        is_over_budget = spent_usd >= budget_usd
+        is_on_pace_to_exceed = (
+            not is_over_budget
+            and elapsed_days_frac >= 1.0
+            and forecast_usd > budget_usd
+        )
+    else:
+        remaining_usd = None
+        pct_used = None
+        is_over_budget = False
+        is_on_pace_to_exceed = False
+
+    return {
+        "budget_usd": float(budget_usd) if budget_usd else None,
+        "spent_usd": round(spent_usd, 2),
+        "remaining_usd": round(remaining_usd, 2) if remaining_usd is not None else None,
+        "forecast_usd": round(forecast_usd, 2),
+        "pct_used": pct_used,
+        "is_over_budget": is_over_budget,
+        "is_on_pace_to_exceed": is_on_pace_to_exceed,
+        "period_days": period_days,
+        "elapsed_days": int(elapsed_days_frac),
+    }
+
+
 @router.get("/budget")
 async def get_budget(token: TokenPayload = Depends(verify_token)):
-    """Get budget status (stub for MVP)."""
-    return {
-        "budget_usd": None,
-        "spent_usd": 0.0,
-        "remaining_usd": None,
-        "forecast_usd": None,
-        "pct_used": 0.0,
-        "is_over_budget": False,
-        "is_on_pace_to_exceed": False,
-        "period_days": 30,
-        "elapsed_days": 0,
-    }
+    """Monthly spend budget + linear burn-rate forecast for the workspace.
+
+    Spend is summed over the current UTC calendar month, matching the *monthly*
+    semantics of `monthly_spend_cap_usd` (the cap `ingest.py` already enforces).
+    """
+    await require_role("viewer", token)
+    workspace_id = str(token.workspace_id)
+
+    now = datetime.now(tz.UTC)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_days = monthrange(now.year, now.month)[1]
+    elapsed_days_frac = (now - month_start).total_seconds() / 86400.0
+
+    spend_rows = await execute_query(
+        """
+        SELECT COALESCE(SUM(cost_usd), 0) AS spent
+        FROM request_records
+        WHERE workspace_id = $1 AND ts >= $2
+        """,
+        workspace_id,
+        month_start,
+    )
+    spent_usd = float(spend_rows[0]["spent"]) if spend_rows else 0.0
+
+    # A limits-resolution failure must not 500 the budget page — degrade to
+    # "no budget set" (the forecast still renders on spend alone).
+    budget_usd = None
+    try:
+        resolved = await resolve_limits(token.workspace_id)
+        if resolved and resolved.monthly_spend_cap_usd is not None:
+            budget_usd = float(resolved.monthly_spend_cap_usd)
+    except Exception:
+        logger.warning("resolve_limits failed in get_budget; forecasting without a budget", exc_info=True)
+
+    return _budget_forecast(spent_usd, elapsed_days_frac, period_days, budget_usd)
 
 
 @router.get(

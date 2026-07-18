@@ -51,7 +51,7 @@ function BudgetsContent() {
     setError("");
     try {
       const [b, t] = await Promise.all([
-        apiFetch("/api/budget", session.token).catch(() => null),
+        apiFetch("/api/v1/budget", session.token).catch(() => null),
         apiFetch("/api/team-budgets", session.token).catch(() => []),
       ]);
       setBudget(b);
