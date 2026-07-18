@@ -6,6 +6,25 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.9.0] — 2026-07-18
+
+### Added
+- **AWS Bedrock provider (Claude).** Proxy Anthropic Claude models on Amazon
+  Bedrock through BurnLens. Auth is a Bedrock API key forwarded as
+  `Authorization: Bearer` (SigV4 is unsupported by design — the proxy replaces
+  the `host` header when forwarding, which invalidates any forwarded signature).
+  The per-region endpoint is resolved from `BURNLENS_BEDROCK_REGION` at request
+  time. Model is read from the `/model/{modelId}/…` path; the geo prefix
+  (`us.`/`eu.`/`apac.`/`global.`) and version suffix are preserved for routing.
+- **Bedrock pricing (`bedrock.json`).** Global cross-region inference rates for
+  10 modern Claude models (Sonnet 5, Fable 5, Opus 4.8/4.7/4.6/4.5, Sonnet
+  4.6/4.5/4, Haiku 4.5), which equal Anthropic first-party pricing — including
+  cache tiers and Sonnet 5's 2026-09-01 scheduled price change. All geo
+  inference profiles bill at the global rate: `calculate_cost` strips the geo
+  prefix before lookup, so a new/unknown geo prefix still prices correctly
+  instead of silently costing $0. Per-geo/regional (+~10%) rates are not
+  modeled. Bedrock is now the 8th supported provider.
+
 ## [OSS `burnlens` v1.8.3] — 2026-07-17
 
 ### Fixed
