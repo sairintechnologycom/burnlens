@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { usePaddleCheckout, type CheckoutPlan } from "@/lib/hooks/usePaddleCheckout";
+import {
+  usePaddleCheckout,
+  type CheckoutPlan,
+  type CheckoutPeriod,
+} from "@/lib/hooks/usePaddleCheckout";
 
 type PlanRow = {
   plan: string;
@@ -23,10 +27,11 @@ type Props = {
 };
 
 // Display prices — source of truth is Paddle; this is presentational only.
-// Matches paddle_product_spec.md (cloud=$29/mo, teams=$99/mo).
-const DISPLAY_PRICE: Record<string, string> = {
-  cloud: "$29/mo",
-  teams: "$99/mo",
+// Matches paddle_product_spec.md (cloud=$29/mo, teams=$99/mo) and the annual
+// prices created in Paddle (cloud=$249/yr, teams=$849/yr — ~28% off).
+const DISPLAY_PRICE: Record<string, Record<CheckoutPeriod, string>> = {
+  cloud: { monthly: "$29/mo", annual: "$249/yr" },
+  teams: { monthly: "$99/mo", annual: "$849/yr" },
 };
 
 function fmt(v: number | null): string {
@@ -44,6 +49,7 @@ export default function PlanPickerModal({ open, onClose }: Props) {
   const [plans, setPlans] = useState<PlanRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<CheckoutPeriod>("monthly");
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -71,7 +77,7 @@ export default function PlanPickerModal({ open, onClose }: Props) {
 
   const handleChoose = (plan: string) => {
     if (plan !== "cloud" && plan !== "teams") return;
-    startCheckout({ plan: plan as CheckoutPlan });
+    startCheckout({ plan: plan as CheckoutPlan, period });
   };
 
   const featureKeys = Array.from(
@@ -118,6 +124,23 @@ export default function PlanPickerModal({ open, onClose }: Props) {
           </button>
         </div>
         <div style={{ padding: 18 }}>
+          <div
+            role="group"
+            aria-label="Billing period"
+            style={{ display: "flex", gap: 6, marginBottom: 16 }}
+          >
+            {(["monthly", "annual"] as CheckoutPeriod[]).map((pr) => (
+              <button
+                key={pr}
+                className={period === pr ? "btn btn-cyan" : "btn"}
+                aria-pressed={period === pr}
+                onClick={() => setPeriod(pr)}
+                style={{ padding: "4px 14px", fontSize: 13 }}
+              >
+                {pr === "monthly" ? "Monthly" : "Annual · save ~28%"}
+              </button>
+            ))}
+          </div>
           {loading && (
             <div className="skeleton" style={{ height: 120, borderRadius: 4 }} />
           )}
@@ -152,7 +175,7 @@ export default function PlanPickerModal({ open, onClose }: Props) {
                     >
                       {titleCase(p.plan)}
                       <div style={{ fontSize: 11, fontWeight: 400, color: "var(--muted)" }}>
-                        {DISPLAY_PRICE[p.plan] || ""}
+                        {DISPLAY_PRICE[p.plan]?.[period] || ""}
                       </div>
                     </th>
                   ))}
