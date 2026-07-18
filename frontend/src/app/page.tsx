@@ -221,6 +221,7 @@ function MiniDashboard() {
 export default function LandingPage() {
   const [termDone, setTermDone] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [annual, setAnnual] = useState(false);
 
   return (
     <>
@@ -569,6 +570,36 @@ export default function LandingPage() {
         <section className="lp-pricing" id="pricing">
           <h2 className="lp-pricing-title">Simple pricing</h2>
           <p className="lp-pricing-sub">Free forever for individual developers. Pay only when your team needs cloud sync.</p>
+          <div
+            role="group"
+            aria-label="Billing period"
+            style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 28 }}
+          >
+            {([false, true] as const).map((isAnnual) => {
+              const active = annual === isAnnual;
+              return (
+                <button
+                  key={isAnnual ? "annual" : "monthly"}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setAnnual(isAnnual)}
+                  style={{
+                    padding: "7px 16px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    border: "1px solid var(--border)",
+                    background: active ? "var(--cyan)" : "transparent",
+                    color: active ? "var(--bg)" : "var(--text)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {isAnnual ? "Annual · save ~28%" : "Monthly"}
+                </button>
+              );
+            })}
+          </div>
           <div className="lp-pricing-grid">
             <div className="lp-plan">
               <div className="lp-plan-name">Free</div>
@@ -585,7 +616,9 @@ export default function LandingPage() {
             <div className="lp-plan featured">
               <div className="lp-plan-badge">Popular</div>
               <div className="lp-plan-name">Cloud</div>
-              <div className="lp-plan-price">$29<span>/mo</span></div>
+              <div className="lp-plan-price">
+                {annual ? <>$249<span>/yr</span></> : <>$29<span>/mo</span></>}
+              </div>
               <ul className="lp-plan-features">
                 <li>Everything in Free</li>
                 <li>Cloud sync + team dashboard</li>
@@ -597,7 +630,9 @@ export default function LandingPage() {
             </div>
             <div className="lp-plan">
               <div className="lp-plan-name">Teams</div>
-              <div className="lp-plan-price">$99<span>/mo</span></div>
+              <div className="lp-plan-price">
+                {annual ? <>$849<span>/yr</span></> : <>$99<span>/mo</span></>}
+              </div>
               <ul className="lp-plan-features">
                 <li>Everything in Cloud</li>
                 <li>Up to 10 seats</li>
