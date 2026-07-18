@@ -1050,7 +1050,7 @@ async def change_plan(
     workspace_id = str(token.workspace_id)
     rows = await execute_query(
         """
-        SELECT plan, paddle_subscription_id_encrypted,
+        SELECT plan, price_cents, paddle_subscription_id_encrypted,
                paddle_customer_id_encrypted,
                current_period_ends_at
         FROM workspaces WHERE id = $1
@@ -1084,7 +1084,18 @@ async def change_plan(
             detail="No active subscription to change. Start a new checkout via /billing/checkout.",
         )
 
-    target_price_id = _plan_to_price_id(target_plan)
+    # Preserve the current billing period across a tier change. PR #50 wired
+    # annual pricing into /checkout only; without this, an annual subscriber who
+    # switches Cloud<->Teams would be silently re-billed on the MONTHLY price.
+    # Annual price_cents always exceeds the plan's monthly cents, so that
+    # comparison recovers the period with no Paddle round-trip. Null/legacy
+    # price_cents falls through to monthly (unchanged pre-annual behavior).
+    current_period = (
+        "annual"
+        if (rows[0]["price_cents"] or 0) > _PLAN_PRICE_CENTS.get(current_plan, 0)
+        else "monthly"
+    )
+    target_price_id = _plan_to_price_id(target_plan, current_period)
     if not target_price_id:
         raise HTTPException(
             status_code=500,

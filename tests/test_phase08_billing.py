@@ -285,6 +285,7 @@ async def test_change_plan_upgrade_cloud_to_teams(app_client):
                 # _ws_pii_value is patched so the encrypted value is never decrypted
                 return [{
                     "plan": "cloud",
+                    "price_cents": 2900,
                     "paddle_subscription_id_encrypted": SUB_ENC,
                     "paddle_customer_id_encrypted": CUST_ENC,
                     "current_period_ends_at": future,
@@ -336,6 +337,60 @@ async def test_change_plan_upgrade_cloud_to_teams(app_client):
 
 
 @pytest.mark.asyncio
+async def test_change_plan_preserves_annual_period(app_client):
+    """An annual subscriber switching tiers must be re-billed on the ANNUAL price,
+    not silently dropped to monthly. Period is inferred from price_cents."""
+    from burnlens_cloud import config as config_mod
+    config_mod.settings.paddle_teams_annual_price_id = "pri_env_teams_annual"
+
+    token = _encode_test_jwt(WS_A, "cloud")
+    future = datetime.now(timezone.utc) + timedelta(days=300)
+    call_count = {"n": 0}
+
+    async def _query_side(q, *args):
+        s = " ".join(q.split())
+        if "FROM workspaces" in s:
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return [{
+                    "plan": "cloud",
+                    "price_cents": 24900,  # Cloud annual → signals annual period
+                    "paddle_subscription_id_encrypted": SUB_ENC,
+                    "paddle_customer_id_encrypted": CUST_ENC,
+                    "current_period_ends_at": future,
+                }]
+            return [_ws_row(plan="teams", current_period_ends_at=future)]
+        return []
+
+    mock_query = AsyncMock(side_effect=_query_side)
+    mock_insert = AsyncMock(return_value="UPDATE 1")
+
+    mock_paddle_resp = MagicMock()
+    mock_paddle_resp.status_code = 200
+    mock_paddle_resp.json.return_value = {"data": {"id": "sub_real_id", "status": "active"}}
+
+    mock_http_client = AsyncMock()
+    mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+    mock_http_client.__aexit__ = AsyncMock(return_value=None)
+    mock_http_client.patch = AsyncMock(return_value=mock_paddle_resp)
+
+    with patch("burnlens_cloud.billing.execute_query", mock_query), \
+         patch("burnlens_cloud.billing.execute_insert", mock_insert), \
+         patch("burnlens_cloud.billing.httpx.AsyncClient", return_value=mock_http_client), \
+         patch("burnlens_cloud.billing._ws_pii_value", return_value="sub_real_id"):
+        async with await app_client() as ac:
+            resp = await ac.post(
+                "/billing/change-plan",
+                json={"target_plan": "teams"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+    assert resp.status_code == 200
+    payload = mock_http_client.patch.call_args.kwargs.get("json") or {}
+    assert payload["items"][0]["price_id"] == "pri_env_teams_annual"
+
+
+@pytest.mark.asyncio
 async def test_change_plan_downgrade_teams_to_cloud(app_client):
     """Downgrade path: effective_from=next_billing_period, scheduled_plan written."""
     token = _encode_test_jwt(WS_A, "teams")
@@ -350,6 +405,7 @@ async def test_change_plan_downgrade_teams_to_cloud(app_client):
             if call_count["n"] == 1:
                 return [{
                     "plan": "teams",
+                    "price_cents": 9900,
                     "paddle_subscription_id_encrypted": SUB_ENC,
                     "paddle_customer_id_encrypted": CUST_ENC,
                     "current_period_ends_at": future,
@@ -406,6 +462,7 @@ async def test_change_plan_paddle_5xx_returns_502(app_client):
 
     mock_query = AsyncMock(return_value=[{
         "plan": "cloud",
+        "price_cents": 2900,
         "paddle_subscription_id_encrypted": SUB_ENC,
         "paddle_customer_id_encrypted": CUST_ENC,
         "current_period_ends_at": future,
@@ -447,6 +504,7 @@ async def test_change_plan_paddle_timeout_returns_502(app_client):
 
     mock_query = AsyncMock(return_value=[{
         "plan": "cloud",
+        "price_cents": 2900,
         "paddle_subscription_id_encrypted": SUB_ENC,
         "paddle_customer_id_encrypted": CUST_ENC,
         "current_period_ends_at": future,
@@ -660,6 +718,7 @@ async def test_cancel_paddle_5xx_returns_502(app_client):
 
     mock_query = AsyncMock(return_value=[{
         "plan": "cloud",
+        "price_cents": 2900,
         "paddle_subscription_id_encrypted": SUB_ENC,
         "cancel_at_period_end": False,
     }])
@@ -747,6 +806,7 @@ async def test_reactivate_400_period_ended(app_client):
 
     mock_query = AsyncMock(return_value=[{
         "plan": "cloud",
+        "price_cents": 2900,
         "paddle_subscription_id_encrypted": SUB_ENC,
         "cancel_at_period_end": True,
         "current_period_ends_at": past,
@@ -773,6 +833,7 @@ async def test_reactivate_400_status_canceled(app_client):
 
     mock_query = AsyncMock(return_value=[{
         "plan": "cloud",
+        "price_cents": 2900,
         "paddle_subscription_id_encrypted": SUB_ENC,
         "cancel_at_period_end": True,
         "current_period_ends_at": future,
@@ -857,6 +918,7 @@ async def test_reactivate_paddle_5xx_returns_502(app_client):
 
     mock_query = AsyncMock(return_value=[{
         "plan": "cloud",
+        "price_cents": 2900,
         "paddle_subscription_id_encrypted": SUB_ENC,
         "cancel_at_period_end": True,
         "current_period_ends_at": future,
