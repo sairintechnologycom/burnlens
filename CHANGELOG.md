@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.10.1] — 2026-07-19
+
+### Fixed
+- **Cloud sync actually forwards OTEL correlation IDs now.** v1.9.2 added
+  `trace_id`/`event_id`/`request_id` to the sync payload but not to the
+  privacy allowlist, so the sanitize step stripped them before the wire. A
+  new test asserts every payload field survives the allowlist.
+
+### Added
+- **Cache savings sync to BurnLens Cloud.** `cache_hit` and `cache_saved_usd`
+  are now part of the sync payload, powering the new "Cache saved" stat on
+  the SaaS dashboard (cloud + frontend deployed separately).
+
 ## [OSS `burnlens` v1.10.0] — 2026-07-19
 
 ### Added
