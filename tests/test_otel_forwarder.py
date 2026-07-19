@@ -102,6 +102,51 @@ class TestOtelProtoConversion:
         assert "burnlens.customer" not in attrs
 
 
+class TestSpanCorrelation:
+    """Span/trace ids must correlate with the client trace and BurnLens event,
+    not be random (the pre-fix behavior left every exported span un-joinable)."""
+
+    _BASE = {
+        "timestamp": "2025-01-01T12:00:00Z",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "duration_ms": 320,
+    }
+    _W3C = "4bf92f3577b34da6a3ce929d0e0e4736"
+
+    def test_w3c_trace_id_passes_through(self):
+        """A W3C trace-id is used verbatim so the span joins the client trace."""
+        span = RequestRecordToSpan.from_record(
+            {**self._BASE, "trace_id": self._W3C, "event_id": "evt-1", "request_id": "chatcmpl-9"}
+        )
+        assert span["traceId"] == self._W3C
+        assert len(span["spanId"]) == 16
+        assert span["attributes"]["burnlens.event_id"] == "evt-1"
+        assert span["attributes"]["gen_ai.response.id"] == "chatcmpl-9"
+
+    def test_ids_are_deterministic_from_event(self):
+        """Same event → same ids (idempotent re-forwarding); trace != span."""
+        a = RequestRecordToSpan.from_record({**self._BASE, "event_id": "evt-42"})
+        b = RequestRecordToSpan.from_record({**self._BASE, "event_id": "evt-42"})
+        assert a["traceId"] == b["traceId"]
+        assert a["spanId"] == b["spanId"]
+        assert a["traceId"] != a["spanId"]
+
+    def test_arbitrary_correlation_id_hashed_to_valid_width(self):
+        """A non-W3C correlation id hashes to a stable, valid 32-hex trace id."""
+        rec = {**self._BASE, "trace_id": "my-correlation-42"}
+        span = RequestRecordToSpan.from_record(rec)
+        assert len(span["traceId"]) == 32
+        assert all(c in "0123456789abcdef" for c in span["traceId"])
+        assert span["traceId"] == RequestRecordToSpan.from_record(rec)["traceId"]
+
+    def test_random_fallback_when_no_ids(self):
+        """With no correlation id at all, fall back to a random (unique) trace."""
+        a = RequestRecordToSpan.from_record(self._BASE)
+        b = RequestRecordToSpan.from_record(self._BASE)
+        assert a["traceId"] != b["traceId"]
+
+
 class TestOtelForwarder:
     """Test OTEL forwarder functionality."""
 

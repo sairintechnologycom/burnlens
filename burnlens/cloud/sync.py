@@ -323,6 +323,10 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         duration_ms=row.get("duration_ms", 0),
         status_code=row.get("status_code", 200),
         system_prompt_hash=row.get("system_prompt_hash"),
+        # Correlation ids for OTEL span export (never prompt content):
+        trace_id=row.get("trace_id"),
+        event_id=row.get("event_id"),
+        request_id=row.get("request_id"),
         tag_feature=tags.get("feature"),
         tag_team=tags.get("team"),
         tag_customer=tags.get("customer"),

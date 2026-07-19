@@ -40,6 +40,10 @@ class RequestRecordBase(BaseModel):
     status_code: int = 200
     tags: dict = Field(default_factory=dict)
     system_prompt_hash: Optional[str] = None
+    # Correlation ids used only to build correlatable OTEL export spans.
+    trace_id: Optional[str] = None
+    event_id: Optional[str] = None
+    request_id: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
