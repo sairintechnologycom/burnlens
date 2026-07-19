@@ -7,6 +7,7 @@ import Shell from "@/components/Shell";
 import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
+import type { RecommendationRow } from "@/lib/contracts";
 
 interface WasteAlert {
   id: string;
@@ -20,18 +21,10 @@ interface WasteAlert {
   monthly_savings: number;
 }
 
-interface Recommendation {
-  id: string;
-  title: string;
-  description: string;
-  command?: string;
-  monthly_savings: number;
-}
-
 function WasteContent() {
   const { session, logout } = useAuth();
   const [alerts, setAlerts] = useState<WasteAlert[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -46,7 +39,7 @@ function WasteContent() {
     ])
       .then(([a, r]) => {
         setAlerts(a as WasteAlert[]);
-        setRecommendations(r as Recommendation[]);
+        setRecommendations(r as RecommendationRow[]);
       })
       .catch((err) => {
         if (err instanceof AuthError) logout();
@@ -158,27 +151,14 @@ function WasteContent() {
           />
         ) : (
           recommendations.map((r) => (
-            <div key={r.id} style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>
+            <div key={`${r.current_model}-${r.feature_tag}`} style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>
               <div style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 13, color: "var(--text)", marginBottom: 4 }}>
-                {r.title}
+                {r.current_model} → {r.suggested_model}
+                <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.feature_tag}</span>
               </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>{r.description}</div>
-              {r.command && (
-                <code style={{
-                  display: "block",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                  color: "var(--cyan)",
-                  background: "var(--bg2)",
-                  padding: "6px 10px",
-                  borderRadius: 3,
-                  marginBottom: 6,
-                }}>
-                  {r.command}
-                </code>
-              )}
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>{r.reason}</div>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--green)" }}>
-                Save ${r.monthly_savings.toFixed(2)}/mo
+                Save ${r.projected_saving.toFixed(2)} ({r.saving_pct.toFixed(0)}%)
               </span>
             </div>
           ))

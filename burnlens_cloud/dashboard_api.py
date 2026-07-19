@@ -20,6 +20,7 @@ from .models import (
     CostByModel,
     CostByTag,
     CostTimeline,
+    RecommendationItem,
     RequestRecordResponse,
 )
 
@@ -495,6 +496,94 @@ async def get_budget(token: TokenPayload = Depends(verify_token)):
         logger.warning("resolve_limits failed in get_budget; forecasting without a budget", exc_info=True)
 
     return _budget_forecast(spent_usd, elapsed_days_frac, period_days, budget_usd)
+
+
+def _model_overkill_recs(rows: list[dict]) -> List[RecommendationItem]:
+    """Apply the OSS recommender's model-overkill rule to aggregated rows.
+
+    Reuses burnlens.analysis.recommender's downgrade map, thresholds, and
+    pricing projection so the SaaS and local dashboards give the same advice.
+    """
+    # ponytail: Rule 1 (model overkill) only — reasoning-overkill and
+    # cache-opportunity rules need per-request data; port them if asked.
+    from burnlens.analysis.recommender import (
+        _CHEAPER_EQUIVALENT,
+        _match_overkill_model,
+        _project_cost,
+    )
+
+    recs: List[RecommendationItem] = []
+    for row in rows:
+        model = row["model"]
+        matched_key = _match_overkill_model(model)
+        if matched_key is None:
+            continue
+        avg_out = float(row["avg_output_tokens"] or 0)
+        count = int(row["request_count"])
+        if avg_out >= 200 or count <= 20:
+            continue
+        suggested = _CHEAPER_EQUIVALENT[matched_key]
+        avg_in = float(row["avg_input_tokens"] or 0)
+        current_cost = float(row["total_cost"] or 0)
+        projected = _project_cost(count, avg_in, avg_out, suggested)
+        if projected is None:
+            continue
+        saving = current_cost - projected
+        pct = (saving / current_cost * 100) if current_cost > 0 else 0.0
+        recs.append(RecommendationItem(
+            current_model=model,
+            suggested_model=suggested,
+            feature_tag=row["feature_tag"],
+            request_count=count,
+            avg_output_tokens=round(avg_out, 1),
+            current_cost=round(current_cost, 6),
+            projected_cost=round(projected, 6),
+            projected_saving=round(saving, 6),
+            saving_pct=round(pct, 1),
+            confidence="high" if avg_out < 50 else "medium",
+            reason=(
+                f"Average output is only {avg_out:.0f} tokens across {count} requests "
+                f"— {suggested} can handle short tasks at a fraction of the cost"
+            ),
+        ))
+    recs.sort(key=lambda r: r.projected_saving, reverse=True)
+    return recs
+
+
+@router.get("/recommendations", response_model=List[RecommendationItem])
+async def get_recommendations(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(30, description="Number of days to look back"),
+):
+    """Model-switch recommendations computed from workspace usage."""
+    await require_role("viewer", token)
+    days = clamp_days_by_plan(days, token.plan)
+    cutoff = datetime.now(tz.UTC) - timedelta(days=days)
+
+    rows = await execute_query(
+        """
+        SELECT
+            model,
+            COALESCE(tags->>'feature', '(untagged)') AS feature_tag,
+            COUNT(*) AS request_count,
+            AVG(input_tokens)  AS avg_input_tokens,
+            AVG(output_tokens) AS avg_output_tokens,
+            SUM(cost_usd)      AS total_cost
+        FROM request_records
+        WHERE workspace_id = $1 AND ts >= $2
+        GROUP BY model, feature_tag
+        """,
+        str(token.workspace_id),
+        cutoff,
+    )
+
+    # A recommender failure must not 500 the savings page — degrade to "no
+    # recommendations" (the page renders its empty state).
+    try:
+        return _model_overkill_recs(rows or [])
+    except Exception:
+        logger.warning("recommendation computation failed; returning []", exc_info=True)
+        return []
 
 
 @router.get(

@@ -60,6 +60,71 @@ async def test_summary_with_auth(dash_client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
+async def test_recommendations_requires_auth(dash_client):
+    response = await dash_client.get("/api/v1/recommendations")
+    assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_recommendations_model_overkill(dash_client, valid_jwt_token):
+    """Short-output traffic on an overkill model yields a downgrade rec."""
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = [
+            {   # triggers: overkill model, avg_out < 200, count > 20
+                "model": "gpt-4o",
+                "feature_tag": "chat",
+                "request_count": 100,
+                "avg_input_tokens": 500.0,
+                "avg_output_tokens": 40.0,
+                "total_cost": 50.0,
+            },
+            {   # below volume threshold — no rec
+                "model": "gpt-4o",
+                "feature_tag": "rare",
+                "request_count": 5,
+                "avg_input_tokens": 500.0,
+                "avg_output_tokens": 40.0,
+                "total_cost": 1.0,
+            },
+            {   # long outputs — no rec
+                "model": "claude-sonnet-5",
+                "feature_tag": "writer",
+                "request_count": 100,
+                "avg_input_tokens": 500.0,
+                "avg_output_tokens": 900.0,
+                "total_cost": 80.0,
+            },
+        ]
+        response = await dash_client.get(
+            "/api/v1/recommendations",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    recs = response.json()
+    assert len(recs) == 1
+    rec = recs[0]
+    assert rec["current_model"] == "gpt-4o"
+    assert rec["suggested_model"] == "gpt-4o-mini"
+    assert rec["feature_tag"] == "chat"
+    assert rec["confidence"] == "high"  # avg_out < 50
+    assert rec["projected_saving"] > 0
+    assert 0 < rec["saving_pct"] <= 100
+
+
+@pytest.mark.asyncio
+async def test_recommendations_empty_workspace(dash_client, valid_jwt_token):
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = []
+        response = await dash_client.get(
+            "/api/v1/recommendations",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
 async def test_costs_by_model(dash_client, valid_jwt_token):
     """Test costs by model endpoint."""
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:

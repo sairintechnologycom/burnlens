@@ -23,6 +23,34 @@ export const UsageSummaryFields: Record<keyof UsageSummary, true> = {
   cache_hits: true,
 };
 
+// --- /api/v1/recommendations  ->  RecommendationItem ---
+export interface RecommendationRow {
+  current_model: string;
+  suggested_model: string;
+  feature_tag: string;
+  request_count: number;
+  avg_output_tokens: number;
+  current_cost: number;
+  projected_cost: number;
+  projected_saving: number;
+  saving_pct: number;
+  confidence: string;
+  reason: string;
+}
+export const RecommendationRowFields: Record<keyof RecommendationRow, true> = {
+  current_model: true,
+  suggested_model: true,
+  feature_tag: true,
+  request_count: true,
+  avg_output_tokens: true,
+  current_cost: true,
+  projected_cost: true,
+  projected_saving: true,
+  saving_pct: true,
+  confidence: true,
+  reason: true,
+};
+
 // --- /api/v1/usage/by-model  ->  CostByModel ---
 export interface CostByModelRow {
   model: string;

@@ -6,6 +6,9 @@ pydantic-settings==2.4.0
 PyJWT[crypto]==2.13.0
 bcrypt==5.0.0
 httpx==0.27.0
+# Pulled in because dashboard_api reuses the OSS recommender (burnlens.analysis)
+# whose package __init__ imports the sqlite storage layer.
+aiosqlite==0.22.1
 python-dotenv==1.0.0
 cryptography==49.0.0
 sendgrid==6.11.0

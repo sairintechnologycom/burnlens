@@ -1087,6 +1087,70 @@
     "title": "PricingResponse",
     "type": "object"
   },
+  "RecommendationItem": {
+    "description": "A model-switch recommendation (mirrors the OSS local-dashboard shape).",
+    "properties": {
+      "avg_output_tokens": {
+        "title": "Avg Output Tokens",
+        "type": "number"
+      },
+      "confidence": {
+        "title": "Confidence",
+        "type": "string"
+      },
+      "current_cost": {
+        "title": "Current Cost",
+        "type": "number"
+      },
+      "current_model": {
+        "title": "Current Model",
+        "type": "string"
+      },
+      "feature_tag": {
+        "title": "Feature Tag",
+        "type": "string"
+      },
+      "projected_cost": {
+        "title": "Projected Cost",
+        "type": "number"
+      },
+      "projected_saving": {
+        "title": "Projected Saving",
+        "type": "number"
+      },
+      "reason": {
+        "title": "Reason",
+        "type": "string"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "saving_pct": {
+        "title": "Saving Pct",
+        "type": "number"
+      },
+      "suggested_model": {
+        "title": "Suggested Model",
+        "type": "string"
+      }
+    },
+    "required": [
+      "current_model",
+      "suggested_model",
+      "feature_tag",
+      "request_count",
+      "avg_output_tokens",
+      "current_cost",
+      "projected_cost",
+      "projected_saving",
+      "saving_pct",
+      "confidence",
+      "reason"
+    ],
+    "title": "RecommendationItem",
+    "type": "object"
+  },
   "RequestRecordBase": {
     "description": "Base request record schema.",
     "properties": {

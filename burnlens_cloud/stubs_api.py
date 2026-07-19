@@ -18,11 +18,9 @@ router = APIRouter(tags=["stubs"])
 # only to 501. Re-add only WITH a real consumer (discovery/reconciliation).
 
 
-@router.get("/api/v1/recommendations")
-async def list_recommendations(
-    token: TokenPayload = Depends(verify_token),
-) -> List[dict]:
-    return []
+# /api/v1/recommendations graduated out of stubs → real impl at
+# dashboard_api.py GET /api/v1/recommendations (model-overkill rule reusing
+# the OSS recommender). Frontend unchanged — same path.
 
 
 @router.post("/api/v1/sync/trigger")
