@@ -212,15 +212,6 @@ function SettingsContent() {
         </div>
       </div>
 
-      {/* Connections */}
-      <div className="card" style={{ margin: 16 }}>
-        <div className="section-header">
-          <span className="section-header-title">Connections</span>
-        </div>
-        <div style={{ padding: 18, fontSize: 12, color: "var(--muted)" }}>
-          Provider connections are managed via the Connections page.
-        </div>
-      </div>
     </div>
   );
 }

@@ -149,7 +149,6 @@ function DashboardContent() {
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <Link href="/setup" className="upgrade-btn" style={{ textDecoration: "none" }}>Setup guide</Link>
-              <Link href="/connections" className="period-btn" style={{ textDecoration: "none" }}>Connections</Link>
             </div>
           </div>
         </div>
