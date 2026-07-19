@@ -6,6 +6,15 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.9.2] — 2026-07-19
+
+### Fixed
+- **Cloud sync now forwards correlation IDs for OTEL export.** The proxy's
+  cloud-sync payload now includes `trace_id`, `event_id`, and `request_id`
+  (IDs only — never prompt content) so the cloud OTEL exporter can build spans
+  that join the client's distributed trace instead of getting random IDs.
+  Pairs with the `burnlens-cloud` exporter fix (deployed).
+
 ## [OSS `burnlens` v1.9.1] — 2026-07-19
 
 ### Changed
