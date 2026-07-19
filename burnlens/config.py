@@ -152,6 +152,22 @@ class RoutingConfig:
 
 
 @dataclass
+class RetryConfig:
+    """Automatic retry of upstream requests on transient provider failures.
+
+    Defaults are billing-safe: only statuses where the provider rejected the
+    request without processing it (429, 503) plus connection-level errors are
+    retried, so a retry can never double-bill. Add 502/504 via config only if
+    you accept the small chance the origin already processed the request.
+    """
+
+    enabled: bool = True
+    max_retries: int = 2
+    backoff_base_seconds: float = 0.5
+    retry_on_status: frozenset[int] = frozenset({429, 503})
+
+
+@dataclass
 class CacheEmbeddingConfig:
     """Configuration for cache embedding generator."""
 
@@ -195,6 +211,7 @@ class BurnLensConfig:
     routing: RoutingConfig = field(default_factory=RoutingConfig)
     budget_policies: list[BudgetPolicy] = field(default_factory=list)
     cache: CacheConfig = field(default_factory=CacheConfig)
+    retry: RetryConfig = field(default_factory=RetryConfig)
 
 
 _FIELD_TYPES: dict[str, type] = {
@@ -421,6 +438,18 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
         kwargs["cache"] = cache
     else:
         kwargs["cache"] = CacheConfig()
+
+    # Parse retry config
+    retry_data = data.get("retry")
+    if retry_data:
+        kwargs["retry"] = RetryConfig(
+            enabled=bool(retry_data.get("enabled", True)),
+            max_retries=int(retry_data.get("max_retries", 2)),
+            backoff_base_seconds=float(retry_data.get("backoff_base_seconds", 0.5)),
+            retry_on_status=frozenset(
+                int(s) for s in retry_data.get("retry_on_status", [429, 503])
+            ),
+        )
 
     cfg = BurnLensConfig(**kwargs)
     _apply_env_overrides(cfg)
