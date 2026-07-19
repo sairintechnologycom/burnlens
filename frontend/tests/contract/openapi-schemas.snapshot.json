@@ -1634,6 +1634,64 @@
     "title": "StatusResponse",
     "type": "object"
   },
+  "TeamBudgetRow": {
+    "description": "Per-team month-to-date spend vs its configured budget.",
+    "properties": {
+      "limit": {
+        "title": "Limit",
+        "type": "number"
+      },
+      "pct_used": {
+        "title": "Pct Used",
+        "type": "number"
+      },
+      "spent": {
+        "title": "Spent",
+        "type": "number"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "team": {
+        "title": "Team",
+        "type": "string"
+      }
+    },
+    "required": [
+      "team",
+      "spent",
+      "limit",
+      "pct_used",
+      "status"
+    ],
+    "title": "TeamBudgetRow",
+    "type": "object"
+  },
+  "TeamBudgetSettingRequest": {
+    "properties": {
+      "monthly_budget_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Monthly Budget Usd"
+      },
+      "team": {
+        "title": "Team",
+        "type": "string"
+      }
+    },
+    "required": [
+      "team"
+    ],
+    "title": "TeamBudgetSettingRequest",
+    "type": "object"
+  },
   "TeamsWebhookRequest": {
     "properties": {
       "webhook_url": {

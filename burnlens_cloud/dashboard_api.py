@@ -22,6 +22,7 @@ from .models import (
     CostTimeline,
     RecommendationItem,
     RequestRecordResponse,
+    TeamBudgetRow,
 )
 
 logger = logging.getLogger(__name__)
@@ -496,6 +497,59 @@ async def get_budget(token: TokenPayload = Depends(verify_token)):
         logger.warning("resolve_limits failed in get_budget; forecasting without a budget", exc_info=True)
 
     return _budget_forecast(spent_usd, elapsed_days_frac, period_days, budget_usd)
+
+
+@router.get("/team-budgets", response_model=List[TeamBudgetRow])
+async def get_team_budgets(token: TokenPayload = Depends(verify_token)):
+    """Month-to-date spend per team vs the budgets set via PUT /settings/team-budget.
+
+    Teams without a configured budget are omitted. Display/alerting only —
+    the workspace-level cap is what ingest enforces.
+    """
+    await require_role("viewer", token)
+    workspace_id = str(token.workspace_id)
+
+    override_rows = await execute_query(
+        "SELECT limit_overrides->'team_budgets' AS tb FROM workspaces WHERE id = $1",
+        workspace_id,
+    )
+    budgets = (override_rows[0]["tb"] if override_rows else None) or {}
+    if not budgets:
+        return []
+
+    month_start = datetime.now(tz.UTC).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    spend_rows = await execute_query(
+        """
+        SELECT COALESCE(tags->>'team', '(untagged)') AS team,
+               COALESCE(SUM(cost_usd), 0) AS spent
+        FROM request_records
+        WHERE workspace_id = $1 AND ts >= $2
+        GROUP BY 1
+        """,
+        workspace_id,
+        month_start,
+    )
+    spent_by_team = {r["team"]: float(r["spent"]) for r in (spend_rows or [])}
+
+    out: List[TeamBudgetRow] = []
+    for team, limit in budgets.items():
+        limit_f = float(limit)
+        if limit_f <= 0:
+            continue
+        spent = spent_by_team.get(team, 0.0)
+        pct = spent / limit_f * 100
+        status = "EXCEEDED" if pct >= 100 else "WARNING" if pct >= 80 else "OK"
+        out.append(TeamBudgetRow(
+            team=team,
+            spent=round(spent, 2),
+            limit=limit_f,
+            pct_used=round(pct, 1),
+            status=status,
+        ))
+    out.sort(key=lambda r: r.pct_used, reverse=True)
+    return out
 
 
 def _model_overkill_recs(rows: list[dict]) -> List[RecommendationItem]:

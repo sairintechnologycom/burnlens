@@ -7,6 +7,7 @@ import Shell from "@/components/Shell";
 import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
+import type { TeamBudgetRow as TeamBudget } from "@/lib/contracts";
 
 interface BudgetStatus {
   budget_usd: number | null;
@@ -18,14 +19,6 @@ interface BudgetStatus {
   is_on_pace_to_exceed: boolean;
   period_days: number;
   elapsed_days: number;
-}
-
-interface TeamBudget {
-  team: string;
-  spent: number;
-  limit: number;
-  pct_used: number;
-  status: string;
 }
 
 function formatCost(n: number): string {
@@ -46,6 +39,9 @@ function BudgetsContent() {
   const [error, setError] = useState("");
   const [budgetInput, setBudgetInput] = useState("");
   const [savingBudget, setSavingBudget] = useState(false);
+  const [teamInput, setTeamInput] = useState("");
+  const [teamAmountInput, setTeamAmountInput] = useState("");
+  const [savingTeam, setSavingTeam] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!session) return;
@@ -54,7 +50,7 @@ function BudgetsContent() {
     try {
       const [b, t] = await Promise.all([
         apiFetch("/api/v1/budget", session.token).catch(() => null),
-        apiFetch("/api/team-budgets", session.token).catch(() => []),
+        apiFetch("/api/v1/team-budgets", session.token).catch(() => []),
       ]);
       setBudget(b);
       setTeams(t as TeamBudget[]);
@@ -93,6 +89,30 @@ function BudgetsContent() {
       setSavingBudget(false);
     }
   }, [session, budgetInput, fetchData, logout]);
+
+  const saveTeamBudget = useCallback(async (team: string, amount: number | null) => {
+    if (!session) return;
+    setError("");
+    if (amount !== null && (!Number.isFinite(amount) || amount <= 0)) {
+      setError("Enter a team budget amount greater than 0.");
+      return;
+    }
+    setSavingTeam(true);
+    try {
+      await apiFetch("/settings/team-budget", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ team, monthly_budget_usd: amount }),
+      });
+      setTeamInput("");
+      setTeamAmountInput("");
+      await fetchData();
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else setError(err.message || "Couldn't save team budget.");
+    } finally {
+      setSavingTeam(false);
+    }
+  }, [session, fetchData, logout]);
 
   if (loading) {
     return (
@@ -207,9 +227,7 @@ function BudgetsContent() {
         {teams.length === 0 ? (
           <EmptyState
             title="No team budgets configured"
-            description="Set per-team monthly caps in burnlens.yaml. BurnLens will warn at 80% and hard-block at 100% — per team, per customer, or globally."
-            code={'budgets:\n  teams:\n    search: 500\n    chat: 2000'}
-            action={{ label: "Configuration docs", href: "https://github.com/sairintechnologycom/burnlens#readme" }}
+            description="Set a monthly budget per team below. Spend is attributed via the team tag on each request; teams show WARNING at 80% and EXCEEDED at 100%."
           />
         ) : (
           <table className="data-table">
@@ -220,6 +238,7 @@ function BudgetsContent() {
                 <th>Limit</th>
                 <th>Used</th>
                 <th>Status</th>
+                {canEditBudget && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -230,10 +249,55 @@ function BudgetsContent() {
                   <td>${formatCost(t.limit)}</td>
                   <td>{t.pct_used}%</td>
                   <td style={{ color: statusColor(t.status), fontWeight: 600 }}>{t.status}</td>
+                  {canEditBudget && (
+                    <td>
+                      <button
+                        className="btn"
+                        style={{ padding: "2px 8px", fontSize: 10 }}
+                        disabled={savingTeam}
+                        onClick={() => saveTeamBudget(t.team, null)}
+                      >
+                        Clear
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
+        )}
+        {canEditBudget && (
+          <div style={{ padding: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid var(--border)" }}>
+            <input
+              aria-label="Team name"
+              placeholder="team name"
+              value={teamInput}
+              onChange={(e) => setTeamInput(e.target.value)}
+              style={{ width: 140 }}
+            />
+            <span style={{ color: "var(--muted)" }}>$</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              inputMode="decimal"
+              aria-label="Team monthly budget in USD"
+              placeholder="500"
+              value={teamAmountInput}
+              onChange={(e) => setTeamAmountInput(e.target.value)}
+              style={{ width: 120 }}
+            />
+            <button
+              className="btn btn-cyan"
+              disabled={savingTeam || !teamInput.trim()}
+              onClick={() => saveTeamBudget(teamInput.trim(), parseFloat(teamAmountInput))}
+            >
+              {savingTeam ? "Saving…" : "Set team budget"}
+            </button>
+            <span style={{ color: "var(--muted)", fontSize: 11 }}>
+              Tracked against the team tag — warns at 80%, flags at 100%.
+            </span>
+          </div>
         )}
       </div>
     </div>

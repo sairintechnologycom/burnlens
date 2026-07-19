@@ -60,6 +60,44 @@ async def test_summary_with_auth(dash_client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
+async def test_team_budgets_no_budgets_returns_empty(dash_client, valid_jwt_token):
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = [{"tb": None}]
+        response = await dash_client.get(
+            "/api/v1/team-budgets",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_team_budgets_spend_vs_limit(dash_client, valid_jwt_token):
+    """Budgets from limit_overrides joined with month-to-date team spend."""
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.side_effect = [
+            [{"tb": {"search": 500, "chat": 100}}],                # overrides
+            [
+                {"team": "search", "spent": 450.0},                # 90% -> WARNING
+                {"team": "chat", "spent": 120.0},                  # 120% -> EXCEEDED
+                {"team": "untracked", "spent": 999.0},             # no budget -> omitted
+            ],
+        ]
+        response = await dash_client.get(
+            "/api/v1/team-budgets",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    rows = response.json()
+    assert [r["team"] for r in rows] == ["chat", "search"]  # sorted by pct desc
+    chat, search = rows
+    assert chat["status"] == "EXCEEDED" and chat["pct_used"] == 120.0
+    assert search["status"] == "WARNING" and search["spent"] == 450.0
+    assert search["limit"] == 500.0
+
+
+@pytest.mark.asyncio
 async def test_recommendations_requires_auth(dash_client):
     response = await dash_client.get("/api/v1/recommendations")
     assert response.status_code in (401, 403)
