@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.9.1] — 2026-07-19
+
+### Changed
+- **Semantic cache no longer caches sampled requests.** Requests with an
+  explicit `temperature > 0` are neither served from nor written to the
+  response cache, so sampled (non-deterministic) outputs stay varied. Requests
+  that omit `temperature` (relying on the provider default) are unaffected.
+
+### Added
+- **Cache-savings visibility.** `/api/summary` now returns `cache_saved_usd`
+  and `cache_hits`, and the local dashboard shows a "Cache Saved" KPI card, so
+  the value the response cache already tracked is now surfaced.
+
 ## [OSS `burnlens` v1.9.0] — 2026-07-18
 
 ### Added
