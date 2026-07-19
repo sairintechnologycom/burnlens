@@ -243,6 +243,30 @@ def _request_is_cacheable(body_bytes: bytes | None) -> bool:
     return not (isinstance(temp, (int, float)) and not isinstance(temp, bool) and temp > 0)
 
 
+# Connection-level errors are always safe to retry — the request never reached
+# the upstream, so a retry cannot double-bill. (Read timeouts are deliberately
+# NOT retried: the upstream may have processed the request already.)
+_RETRYABLE_CONNECT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout)
+
+
+async def _retry_backoff(attempt: int, cfg: Any) -> None:
+    """Exponential backoff sleep before retry ``attempt`` (0-indexed)."""
+    await asyncio.sleep(cfg.backoff_base_seconds * (2 ** attempt))
+
+
+def _should_retry_status(status: int, attempt: int, cfg: Any) -> bool:
+    """True if a response with ``status`` should be retried at this attempt."""
+    return bool(
+        cfg and cfg.enabled and attempt < cfg.max_retries
+        and status in cfg.retry_on_status
+    )
+
+
+def _should_retry_connect(attempt: int, cfg: Any) -> bool:
+    """True if a connection error should be retried at this attempt."""
+    return bool(cfg and cfg.enabled and attempt < cfg.max_retries)
+
+
 def _hash_system_prompt(body_bytes: bytes) -> str | None:
     """Return SHA-256 hex of the first system message content, or None."""
     try:
@@ -661,12 +685,36 @@ async def _handle_non_streaming(
     reservation: dict[str, Any] | None = None,
 ) -> tuple[int, dict[str, str], bytes, None]:
     """Forward a non-streaming request and log asynchronously."""
-    response = await client.request(
-        method=method,
-        url=upstream_url,
-        headers=headers,
-        content=body_bytes,
-    )
+    retry_cfg = getattr(config, "retry", None)
+    attempt = 0
+    while True:
+        try:
+            response = await client.request(
+                method=method,
+                url=upstream_url,
+                headers=headers,
+                content=body_bytes,
+            )
+        except _RETRYABLE_CONNECT_ERRORS as exc:
+            if _should_retry_connect(attempt, retry_cfg):
+                logger.warning(
+                    "[BurnLens] %s connect error, retry %d/%d: %s",
+                    provider.name, attempt + 1, retry_cfg.max_retries, exc,
+                )
+                await _retry_backoff(attempt, retry_cfg)
+                attempt += 1
+                continue
+            raise
+        if _should_retry_status(response.status_code, attempt, retry_cfg):
+            logger.warning(
+                "[BurnLens] %s returned %d, retry %d/%d",
+                provider.name, response.status_code, attempt + 1, retry_cfg.max_retries,
+            )
+            await response.aclose()
+            await _retry_backoff(attempt, retry_cfg)
+            attempt += 1
+            continue
+        break
     duration_ms = int((time.monotonic() - start_ms) * 1000)
 
     resp_body = response.content
@@ -873,7 +921,33 @@ async def _handle_streaming(
         headers={k: v for k, v in req.headers.items() if k.lower() not in _STRIP_REQUEST_HEADERS},
         content=req.content,
     )
-    response = await client.send(req, stream=True)
+    # Retry the initial connect + status only — once bytes are yielded there is
+    # no safe retry. The request content is bytes, so re-sending is safe.
+    retry_cfg = getattr(config, "retry", None)
+    attempt = 0
+    while True:
+        try:
+            response = await client.send(req, stream=True)
+        except _RETRYABLE_CONNECT_ERRORS as exc:
+            if _should_retry_connect(attempt, retry_cfg):
+                logger.warning(
+                    "[BurnLens] %s connect error (stream), retry %d/%d: %s",
+                    provider.name, attempt + 1, retry_cfg.max_retries, exc,
+                )
+                await _retry_backoff(attempt, retry_cfg)
+                attempt += 1
+                continue
+            raise
+        if _should_retry_status(response.status_code, attempt, retry_cfg):
+            logger.warning(
+                "[BurnLens] %s returned %d (stream), retry %d/%d",
+                provider.name, response.status_code, attempt + 1, retry_cfg.max_retries,
+            )
+            await response.aclose()
+            await _retry_backoff(attempt, retry_cfg)
+            attempt += 1
+            continue
+        break
     if response.status_code >= 400:
         err_body = await response.aread()
         _log_upstream_error_hint(response.status_code, err_body, provider.name)
