@@ -7,19 +7,7 @@ import Shell from "@/components/Shell";
 import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
-
-interface Recommendation {
-  current_model: string;
-  suggested_model: string;
-  feature_tag: string;
-  request_count: number;
-  current_cost: number;
-  projected_cost: number;
-  projected_saving: number;
-  saving_pct: number;
-  confidence: string;
-  reason: string;
-}
+import type { RecommendationRow as Recommendation } from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });

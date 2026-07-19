@@ -170,6 +170,21 @@ class StatsSummary(BaseModel):
     cache_hits: int = 0
 
 
+class RecommendationItem(BaseModel):
+    """A model-switch recommendation (mirrors the OSS local-dashboard shape)."""
+    current_model: str
+    suggested_model: str
+    feature_tag: str
+    request_count: int
+    avg_output_tokens: float
+    current_cost: float
+    projected_cost: float
+    projected_saving: float
+    saving_pct: float
+    confidence: str
+    reason: str
+
+
 class CostByModel(BaseModel):
     """Cost aggregated by model."""
     model: str
