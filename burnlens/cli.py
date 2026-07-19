@@ -37,6 +37,13 @@ wal_app = typer.Typer(
 )
 app.add_typer(wal_app, name="wal")
 
+vkey_app = typer.Typer(
+    name="vkey",
+    help="Issue virtual keys (gateway): per-team budget + model allowlist.",
+    add_completion=False,
+)
+app.add_typer(vkey_app, name="vkey")
+
 
 @wal_app.command("doctor")
 def wal_doctor(
@@ -1548,6 +1555,111 @@ def key_remove(
             console.print(f"[green]Removed[/green] [bold]{label}[/bold].")
         else:
             console.print(f"[yellow]No key registered with label '{label}'.[/yellow]")
+            raise typer.Exit(code=1)
+
+    asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# `burnlens vkey` subcommands — virtual keys (gateway)
+# ---------------------------------------------------------------------------
+
+
+@vkey_app.command("issue")
+def vkey_issue(
+    label: str = typer.Option(..., "--label", "-l", help="Unique name for this key"),
+    team: str = typer.Option(..., "--team", "-t", help="Team the key belongs to (used for budget + attribution)"),
+    provider: str = typer.Option(..., "--provider", "-p", help="openai / anthropic / google / ..."),
+    upstream_env: str = typer.Option(..., "--upstream-env", "-e", help="Name of the env var holding the REAL provider key"),
+    allow: Optional[str] = typer.Option(None, "--allow", help="Comma-separated model allowlist (default: all models)"),
+    budget: Optional[float] = typer.Option(None, "--budget", "-b", help="Monthly team budget in USD (default: none)"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Issue a virtual key. The raw token is printed once — store it now."""
+    from burnlens.virtual_keys import VirtualKeyExists, issue_key
+    from burnlens.storage.database import init_db
+
+    allowed_models = [m.strip() for m in allow.split(",") if m.strip()] if allow else None
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        try:
+            raw_token, prefix = await issue_key(
+                cfg.db_path, label, team, provider, upstream_env,
+                allowed_models=allowed_models, monthly_budget_usd=budget,
+            )
+        except VirtualKeyExists as exc:
+            console.print(f"[red]{exc}[/red] — pick a different --label.")
+            raise typer.Exit(code=1) from exc
+
+        console.print(
+            f"[green]Issued[/green] [bold]{label}[/bold] for team [cyan]{team}[/cyan] "
+            f"({provider} via ${upstream_env})"
+        )
+        if allowed_models:
+            console.print(f"  models: [dim]{', '.join(allowed_models)}[/dim]")
+        if budget is not None:
+            console.print(f"  budget: [dim]${budget:.2f}/mo[/dim]")
+        console.print("\n[bold yellow]Save this token now — it is not stored and cannot be shown again:[/bold yellow]")
+        console.print(f"[bold]{raw_token}[/bold]\n")
+
+    asyncio.run(_run())
+
+
+@vkey_app.command("list")
+def vkey_list(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """List virtual keys (raw tokens are never stored, so never shown)."""
+    from burnlens.virtual_keys import list_keys
+    from burnlens.storage.database import init_db
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        rows = await list_keys(cfg.db_path)
+        if not rows:
+            console.print("[dim]No virtual keys. Run [bold]burnlens vkey issue[/bold].[/dim]")
+            return
+        table = Table(title="[bold]Virtual Keys[/bold]", expand=True)
+        table.add_column("Label", style="cyan")
+        table.add_column("Team")
+        table.add_column("Provider")
+        table.add_column("Prefix", style="dim")
+        table.add_column("Models")
+        table.add_column("Budget/mo")
+        table.add_column("Status")
+        for r in rows:
+            models = ", ".join(r["allowed_models"]) if r["allowed_models"] else "all"
+            budget = f"${r['monthly_budget_usd']:.2f}" if r["monthly_budget_usd"] is not None else "—"
+            status = "[red]revoked[/red]" if r["revoked_at"] else "[green]active[/green]"
+            table.add_row(r["label"], r["team"], r["provider"], r["token_prefix"] + "…",
+                          models, budget, status)
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@vkey_app.command("revoke")
+def vkey_revoke(
+    label: str = typer.Option(..., "--label", "-l", help="Label to revoke"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Revoke a virtual key by label (immediately stops working)."""
+    from burnlens.virtual_keys import revoke_key
+    from burnlens.storage.database import init_db
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        revoked = await revoke_key(cfg.db_path, label)
+        if revoked:
+            console.print(f"[green]Revoked[/green] [bold]{label}[/bold].")
+        else:
+            console.print(f"[yellow]No active virtual key with label '{label}'.[/yellow]")
             raise typer.Exit(code=1)
 
     asyncio.run(_run())

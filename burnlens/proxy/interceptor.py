@@ -362,6 +362,28 @@ def _extract_api_key_hash(headers: dict[str, str]) -> str | None:
     return None
 
 
+def _extract_auth_token(headers: dict[str, str]) -> tuple[str | None, str | None]:
+    """Return ``(raw_token, header_name)`` for the auth header, or ``(None, None)``.
+
+    ``header_name`` is the lowercased header the token arrived in so a virtual
+    key can be swapped back into the same header the provider expects.
+    """
+    lower_headers = {k.lower(): v for k, v in headers.items()}
+
+    auth = lower_headers.get("authorization")
+    if auth:
+        token = auth.removeprefix("Bearer ").removeprefix("bearer ").strip()
+        if token:
+            return token, "authorization"
+
+    for header_name in ("x-api-key", "x-goog-api-key"):
+        api_key = lower_headers.get(header_name)
+        if api_key and api_key.strip():
+            return api_key.strip(), header_name
+
+    return None, None
+
+
 async def _upsert_asset(
     db_path: str,
     provider_name: str,
@@ -415,6 +437,73 @@ async def handle_request(
 
     tags = _extract_tags(headers)
 
+    # --- Virtual key gateway (only fires when the client used a bl-sk- token) ---
+    # Resolve the virtual key, enforce its model allowlist and per-team monthly
+    # budget, and stage a swap of the real upstream key (from the operator's env)
+    # into the outbound headers. Anything else passes through unchanged.
+    vk_swap: tuple[str, str] | None = None  # (header_name, real_upstream_key)
+    raw_token, token_header = _extract_auth_token(headers)
+    from burnlens.virtual_keys import looks_like_virtual_key
+    if looks_like_virtual_key(raw_token):
+        import os
+        from burnlens.virtual_keys import hash_token, resolve as _resolve_vkey
+        vk = None
+        try:
+            vk = await _resolve_vkey(db_path, hash_token(raw_token))
+        except Exception as exc:  # fail-closed: a lookup error must not leak upstream
+            logger.error("Virtual key lookup failed: %s", exc)
+            return 503, {"content-type": "application/json"}, json.dumps(
+                {"error": "gateway_error"}).encode(), None
+        if vk is None:
+            return 401, {"content-type": "application/json"}, json.dumps(
+                {"error": "invalid_virtual_key"}).encode(), None
+
+        # A vkey is bound to one provider; without this check its mapped upstream
+        # secret would be forwarded to whatever provider the path names.
+        if vk.provider != provider.name:
+            return 403, {"content-type": "application/json"}, json.dumps({
+                "error": "provider_mismatch",
+                "expected": vk.provider,
+            }).encode(), None
+
+        vk_model = provider.extract_model(_safe_json(body_bytes), upstream_path) or "unknown"
+        if vk.allowed_models and vk_model not in vk.allowed_models:
+            return 403, {"content-type": "application/json"}, json.dumps({
+                "error": "model_not_allowed",
+                "model": vk_model,
+                "allowed_models": vk.allowed_models,
+            }).encode(), None
+
+        if vk.monthly_budget_usd is not None:
+            try:
+                from burnlens.storage.database import get_spend_by_team_this_month
+                spent = (await get_spend_by_team_this_month(db_path)).get(vk.team, 0.0)
+            except Exception as exc:
+                logger.debug("Team spend lookup failed (allowing): %s", exc)
+                spent = 0.0
+            # ponytail: eventual-consistency cap, like the other budget checks —
+            # concurrent requests can overshoot slightly before spend catches up.
+            if spent >= vk.monthly_budget_usd:
+                return 429, {"content-type": "application/json"}, json.dumps({
+                    "error": "team_budget_exceeded",
+                    "team": vk.team,
+                    "spent": round(spent, 2),
+                    "limit": vk.monthly_budget_usd,
+                }).encode(), None
+
+        real_key = os.environ.get(vk.upstream_key_env)
+        if not real_key:
+            logger.error(
+                "Virtual key %s references missing env var %s — failing closed",
+                vk.token_prefix, vk.upstream_key_env,
+            )
+            return 503, {"content-type": "application/json"}, json.dumps(
+                {"error": "gateway_misconfigured"}).encode(), None
+
+        vk_swap = (token_header, real_key)  # token_header is set whenever raw_token is
+        tags["team"] = vk.team
+        tags.setdefault("key_label", vk.label)
+
     # --- CODE-2: resolve the API-key label for this request ---
     # SHA-256 the auth header, look up the matching label in api_keys, and
     # write it to tags["key_label"]. Stored as tag_key_label on the request
@@ -467,6 +556,19 @@ async def handle_request(
             return 429, {"content-type": "application/json"}, reject_body, None
 
     clean_headers = _clean_request_headers(headers, provider)
+
+    # Swap the virtual key for the operator's real upstream key, in the same
+    # header the client used (Bearer-wrapped for Authorization). The bl-sk-
+    # token is thereby never forwarded upstream.
+    if vk_swap is not None:
+        swap_header, real_key = vk_swap
+        # Drop any case-variant of the target header so exactly one auth header
+        # (carrying the real key) is forwarded.
+        for k in [h for h in clean_headers if h.lower() == swap_header]:
+            del clean_headers[k]
+        clean_headers[swap_header] = (
+            f"Bearer {real_key}" if swap_header == "authorization" else real_key
+        )
     body_json = _safe_json(body_bytes)
     streaming = provider.is_streaming(body_json, upstream_path)
 
