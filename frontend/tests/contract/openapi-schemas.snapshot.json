@@ -1110,6 +1110,17 @@
         "title": "Duration Ms",
         "type": "integer"
       },
+      "event_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Event Id"
+      },
       "input_tokens": {
         "default": 0,
         "title": "Input Tokens",
@@ -1132,6 +1143,17 @@
         "default": 0,
         "title": "Reasoning Tokens",
         "type": "integer"
+      },
+      "request_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Request Id"
       },
       "status_code": {
         "default": 200,
@@ -1157,6 +1179,17 @@
         "format": "date-time",
         "title": "Timestamp",
         "type": "string"
+      },
+      "trace_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Trace Id"
       }
     },
     "required": [
@@ -1190,6 +1223,17 @@
         "title": "Duration Ms",
         "type": "integer"
       },
+      "event_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Event Id"
+      },
       "id": {
         "title": "Id",
         "type": "integer"
@@ -1222,6 +1266,17 @@
         "title": "Received At",
         "type": "string"
       },
+      "request_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Request Id"
+      },
       "status_code": {
         "default": 200,
         "title": "Status Code",
@@ -1246,6 +1301,17 @@
         "format": "date-time",
         "title": "Timestamp",
         "type": "string"
+      },
+      "trace_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Trace Id"
       },
       "workspace_id": {
         "format": "uuid",
