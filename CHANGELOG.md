@@ -6,6 +6,17 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.9.3] — 2026-07-19
+
+### Added
+- **Automatic upstream retry on transient provider failures.** The proxy now
+  retries `429`/`503` responses and connection-level errors with exponential
+  backoff on both the streaming and non-streaming paths (`retry:` config,
+  enabled by default, `max_retries=2`). Defaults are billing-safe — only
+  statuses where the provider rejected the request without processing it are
+  retried, so a retry can never double-bill. `502`/`504` are opt-in. Read
+  timeouts are never retried. Cross-provider failover is not included.
+
 ## [OSS `burnlens` v1.9.2] — 2026-07-19
 
 ### Fixed
