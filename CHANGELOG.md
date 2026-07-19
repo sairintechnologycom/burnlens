@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.10.0] — 2026-07-19
+
+### Added
+- **Virtual keys — the proxy is now a key-issuing gateway.** `burnlens vkey
+  issue/list/revoke` mints `bl-sk-` tokens bound to a team, a provider, and an
+  operator env var holding the real upstream key. The proxy resolves the token
+  (SHA-256 stored, raw shown once), enforces an optional per-key model
+  allowlist and per-team monthly budget, and swaps in the real key before
+  forwarding. Enforcement is fail-closed (401/403/429/503) and a key issued
+  for one provider is rejected with `403 provider_mismatch` on any other
+  provider's path, so an upstream secret can never be sent to the wrong
+  provider.
+
 ## [OSS `burnlens` v1.9.3] — 2026-07-19
 
 ### Added
