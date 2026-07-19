@@ -347,7 +347,35 @@ async def init_db(db_path: str) -> None:
     await migrate_create_semantic_cache_table(db_path)
     await migrate_add_semantic_cache_integrity_fields(db_path)
 
+    # Virtual keys (gateway) table
+    await migrate_create_virtual_keys_table(db_path)
+
     logger.debug("Database initialized at %s", db_path)
+
+
+async def migrate_create_virtual_keys_table(db_path: str) -> None:
+    """Create the virtual_keys table and its lookup index. Idempotent."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS virtual_keys (
+                label              TEXT PRIMARY KEY,
+                team               TEXT NOT NULL,
+                provider           TEXT NOT NULL,
+                upstream_key_env   TEXT NOT NULL,
+                token_hash         TEXT NOT NULL,
+                token_prefix       TEXT NOT NULL,
+                allowed_models     TEXT,
+                monthly_budget_usd REAL,
+                created_at         TEXT NOT NULL,
+                revoked_at         TEXT
+            )
+            """
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_virtual_keys_hash ON virtual_keys(token_hash)"
+        )
+        await db.commit()
 
 
 async def migrate_add_semantic_cache_integrity_fields(db_path: str) -> None:
