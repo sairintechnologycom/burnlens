@@ -1090,10 +1090,20 @@
   "RequestRecordBase": {
     "description": "Base request record schema.",
     "properties": {
+      "cache_hit": {
+        "default": 0,
+        "title": "Cache Hit",
+        "type": "integer"
+      },
       "cache_read_tokens": {
         "default": 0,
         "title": "Cache Read Tokens",
         "type": "integer"
+      },
+      "cache_saved_usd": {
+        "default": 0.0,
+        "title": "Cache Saved Usd",
+        "type": "number"
       },
       "cache_write_tokens": {
         "default": 0,
@@ -1203,10 +1213,20 @@
   "RequestRecordResponse": {
     "description": "Schema for request record response.",
     "properties": {
+      "cache_hit": {
+        "default": 0,
+        "title": "Cache Hit",
+        "type": "integer"
+      },
       "cache_read_tokens": {
         "default": 0,
         "title": "Cache Read Tokens",
         "type": "integer"
+      },
+      "cache_saved_usd": {
+        "default": 0.0,
+        "title": "Cache Saved Usd",
+        "type": "number"
       },
       "cache_write_tokens": {
         "default": 0,
@@ -1492,6 +1512,16 @@
           }
         ],
         "title": "Budget Pct Used"
+      },
+      "cache_hits": {
+        "default": 0,
+        "title": "Cache Hits",
+        "type": "integer"
+      },
+      "cache_saved_usd": {
+        "default": 0.0,
+        "title": "Cache Saved Usd",
+        "type": "number"
       },
       "models_used": {
         "title": "Models Used",

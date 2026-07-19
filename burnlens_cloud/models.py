@@ -40,6 +40,9 @@ class RequestRecordBase(BaseModel):
     status_code: int = 200
     tags: dict = Field(default_factory=dict)
     system_prompt_hash: Optional[str] = None
+    # Semantic-cache outcome from the OSS proxy (1 = served from cache).
+    cache_hit: int = 0
+    cache_saved_usd: float = 0.0
     # Correlation ids used only to build correlatable OTEL export spans.
     trace_id: Optional[str] = None
     event_id: Optional[str] = None
@@ -163,6 +166,8 @@ class StatsSummary(BaseModel):
     models_used: int
     budget_limit_usd: Optional[float] = None
     budget_pct_used: Optional[float] = None
+    cache_saved_usd: float = 0.0
+    cache_hits: int = 0
 
 
 class CostByModel(BaseModel):

@@ -107,7 +107,7 @@ function DashboardContent() {
   return (
     <div>
       {/* Stat strip */}
-      <div className="stat-strip">
+      <div className="stat-strip cols-5">
         <div className="stat-cell">
           <div className="stat-label">Total spend</div>
           <div className="stat-value">
@@ -130,6 +130,12 @@ function DashboardContent() {
           <div className="stat-label">Waste</div>
           <div className={`stat-value${wasteAmount > 0 ? " amber" : ""}`}>
             {hasData ? `$${formatCost(wasteAmount)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+          </div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-label">Cache saved</div>
+          <div className="stat-value" style={(summary?.cache_saved_usd ?? 0) > 0 ? { color: "var(--green)" } : undefined}>
+            {hasData ? `$${formatCost(summary?.cache_saved_usd ?? 0)}` : <span style={{ color: "var(--dim)" }}>—</span>}
           </div>
         </div>
       </div>

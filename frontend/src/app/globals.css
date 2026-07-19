@@ -633,6 +633,10 @@ img, svg { display: block; }
   border-bottom: 1px solid var(--border);
 }
 
+.stat-strip.cols-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .stat-cell {
   padding: 20px 24px;
   border-right: 1px solid var(--border);
@@ -1205,7 +1209,8 @@ img, svg { display: block; }
     border-right: none;
   }
 
-  .stat-strip {
+  .stat-strip,
+  .stat-strip.cols-5 {
     grid-template-columns: repeat(2, 1fr);
   }
 

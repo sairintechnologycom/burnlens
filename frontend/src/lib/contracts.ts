@@ -11,12 +11,16 @@ export interface UsageSummary {
   total_requests: number;
   avg_cost_per_request_usd: number;
   models_used: number;
+  cache_saved_usd: number;
+  cache_hits: number;
 }
 export const UsageSummaryFields: Record<keyof UsageSummary, true> = {
   total_cost_usd: true,
   total_requests: true,
   avg_cost_per_request_usd: true,
   models_used: true,
+  cache_saved_usd: true,
+  cache_hits: true,
 };
 
 // --- /api/v1/usage/by-model  ->  CostByModel ---

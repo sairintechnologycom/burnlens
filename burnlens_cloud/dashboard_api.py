@@ -105,7 +105,9 @@ async def get_summary(
             COALESCE(SUM(cost_usd), 0) as total_cost,
             COUNT(*) as request_count,
             COUNT(DISTINCT model) as model_count,
-            COALESCE(AVG(cost_usd), 0) as avg_cost
+            COALESCE(AVG(cost_usd), 0) as avg_cost,
+            COALESCE(SUM(cache_saved_usd), 0) as cache_saved,
+            COALESCE(SUM(cache_hit), 0) as cache_hits
         FROM request_records
         WHERE workspace_id = $1 AND ts >= $2
         """,
@@ -120,6 +122,8 @@ async def get_summary(
         total_requests=int(row.get("request_count", 0)),
         avg_cost_per_request_usd=float(row.get("avg_cost", 0)),
         models_used=int(row.get("model_count", 0)),
+        cache_saved_usd=float(row.get("cache_saved", 0)),
+        cache_hits=int(row.get("cache_hits", 0)),
     )
 
 
