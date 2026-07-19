@@ -622,6 +622,23 @@ async def get_total_cost(
     return float(row[0]) if row else 0.0
 
 
+async def get_cache_savings(
+    db_path: str,
+    since: str | None = None,
+) -> tuple[float, int]:
+    """Return (total cache_saved_usd, cache_hit count), optionally since a timestamp."""
+    where = "WHERE timestamp >= ?" if since else ""
+    params: tuple = (since,) if since else ()
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            f"SELECT COALESCE(SUM(cache_saved_usd), 0.0), COALESCE(SUM(cache_hit), 0) "
+            f"FROM requests {where}",
+            params,
+        )
+        row = await cursor.fetchone()
+    return (float(row[0]), int(row[1])) if row else (0.0, 0)
+
+
 async def get_usage_by_tag(
     db_path: str,
     tag_key: str,

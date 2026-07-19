@@ -93,6 +93,9 @@ async function fetchSummary() {
   setText('kpi-avg', fmtCost(d.avg_cost_per_request_usd));
   setText('kpi-avg-sub', 'per API call');
 
+  setText('kpi-cache', fmtCost(d.cache_saved_usd || 0));
+  setText('kpi-cache-sub', fmtNum(d.cache_hits || 0) + ' cache hit' + ((d.cache_hits === 1) ? '' : 's'));
+
   if (d.budget_pct_used !== null && d.budget_pct_used !== undefined) {
     setText('kpi-budget', d.budget_pct_used.toFixed(1) + '%');
     setText('kpi-budget-sub', fmtCost(d.total_cost_usd) + ' of ' + fmtCost(d.budget_limit_usd));
