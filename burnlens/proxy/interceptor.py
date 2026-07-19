@@ -458,6 +458,14 @@ async def handle_request(
             return 401, {"content-type": "application/json"}, json.dumps(
                 {"error": "invalid_virtual_key"}).encode(), None
 
+        # A vkey is bound to one provider; without this check its mapped upstream
+        # secret would be forwarded to whatever provider the path names.
+        if vk.provider != provider.name:
+            return 403, {"content-type": "application/json"}, json.dumps({
+                "error": "provider_mismatch",
+                "expected": vk.provider,
+            }).encode(), None
+
         vk_model = provider.extract_model(_safe_json(body_bytes), upstream_path) or "unknown"
         if vk.allowed_models and vk_model not in vk.allowed_models:
             return 403, {"content-type": "application/json"}, json.dumps({

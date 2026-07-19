@@ -107,6 +107,25 @@ async def test_model_not_allowed_returns_403(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_provider_mismatch_returns_403(tmp_path, monkeypatch):
+    """A vkey bound to one provider is rejected on another provider's path —
+    the mapped upstream secret must never reach the wrong provider."""
+    db = str(tmp_path / "vk.db")
+    await init_db(db)
+    monkeypatch.setenv("MY_ANTHROPIC_KEY", "sk-ant-real")
+    raw, _ = await vk.issue_key(db, "k", "team-a", "anthropic", "MY_ANTHROPIC_KEY")
+    route = respx.post(_URL).mock(return_value=httpx.Response(200, json=_OK))
+
+    async with httpx.AsyncClient() as client:
+        status, _, body, _ = await _call(client, db, raw)  # openai path
+
+    assert status == 403
+    assert json.loads(body) == {"error": "provider_mismatch", "expected": "anthropic"}
+    assert route.call_count == 0  # upstream never called, real key never forwarded
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_missing_env_fails_closed(tmp_path):
     """If the referenced env var is unset, fail closed (503) — never forward."""
     db = str(tmp_path / "vk.db")
