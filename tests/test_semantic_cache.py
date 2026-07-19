@@ -15,10 +15,11 @@ from burnlens.cache.manager import (
     reconstruct_streaming_chunks,
     SemanticCacheManager,
 )
-from burnlens.proxy.interceptor import handle_request
+from burnlens.proxy.interceptor import handle_request, _request_is_cacheable
 from burnlens.providers.openai import openai_provider
-from burnlens.storage.database import init_db
-from burnlens.storage.queries import get_recent_requests
+from burnlens.storage.database import init_db, insert_request
+from burnlens.storage.models import RequestRecord
+from burnlens.storage.queries import get_recent_requests, get_cache_savings
 
 
 def test_normalize_vector():
@@ -164,6 +165,48 @@ async def test_semantic_cache_manager_database_ops(tmp_path):
         similarity_threshold=0.95,
     )
     assert sem_res_miss is None
+
+
+def test_request_is_cacheable_temperature():
+    """Sampled requests (explicit temperature > 0) must not be cached."""
+    base = {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
+    # No temperature → cacheable (deterministic-by-default assumption)
+    assert _request_is_cacheable(json.dumps(base).encode()) is True
+    # temperature 0 → cacheable
+    assert _request_is_cacheable(json.dumps({**base, "temperature": 0}).encode()) is True
+    # temperature > 0 → NOT cacheable
+    assert _request_is_cacheable(json.dumps({**base, "temperature": 0.7}).encode()) is False
+    assert _request_is_cacheable(json.dumps({**base, "temperature": 1}).encode()) is False
+    # bool is not a temperature
+    assert _request_is_cacheable(json.dumps({**base, "temperature": True}).encode()) is True
+    # Garbage / empty body → cacheable (fail-open, matches other cache guards)
+    assert _request_is_cacheable(b"not json") is True
+    assert _request_is_cacheable(None) is True
+
+
+@pytest.mark.asyncio
+async def test_get_cache_savings(tmp_path):
+    """get_cache_savings sums cache_saved_usd and counts cache hits."""
+    db_path = str(tmp_path / "savings.db")
+    await init_db(db_path)
+
+    # Empty DB
+    assert await get_cache_savings(db_path) == (0.0, 0)
+
+    # A normal (non-hit) request contributes nothing
+    await insert_request(db_path, RequestRecord(
+        provider="openai", model="gpt-4o", request_path="/x", cost_usd=0.5,
+    ))
+    # Two cache hits with savings
+    for saved in (0.10, 0.25):
+        await insert_request(db_path, RequestRecord(
+            provider="openai", model="gpt-4o", request_path="/x",
+            cost_usd=0.0, cache_hit=1, cache_saved_usd=saved,
+        ))
+
+    total, hits = await get_cache_savings(db_path)
+    assert hits == 2
+    assert abs(total - 0.35) < 1e-9
 
 
 @pytest.mark.asyncio

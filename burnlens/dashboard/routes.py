@@ -13,6 +13,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 
 from burnlens.storage.queries import (
+    get_cache_savings,
     get_cost_by_pr,
     get_daily_cost,
     get_recent_requests,
@@ -81,6 +82,8 @@ async def summary(
     budget_limit = _budget_limit(request)
     budget_pct = (total_cost / budget_limit * 100) if budget_limit else None
 
+    cache_saved, cache_hits = await get_cache_savings(db, since=since)
+
     return {
         "total_cost_usd": round(total_cost, 6),
         "total_requests": total_requests,
@@ -88,6 +91,8 @@ async def summary(
         "models_used": len(models),
         "budget_limit_usd": budget_limit,
         "budget_pct_used": round(budget_pct, 1) if budget_pct is not None else None,
+        "cache_saved_usd": round(cache_saved, 6),
+        "cache_hits": cache_hits,
         "period": period,
     }
 

@@ -231,6 +231,18 @@ def _safe_json(body_bytes: bytes) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _request_is_cacheable(body_bytes: bytes | None) -> bool:
+    """False when the request samples (temperature > 0) — its output is meant to vary.
+
+    Caching a sampled response replays one fixed sample, defeating the point.
+    ponytail: only skips on an EXPLICIT temperature > 0. A client that omits the
+    field and relies on the provider default (OpenAI's is 1.0) still caches —
+    add top_p / provider-default awareness if that proves too coarse.
+    """
+    temp = _safe_json(body_bytes or b"").get("temperature")
+    return not (isinstance(temp, (int, float)) and not isinstance(temp, bool) and temp > 0)
+
+
 def _hash_system_prompt(body_bytes: bytes) -> str | None:
     """Return SHA-256 hex of the first system message content, or None."""
     try:
@@ -448,7 +460,7 @@ async def handle_request(
         if "nocache=true" in query_string or "nocache=1" in query_string:
             cache_bypass = True
 
-    if cache_enabled and not cache_bypass and method.upper() == "POST":
+    if cache_enabled and not cache_bypass and method.upper() == "POST" and _request_is_cacheable(body_bytes):
         try:
             from burnlens.cache.manager import extract_query_text, SemanticCacheManager
             query_text = extract_query_text(body_bytes, provider.name)
@@ -675,7 +687,7 @@ async def _handle_non_streaming(
         cc = original_headers.get("cache-control") or original_headers.get("Cache-Control") or ""
         if "no-cache" in cc or "no-store" in cc:
             cache_bypass = True
-    if method.upper() == "POST" and response.status_code == 200 and cache_enabled and not cache_bypass:
+    if method.upper() == "POST" and response.status_code == 200 and cache_enabled and not cache_bypass and _request_is_cacheable(body_bytes):
         try:
             from burnlens.cache.manager import extract_query_text
             query_text = extract_query_text(body_bytes, provider.name)
@@ -987,7 +999,7 @@ async def _log_streaming_usage(
         cc = original_headers.get("cache-control") or original_headers.get("Cache-Control") or ""
         if "no-cache" in cc or "no-store" in cc:
             cache_bypass = True
-    if status_code == 200 and cache_enabled and not cache_bypass:
+    if status_code == 200 and cache_enabled and not cache_bypass and _request_is_cacheable(body_bytes):
         try:
             from burnlens.cache.manager import extract_query_text, reconstruct_complete_response_from_chunks
             query_text = extract_query_text(body_bytes, provider.name)
