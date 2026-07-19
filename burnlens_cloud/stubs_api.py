@@ -6,28 +6,16 @@ replaced with a real implementation before the feature it powers ships.
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from .auth import TokenPayload, verify_token
 
 router = APIRouter(tags=["stubs"])
 
 
-@router.get("/api/v1/connections")
-async def list_connections(token: TokenPayload = Depends(verify_token)) -> List[dict]:
-    return []
-
-
-@router.post("/api/v1/connections", status_code=501)
-async def create_connection(token: TokenPayload = Depends(verify_token)):
-    raise HTTPException(status_code=501, detail="connections_not_implemented")
-
-
-@router.delete("/api/v1/connections/{connection_id}", status_code=501)
-async def delete_connection(
-    connection_id: str, token: TokenPayload = Depends(verify_token)
-):
-    raise HTTPException(status_code=501, detail="connections_not_implemented")
+# /api/v1/connections removed 2026-07-19 along with its frontend page: nothing
+# in the cloud consumed stored provider keys, so the page collected secrets
+# only to 501. Re-add only WITH a real consumer (discovery/reconciliation).
 
 
 @router.get("/api/v1/recommendations")

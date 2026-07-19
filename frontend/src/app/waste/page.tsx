@@ -98,7 +98,6 @@ function WasteContent() {
             description="Once BurnLens sees your traffic, we watch for duplicate prompts, oversized models, prompt-caching opportunities, and more. Install the local proxy to start collecting data."
             code={"pip install burnlens\nburnlens start"}
             action={{ label: "View install docs", href: "https://github.com/sairintechnologycom/burnlens#readme" }}
-            secondaryAction={{ label: "Connect a provider", href: "/connections" }}
           />
         ) : (
           activeAlerts.map((a) => (
