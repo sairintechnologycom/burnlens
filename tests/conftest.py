@@ -43,8 +43,12 @@ async def settle_background_tasks(ceiling: float = 5.0) -> None:
         pending = [t for t in asyncio.all_tasks() if t is not me and not t.done()]
         if not pending:
             break
+        # ponytail: 0.5s idle window — 0.1s misread a busy-but-slow task as idle
+        # under CI disk load (anomaly detector mid-insert → 1 of 4 events stored,
+        # deploy-railway 2026-07-19). Truly distinguishing "slow" from "idle"
+        # needs task introspection; widen the window instead, ceiling still bounds.
         done, _ = await asyncio.wait(
-            pending, timeout=0.1, return_when=asyncio.FIRST_COMPLETED
+            pending, timeout=0.5, return_when=asyncio.FIRST_COMPLETED
         )
         if not done:  # nothing completed → remaining tasks are idle; loggers flushed
             break
