@@ -442,6 +442,8 @@ async def ingest(
                 record.tags,
                 record.system_prompt_hash,
                 datetime.utcnow(),
+                record.cache_hit,
+                record.cache_saved_usd,
             )
         )
 
@@ -480,8 +482,10 @@ async def ingest(
                 INSERT INTO request_records
                 (workspace_id, ts, provider, model, input_tokens, output_tokens,
                  reasoning_tokens, cache_read_tokens, cache_write_tokens,
-                 cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                 cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at,
+                 cache_hit, cache_saved_usd)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                        $16, $17)
                 """,
                 insert_data,
             )

@@ -342,8 +342,24 @@ async def init_db():
                 status_code INT NOT NULL DEFAULT 200,
                 tags JSONB NOT NULL DEFAULT '{}',
                 system_prompt_hash TEXT,
-                received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                cache_hit INT NOT NULL DEFAULT 0,
+                cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0
             )
+        """)
+
+        # Migration: semantic-cache columns for pre-existing installs
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records' AND column_name = 'cache_hit'
+                ) THEN
+                    ALTER TABLE request_records ADD COLUMN cache_hit INT NOT NULL DEFAULT 0;
+                    ALTER TABLE request_records ADD COLUMN cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0;
+                END IF;
+            END $$;
         """)
 
         # Create indexes

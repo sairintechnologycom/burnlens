@@ -313,6 +313,34 @@ def test_anonymise_removes_prompt_content():
     assert payload["status_code"] == 200
 
 
+def test_payload_survives_sanitize_allowlist():
+    """Every field _row_to_payload emits must be in SYNC_ALLOWED_FIELDS.
+
+    push_batch() runs _sanitize_record() over the payload; a field added to
+    _row_to_payload but not the allowlist is silently dropped on the wire
+    (this bit the v1.9.2 trace/event/request correlation IDs).
+    """
+    from burnlens.cloud.sync import SYNC_ALLOWED_FIELDS, _sanitize_record
+
+    row = {
+        "timestamp": "2025-04-08T18:35:46",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "cache_hit": 1,
+        "cache_saved_usd": 0.005,
+        "trace_id": "0af7651916cd43dd8448eb211c80319c",
+        "event_id": "evt-1",
+        "request_id": "req-1",
+        "tags": "{}",
+    }
+    payload = _row_to_payload(row)
+    assert set(payload) <= SYNC_ALLOWED_FIELDS
+
+    sanitized = _sanitize_record(payload)
+    for field in ("cache_hit", "cache_saved_usd", "trace_id", "event_id", "request_id"):
+        assert sanitized[field] == row[field]
+
+
 # ---------------------------------------------------------------------------
 # Cloud disabled by default
 # ---------------------------------------------------------------------------
