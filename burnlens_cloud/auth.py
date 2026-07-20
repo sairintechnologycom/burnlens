@@ -295,6 +295,22 @@ async def require_role(required_role: str, token: TokenPayload):
         )
 
 
+async def require_enterprise(token: TokenPayload) -> None:
+    """Raise 403 unless the workspace's SERVER-SIDE plan is enterprise.
+
+    Reads `resolve_limits` (DB), never the `token.plan` JWT claim — so a stale
+    or downgraded token cannot retain enterprise-only access (audit log, custom
+    pricing). Same rationale as `require_feature` (threat_model T-09-12).
+    """
+    from .plans import resolve_limits
+
+    limits = await resolve_limits(token.workspace_id)
+    if not limits or limits.plan != "enterprise":
+        raise HTTPException(
+            status_code=403, detail="Enterprise plan required"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Plan-entitlement middleware (Phase 9 D-17 / GATE-05)
 # ---------------------------------------------------------------------------

@@ -13,6 +13,15 @@ def _auth(app, token):
     app.dependency_overrides[_verify_token] = lambda: token
 
 
+def _plan(name):
+    """Patch the server-side plan lookup that require_enterprise reads."""
+    from types import SimpleNamespace
+    return patch(
+        "burnlens_cloud.plans.resolve_limits",
+        AsyncMock(return_value=SimpleNamespace(plan=name, gated_features={})),
+    )
+
+
 def _make_db_mock():
     """Properly wired asyncpg connection mock (transaction is a sync context manager)."""
     mock_conn = MagicMock()
@@ -167,16 +176,22 @@ class TestOtelConfigEndpoints:
 class TestCustomPricingEndpoints:
     """Test custom pricing API endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def _default_enterprise(self):
+        with _plan("enterprise"):
+            yield
+
     @pytest.mark.asyncio
     async def test_put_pricing_enterprise_only(self, cloud_client, non_enterprise_token):
-        """PUT /settings/pricing should reject non-enterprise plans."""
+        """PUT /settings/pricing should reject non-enterprise plans (server-side, not JWT)."""
         ac, app = cloud_client
         _auth(app, non_enterprise_token)
 
-        response = await ac.put(
-            "/settings/pricing",
-            json={"gpt-4o": {"input_per_1m": 4.50, "output_per_1m": 13.50}},
-        )
+        with _plan("cloud"):
+            response = await ac.put(
+                "/settings/pricing",
+                json={"gpt-4o": {"input_per_1m": 4.50, "output_per_1m": 13.50}},
+            )
 
         assert response.status_code == 403
         assert "enterprise" in response.json()["detail"].lower()
@@ -261,6 +276,33 @@ class TestCustomPricingEndpoints:
             assert response.status_code == 200
             assert "gpt-4o" in response.json()["pricing"]
             assert response.json()["pricing"]["gpt-4o"]["input_per_1m"] == 4.50
+
+
+class TestTeamsWebhookValidator:
+    """is_valid_teams_webhook must accept real Teams hosts and reject lookalikes."""
+
+    @pytest.mark.parametrize("url", [
+        "https://outlook.office.com/webhook/abc",
+        "https://mytenant.webhook.office.com/webhookb2/xyz",
+        "https://foo.microsoft.com/hook",
+        "https://office.com/hook",
+    ])
+    def test_valid_teams_hosts(self, url):
+        from burnlens_cloud.alert_engine import is_valid_teams_webhook
+        assert is_valid_teams_webhook(url) is True
+
+    @pytest.mark.parametrize("url", [
+        "https://office.com.attacker.com/hook",   # substring-bypass (the bug)
+        "https://notoffice.com/hook",
+        "https://evil.com/office.com",
+        "http://outlook.office.com/webhook/abc",  # not https
+        "https://169.254.169.254/hook",
+        "",
+        None,
+    ])
+    def test_rejects_lookalikes_and_bad_scheme(self, url):
+        from burnlens_cloud.alert_engine import is_valid_teams_webhook
+        assert is_valid_teams_webhook(url) is False
 
 
 class TestSlackWebhookEndpoints:

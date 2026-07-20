@@ -43,10 +43,18 @@ async def confirm_action(token: str):
     if not payload:
         raise HTTPException(status_code=400, detail="invalid_or_expired_token")
 
-    # Build human-readable description
-    action_label = payload.action.replace("_", " ").title()
-    target_desc = f"target {payload.target_id}" if payload.target_id else "this workspace"
-    
+    # Build human-readable description. Values come from a server-signed token,
+    # but escape anyway — never interpolate raw strings into HTML.
+    import html as _html
+
+    action_label = _html.escape(payload.action.replace("_", " ").title())
+    target_desc = (
+        f"target {_html.escape(str(payload.target_id))}"
+        if payload.target_id
+        else "this workspace"
+    )
+    token_attr = _html.escape(token, quote=True)
+
     html = f"""
     <html>
         <head>
@@ -67,7 +75,7 @@ async def confirm_action(token: str):
                 <h1>Confirm Action</h1>
                 <p>Are you sure you want to <strong>{action_label}</strong> for {target_desc}?</p>
                 <form action="/api/v1/actions/execute" method="POST">
-                    <input type="hidden" name="token" value="{token}">
+                    <input type="hidden" name="token" value="{token_attr}">
                     <button type="submit" class="{'danger' if 'pause' in payload.action else ''}">Confirm {action_label}</button>
                 </form>
             </div>

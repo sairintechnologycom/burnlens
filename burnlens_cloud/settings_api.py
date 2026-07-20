@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from urllib.parse import urlparse
 
-from .auth import verify_token, require_role
+from .auth import verify_token, require_role, require_enterprise
 from .database import execute_query, execute_insert, get_db
 from .encryption import get_encryption_manager, EncryptionManager
 from .models import (
@@ -228,12 +228,7 @@ async def update_pricing(
     Body: {"model_name": {"input_per_1m": X.XX, "output_per_1m": Y.YY}}
     """
     await require_role("admin", token)
-
-    # Check if enterprise plan
-    if token.plan != "enterprise":
-        raise HTTPException(
-            status_code=403, detail="Custom pricing available for enterprise plan only"
-        )
+    await require_enterprise(token)
 
     # Validate pricing format
     try:
@@ -514,10 +509,8 @@ async def update_teams_webhook(
 
     url = body.webhook_url
     if url is not None:
-        from urllib.parse import urlparse as _urlparse
-        _p = _urlparse(url)
-        valid_subs = ["office.com", "microsoft.com"]
-        if _p.scheme != "https" or not any(s in (_p.hostname or "") for s in valid_subs):
+        from .alert_engine import is_valid_teams_webhook
+        if not is_valid_teams_webhook(url):
             raise HTTPException(
                 status_code=422,
                 detail="webhook_url must be a valid Microsoft Teams webhook URL",

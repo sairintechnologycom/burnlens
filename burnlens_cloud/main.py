@@ -159,7 +159,15 @@ def get_app() -> FastAPI:
     # (X-API-Key, Bearer CRON_SECRET, or the Paddle webhook signature) and
     # are never cookie-authenticated, so CSRF does not apply — and their
     # non-browser callers don't send X-Requested-With.
-    csrf_exempt_prefixes = ("/v1/ingest", "/cron/", "/billing/webhook")
+    # /api/v1/actions/execute authenticates via a single-use signed action
+    # token (from the confirm page's form), never a cookie, and a native form
+    # POST cannot send X-Requested-With — so it belongs with the M2M exemptions.
+    csrf_exempt_prefixes = (
+        "/v1/ingest",
+        "/cron/",
+        "/billing/webhook",
+        "/api/v1/actions/execute",
+    )
 
     class CsrfMiddleware(BaseHTTPMiddleware):
         """Simple CSRF protection: require custom header for state-changing requests."""

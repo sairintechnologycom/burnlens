@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from .auth import verify_token, require_role
+from .alert_engine import is_valid_teams_webhook
 from .database import execute_query, execute_insert
 from .models import TokenPayload
 
@@ -77,6 +78,13 @@ async def patch_alert_rule(
         params.append(body.extra_emails)
         idx += 1
     if body.teams_webhook_url is not None:
+        # Empty string clears the webhook; a non-empty value must be a real
+        # Teams host (SSRF/exfil guard — same validator as settings_api).
+        if body.teams_webhook_url and not is_valid_teams_webhook(body.teams_webhook_url):
+            raise HTTPException(
+                status_code=422,
+                detail="teams_webhook_url must be a valid Microsoft Teams webhook URL",
+            )
         fields.append(f"teams_webhook_url = ${idx}")
         params.append(body.teams_webhook_url)
         idx += 1
