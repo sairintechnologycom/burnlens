@@ -185,6 +185,15 @@ class TestSpanCorrelation:
 class TestOtelForwarder:
     """Test OTEL forwarder functionality."""
 
+    @pytest.fixture(autouse=True)
+    def _resolve_to_public_ip(self):
+        """These tests use a placeholder hostname and mock only httpx.
+        _validate_endpoint now does real DNS (SSRF fix), so stub resolution
+        to a public IP; the SSRF checks live in TestEndpointSsrfValidation.
+        """
+        with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("140.82.112.3", 443))]):
+            yield
+
     @pytest.mark.asyncio
     async def test_forward_batch_success(self, forwarder, sample_record):
         """Successful forward should return True."""
