@@ -2,11 +2,20 @@
 
 import datetime
 import time
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 from unittest.mock import patch, AsyncMock
 from uuid import uuid4
+
+
+def _plan(name):
+    """Patch the server-side plan lookup that require_enterprise reads."""
+    return patch(
+        "burnlens_cloud.plans.resolve_limits",
+        AsyncMock(return_value=SimpleNamespace(plan=name, gated_features={})),
+    )
 
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
@@ -65,13 +74,19 @@ def non_enterprise_admin_token():
 class TestAuditLogEndpoint:
     """Test audit log query endpoint."""
 
+    @pytest.fixture(autouse=True)
+    def _default_enterprise(self):
+        with _plan("enterprise"):
+            yield
+
     @pytest.mark.asyncio
     async def test_audit_log_enterprise_only(self, audit_client, non_enterprise_admin_token):
-        """GET /api/audit-log should reject non-enterprise plans."""
+        """GET /api/audit-log should reject non-enterprise plans (server-side, not JWT)."""
         ac, app = audit_client
         _auth(app, non_enterprise_admin_token)
 
-        response = await ac.get("/api/audit-log")
+        with _plan("cloud"):
+            response = await ac.get("/api/audit-log")
 
         assert response.status_code == 403
         assert "enterprise" in response.json()["detail"].lower()
@@ -193,13 +208,19 @@ class TestAuditLogEndpoint:
 class TestAuditLogCsvExport:
     """Test audit log CSV export."""
 
+    @pytest.fixture(autouse=True)
+    def _default_enterprise(self):
+        with _plan("enterprise"):
+            yield
+
     @pytest.mark.asyncio
     async def test_export_csv_enterprise_only(self, audit_client, non_enterprise_admin_token):
-        """CSV export should reject non-enterprise plans."""
+        """CSV export should reject non-enterprise plans (server-side, not JWT)."""
         ac, app = audit_client
         _auth(app, non_enterprise_admin_token)
 
-        response = await ac.get("/api/audit-log/export")
+        with _plan("cloud"):
+            response = await ac.get("/api/audit-log/export")
 
         assert response.status_code == 403
         assert "enterprise" in response.json()["detail"].lower()
@@ -296,6 +317,11 @@ class TestAuditLogQueryColumns:
     u.email_encrypted (and decrypt in Python), never u.email — otherwise
     every call 500s in prod while unit tests that mock the row shape pass.
     """
+
+    @pytest.fixture(autouse=True)
+    def _default_enterprise(self):
+        with _plan("enterprise"):
+            yield
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("path", ["/api/audit-log", "/api/audit-log/export"])
