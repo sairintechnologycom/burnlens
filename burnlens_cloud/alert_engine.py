@@ -22,7 +22,24 @@ from .action_tokens import create_action_token
 log = logging.getLogger(__name__)
 
 _SLACK_VALID_HOST = "hooks.slack.com"
-_TEAMS_VALID_SUBSTRINGS = ["office.com", "microsoft.com"]
+_TEAMS_VALID_HOST_SUFFIXES = ["office.com", "microsoft.com"]
+
+
+def is_valid_teams_webhook(url: str | None) -> bool:
+    """True only for an https Microsoft Teams webhook host.
+
+    Matches the host exactly or as a dotted suffix (foo.office.com), so
+    lookalikes like ``office.com.attacker.com`` — which a substring check
+    accepted — are rejected. Shared by settings_api, alerts_api and dispatch.
+    """
+    if not url:
+        return False
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and any(
+        host == suffix or host.endswith("." + suffix)
+        for suffix in _TEAMS_VALID_HOST_SUFFIXES
+    )
 
 
 async def _should_fire(conn: Any, rule_id: str, now: datetime) -> bool:
@@ -160,9 +177,7 @@ async def _dispatch_teams(
     POST a Microsoft Teams notification with interactive action buttons (Phase 10).
     Uses the MessageCard format (Office 365 Connector).
     """
-    parsed = urlparse(webhook_url) if webhook_url else None
-    is_valid = parsed and parsed.scheme == "https" and any(s in (parsed.hostname or "") for s in _TEAMS_VALID_SUBSTRINGS)
-    if not is_valid:
+    if not is_valid_teams_webhook(webhook_url):
         log.warning(
             "alert_engine: invalid Teams webhook URL for workspace %s",
             workspace_id,

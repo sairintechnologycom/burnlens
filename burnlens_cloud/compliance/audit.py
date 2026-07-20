@@ -7,7 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from ..auth import verify_token, require_role
+from ..auth import verify_token, require_role, require_enterprise
 from ..database import get_db
 from ..models import AuditLogResponse, AuditLogEntryExtended, TokenPayload
 from ..pii_crypto import decrypt_pii
@@ -52,12 +52,7 @@ async def get_audit_log(
     Auth: admin+ and enterprise plan only
     """
     await require_role("admin", token)
-
-    # Check if enterprise plan
-    if token.plan != "enterprise":
-        raise HTTPException(
-            status_code=403, detail="Audit log available for enterprise plan only"
-        )
+    await require_enterprise(token)
 
     # Clamp parameters
     days = min(days, 365)
@@ -145,13 +140,7 @@ async def export_audit_log_csv(
     Auth: admin+ and enterprise plan only
     """
     await require_role("admin", token)
-
-    # Check if enterprise plan
-    if token.plan != "enterprise":
-        raise HTTPException(
-            status_code=403,
-            detail="Audit log export available for enterprise plan only",
-        )
+    await require_enterprise(token)
 
     # Clamp days
     days = min(days, 365)

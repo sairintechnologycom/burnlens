@@ -232,20 +232,21 @@ async def get_costs_by_tag(
             logger.warning("ClickHouse by-tag query failed, falling back to PostgreSQL: %s", e)
 
     result = await execute_query(
-        f"""
+        """
         SELECT
-            tags ->> '{tag_type}' as tag_value,
+            tags ->> $3 as tag_value,
             COUNT(*) as request_count,
             COALESCE(SUM(cost_usd), 0) as total_cost,
             COALESCE(SUM(input_tokens), 0) as total_input_tokens,
             COALESCE(SUM(output_tokens), 0) as total_output_tokens
         FROM request_records
-        WHERE workspace_id = $1 AND ts >= $2 AND tags ->> '{tag_type}' IS NOT NULL
+        WHERE workspace_id = $1 AND ts >= $2 AND tags ->> $3 IS NOT NULL
         GROUP BY tag_value
         ORDER BY total_cost DESC
         """,
         str(token.workspace_id),
         cutoff,
+        tag_type,
     )
 
     return [
