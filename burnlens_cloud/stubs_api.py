@@ -4,7 +4,6 @@ Tracked in .planning/backlog/frontend-api-gaps.md — each handler here must be
 replaced with a real implementation before the feature it powers ships.
 """
 from datetime import datetime, timezone
-from typing import List
 
 from fastapi import APIRouter, Depends
 
@@ -32,11 +31,9 @@ async def trigger_sync(token: TokenPayload = Depends(verify_token)):
     }
 
 
-@router.get("/api/team-budgets")
-async def list_team_budgets(
-    token: TokenPayload = Depends(verify_token),
-) -> List[dict]:
-    return []
+# /api/team-budgets graduated out of stubs → real impl at dashboard_api.py
+# GET /api/v1/team-budgets (per-team spend vs limit_overrides.team_budgets,
+# set via settings_api PUT /settings/team-budget). Frontend repointed.
 
 
 # /api/budget graduated out of stubs → real impl at dashboard_api.py

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import {
   UsageSummaryFields,
   RecommendationRowFields,
+  TeamBudgetRowFields,
   CostByModelFields,
   CostByTagFields,
   CostTimelineFields,
@@ -29,6 +30,7 @@ interface OpenApiProp {
 const CONTRACTS = [
   { endpoint: "/api/v1/usage/summary", schema: "StatsSummary", fields: UsageSummaryFields },
   { endpoint: "/api/v1/recommendations", schema: "RecommendationItem", fields: RecommendationRowFields },
+  { endpoint: "/api/v1/team-budgets", schema: "TeamBudgetRow", fields: TeamBudgetRowFields },
   { endpoint: "/api/v1/usage/by-model", schema: "CostByModel", fields: CostByModelFields },
   { endpoint: "/api/v1/usage/by-feature", schema: "CostByTag", fields: CostByTagFields },
   { endpoint: "/api/v1/usage/by-customer", schema: "CostByTag", fields: CostByTagFields },

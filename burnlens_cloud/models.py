@@ -170,6 +170,15 @@ class StatsSummary(BaseModel):
     cache_hits: int = 0
 
 
+class TeamBudgetRow(BaseModel):
+    """Per-team month-to-date spend vs its configured budget."""
+    team: str
+    spent: float
+    limit: float
+    pct_used: float
+    status: str
+
+
 class RecommendationItem(BaseModel):
     """A model-switch recommendation (mirrors the OSS local-dashboard shape)."""
     current_model: str

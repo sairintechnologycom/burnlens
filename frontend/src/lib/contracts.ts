@@ -23,6 +23,22 @@ export const UsageSummaryFields: Record<keyof UsageSummary, true> = {
   cache_hits: true,
 };
 
+// --- /api/v1/team-budgets  ->  TeamBudgetRow ---
+export interface TeamBudgetRow {
+  team: string;
+  spent: number;
+  limit: number;
+  pct_used: number;
+  status: string;
+}
+export const TeamBudgetRowFields: Record<keyof TeamBudgetRow, true> = {
+  team: true,
+  spent: true,
+  limit: true,
+  pct_used: true,
+  status: true,
+};
+
 // --- /api/v1/recommendations  ->  RecommendationItem ---
 export interface RecommendationRow {
   current_model: string;

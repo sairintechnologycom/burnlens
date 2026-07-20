@@ -352,6 +352,79 @@ async def update_budget(
     return {"monthly_budget_usd": amount}
 
 
+class TeamBudgetSettingRequest(BaseModel):
+    team: str
+    monthly_budget_usd: Optional[float] = None  # None to clear
+
+
+@router.put("/team-budget")
+async def update_team_budget(
+    body: TeamBudgetSettingRequest,
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """Admin+. Set or clear a per-team monthly budget (USD).
+
+    Writes `limit_overrides.team_budgets.<team>` on the workspace; read back by
+    `GET /api/v1/team-budgets` with month-to-date spend from the team tag.
+    Display/alerting only — the workspace-level cap is what ingest enforces.
+    """
+    await require_role("admin", token)
+
+    team = body.team.strip()
+    if not team:
+        raise HTTPException(status_code=422, detail="team must be non-empty")
+    amount = body.monthly_budget_usd
+    if amount is not None and amount <= 0:
+        raise HTTPException(
+            status_code=422, detail="monthly_budget_usd must be greater than 0"
+        )
+
+    if amount is not None:
+        await execute_insert(
+            """
+            UPDATE workspaces
+            SET limit_overrides = jsonb_set(
+                COALESCE(limit_overrides, '{}'::jsonb),
+                ARRAY['team_budgets', $1],
+                to_jsonb($2::numeric),
+                true
+            )
+            WHERE id = $3
+            """,
+            team,
+            amount,
+            token.workspace_id,
+        )
+    else:
+        await execute_insert(
+            """
+            UPDATE workspaces
+            SET limit_overrides =
+                COALESCE(limit_overrides, '{}'::jsonb) #- ARRAY['team_budgets', $1]
+            WHERE id = $2
+            """,
+            team,
+            token.workspace_id,
+        )
+
+    # Best-effort audit trail (money-affecting setting). Must never block the write.
+    try:
+        await execute_insert(
+            """
+            INSERT INTO workspace_activity (workspace_id, user_id, action, detail)
+            VALUES ($1, $2, $3, $4::jsonb)
+            """,
+            token.workspace_id,
+            token.user_id,
+            "update_team_budget",
+            json.dumps({"team": team, "monthly_budget_usd": amount}),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("team-budget audit-log write failed (ignored): %s", e)
+
+    return {"team": team, "monthly_budget_usd": amount}
+
+
 # Phase 12: Slack webhook configuration for alert rules.
 class SlackWebhookRequest(BaseModel):
     webhook_url: Optional[str] = None  # None to clear
