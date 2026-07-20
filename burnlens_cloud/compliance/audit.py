@@ -10,9 +10,28 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from ..auth import verify_token, require_role
 from ..database import get_db
 from ..models import AuditLogResponse, AuditLogEntryExtended, TokenPayload
+from ..pii_crypto import decrypt_pii
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["compliance"])
+
+
+def _format_actor(row) -> str:
+    """Render the audit actor as "Name <email>".
+
+    Phase 1c dropped users.email; the plaintext email now lives encrypted in
+    email_encrypted and must be decrypted in Python. u.name was never dropped.
+    """
+    email = "unknown"
+    encrypted = row.get("email_encrypted")
+    if encrypted:
+        try:
+            email = decrypt_pii(encrypted)
+        except Exception as e:
+            logger.warning("audit: decrypt_pii failed: %s", e)
+    if row.get("user_name"):
+        return f"{row['user_name']} <{email}>"
+    return email
 
 
 @router.get("/audit-log")
@@ -70,7 +89,7 @@ async def get_audit_log(
                 wa.ip_address,
                 wa.user_agent,
                 wa.api_key_last4,
-                u.email as user_email,
+                u.email_encrypted,
                 u.name as user_name
             FROM workspace_activity wa
             LEFT JOIN users u ON wa.user_id = u.id
@@ -87,14 +106,10 @@ async def get_audit_log(
         # Convert to response model
         entries = []
         for row in rows:
-            user_email = row.get("user_email") or "unknown"
-            if row.get("user_name"):
-                user_email = f"{row['user_name']} <{user_email}>"
-
             entries.append(
                 AuditLogEntryExtended(
                     id=row["id"],
-                    user=user_email,
+                    user=_format_actor(row),
                     action=row["action"],
                     detail=row["detail"] or {},
                     created_at=row["created_at"],
@@ -155,7 +170,7 @@ async def export_audit_log_csv(
                 wa.ip_address,
                 wa.user_agent,
                 wa.api_key_last4,
-                u.email as user_email,
+                u.email_encrypted,
                 u.name as user_name
             FROM workspace_activity wa
             LEFT JOIN users u ON wa.user_id = u.id
@@ -183,9 +198,7 @@ async def export_audit_log_csv(
 
         # Write rows
         for row in rows:
-            user_email = row.get("user_email") or "unknown"
-            if row.get("user_name"):
-                user_email = f"{row['user_name']} <{user_email}>"
+            user_email = _format_actor(row)
 
             detail_str = ""
             if row.get("detail"):

@@ -23,12 +23,24 @@ class OtelForwarder:
         """Initialize forwarder with configurable timeout."""
         self.timeout_seconds = timeout_seconds
 
+    @staticmethod
+    def _ip_is_internal(ip: ipaddress._BaseAddress) -> bool:
+        """True if the IP is not a safe public destination (covers link-local
+        169.254.169.254 metadata, loopback, RFC1918, multicast, reserved)."""
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+
     def _validate_endpoint(self, endpoint: str) -> bool:
         """
         Validate the OTEL endpoint URL to prevent SSRF.
         - Must be HTTPS.
-        - Must not be a private/internal IP address.
-        - Must not be a cloud metadata service address.
+        - Must not resolve to a private/internal/metadata IP address.
         """
         try:
             parsed = urlparse(endpoint)
@@ -40,20 +52,32 @@ class OtelForwarder:
             if not hostname:
                 return False
 
-            # Try to resolve hostname to IP to check for internal addresses
+            # IP literal: check directly.
             try:
-                # Basic check for IP literals first
-                ip = ipaddress.ip_address(hostname)
-                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
-                    logger.warning(f"Blocked private/internal OTEL endpoint IP: {hostname}")
+                if self._ip_is_internal(ipaddress.ip_address(hostname)):
+                    logger.warning(f"Blocked internal OTEL endpoint IP: {hostname}")
                     return False
+                return True
             except ValueError:
-                # Not an IP literal, it's a hostname. 
-                # In production, we'd resolve this to check the underlying IP, 
-                # but for now we'll do basic checks and rely on httpx for the rest.
-                if hostname.lower() in ("localhost", "127.0.0.1", "::1"):
-                    return False
-                if "metadata.google.internal" in hostname.lower() or "169.254.169.254" in hostname:
+                pass  # Not a literal — a hostname, resolve it below.
+
+            # Hostname: resolve and reject if ANY resolved address is internal.
+            # Closes the DNS-based SSRF path (e.g. a name pointing at
+            # 169.254.169.254 or 10.x). getaddrinfo blocks briefly, which is
+            # fine here — forwarding already runs as a fire-and-forget task.
+            # ponytail: residual TOCTOU (DNS rebinding between this check and
+            #   httpx's own resolve); pin the validated IP as the connect target
+            #   if that ever matters.
+            try:
+                infos = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+            except socket.gaierror as e:
+                logger.warning(f"OTEL endpoint {hostname} did not resolve: {e}")
+                return False
+
+            for info in infos:
+                ip = ipaddress.ip_address(info[4][0])
+                if self._ip_is_internal(ip):
+                    logger.warning(f"Blocked OTEL endpoint {hostname} resolving to internal IP {ip}")
                     return False
 
             return True
