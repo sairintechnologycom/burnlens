@@ -112,14 +112,18 @@ def test_csrf_403_carries_cors_headers(cloud_app):
 
 def test_login_with_xrw_header_passes_csrf(cloud_app):
     """The header the frontend now sends must get past the CSRF gate — the
-    request should reach the auth handler (401/500-family), never CSRF 403."""
+    request must reach the auth handler (401 no-such-user), never CSRF 403."""
+    from unittest.mock import AsyncMock, patch
+
     client = TestClient(cloud_app)
-    resp = client.post(
-        "/auth/login",
-        json={"email": "x@example.com", "password": "irrelevant"},
-        headers={
-            "Origin": "https://burnlens.app",
-            "X-Requested-With": "XMLHttpRequest",
-        },
-    )
-    assert resp.status_code != 403
+    with patch("burnlens_cloud.auth.execute_query", new=AsyncMock(return_value=[])):
+        resp = client.post(
+            "/auth/login",
+            json={"email": "x@example.com", "password": "irrelevant"},
+            headers={
+                "Origin": "https://burnlens.app",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        )
+    assert resp.status_code == 401
+    assert resp.headers.get("access-control-allow-origin") == "https://burnlens.app"
