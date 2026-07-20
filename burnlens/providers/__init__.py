@@ -12,9 +12,11 @@ from burnlens.providers.bedrock import bedrock_provider
 from burnlens.providers.google import google_provider
 from burnlens.providers.openai import openai_provider
 from burnlens.providers.openai_compatible import (
+    deepseek_provider,
     groq_provider,
     mistral_provider,
     together_provider,
+    xai_provider,
 )
 
 register(openai_provider)
@@ -23,5 +25,7 @@ register(google_provider)
 register(groq_provider)
 register(together_provider)
 register(mistral_provider)
+register(xai_provider)
+register(deepseek_provider)
 register(azure_provider)
 register(bedrock_provider)
