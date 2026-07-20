@@ -33,6 +33,41 @@ def forwarder():
     return OtelForwarder(timeout_seconds=5)
 
 
+class TestEndpointSsrfValidation:
+    """_validate_endpoint must block internal targets, incl. via DNS resolution."""
+
+    def test_rejects_non_https(self, forwarder):
+        assert forwarder._validate_endpoint("http://otel.example.com/v1/traces") is False
+
+    def test_rejects_ip_literal_metadata(self, forwarder):
+        assert forwarder._validate_endpoint("https://169.254.169.254/latest") is False
+
+    def test_rejects_ip_literal_private(self, forwarder):
+        assert forwarder._validate_endpoint("https://10.0.0.5/v1/traces") is False
+        assert forwarder._validate_endpoint("https://127.0.0.1/v1/traces") is False
+
+    def test_rejects_hostname_resolving_to_metadata_ip(self, forwarder):
+        # The core SSRF fix: a public-looking name that resolves to link-local.
+        fake = [(2, 1, 6, "", ("169.254.169.254", 443))]
+        with patch("socket.getaddrinfo", return_value=fake):
+            assert forwarder._validate_endpoint("https://evil.example.com/v1/traces") is False
+
+    def test_rejects_hostname_resolving_to_private_ip(self, forwarder):
+        fake = [(2, 1, 6, "", ("10.1.2.3", 443))]
+        with patch("socket.getaddrinfo", return_value=fake):
+            assert forwarder._validate_endpoint("https://rebind.example.com/v1/traces") is False
+
+    def test_allows_hostname_resolving_to_public_ip(self, forwarder):
+        fake = [(2, 1, 6, "", ("140.82.112.3", 443))]
+        with patch("socket.getaddrinfo", return_value=fake):
+            assert forwarder._validate_endpoint("https://otel.datadoghq.com/v1/traces") is True
+
+    def test_rejects_unresolvable_hostname(self, forwarder):
+        import socket
+        with patch("socket.getaddrinfo", side_effect=socket.gaierror("nxdomain")):
+            assert forwarder._validate_endpoint("https://nope.invalid/v1/traces") is False
+
+
 class TestOtelProtoConversion:
     """Test conversion of request records to OTLP spans."""
 
@@ -149,6 +184,15 @@ class TestSpanCorrelation:
 
 class TestOtelForwarder:
     """Test OTEL forwarder functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _resolve_to_public_ip(self):
+        """These tests use a placeholder hostname and mock only httpx.
+        _validate_endpoint now does real DNS (SSRF fix), so stub resolution
+        to a public IP; the SSRF checks live in TestEndpointSsrfValidation.
+        """
+        with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("140.82.112.3", 443))]):
+            yield
 
     @pytest.mark.asyncio
     async def test_forward_batch_success(self, forwarder, sample_record):

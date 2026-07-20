@@ -113,7 +113,7 @@ class TestAuditLogEndpoint:
                 "ip_address": "192.168.1.1",
                 "user_agent": "Mozilla/5.0",
                 "api_key_last4": "xxxx",
-                "user_email": "bob@example.com",
+                "email_encrypted": "bob@example.com",
                 "user_name": "Bob Smith",
             }
         ]
@@ -121,7 +121,7 @@ class TestAuditLogEndpoint:
         with patch(
             "burnlens_cloud.compliance.audit.get_db",
             AsyncMock(return_value=mock_db),
-        ):
+        ), patch("burnlens_cloud.compliance.audit.decrypt_pii", lambda c: c):
             response = await ac.get("/api/audit-log?days=90&limit=10&offset=0")
 
         assert response.status_code == 200
@@ -148,7 +148,7 @@ class TestAuditLogEndpoint:
                 "ip_address": "10.0.0.1",
                 "user_agent": "curl/7.68.0",
                 "api_key_last4": "4567",
-                "user_email": "admin@example.com",
+                "email_encrypted": "admin@example.com",
                 "user_name": "Admin User",
             }
         ]
@@ -156,13 +156,14 @@ class TestAuditLogEndpoint:
         with patch(
             "burnlens_cloud.compliance.audit.get_db",
             AsyncMock(return_value=mock_db),
-        ):
+        ), patch("burnlens_cloud.compliance.audit.decrypt_pii", lambda c: c):
             response = await ac.get("/api/audit-log")
 
         assert response.status_code == 200
         entry = response.json()["entries"][0]
         assert entry["user"] is not None
         assert "Admin User" in entry["user"]
+        assert "admin@example.com" in entry["user"]  # decrypted from email_encrypted
         assert entry["ip_address"] == "10.0.0.1"
         assert entry["api_key_last4"] == "4567"
 
@@ -219,7 +220,7 @@ class TestAuditLogCsvExport:
                 "ip_address": "192.168.1.1",
                 "user_agent": "Mozilla/5.0",
                 "api_key_last4": "abcd",
-                "user_email": "bob@example.com",
+                "email_encrypted": "bob@example.com",
                 "user_name": "Bob",
             }
         ]
@@ -227,7 +228,7 @@ class TestAuditLogCsvExport:
         with patch(
             "burnlens_cloud.compliance.audit.get_db",
             AsyncMock(return_value=mock_db),
-        ):
+        ), patch("burnlens_cloud.compliance.audit.decrypt_pii", lambda c: c):
             response = await ac.get("/api/audit-log/export")
 
         assert response.status_code == 200
@@ -250,7 +251,7 @@ class TestAuditLogCsvExport:
                 "ip_address": "10.0.0.1",
                 "user_agent": "curl/7.68",
                 "api_key_last4": "xyz1",
-                "user_email": "admin@example.com",
+                "email_encrypted": "admin@example.com",
                 "user_name": "Admin",
             }
         ]
@@ -258,7 +259,7 @@ class TestAuditLogCsvExport:
         with patch(
             "burnlens_cloud.compliance.audit.get_db",
             AsyncMock(return_value=mock_db),
-        ):
+        ), patch("burnlens_cloud.compliance.audit.decrypt_pii", lambda c: c):
             response = await ac.get("/api/audit-log/export")
 
         content = response.text
@@ -266,7 +267,7 @@ class TestAuditLogCsvExport:
         assert "User" in content
         assert "Action" in content
         assert "update_custom_pricing" in content
-        assert "admin@example.com" in content or "Admin" in content
+        assert "admin@example.com" in content  # decrypted from email_encrypted
 
     @pytest.mark.asyncio
     async def test_export_csv_filename_timestamp(self, audit_client, enterprise_admin_token):
@@ -286,3 +287,35 @@ class TestAuditLogCsvExport:
         disposition = response.headers["content-disposition"]
         assert "audit-log" in disposition
         assert ".csv" in disposition
+
+
+class TestAuditLogQueryColumns:
+    """Guard against the Phase 1c dropped-column regression.
+
+    users.email was dropped in Phase 1c; both audit queries must select
+    u.email_encrypted (and decrypt in Python), never u.email — otherwise
+    every call 500s in prod while unit tests that mock the row shape pass.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("path", ["/api/audit-log", "/api/audit-log/export"])
+    async def test_query_selects_encrypted_email_not_dropped_column(
+        self, audit_client, enterprise_admin_token, path
+    ):
+        ac, app = audit_client
+        _auth(app, enterprise_admin_token)
+
+        mock_db = AsyncMock()
+        mock_db.fetchval.return_value = 0
+        mock_db.fetch.return_value = []
+
+        with patch(
+            "burnlens_cloud.compliance.audit.get_db",
+            AsyncMock(return_value=mock_db),
+        ):
+            await ac.get(path)
+
+        sql = mock_db.fetch.call_args.args[0]
+        assert "email_encrypted" in sql
+        assert "u.email " not in sql and "u.email\n" not in sql
+        assert "u.email," not in sql
