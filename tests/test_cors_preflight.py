@@ -89,3 +89,41 @@ def test_cors_rejects_unrelated_vercel_hosts(cloud_app):
     )
     # Starlette returns 400 for disallowed preflight origins
     assert resp.headers.get("access-control-allow-origin") != "https://malicious-project.vercel.app"
+
+
+def test_csrf_403_carries_cors_headers(cloud_app):
+    """Regression: CORS must be the OUTERMOST middleware.
+
+    Before 2026-07-20, CsrfMiddleware was outside CORSMiddleware, so its 403
+    had no Access-Control-Allow-Origin — browsers hid the status behind an
+    unreadable "Failed to fetch". That masked a week-long /auth outage (the
+    setup page's raw fetch() calls never sent X-Requested-With).
+    """
+    client = TestClient(cloud_app)
+    resp = client.post(
+        "/auth/login",
+        json={"email": "x@example.com", "password": "irrelevant"},
+        headers={"Origin": "https://burnlens.app"},  # no X-Requested-With
+    )
+    assert resp.status_code == 403  # CSRF rejection, not auth
+    assert resp.json()["detail"].startswith("CSRF")
+    assert resp.headers.get("access-control-allow-origin") == "https://burnlens.app"
+
+
+def test_login_with_xrw_header_passes_csrf(cloud_app):
+    """The header the frontend now sends must get past the CSRF gate — the
+    request must reach the auth handler (401 no-such-user), never CSRF 403."""
+    from unittest.mock import AsyncMock, patch
+
+    client = TestClient(cloud_app)
+    with patch("burnlens_cloud.auth.execute_query", new=AsyncMock(return_value=[])):
+        resp = client.post(
+            "/auth/login",
+            json={"email": "x@example.com", "password": "irrelevant"},
+            headers={
+                "Origin": "https://burnlens.app",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        )
+    assert resp.status_code == 401
+    assert resp.headers.get("access-control-allow-origin") == "https://burnlens.app"

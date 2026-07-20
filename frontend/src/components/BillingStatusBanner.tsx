@@ -35,6 +35,7 @@ export function BillingStatusBanner({ billing, session }: Props) {
     try {
       const r = await fetch(`${API_BASE}/auth/resend-verification`, {
         method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
         credentials: "include",
       });
       if (!r.ok) {
