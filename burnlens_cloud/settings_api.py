@@ -380,11 +380,20 @@ async def update_team_budget(
         )
 
     if amount is not None:
+        # jsonb_set cannot create INTERMEDIATE keys — with no existing
+        # 'team_budgets' object the write silently no-ops. The inner
+        # jsonb_set seeds the parent (depth-1 path always traversable),
+        # the outer one sets the leaf.
         await execute_insert(
             """
             UPDATE workspaces
             SET limit_overrides = jsonb_set(
-                COALESCE(limit_overrides, '{}'::jsonb),
+                jsonb_set(
+                    COALESCE(limit_overrides, '{}'::jsonb),
+                    '{team_budgets}',
+                    COALESCE(limit_overrides->'team_budgets', '{}'::jsonb),
+                    true
+                ),
                 ARRAY['team_budgets', $1],
                 to_jsonb($2::numeric),
                 true
