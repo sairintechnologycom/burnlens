@@ -9,7 +9,7 @@ from burnlens.cost.pricing import get_model_pricing
 from burnlens.providers import all_providers, get, get_by_proxy_path
 from burnlens.providers.openai_compatible import OpenAICompatibleProvider
 
-NEW_PROVIDERS = ["groq", "together", "mistral"]
+NEW_PROVIDERS = ["groq", "together", "mistral", "xai", "deepseek"]
 
 
 @pytest.mark.parametrize("name", NEW_PROVIDERS)
@@ -27,6 +27,8 @@ def test_registered(name):
         ("/proxy/groq/v1/chat/completions", "groq"),
         ("/proxy/together/v1/chat/completions", "together"),
         ("/proxy/mistral/v1/chat/completions", "mistral"),
+        ("/proxy/xai/v1/chat/completions", "xai"),
+        ("/proxy/deepseek/v1/chat/completions", "deepseek"),
         # existing providers must not be shadowed by prefix collisions
         ("/proxy/openai/v1/chat/completions", "openai"),
     ],
@@ -51,6 +53,9 @@ def test_upstream_url_building():
         ("groq", "llama-3.3-70b-versatile"),
         ("together", "deepseek-ai/DeepSeek-R1"),
         ("mistral", "mistral-large-latest"),
+        ("xai", "grok-4.5"),
+        ("deepseek", "deepseek-chat"),
+        ("deepseek", "deepseek-v4-pro"),
     ],
 )
 def test_pricing_resolves(provider, model):

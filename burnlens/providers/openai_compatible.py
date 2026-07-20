@@ -34,3 +34,9 @@ groq_provider = OpenAICompatibleProvider(
 )
 together_provider = OpenAICompatibleProvider("together", "https://api.together.xyz")
 mistral_provider = OpenAICompatibleProvider("mistral", "https://api.mistral.ai")
+xai_provider = OpenAICompatibleProvider(
+    "xai", "https://api.x.ai", env_var="XAI_BASE_URL"
+)
+deepseek_provider = OpenAICompatibleProvider(
+    "deepseek", "https://api.deepseek.com", env_var="DEEPSEEK_BASE_URL"
+)

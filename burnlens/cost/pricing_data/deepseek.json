@@ -1,0 +1,26 @@
+{
+  "provider": "deepseek",
+  "updated": "2026-07-20",
+  "models": {
+    "deepseek-v4-flash": {
+      "input_per_million": 0.14,
+      "output_per_million": 0.28,
+      "cache_read_per_million": 0.0028
+    },
+    "deepseek-v4-pro": {
+      "input_per_million": 0.435,
+      "output_per_million": 0.87,
+      "cache_read_per_million": 0.003625
+    },
+    "deepseek-chat": {
+      "input_per_million": 0.14,
+      "output_per_million": 0.28,
+      "cache_read_per_million": 0.0028
+    },
+    "deepseek-reasoner": {
+      "input_per_million": 0.14,
+      "output_per_million": 0.28,
+      "cache_read_per_million": 0.0028
+    }
+  }
+}
