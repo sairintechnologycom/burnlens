@@ -13,6 +13,15 @@ def _auth(app, token):
     app.dependency_overrides[_verify_token] = lambda: token
 
 
+def _plan(name):
+    """Patch the server-side plan lookup that require_enterprise reads."""
+    from types import SimpleNamespace
+    return patch(
+        "burnlens_cloud.plans.resolve_limits",
+        AsyncMock(return_value=SimpleNamespace(plan=name, gated_features={})),
+    )
+
+
 def _make_db_mock():
     """Properly wired asyncpg connection mock (transaction is a sync context manager)."""
     mock_conn = MagicMock()
@@ -106,16 +115,22 @@ class TestCustomPricingGet:
 class TestCustomPricingPut:
     """Test PUT /settings/pricing endpoint."""
 
+    @pytest.fixture(autouse=True)
+    def _default_enterprise(self):
+        with _plan("enterprise"):
+            yield
+
     @pytest.mark.asyncio
     async def test_put_pricing_enterprise_only(self, cloud_client, cloud_admin_token):
-        """PUT pricing should reject non-enterprise plans."""
+        """PUT pricing should reject non-enterprise plans (server-side, not JWT)."""
         ac, app = cloud_client
         _auth(app, cloud_admin_token)
 
-        response = await ac.put(
-            "/settings/pricing",
-            json={"gpt-4o": {"input_per_1m": 5.0, "output_per_1m": 15.0}},
-        )
+        with _plan("cloud"):
+            response = await ac.put(
+                "/settings/pricing",
+                json={"gpt-4o": {"input_per_1m": 5.0, "output_per_1m": 15.0}},
+            )
 
         assert response.status_code == 403
         assert "enterprise" in response.json()["detail"].lower()
