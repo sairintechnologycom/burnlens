@@ -138,19 +138,6 @@ def get_app() -> FastAPI:
     # to an empty string to disable preview-host matching entirely.
     _default_origin_regex = r"^https://burnlens-app-[a-z0-9-]+\.vercel\.app$"
     _origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", _default_origin_regex) or None
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_allowed_origins,
-        allow_origin_regex=_origin_regex,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
-        # Shrink browser preflight cache from Starlette's 600s default to 60s so
-        # CORS-related deploys don't leave active sessions with stale preflights
-        # for ~10 min. See project_billing_summary_cors_regression.md.
-        max_age=60,
-    )
-
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):
             response = await call_next(request)
@@ -192,6 +179,24 @@ def get_app() -> FastAPI:
             return await call_next(request)
 
     app.add_middleware(CsrfMiddleware)
+
+    # CORS is registered LAST so it is the OUTERMOST middleware: responses
+    # short-circuited by inner middleware (CSRF 403, rate-limit 429) still get
+    # Access-Control-Allow-Origin. Before this ordering, those responses had no
+    # CORS headers, so browsers hid the real status behind an unreadable
+    # "Failed to fetch" — which is exactly how the /auth CSRF regression hid.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_origin_regex=_origin_regex,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
+        # Shrink browser preflight cache from Starlette's 600s default to 60s so
+        # CORS-related deploys don't leave active sessions with stale preflights
+        # for ~10 min. See project_billing_summary_cors_regression.md.
+        max_age=60,
+    )
 
     # Global exception handler — Starlette's outermost ServerErrorMiddleware
     # produces a plain-text 500 that bypasses CORSMiddleware on its way back

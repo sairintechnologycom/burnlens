@@ -25,7 +25,7 @@ function VerifyEmailContent() {
     }
     fetch(`${API_BASE}/auth/verify-email`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
       body: JSON.stringify({ token }),
     })
       .then(async (res) => {

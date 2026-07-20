@@ -90,7 +90,7 @@ function SetupContent() {
     try {
       const resp = await fetch(`${BASE_URL}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify({ email, password }),
         credentials: "include",
       });
@@ -114,7 +114,7 @@ function SetupContent() {
     try {
       await fetch(`${BASE_URL}/auth/reset-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify({ email: forgotEmail }),
       });
       setForgotMsg("If that email is registered, a reset link is on its way. Check your inbox.");
@@ -133,7 +133,7 @@ function SetupContent() {
     try {
       const resp = await fetch(`${BASE_URL}/auth/signup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
         body: JSON.stringify({
           email: regEmail,
           password: regPassword,

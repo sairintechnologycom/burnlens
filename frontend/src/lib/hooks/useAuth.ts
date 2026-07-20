@@ -105,6 +105,7 @@ export function useAuth() {
     if (!isLocalBackend()) {
       fetch(`${API_BASE}/auth/logout`, {
         method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
         credentials: "include",
       }).catch(() => {});
     }
