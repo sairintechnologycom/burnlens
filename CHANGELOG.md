@@ -6,6 +6,22 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.11.0] — 2026-07-21
+
+### Added
+- **xAI (Grok) and DeepSeek providers.** Both speak the OpenAI wire format,
+  so they're config-only `OpenAICompatibleProvider` routes: `/proxy/xai` →
+  `api.x.ai` and `/proxy/deepseek` → `api.deepseek.com` (override with
+  `XAI_BASE_URL` / `DEEPSEEK_BASE_URL`). Pricing verified against the
+  official pages 2026-07-20: `grok-4.5` $2/$6; `deepseek-v4-flash`
+  $0.14/$0.28, `deepseek-v4-pro` $0.435/$0.87, plus `deepseek-chat` /
+  `deepseek-reasoner` aliases.
+- **Anthropic price fills.** `claude-opus-4` / `claude-opus-4-1` ($15/$75)
+  and `claude-sonnet-4` / `claude-3-7-sonnet` ($3/$15) were missing from
+  `anthropic.json`, so direct-Anthropic traffic on those older models had
+  been costing $0. Longest-prefix matching resolves the dated API ids
+  without shadowing the newer `-4-5`/`-4-8` keys.
+
 ## [OSS `burnlens` v1.10.1] — 2026-07-19
 
 ### Fixed
