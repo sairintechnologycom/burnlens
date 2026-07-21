@@ -12,7 +12,7 @@ const TERMINAL_LINES = [
   { prompt: false, text: "Successfully installed burnlens-1.9.0", delay: 1800 },
   { prompt: true,  text: "burnlens start", delay: 2400 },
   { prompt: false, text: "BurnLens v1.9.0 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
-  { prompt: false, text: "Intercepting: OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure, Bedrock", delay: 3400 },
+  { prompt: false, text: "Intercepting: OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure, Bedrock", delay: 3400 },
   { prompt: false, text: "Ready. Waiting for requests...", delay: 3800, highlight: true },
 ];
 
@@ -286,7 +286,7 @@ export default function LandingPage() {
                 Hard-cap your AI spend across every provider — <span className="acc">before the call</span>, not after the bill
               </h1>
               <p className="lp-subline">
-                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
+                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/setup?intent=register" className="lp-hero-btn primary">
@@ -308,7 +308,7 @@ export default function LandingPage() {
                 </a>
               </div>
               <div className="lp-provider-strip lp-provider-strip-left">
-                {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "Azure OpenAI", "AWS Bedrock"].map((p) => (
+                {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "xAI", "DeepSeek", "Azure OpenAI", "AWS Bedrock"].map((p) => (
                   <span key={p} className="lp-provider-chip">{p}</span>
                 ))}
               </div>
@@ -425,7 +425,7 @@ export default function LandingPage() {
             <div className="lp-ed-content">
               <h3>Every provider, unified.</h3>
               <p>
-                OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock spend in one view.
+                OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock spend in one view.
                 Model breakdowns, waste detection, and budget tracking using versioned provider pricing.
               </p>
             </div>
@@ -606,7 +606,7 @@ export default function LandingPage() {
               <div className="lp-plan-price">$0<span>/mo</span></div>
               <ul className="lp-plan-features">
                 <li>Local proxy + dashboard</li>
-                <li>All 8 providers</li>
+                <li>All 10 providers</li>
                 <li>Waste detection + recommendations</li>
                 <li>Budget alerts + anomaly detection</li>
                 <li>7-day history</li>
