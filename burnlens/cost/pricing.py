@@ -84,6 +84,29 @@ def _apply_scheduled(pricing: dict[str, Any], today: date) -> dict[str, Any]:
     return merged
 
 
+def apply_tiered(pricing: dict[str, Any], input_tokens: int) -> dict[str, Any]:
+    """Apply a long-context rate tier if the prompt size crosses a threshold.
+
+    A pricing entry may carry ``"tiered": [{"over": N, ...rate overrides}]`` for
+    providers that bill the WHOLE request at a higher rate once the prompt
+    exceeds N input tokens (e.g. Gemini 2.5 Pro / 3.1 Pro >200k). The highest
+    ``over`` that ``input_tokens`` exceeds is merged over the base. Not called
+    from ``get_model_pricing`` — that has no token count; ``calculate_cost``
+    calls it after the lookup. ``over`` is exclusive (N tokens is NOT over N).
+    """
+    tiers = pricing.get("tiered")
+    if not tiers:
+        return pricing
+    active: dict[str, Any] | None = None
+    for tier in tiers:
+        if input_tokens > tier["over"] and (active is None or tier["over"] > active["over"]):
+            active = tier
+    merged = {k: v for k, v in pricing.items() if k != "tiered"}
+    if active is not None:
+        merged.update({k: v for k, v in active.items() if k != "over"})
+    return merged
+
+
 def get_model_pricing(
     provider: str, model: str, today: date | None = None
 ) -> dict[str, Any] | None:

@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from burnlens.cost.pricing import get_model_pricing
+from burnlens.cost.pricing import apply_tiered, get_model_pricing
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,12 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
     pricing = get_model_pricing(provider, model)
     if pricing is None:
         return 0.0
+
+    # Long-context tier keyed on total prompt size. Google/OpenAI report the
+    # full prompt as input_tokens (cache is a subset), so input_tokens IS the
+    # basis. ponytail: if an Anthropic-style tiered entry is ever added, its
+    # cache tokens are DISJOINT from input_tokens — sum them in here first.
+    pricing = apply_tiered(pricing, usage.input_tokens)
 
     per_million = 1_000_000.0
 

@@ -6,6 +6,23 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.12.0] — 2026-07-23
+
+### Added
+- **Tiered long-context pricing.** Pricing entries may now carry a `tiered`
+  list — `[{"over": N, ...rate overrides}]` — that switches the WHOLE request
+  to a higher per-token rate once the prompt exceeds N input tokens (a rate
+  switch, not marginal brackets — matching how Google bills). Applied in
+  `calculate_cost` after the pricing lookup; `over` is exclusive. Verified
+  against ai.google.dev/pricing 2026-07-23: `gemini-2.5-pro` >200k input now
+  bills $2.50/$15 (was flat $1.25/$10) and `gemini-3.1-pro-preview` >200k bills
+  $4/$18 (was flat $2/$12). Long-context Gemini Pro requests were previously
+  under-costed.
+- Not applied to Anthropic/Bedrock: per the official pricing page, current
+  Claude models (Opus 4.6+, Sonnet 4.6, Sonnet 5, Fable 5) include the full 1M
+  context window at standard pricing — the old Sonnet 4/4.5 1M-context premium
+  was retired 2026-04-30, so there is no Claude long-context tier to model.
+
 ## [OSS `burnlens` v1.11.0] — 2026-07-21
 
 ### Added
