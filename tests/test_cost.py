@@ -275,10 +275,11 @@ class TestCostCalculation:
         assert abs(cost - expected) < 1e-9
 
     def test_google_pro_pricing(self):
-        # gemini-2.5-pro: input=$1.25/M, output=$10/M
-        usage = TokenUsage(input_tokens=1_000_000, output_tokens=0)
+        # gemini-2.5-pro base tier (<=200k input): input=$1.25/M, output=$10/M.
+        # (Over 200k it switches to $2.50/$15 — see TestTieredPricing.)
+        usage = TokenUsage(input_tokens=100_000, output_tokens=0)
         cost = calculate_cost("google", "gemini-2.5-pro", usage)
-        assert abs(cost - 1.25) < 1e-6
+        assert abs(cost - 0.125) < 1e-6
 
     def test_google_prefix_match_cost(self):
         # "gemini-1.5-pro-002" → "gemini-1.5-pro" ($1.25/M input)
@@ -478,3 +479,66 @@ class TestUsageExtraction:
         u = extract_usage_google(body)
         assert u.input_tokens == 100
         assert u.output_tokens == 0
+
+
+# ---------------------------------------------------------------------------
+# Tiered (long-context) pricing — whole-request rate switch over a threshold
+# ---------------------------------------------------------------------------
+
+
+class TestTieredPricing:
+    def test_below_threshold_uses_base_rate(self):
+        usage = TokenUsage(input_tokens=100_000, output_tokens=1_000)
+        assert calculate_cost("google", "gemini-2.5-pro", usage) == pytest.approx(
+            100_000 * 1.25 / 1e6 + 1_000 * 10.00 / 1e6
+        )
+
+    def test_above_threshold_switches_whole_request(self):
+        # 300k input crosses 200k → BOTH input and output bill at the >200k tier
+        usage = TokenUsage(input_tokens=300_000, output_tokens=1_000)
+        assert calculate_cost("google", "gemini-2.5-pro", usage) == pytest.approx(
+            300_000 * 2.50 / 1e6 + 1_000 * 15.00 / 1e6
+        )
+
+    def test_exactly_at_threshold_stays_base(self):
+        # "over" is exclusive: 200_000 is NOT over 200000
+        usage = TokenUsage(input_tokens=200_000)
+        assert calculate_cost("google", "gemini-2.5-pro", usage) == pytest.approx(
+            200_000 * 1.25 / 1e6
+        )
+
+    def test_gemini_31_pro_tier(self):
+        usage = TokenUsage(input_tokens=250_000, output_tokens=1_000)
+        assert calculate_cost("google", "gemini-3.1-pro-preview", usage) == pytest.approx(
+            250_000 * 4.00 / 1e6 + 1_000 * 18.00 / 1e6
+        )
+
+    def test_flat_model_unaffected_at_any_size(self):
+        usage = TokenUsage(input_tokens=5_000_000)
+        assert calculate_cost("google", "gemini-2.0-flash", usage) == pytest.approx(
+            5_000_000 * 0.10 / 1e6
+        )
+
+    def test_apply_tiered_unit(self):
+        from burnlens.cost.pricing import apply_tiered
+
+        p = {
+            "input_per_million": 1.0,
+            "output_per_million": 2.0,
+            "tiered": [
+                {"over": 100, "input_per_million": 3.0},
+                {"over": 1000, "input_per_million": 5.0},
+            ],
+        }
+        assert apply_tiered(p, 50)["input_per_million"] == 1.0
+        mid = apply_tiered(p, 500)
+        assert mid["input_per_million"] == 3.0
+        assert mid["output_per_million"] == 2.0  # un-overridden key preserved
+        assert "tiered" not in mid and "over" not in mid
+        assert apply_tiered(p, 5000)["input_per_million"] == 5.0
+
+    def test_apply_tiered_noop_without_tiers(self):
+        from burnlens.cost.pricing import apply_tiered
+
+        p = {"input_per_million": 1.0}
+        assert apply_tiered(p, 10_000_000) is p

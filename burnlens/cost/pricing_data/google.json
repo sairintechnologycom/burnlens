@@ -1,10 +1,13 @@
 {
   "provider": "google",
-  "updated": "2026-07-17",
+  "updated": "2026-07-23",
   "models": {
     "gemini-2.5-pro": {
       "input_per_million": 1.25,
-      "output_per_million": 10.00
+      "output_per_million": 10.00,
+      "tiered": [
+        {"over": 200000, "input_per_million": 2.50, "output_per_million": 15.00}
+      ]
     },
     "gemini-2.5-flash": {
       "input_per_million": 0.30,
@@ -44,7 +47,10 @@
     },
     "gemini-3.1-pro-preview": {
       "input_per_million": 2.00,
-      "output_per_million": 12.00
+      "output_per_million": 12.00,
+      "tiered": [
+        {"over": 200000, "input_per_million": 4.00, "output_per_million": 18.00}
+      ]
     },
     "gemini-3.1-flash-lite": {
       "input_per_million": 0.25,
