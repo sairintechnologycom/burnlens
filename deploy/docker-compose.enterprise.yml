@@ -65,13 +65,14 @@ services:
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 8123
       CLICKHOUSE_DATABASE: burnlens
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?Error: CLICKHOUSE_USER not set}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Error: CLICKHOUSE_PASSWORD not set}
       
       # Kafka Ingress Stream
       STREAMING_ENABLED: "true"
       KAFKA_BOOTSTRAP_SERVERS: "redpanda:29092"
       KAFKA_TOPIC: "burnlens-ingest-records"
+      KAFKA_IDENTITY_TOPIC: "burnlens-ingest-records-identity"
 
       # JWT
       JWT_SECRET: ${JWT_SECRET:?Error: JWT_SECRET not set}
@@ -162,6 +163,9 @@ services:
     image: clickhouse/clickhouse-server:24.3-alpine
     container_name: burnlens-clickhouse
     restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?Error: CLICKHOUSE_USER not set}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Error: CLICKHOUSE_PASSWORD not set}
     ports:
       - "8123:8123"
       - "9000:9000"

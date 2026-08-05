@@ -60,6 +60,14 @@ async def lifespan(app: FastAPI):
             logger.info("ClickHouse initialized")
         except Exception as e:
             logger.error(f"ClickHouse schema initialization failed: {e}")
+        if settings.event_identity_enabled:
+            try:
+                from .ingest_identity import drain_stream_outbox
+                replayed = await drain_stream_outbox()
+                logger.info("Replayed %d pending source-id stream records", replayed)
+            except Exception as e:
+                # Streaming replication is not the canonical financial write.
+                logger.warning("Pending source-id stream replay deferred: %s", e)
     else:
         logger.info("ClickHouse OLAP plane disabled (STREAMING_ENABLED=false)")
 

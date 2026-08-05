@@ -13,6 +13,12 @@ from .plans import resolve_limits
 from .telemetry.forwarder import get_forwarder
 from .config import settings
 from .streaming import send_records_to_stream
+from .ingest_identity import (
+    classify_existing_events,
+    flush_stream_outbox,
+    persist_event_records,
+    source_event_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -411,9 +417,20 @@ async def ingest(
 
     workspace_id, plan = workspace_result
 
+    # Source identities are optional for wire compatibility.  Existing ids are
+    # classified before the quota gate so a normal retry does not consume a
+    # second quota unit or create a second financial record.
+    event_identity_active = settings.event_identity_enabled
+    event_records = [record for record in request.records if event_identity_active and source_event_id(record)]
+    legacy_records = [record for record in request.records if record not in event_records]
+    event_classification = await classify_existing_events(workspace_id, event_records)
+    prospective_count = len(legacy_records) + len(event_classification.new_records)
+
     # Phase 15 (QUOTA-01–04): hard quota pre-check — raises 429 before any write.
-    # Must run after auth (workspace_id available) and before execute_bulk_insert.
-    await _check_quota_or_raise(workspace_id, plan, len(request.records))
+    # A concurrent same-event request can race this read, but cannot duplicate a
+    # canonical record because persist_event_records claims the DB identity.
+    if prospective_count:
+        await _check_quota_or_raise(workspace_id, plan, prospective_count)
 
     # Fetch full workspace details (including OTEL config)
     workspace_details = await execute_query(
@@ -422,9 +439,10 @@ async def ingest(
     )
     otel_config = workspace_details[0] if workspace_details else None
 
-    # Prepare bulk insert data
+    # Keep the legacy path byte-for-byte compatible for clients that do not
+    # provide event_id.  Event-bearing records use the identity transaction.
     insert_data = []
-    for record in request.records:
+    for record in legacy_records:
         insert_data.append(
             (
                 workspace_id,
@@ -449,10 +467,27 @@ async def ingest(
 
     # Ingest records — stream to Kafka/Redpanda if enabled, else insert to PostgreSQL
     try:
+        persisted_events = await persist_event_records(
+            workspace_id,
+            event_classification.new_records,
+            queue_for_streaming=settings.streaming_enabled,
+        )
+        rejected = event_classification.conflict_count + persisted_events.conflict_count
+        accepted_count = len(legacy_records) + len(persisted_events.inserted_records)
+
         if settings.streaming_enabled:
-            # Map Pydantic record schema to stream event dict
+            # Source-id records are first committed to Postgres and then sent
+            # through the outbox.  A retry drains a pending outbox entry rather
+            # than inserting a second cost row.
+            if event_records:
+                await flush_stream_outbox(
+                    workspace_id,
+                    [source_event_id(record) for record in event_records if source_event_id(record)],
+                )
+
+            # Event-less legacy records retain the established streaming path.
             stream_records = []
-            for r in request.records:
+            for r in legacy_records:
                 tags = r.tags or {}
                 stream_records.append({
                     "ts": r.timestamp.isoformat() if hasattr(r.timestamp, "isoformat") else str(r.timestamp),
@@ -472,46 +507,52 @@ async def ingest(
                     "tag_key_label": tags.get("key_label", ""),
                     "system_prompt_hash": r.system_prompt_hash or "",
                 })
-            await send_records_to_stream(workspace_id, stream_records)
-            logger.info(
-                f"Streamed {len(request.records)} records for workspace {workspace_id} to stream plane"
-            )
+            if stream_records:
+                await send_records_to_stream(workspace_id, stream_records)
+                logger.info(
+                    f"Streamed {len(stream_records)} legacy records for workspace {workspace_id} to stream plane"
+                )
         else:
-            await execute_bulk_insert(
-                """
-                INSERT INTO request_records
-                (workspace_id, ts, provider, model, input_tokens, output_tokens,
-                 reasoning_tokens, cache_read_tokens, cache_write_tokens,
-                 cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at,
-                 cache_hit, cache_saved_usd)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                        $16, $17)
-                """,
-                insert_data,
-            )
+            if insert_data:
+                await execute_bulk_insert(
+                    """
+                    INSERT INTO request_records
+                    (workspace_id, ts, provider, model, input_tokens, output_tokens,
+                     reasoning_tokens, cache_read_tokens, cache_write_tokens,
+                     cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at,
+                     cache_hit, cache_saved_usd)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                            $16, $17)
+                    """,
+                    insert_data,
+                )
             logger.info(
-                f"Ingested {len(request.records)} records for workspace {workspace_id} directly to PostgreSQL"
+                "Ingested %d new records for workspace %s directly to PostgreSQL",
+                accepted_count,
+                workspace_id,
             )
 
         # Phase 9 QUOTA-01/02/03: record usage, check 80/100% thresholds, enqueue email.
         # Wrapped internally; failures MUST NOT affect the ingest 200 response.
         # Compute batch token and spend totals for usage tracking (Phase 15 QUOTA-02/03).
+        accepted_records = legacy_records + persisted_events.inserted_records
         batch_tokens = sum(
             r.input_tokens + r.output_tokens + (r.reasoning_tokens or 0)
-            for r in request.records
+            for r in accepted_records
         )
-        batch_spend_usd = sum(float(r.cost_usd) for r in request.records)
+        batch_spend_usd = sum(float(r.cost_usd) for r in accepted_records)
 
-        try:
-            await _record_usage_and_maybe_notify(
-                workspace_id, plan, len(request.records),
-                batch_tokens=batch_tokens,
-                batch_spend_usd=batch_spend_usd,
-            )
-        except Exception as exc:
-            logger.warning(
-                "usage.record_outer_guard workspace=%s err=%s", workspace_id, exc
-            )
+        if accepted_count:
+            try:
+                await _record_usage_and_maybe_notify(
+                    workspace_id, plan, accepted_count,
+                    batch_tokens=batch_tokens,
+                    batch_spend_usd=batch_spend_usd,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "usage.record_outer_guard workspace=%s err=%s", workspace_id, exc
+                )
 
         # Queue OTEL forward as background task (never block on this)
         if otel_config and otel_config.get("otel_enabled"):
@@ -527,7 +568,7 @@ async def ingest(
 
                     # Convert records to dicts for OTEL forwarding
                     otel_records = []
-                    for record in request.records:
+                    for record in accepted_records:
                         otel_records.append(record.dict())
 
                     # Forward as background task (fire and forget)
@@ -553,8 +594,8 @@ async def ingest(
             overrides = None
 
         return IngestResponse(
-            accepted=len(request.records),
-            rejected=0,
+            accepted=accepted_count,
+            rejected=rejected,
             routing_overrides=overrides
         )
 

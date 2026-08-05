@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     streaming_enabled: bool = os.getenv("STREAMING_ENABLED", "false").lower() in ("true", "1")
     kafka_bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     kafka_topic: str = os.getenv("KAFKA_TOPIC", "burnlens-ingest-records")
+    kafka_identity_topic: str = os.getenv("KAFKA_IDENTITY_TOPIC", "burnlens-ingest-records-identity")
+
+    # Expand-only migration gate for workspace-scoped source-event identity.
+    # Leave false until both Postgres and (when used) ClickHouse migrations are
+    # applied. Older clients remain valid either way.
+    event_identity_enabled: bool = os.getenv("EVENT_IDENTITY_ENABLED", "false").lower() in ("true", "1", "yes", "on")
+    outbox_max_attempts: int = int(os.getenv("OUTBOX_MAX_ATTEMPTS", "10"))
 
     class Config:
         env_file = ".env"

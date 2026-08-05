@@ -33,6 +33,9 @@ async def get_streaming_producer() -> Optional[Any]:
                         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
                         retry_backoff_ms=500,
                         request_timeout_ms=5000,
+                        # Broker retries for a single producer session must not
+                        # duplicate an acknowledged source event.
+                        enable_idempotence=True,
                     )
                     await _producer.start()
                     logger.info("AIOKafkaProducer started successfully.")
@@ -57,7 +60,9 @@ async def close_streaming_producer() -> None:
                 _producer = None
 
 
-async def send_records_to_stream(workspace_id: str, records: list[dict[str, Any]]) -> None:
+async def send_records_to_stream(
+    workspace_id: str, records: list[dict[str, Any]], *, topic: str | None = None
+) -> None:
     """Publish a batch of request records to Kafka/Redpanda topic."""
     if not records:
         return
@@ -70,6 +75,7 @@ async def send_records_to_stream(workspace_id: str, records: list[dict[str, Any]
     # Ingest API receives records in the schema format:
     # timestamp, provider, model, input_tokens, output_tokens, etc.
     # We enrich them with workspace_id and serialize date/times to strings.
+    topic = topic or settings.kafka_topic
     tasks = []
     for record in records:
         # Format datetimes
@@ -87,7 +93,7 @@ async def send_records_to_stream(workspace_id: str, records: list[dict[str, Any]
         key_bytes = workspace_id.encode("utf-8") if workspace_id else None
         tasks.append(
             producer.send(
-                settings.kafka_topic,
+                topic,
                 value=payload,
                 key=key_bytes,
             )
@@ -96,7 +102,7 @@ async def send_records_to_stream(workspace_id: str, records: list[dict[str, Any]
     try:
         # Await the send futures in parallel to ensure they are queued
         await asyncio.gather(*tasks)
-        logger.info("Successfully produced %d records to topic '%s' for workspace %s", len(records), settings.kafka_topic, workspace_id)
+        logger.info("Successfully produced %d records to topic '%s' for workspace %s", len(records), topic, workspace_id)
     except Exception as e:
         logger.error("Failed to produce records to stream: %s", e)
         raise

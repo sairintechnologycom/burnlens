@@ -31,7 +31,7 @@ async def init_db():
 
     # Create connection pool
     pool = await asyncpg.create_pool(
-        settings.database_url,
+        settings.database_url.replace("postgresql+asyncpg://", "postgresql://", 1),
         min_size=2,
         max_size=20,
         command_timeout=60,
@@ -752,6 +752,18 @@ async def init_db():
                     WHERE table_name = 'workspaces' AND column_name = 'routing_overrides'
                 ) THEN
                     ALTER TABLE workspaces ADD COLUMN routing_overrides JSONB;
+                END IF;
+            END $$;
+        """)
+
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces' AND column_name = 'limit_overrides'
+                ) THEN
+                    ALTER TABLE workspaces ADD COLUMN limit_overrides JSONB;
                 END IF;
             END $$;
         """)

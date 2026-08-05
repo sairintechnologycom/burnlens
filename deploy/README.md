@@ -148,6 +148,8 @@ cp deploy/docker-compose.enterprise.yml docker-compose.yml
 cat > .env << 'EOF'
 DOMAIN=burnlens.acme.com
 DB_PASSWORD=SecurePassword123!@#
+CLICKHOUSE_USER=burnlens
+CLICKHOUSE_PASSWORD=ReplaceWithAStrongSecret
 JWT_SECRET=$(openssl rand -base64 32)
 OTEL_ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 SENDGRID_API_KEY=

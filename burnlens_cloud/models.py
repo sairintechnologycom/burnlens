@@ -43,7 +43,8 @@ class RequestRecordBase(BaseModel):
     # Semantic-cache outcome from the OSS proxy (1 = served from cache).
     cache_hit: int = 0
     cache_saved_usd: float = 0.0
-    # Correlation ids used only to build correlatable OTEL export spans.
+    # Optional source identities. `event_id` becomes a workspace-scoped
+    # idempotency key only when EVENT_IDENTITY_ENABLED is enabled.
     trace_id: Optional[str] = None
     event_id: Optional[str] = None
     request_id: Optional[str] = None

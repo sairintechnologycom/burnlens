@@ -11,6 +11,37 @@ logger = logging.getLogger(__name__)
 _client: Optional[Client] = None
 _client_lock = asyncio.Lock()
 
+# The stream is at-least-once across a process crash after broker acknowledgement.
+# Source-id rows are therefore collapsed here; event-less legacy rows use the raw
+# ClickHouse row UUID and retain their historical append-only semantics.
+_DEDUPED_RAW_CTE = """
+    WITH deduped AS (
+        SELECT
+            argMax(ts, received_at) AS ts,
+            argMax(provider, received_at) AS provider,
+            argMax(model, received_at) AS model,
+            argMax(input_tokens, received_at) AS input_tokens,
+            argMax(output_tokens, received_at) AS output_tokens,
+            argMax(reasoning_tokens, received_at) AS reasoning_tokens,
+            argMax(cache_read_tokens, received_at) AS cache_read_tokens,
+            argMax(cache_write_tokens, received_at) AS cache_write_tokens,
+            argMax(cost_usd, received_at) AS cost_usd,
+            argMax(duration_ms, received_at) AS duration_ms,
+            argMax(status_code, received_at) AS status_code,
+            argMax(tag_feature, received_at) AS tag_feature,
+            argMax(tag_team, received_at) AS tag_team,
+            argMax(tag_customer, received_at) AS tag_customer,
+            argMax(tag_key_label, received_at) AS tag_key_label
+        FROM request_records_raw
+        WHERE request_records_raw.workspace_id = {ws:UUID}
+          AND request_records_raw.ts >= toDateTime({start:Date})
+          AND request_records_raw.ts < toDateTime({end:Date}) + INTERVAL 1 DAY
+        GROUP BY request_records_raw.workspace_id,
+            if(request_records_raw.source_event_id = '',
+               concat('__legacy__', toString(request_records_raw.id)), request_records_raw.source_event_id)
+    )
+"""
+
 
 def get_clickhouse_client() -> Client:
     """Get or create synchronous ClickHouse client."""
@@ -177,8 +208,8 @@ def _init_clickhouse_sync() -> None:
             reasoning_tokens SimpleAggregateFunction(sum, UInt64),
             cache_read_tokens SimpleAggregateFunction(sum, UInt64),
             cache_write_tokens SimpleAggregateFunction(sum, UInt64),
-            cost_usd SimpleAggregateFunction(sum, Decimal(18, 8)),
-            duration_ms SimpleAggregateFunction(avg, Float64),
+            cost_usd SimpleAggregateFunction(sum, Decimal(38, 8)),
+            duration_ms AggregateFunction(avg, UInt32),
             status_code_ok_count SimpleAggregateFunction(sum, UInt64)
         ) ENGINE = SummingMergeTree()
         PARTITION BY toYYYYMM(day)
@@ -204,7 +235,7 @@ def _init_clickhouse_sync() -> None:
             sum(cache_read_tokens) AS cache_read_tokens,
             sum(cache_write_tokens) AS cache_write_tokens,
             sum(cost_usd) AS cost_usd,
-            avg(duration_ms) AS duration_ms,
+            avgState(duration_ms) AS duration_ms,
             sum(status_code = 200 OR status_code = 201) AS status_code_ok_count
         FROM request_records_raw
         GROUP BY workspace_id, day, provider, model, tag_feature, tag_team, tag_customer, tag_key_label;
@@ -214,18 +245,12 @@ def _init_clickhouse_sync() -> None:
 
 
 async def get_spend_summary(workspace_id: str, start_date: str, end_date: str) -> dict[str, Any]:
-    """Query workspace level total cost, requests, and token statistics from rollup table."""
+    """Query workspace totals from source-id-deduplicated raw records."""
     def _query():
         client = get_clickhouse_client()
-        query = """
-            SELECT 
-                sum(request_count) as total_requests,
-                sum(input_tokens) as total_input_tokens,
-                sum(output_tokens) as total_output_tokens,
-                sum(cost_usd) as total_cost_usd,
-                avg(duration_ms) as avg_duration_ms
-            FROM daily_spend_rollup
-            WHERE workspace_id = {ws:UUID} AND day >= {start:Date} AND day <= {end:Date}
+        query = _DEDUPED_RAW_CTE + """
+            SELECT count(), sum(input_tokens), sum(output_tokens), sum(cost_usd), avg(duration_ms)
+            FROM deduped
         """
         params = {"ws": workspace_id, "start": start_date, "end": end_date}
         result = client.query(query, params)
@@ -251,19 +276,18 @@ async def get_spend_summary(workspace_id: str, start_date: str, end_date: str) -
 
 
 async def get_spend_by_model(workspace_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """Query spend broken down by model and provider from rollup table."""
+    """Query model spend without counting at-least-once stream delivery twice."""
     def _query():
         client = get_clickhouse_client()
-        query = """
+        query = _DEDUPED_RAW_CTE + """
             SELECT 
                 model,
                 provider,
-                sum(request_count) as request_count,
+                count() as request_count,
                 sum(input_tokens) as total_input_tokens,
                 sum(output_tokens) as total_output_tokens,
                 sum(cost_usd) as total_cost_usd
-            FROM daily_spend_rollup
-            WHERE workspace_id = {ws:UUID} AND day >= {start:Date} AND day <= {end:Date}
+            FROM deduped
             GROUP BY model, provider
             ORDER BY total_cost_usd DESC
         """
@@ -294,15 +318,15 @@ async def get_spend_by_tag(workspace_id: str, tag_type: str, start_date: str, en
     def _query():
         client = get_clickhouse_client()
         # Note: formatting column name into query is safe here as we validated tag_type above
-        query = f"""
+        query = _DEDUPED_RAW_CTE + f"""
             SELECT 
                 {tag_column} as tag_value,
-                sum(request_count) as request_count,
+                count() as request_count,
                 sum(input_tokens) as total_input_tokens,
                 sum(output_tokens) as total_output_tokens,
                 sum(cost_usd) as total_cost_usd
-            FROM daily_spend_rollup
-            WHERE workspace_id = {{ws:UUID}} AND day >= {{start:Date}} AND day <= {{end:Date}} AND tag_value != ''
+            FROM deduped
+            WHERE {tag_column} != ''
             GROUP BY tag_value
             ORDER BY total_cost_usd DESC
         """
@@ -323,16 +347,15 @@ async def get_spend_by_tag(workspace_id: str, tag_type: str, start_date: str, en
 
 
 async def get_spend_timeseries(workspace_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """Query daily cost and request count timeseries from rollup table."""
+    """Query daily spend from the deduplicated raw stream."""
     def _query():
         client = get_clickhouse_client()
-        query = """
+        query = _DEDUPED_RAW_CTE + """
             SELECT 
-                day,
-                sum(request_count) as request_count,
+                toDate(ts) AS day,
+                count() as request_count,
                 sum(cost_usd) as total_cost_usd
-            FROM daily_spend_rollup
-            WHERE workspace_id = {ws:UUID} AND day >= {start:Date} AND day <= {end:Date}
+            FROM deduped
             GROUP BY day
             ORDER BY day ASC
         """
