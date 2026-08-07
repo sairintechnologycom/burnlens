@@ -244,9 +244,10 @@ export default function LandingPage() {
             <a href="#pricing">Pricing</a>
             <a href="https://github.com/sairintechnologycom/burnlens#readme">Docs</a>
             <Link href="/demo" className="outline">Live demo</Link>
-            <Link href="/setup?intent=register" className="primary">Get Started</Link>
+            <Link href="/setup?intent=register" className="primary">Create workspace</Link>
           </div>
           <button
+            type="button"
             className="lp-mobile-menu-btn"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
@@ -273,7 +274,7 @@ export default function LandingPage() {
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <a href="https://github.com/sairintechnologycom/burnlens#readme" onClick={() => setMenuOpen(false)}>Docs</a>
               <Link href="/demo" onClick={() => setMenuOpen(false)}>Live demo</Link>
-              <Link href="/setup" className="lp-mobile-cta" onClick={() => setMenuOpen(false)}>Get Started</Link>
+              <Link href="/setup?intent=register" className="lp-mobile-cta" onClick={() => setMenuOpen(false)}>Create workspace</Link>
             </div>
           </>
         )}
@@ -286,15 +287,15 @@ export default function LandingPage() {
                 Hard-cap your AI spend across every provider — <span className="acc">before the call</span>, not after the bill
               </h1>
               <p className="lp-subline">
-                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock. Hard 429 caps, per-feature attribution, prompts never leave your machine. Free for solo use. $29/mo for teams.
+                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock. Hard 429 caps, per-feature attribution, and prompt bodies that go only to your provider — never to BurnLens Cloud. Free for local use; cloud workspaces from $29/mo.
               </p>
               <div className="lp-hero-cta">
-                <Link href="/setup?intent=register" className="lp-hero-btn primary">
-                  Start free trial
+                <a href="#install" className="lp-hero-btn primary">
+                  Install free — no account
                   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M5 10h10m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
-                </Link>
+                </a>
                 <a
                   href="https://github.com/sairintechnologycom/burnlens"
                   className="lp-hero-btn secondary"
@@ -342,7 +343,7 @@ export default function LandingPage() {
                 fontFamily: "var(--font-mono), monospace",
                 fontSize: 11, color: "var(--l-muted)", letterSpacing: "0.06em"
               }}>
-                localhost:8420/ui — your data never leaves your machine
+                localhost:8420/ui — runs on your machine, no account required
               </p>
             </div>
           </>
@@ -402,8 +403,10 @@ export default function LandingPage() {
               <p>
                 Three request headers — <code>X-BurnLens-Tag-Feature</code>,{" "}
                 <code>-Team</code>, <code>-Customer</code> — attribute cost to any
-                dimension you care about. Tags are stripped before reaching the AI
-                provider. They never leave your machine.
+                dimension you care about. Tags are stripped before the request
+                reaches the AI provider. If you enable cloud sync, tag values are
+                uploaded to your workspace alongside cost metadata — never prompt
+                or response bodies.
               </p>
             </div>
           </div>
@@ -538,7 +541,7 @@ export default function LandingPage() {
                   <td className="no">✗</td>
                 </tr>
                 <tr>
-                  <td>Local-first (prompts stay local)</td>
+                  <td>Local-first (prompt bodies never pass through the vendor)</td>
                   <td className="yes">✓</td>
                   <td className="no">✗</td>
                   <td className="no">✗</td>
@@ -675,7 +678,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="lp-install-cta">
-            <Link href="/setup?intent=register" className="lp-btn-go">Get Started</Link>
+            <Link href="/setup?intent=register" className="lp-btn-go">Create workspace</Link>
             <a href="https://github.com/sairintechnologycom/burnlens" className="lp-btn-gh">View on GitHub</a>
           </div>
         </section>

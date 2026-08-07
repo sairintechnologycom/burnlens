@@ -1,6 +1,6 @@
 # BurnLens — The open-source FinOps proxy for AI spend
 
-Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock. Hard-cap budgets before the API call — not after the bill arrives.
+Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock. Hard-cap budgets before the API call — not after the bill arrives.
 
 [![PyPI](https://img.shields.io/pypi/v/burnlens?label=pypi&color=00e5c8)](https://pypi.org/project/burnlens)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
@@ -29,11 +29,11 @@ burnlens start
 
 1. **Drop-in proxy.** Point your SDK's `BASE_URL` at `localhost:8420`. Existing code works unchanged. The proxy is designed for low overhead and supports streaming passthrough.
 
-2. **Tag what matters.** Three request headers (`X-BurnLens-Tag-Feature`, `X-BurnLens-Tag-Team`, `X-BurnLens-Tag-Customer`) attribute any call to any dimension. Tags are stripped before reaching the AI provider — they never leave your machine.
+2. **Tag what matters.** Three request headers (`X-BurnLens-Tag-Feature`, `X-BurnLens-Tag-Team`, `X-BurnLens-Tag-Customer`) attribute any call to any dimension. Tags are stripped before the request reaches the AI provider. If you enable cloud sync, tag values are uploaded to your workspace alongside cost metadata — never prompt or response bodies.
 
 3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts.
 
-4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, Azure OpenAI, and AWS Bedrock spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
+4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
 
 ---
 
@@ -51,7 +51,7 @@ client = openai.OpenAI(default_headers={
 })
 ```
 
-Tags are stripped before the request reaches OpenAI. They never appear in any API payload.
+Tags are stripped before the request reaches OpenAI. They never appear in the provider API payload.
 
 ---
 
@@ -73,10 +73,12 @@ Tags are stripped before the request reaches OpenAI. They never appear in any AP
 |----------|--------|-------|
 | OpenAI | Stable | All models, streaming, reasoning tokens |
 | Anthropic | Stable | All models, streaming, prompt caching tokens |
-| Google | Stable | Gemini 1.5–2.5 (+ 3.x previews), requires `patch_google()`; Gemini 3.1 Pro pricing covers requests up to 200K tokens |
+| Google | Stable | Gemini 1.5–2.5 (+ 3.x previews), requires `patch_google()`; Gemini 2.5 / 3.1 Pro switch to their higher long-context rate above 200K input tokens |
 | Groq | Beta | OpenAI-compatible: point `GROQ_BASE_URL` at `/proxy/groq` |
 | Together | Beta | OpenAI-compatible: set client `base_url` to `/proxy/together` |
 | Mistral | Beta | OpenAI-compatible: set client `base_url` to `/proxy/mistral` |
+| xAI | Beta | OpenAI-compatible: point `XAI_BASE_URL` at `/proxy/xai` |
+| DeepSeek | Beta | OpenAI-compatible: point `DEEPSEEK_BASE_URL` at `/proxy/deepseek` |
 | Azure OpenAI | Beta | Point client `azure_endpoint` at `/proxy/azure`; set `BURNLENS_AZURE_ENDPOINT` to your resource URL |
 | AWS Bedrock | Beta | Claude models; Bedrock API key (`Authorization: Bearer`, no SigV4); set `BURNLENS_BEDROCK_REGION`; Global cross-region pricing |
 
@@ -84,8 +86,8 @@ Pricing covers current text/chat models for the supported providers, plus
 audio-modality tokens (OpenAI `*-audio-preview` / `*-realtime-preview`, billed at
 their own per-million rate) and arbitrary flat per-unit fees via each model's
 optional `unit_prices` (e.g. per web-search call). Image and video generation are
-still out of scope. Gemini 3.1 Pro's higher rate above 200K input tokens is
-excluded (flat-rate schema uses the ≤200K rate). Audio rates should be re-checked
+still out of scope. Gemini Pro's higher rate above 200K input tokens is applied
+automatically (tiered pricing, since v1.12.0). Audio rates should be re-checked
 against the provider pricing page — they change less often than text but do move.
 
 ---
@@ -95,7 +97,7 @@ against the provider pricing page — they change less often than text but do mo
 | | BurnLens | Helicone / Langfuse | Vantage / CloudZero |
 |---|---|---|---|
 | Open source | ✓ | Partial | ✗ |
-| Local-first (prompts stay local) | ✓ | ✗ | ✗ |
+| Local-first (prompt bodies never pass through the vendor) | ✓ | ✗ | ✗ |
 | Hard caps before API call | ✓ | ✗ | ✗ |
 | Per-customer attribution | ✓ | ✓ | ✗ |
 | Multi-cloud (Azure / AWS / GCP) | Partial | Partial | ✓ |

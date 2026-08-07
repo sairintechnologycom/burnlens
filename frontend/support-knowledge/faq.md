@@ -60,7 +60,7 @@ Open the cloud dashboard → Account → Billing → Cancel. Cancellation takes 
 
 ## What providers are supported?
 
-Eight providers today: OpenAI, Anthropic, Google Gemini (via `patch_google()`), Groq, Together, Mistral, Azure OpenAI, and AWS Bedrock (Claude models, Bedrock API key). OpenAI, Anthropic, and Google are stable; the rest are beta.
+Ten providers today: OpenAI, Anthropic, Google Gemini (via `patch_google()`), Groq, Together, Mistral, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock (Claude models, Bedrock API key). OpenAI, Anthropic, and Google are stable; the rest are beta.
 
 ## I am getting 429 errors from BurnLens but not from the upstream provider.
 

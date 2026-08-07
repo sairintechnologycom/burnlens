@@ -72,7 +72,7 @@ burnlens CLI                             Stripe billing
 - Shadow AI discovery **always runs locally** — discovery data never syncs to the cloud in v1.0.
 - The cloud dashboard shows **cost analytics only** (spend charts, model breakdown, request table).
 
-This split is intentional: the local proxy is the trust layer. Prompt content never leaves the machine.
+This split is intentional: the local proxy is the trust layer. Prompt content is forwarded only to the upstream AI provider and never reaches BurnLens Cloud.
 
 ---
 

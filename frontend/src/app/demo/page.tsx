@@ -436,7 +436,7 @@ export default function DemoPage() {
           This is the dashboard you get for your own stack.
         </div>
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
-          Install BurnLens locally — your data never leaves your machine.
+          Install BurnLens locally — prompt and response bodies go only to your AI provider, never to BurnLens Cloud.
         </div>
         <div
           style={{

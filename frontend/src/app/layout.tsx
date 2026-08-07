@@ -18,10 +18,14 @@ const manrope = Manrope({
   variable: "--font-sans",
 });
 
+const SITE_TITLE = "BurnLens — Hard-cap your AI spend across every provider";
+const SITE_DESCRIPTION =
+  "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cost attribution across 10 providers including OpenAI, Anthropic, Google, Azure OpenAI, and AWS Bedrock.";
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnlens.app"),
-  title: "BurnLens — Hard-cap your AI spend across every provider",
-  description: "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cross-provider cost attribution for OpenAI, Anthropic, and Google.",
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
   alternates: {
     canonical: "/",
   },
@@ -32,16 +36,16 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "BurnLens — Hard-cap your AI spend across every provider",
-    description: "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cross-provider cost attribution for OpenAI, Anthropic, and Google.",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
     url: "https://burnlens.app",
     siteName: "BurnLens",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "BurnLens — Hard-cap your AI spend across every provider",
-    description: "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cross-provider cost attribution for OpenAI, Anthropic, and Google.",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
   },
 };
 

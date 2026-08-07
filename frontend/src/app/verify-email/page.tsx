@@ -259,7 +259,7 @@ export default function VerifyEmailPage() {
               </div>
               <div className="sp-left-feat">
                 <span className="sp-left-feat-dot" />
-                <span>Self-hosted — data never leaves your machine</span>
+                <span>Self-hosted — prompts never sent to BurnLens Cloud</span>
               </div>
             </div>
           </div>
