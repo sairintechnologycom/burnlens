@@ -79,7 +79,7 @@ export default function CompareHelicone() {
             If you are evaluating an LLM observability proxy in 2026, you want a tool that is still being shipped.
             <strong> BurnLens</strong> is the closest drop-in alternative: open-source, one-env-var install,
             and adds two capabilities Helicone never had — <em>hard-cap budget enforcement before the upstream call</em>
-            and <em>local-first storage</em> so prompts never leave your machine.
+            and <em>local-first storage</em> so prompt bodies go only to your AI provider, never through a vendor cloud.
           </p>
         </section>
 
@@ -93,7 +93,7 @@ export default function CompareHelicone() {
               <tr><td>Actively maintained (2026)</td><td>Yes</td><td>Maintenance mode</td></tr>
               <tr><td>Open source license</td><td>Apache 2.0</td><td>Apache 2.0 (frozen)</td></tr>
               <tr><td>Install method</td><td><code>pip install burnlens</code></td><td>Docker / hosted proxy</td></tr>
-              <tr><td>Local-first (prompts never leave machine)</td><td>Yes</td><td>No — proxies through Helicone Cloud by default</td></tr>
+              <tr><td>Local-first (prompt bodies never pass through the vendor)</td><td>Yes</td><td>No — proxies through Helicone Cloud by default</td></tr>
               <tr><td>Hard-cap budgets (returns 429 before upstream call)</td><td>Yes</td><td>No — alerts only, post-call</td></tr>
               <tr><td>Per-customer cost attribution via headers</td><td>Yes</td><td>Yes</td></tr>
               <tr><td>Multi-provider</td><td>OpenAI, Anthropic, Google, Azure OpenAI, AWS Bedrock, Groq, Mistral, Together, xAI, DeepSeek</td><td>OpenAI, Anthropic, Azure (frozen)</td></tr>
@@ -110,8 +110,9 @@ export default function CompareHelicone() {
           is forwarded upstream — your bill literally cannot exceed the cap.</p>
 
           <p><strong>2. Prompts stay on your machine.</strong> Helicone&apos;s default deployment proxies your traffic
-          through their cloud. BurnLens runs on <code>localhost:8420</code>. The full request body never leaves your
-          infrastructure; only selected pseudonymous usage metadata syncs to the optional cloud dashboard.</p>
+          through their cloud. BurnLens runs on <code>localhost:8420</code>; the full request body goes only to your
+          AI provider and never passes through BurnLens Cloud. Only selected pseudonymous usage metadata and your
+          opted-in tag values sync to the optional cloud dashboard.</p>
 
           <p><strong>3. New providers ship in days, not never.</strong> Adding a provider to BurnLens is one new file
           in <code>burnlens/providers/</code> plus a pricing JSON — Groq, Bedrock, and Azure all shipped this way.

@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Security & Privacy — what BurnLens sees, what it never sends · BurnLens",
   description:
-    "BurnLens runs on your machine. Prompts, responses, and code never leave. Cloud sync uploads selected cost metadata and keyed prompt fingerprints — never request or response bodies.",
+    "BurnLens runs on your machine. Prompt and response bodies go only to your AI provider, never to BurnLens Cloud. Cloud sync uploads selected cost metadata, opted-in tag values, and keyed prompt fingerprints — never request or response bodies.",
   alternates: { canonical: "/security" },
   openGraph: {
     title: "Security & Privacy — what BurnLens sees, what it never sends",
@@ -123,14 +123,17 @@ export default function SecurityPage() {
           <h2>The short version</h2>
           <p>
             BurnLens is a proxy that runs on <strong>your</strong> machine. Your AI SDK talks to{" "}
-            <code>localhost:8420</code>; BurnLens forwards the call to OpenAI, Anthropic, or Google;
+            <code>localhost:8420</code>; BurnLens forwards the call to your AI provider;
             the response comes back unmodified. Cost calculation and logging happen locally, against
             a SQLite database at <code>~/.burnlens/burnlens.db</code>.
           </p>
           <p>
-            <strong>Prompts and responses never leave your machine.</strong> If you choose to enable
-            cloud sync for a team dashboard, BurnLens uploads selected cost metadata, opted-in
-            tags, and a keyed prompt fingerprint — never request or response bodies.
+            <strong>Prompt and response bodies never reach BurnLens Cloud.</strong> They are
+            processed locally and forwarded only to the AI provider you chose. If you enable
+            cloud sync for a team dashboard, BurnLens uploads selected cost metadata, your
+            opted-in tag values (<code>feature</code>, <code>team</code>, <code>customer</code>,
+            key label), and a workspace-keyed system-prompt fingerprint — never request or
+            response bodies, and never your provider API keys.
           </p>
         </section>
 
