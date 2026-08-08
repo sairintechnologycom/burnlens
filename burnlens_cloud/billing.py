@@ -380,7 +380,12 @@ async def paddle_webhook(request: Request):
         return {"received": True, "deduped": True}
 
     try:
-        if event_type == "subscription.activated":
+        # subscription.trialing fires when a trial STARTS; subscription.activated
+        # only once the trial has elapsed and Paddle has billed the customer. The
+        # Cloud plan ships a 7-day trial, so handling activated alone left trial
+        # subscribers on the free plan for the whole trial. Same payload shape —
+        # the handler reads `status` and `trial_ends_at` off the event.
+        if event_type in ("subscription.activated", "subscription.trialing"):
             await _handle_subscription_activated(data)
         elif event_type == "subscription.updated":
             await _handle_subscription_updated(data)

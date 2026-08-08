@@ -317,6 +317,80 @@ async def test_subscription_activated_populates_all_columns(app_client):
 
 
 # ---------------------------------------------------------------------------
+# 7b: subscription.trialing — trial START must upgrade the plan too.
+#
+# Paddle fires subscription.activated only once a trial has elapsed AND the
+# customer has been billed; trial start fires subscription.trialing. The Cloud
+# plan ships a 7-day trial, so handling activated alone parked trial
+# subscribers on the free plan for the whole trial.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_subscription_trialing_upgrades_plan(app_client):
+    event = {
+        "event_id": "evt_trial_1",
+        "event_type": "subscription.trialing",
+        "data": {
+            "id": "sub_trial_1",
+            "customer_id": "ctm_2",
+            "status": "trialing",
+            "custom_data": {"workspace_id": WS_A},
+            "items": [{
+                "price": {
+                    "id": "pri_env_cloud",
+                    "unit_price": {"amount": "2900", "currency_code": "USD"},
+                }
+            }],
+            "current_billing_period": {
+                "starts_at": "2026-08-08T00:00:00Z",
+                "ends_at": "2026-09-08T00:00:00Z",
+            },
+            "trial_dates": {
+                "starts_at": "2026-08-08T00:00:00Z",
+                "ends_at": "2026-08-15T00:00:00Z",
+            },
+            "scheduled_change": None,
+        },
+    }
+    raw = json.dumps(event).encode("utf-8")
+    sig = _sign(raw)
+
+    async def _query_side_effect(q, *args):
+        if "INSERT INTO paddle_events" in q:
+            return [{"event_id": "evt_trial_1"}]
+        if "FROM plan_limits" in q:
+            return [{"plan": "cloud"}]
+        return []
+
+    mock_query = AsyncMock(side_effect=_query_side_effect)
+    mock_insert = AsyncMock(return_value="UPDATE 1")
+
+    with patch("burnlens_cloud.billing.execute_query", mock_query), \
+         patch("burnlens_cloud.billing.execute_insert", mock_insert):
+        async with await app_client() as ac:
+            resp = await ac.post(
+                "/billing/webhook",
+                content=raw,
+                headers={"Content-Type": "application/json", "Paddle-Signature": sig},
+            )
+
+    assert resp.status_code == 200
+    update_calls = [
+        c for c in mock_insert.call_args_list
+        if "UPDATE workspaces" in c.args[0] and "plan = $1" in c.args[0]
+    ]
+    assert len(update_calls) == 1, (
+        "subscription.trialing must upgrade the workspace plan — trial subscribers "
+        "otherwise sit on free limits until the trial converts"
+    )
+    params = update_calls[0].args[1:]
+    plan, status, ws_id = params[0], params[5], params[11]
+    assert plan == "cloud"
+    assert status == "trialing"
+    assert ws_id == WS_A
+
+
+# ---------------------------------------------------------------------------
 # 8: subscription.updated with status=past_due — status flips, plan unchanged.
 # ---------------------------------------------------------------------------
 
