@@ -420,6 +420,18 @@ export default function LandingPage() {
                 returns <code>429</code> before the call is forwarded upstream.
                 50% and 80% thresholds fire Slack or email alerts.
               </p>
+              <p>
+                <a
+                  href="https://github.com/sairintechnologycom/burnlens/blob/main/docs/BUDGET_ENFORCEMENT.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Budget enforcement semantics
+                </a>{" "}
+                — exact behaviour under concurrency, streaming, retries, and
+                unpriced models, with the implementing function cited for every
+                claim.
+              </p>
             </div>
           </div>
 
