@@ -31,7 +31,7 @@ burnlens start
 
 2. **Tag what matters.** Three request headers (`X-BurnLens-Tag-Feature`, `X-BurnLens-Tag-Team`, `X-BurnLens-Tag-Customer`) attribute any call to any dimension. Tags are stripped before the request reaches the AI provider. If you enable cloud sync, tag values are uploaded to your workspace alongside cost metadata — never prompt or response bodies.
 
-3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts.
+3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts. Exact behaviour under concurrency, streaming, retries, and unpriced models is specified in [Budget enforcement semantics](docs/BUDGET_ENFORCEMENT.md).
 
 4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
 
