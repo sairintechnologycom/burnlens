@@ -53,18 +53,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    # Credential surface check. Every email sender is fail-open, so an unset
-    # provider is invisible at runtime — production ran with no mail configured
-    # at all, silently disabling password reset, invitations and receipts.
-    # State it once per boot so it is discoverable without reading the code.
-    from .email import mail_configured
-    if mail_configured():
-        logger.info("Email configured: %s via %s", settings.mail_from, settings.smtp_host)
-    else:
-        logger.warning(
-            "EMAIL DISABLED — SMTP_PASSWORD is unset. Password reset, team "
-            "invitations, payment receipts and ops alerts will not be delivered."
-        )
+    # Credential surface check. Integrations are fail-open by design, so an
+    # unset or lapsed credential is invisible at runtime — that is how checkout
+    # stayed down for three weeks and email was never configured at all. State
+    # the whole inventory once per boot, and probe Paddle, whose key was
+    # present but expired (presence alone would have missed it).
+    from .startup_check import schedule_startup_checks
+    paddle_probe_task = schedule_startup_checks()
 
     if settings.streaming_enabled:
         logger.info("Initializing ClickHouse OLAP schema...")
