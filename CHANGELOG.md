@@ -6,6 +6,37 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.13.0] — 2026-08-08
+
+### Fixed
+- **Unpriced models no longer defeat budget enforcement.** A model absent from
+  the pricing data costs `$0`, so its spend never advanced a counter and any
+  cap over it silently enforced nothing. Worse, `check_and_reserve` returned
+  *allowed* outright on a `$0` estimate, so an unpriced model bypassed every
+  `budget_policies` entry without consulting one. Such a request is now
+  rejected with `403 unpriced_model_blocked` — but **only where a budget
+  actually attaches to it**: a registered key with a daily cap, a tagged
+  customer with a budget, a virtual key with a team budget, or a matching
+  budget policy. Uncapped traffic on a new model is unaffected.
+
+  403 rather than 429 is deliberate: nothing was exceeded and retrying will
+  not help. The gateway is refusing because it cannot enforce.
+
+### Added
+- `block_unpriced_models` (default `true`). Set `false` to prefer availability
+  over enforcement when a provider ships a model before BurnLens ships its
+  price; that model's spend is then recorded as `$0` and does not count against
+  any cap — the old behaviour, now opt-in and explicit rather than silent.
+- `is_model_priced(provider, model)` and `resolve_pricing(provider, model)` in
+  `burnlens.cost.calculator`. `calculate_cost` returns `0.0` both for a
+  genuinely free request and for a model it cannot price; callers that must
+  distinguish the two now have a way to. Both go through `resolve_pricing`, so
+  a model can never be priced by one and unknown to the other.
+- `docs/BUDGET_ENFORCEMENT.md` — budget enforcement semantics: concurrency,
+  reserved vs finalized cost, streaming overrun, retries, reset timezone,
+  fail-open behaviour, and cache interaction, each citing the implementing
+  function.
+
 ## [OSS `burnlens` v1.12.0] — 2026-07-23
 
 ### Added

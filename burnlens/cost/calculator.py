@@ -49,14 +49,15 @@ def _cursor_underlying(model: str) -> tuple[str, str] | None:
     return None
 
 
-def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
-    """Return total cost in USD for the given token usage.
+def resolve_pricing(provider: str, model: str) -> dict | None:
+    """Return the pricing entry for ``(provider, model)``, or ``None``.
 
-    Returns 0.0 if model is not in the pricing DB (logs a warning).
+    The single place that knows how to get from a wire-level (provider, model)
+    pair to a pricing row: Cursor is routed to the underlying vendor, Bedrock's
+    geo prefix is stripped, then the pricing table is consulted.
 
-    For ``provider='cursor'`` the model is routed to the underlying provider's
-    pricing (Anthropic for Claude/Auto, OpenAI for GPT/o-series). Cursor is
-    a coding-tool surface, not an LLM provider — its bills are pass-through.
+    ``calculate_cost`` and ``is_model_priced`` both go through here so a model
+    can never be priced by one and unknown to the other.
     """
     if provider == "cursor":
         underlying = _cursor_underlying(model)
@@ -64,8 +65,8 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
             logger.warning(
                 "Unknown Cursor model %r — cannot route to underlying pricing", model
             )
-            return 0.0
-        return calculate_cost(underlying[0], underlying[1], usage)
+            return None
+        return resolve_pricing(underlying[0], underlying[1])
 
     if provider == "bedrock":
         # Bedrock model IDs carry a geo prefix (us./eu./apac./global.) selecting
@@ -76,7 +77,30 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
         # ponytail: global-only billing; model per-geo (+~10%) rates if AWS diverges.
         model = re.sub(r"^[a-z0-9-]+\.(?=anthropic\.)", "", model)
 
-    pricing = get_model_pricing(provider, model)
+    return get_model_pricing(provider, model)
+
+
+def is_model_priced(provider: str, model: str) -> bool:
+    """True when BurnLens can compute a real cost for ``(provider, model)``.
+
+    A False here means every request for this model costs $0 as far as
+    BurnLens is concerned, so no budget can ever be enforced against it.
+    """
+    return resolve_pricing(provider, model) is not None
+
+
+def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
+    """Return total cost in USD for the given token usage.
+
+    Returns 0.0 if model is not in the pricing DB (logs a warning). Callers
+    that need to distinguish "genuinely free" from "unknown to us" must ask
+    ``is_model_priced`` — this return value cannot tell them apart.
+
+    For ``provider='cursor'`` the model is routed to the underlying provider's
+    pricing (Anthropic for Claude/Auto, OpenAI for GPT/o-series). Cursor is
+    a coding-tool surface, not an LLM provider — its bills are pass-through.
+    """
+    pricing = resolve_pricing(provider, model)
     if pricing is None:
         return 0.0
 

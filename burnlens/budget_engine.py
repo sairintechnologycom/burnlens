@@ -10,7 +10,7 @@ from typing import Any
 import aiosqlite
 
 from burnlens.config import BurnLensConfig, BudgetPolicy
-from burnlens.cost.calculator import TokenUsage, calculate_cost
+from burnlens.cost.calculator import TokenUsage, calculate_cost, is_model_priced
 
 logger = logging.getLogger(__name__)
 
@@ -196,15 +196,17 @@ class BudgetEngine:
             If allowed is True, reservation_dict contains:
               - "estimated_cost": float
               - "policies": list[tuple[BudgetPolicy, str]] -- matched policies and their period_start strings
-            If allowed is False, reservation_dict contains:
-              - "violated_policy": BudgetPolicy
-              - "estimated_cost": float
+            If allowed is False, reservation_dict contains either:
+              - "violated_policy": BudgetPolicy, "estimated_cost": float
+              - "unpriced": True — the model has no pricing entry, so no policy
+                over it can ever be enforced. The caller renders this as 403,
+                not 429: nothing was exceeded and a retry will not help.
         """
         estimated_cost = self.estimate_cost(provider, model, body_bytes)
-        if estimated_cost <= 0.0:
-            return True, {"estimated_cost": 0.0, "policies": []}
 
-        # Filter applicable policies
+        # Filter applicable policies. This runs BEFORE the zero-cost shortcut:
+        # a $0 estimate used to return "allowed" outright, which meant a model
+        # missing from the pricing data bypassed every policy silently.
         matching_policies: list[tuple[BudgetPolicy, str]] = []
         now = datetime.now(timezone.utc)
 
@@ -215,6 +217,21 @@ class BudgetEngine:
 
         if not matching_policies:
             return True, {"estimated_cost": estimated_cost, "policies": []}
+
+        if estimated_cost <= 0.0:
+            # A policy applies but we costed the request at zero. If that is
+            # because the model is unknown to the pricing data, the policy is
+            # unenforceable and we refuse rather than wave it through.
+            if getattr(self.config, "block_unpriced_models", True) and not is_model_priced(
+                provider, model
+            ):
+                logger.warning(
+                    "Blocking %s/%s — no pricing entry, so budget policy %r cannot "
+                    "be enforced against it.",
+                    provider, model, matching_policies[0][0].name,
+                )
+                return False, {"unpriced": True, "estimated_cost": 0.0, "model": model}
+            return True, {"estimated_cost": 0.0, "policies": []}
 
         async with self._lock:
             async with aiosqlite.connect(self.db_path) as db:

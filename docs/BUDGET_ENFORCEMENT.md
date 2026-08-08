@@ -126,19 +126,47 @@ Daily caps use finalized cost only (no estimate). Budget policies use an
 estimate to reserve, then reconcile to the finalized cost. Between forward and
 reconcile, a policy counter is wrong by `estimated - actual`.
 
-### Unknown models
+### Unknown models — fail closed
 
-`calculate_cost` returns `0.0` and logs a warning when the model is absent from
-the pricing data (`cost/calculator.py:52`). Two consequences:
+A model absent from the pricing data costs `$0.0` to BurnLens
+(`calculate_cost`), so its spend can never advance a counter and any budget
+over it would enforce nothing.
 
-- Spend for that model contributes nothing to any cap. A cap will not trip on
-  traffic BurnLens cannot price.
-- In `check_and_reserve`, `estimated_cost <= 0.0` returns *allowed* immediately
-  (`budget_engine.py:204`) without consulting any policy — an unpriced model
-  bypasses budget policies entirely.
+**BurnLens refuses such a request rather than forward it under a cap that
+cannot fire.** The response is `403 unpriced_model_blocked` — not 429, because
+no budget was exceeded and retrying will not help. The gateway is refusing
+because it cannot enforce, which is a configuration problem.
 
-Check `burnlens pricing` covers every model you route before relying on a cap.
-Unpriced traffic is unenforced traffic.
+This applies **only where a budget actually attaches to the request**:
+
+| Situation | Unpriced model |
+|---|---|
+| Registered key with a daily cap (explicit or inherited from `default`) | blocked |
+| Tagged customer with a monthly budget | blocked |
+| Virtual key with a monthly team budget | blocked |
+| A `budget_policies` entry matches the request | blocked |
+| None of the above | **allowed** — nothing to defeat |
+
+Untagged, uncapped traffic on a new model keeps working. Only the combination
+of "unpriced" and "supposedly capped" is refused.
+
+`is_model_priced` (`cost/calculator.py`) is the check, and it shares
+`resolve_pricing` with `calculate_cost`, so a model can never be priced by one
+and unknown to the other. Note that pricing lookup is longest-prefix matching:
+`gpt-4o-2024-11-20` resolves to the `gpt-4o` entry and counts as priced.
+
+**Escape hatch.** Providers ship models before BurnLens ships their prices. Set
+
+```yaml
+block_unpriced_models: false
+```
+
+to prefer availability over enforcement. Spend for the unpriced model is then
+recorded as `$0` and does not count against any cap — the old behaviour, now
+opt-in and explicit rather than silent.
+
+The durable fix is pricing data: check `burnlens pricing` covers every model
+you route.
 
 ### Provider retries
 
@@ -203,11 +231,16 @@ and remaining budget. Disable with `routing.disabled: true` in
 
 Documented rather than fixed, in rough order of how likely they are to bite:
 
-1. **Unpriced models are unenforced** — and silently bypass budget policies.
-   The most likely way to think you are capped and not be.
-2. **Concurrent overshoot** — no reservation on daily caps; policy lock is
+1. **Concurrent overshoot** — no reservation on daily caps; policy lock is
    per-process.
-3. **Streams are not interrupted mid-flight.**
-4. **Budget policies ignore `reset_timezone`** and always use UTC period
+2. **Streams are not interrupted mid-flight.**
+3. **Budget policies ignore `reset_timezone`** and always use UTC period
    boundaries, unlike daily caps.
-5. **Multi-process deployments** weaken the budget-policy lock to per-process.
+4. **Multi-process deployments** weaken the budget-policy lock to per-process.
+5. **`block_unpriced_models: false` restores the silent-bypass behaviour.** If
+   you set it, unpriced traffic is unenforced traffic again — deliberately, but
+   the consequence is the same.
+
+Fixed in 1.13.0: unpriced models used to be forwarded under a cap that could
+never fire, and bypassed budget policies entirely via a `$0` estimate. They now
+fail closed. See "Unknown models" above.
