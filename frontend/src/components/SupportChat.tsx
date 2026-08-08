@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SupportChatResults, { type SearchResultView } from "./SupportChatMessages";
 import { searchChunks } from "@/lib/support/retrieval";
 import indexData from "@/lib/support/index.json";
@@ -15,6 +15,20 @@ export default function SupportChat() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultView[]>([]);
   const [searched, setSearched] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Escape closes the panel and returns focus to the trigger, so a keyboard
+  // user is not stranded at the top of the document.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   const search = useCallback(() => {
     const trimmed = input.trim();
@@ -33,7 +47,9 @@ export default function SupportChat() {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
+        aria-expanded={open}
         aria-label={open ? "Close BurnLens support" : "Ask BurnLens"}
         onClick={() => setOpen((v) => !v)}
         className="support-chat-trigger"

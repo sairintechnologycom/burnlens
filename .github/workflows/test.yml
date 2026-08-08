@@ -5,6 +5,9 @@ name: Tests
 #   2. Frontend vitest, which includes the frontend<->API contract test
 #   3. Backend pytest — the full suite, run under requirements-test.txt (the
 #      prod-pinned deps, NOT a dev machine's newer packages).
+#   4. Public-route browser smoke — every public page loaded against a
+#      production build, failing on any console error (catches hydration
+#      breakage that unit tests cannot see).
 #
 # The backend suite was made green and gated here after the pre-existing red
 # (36 failed / 12 errors) was resolved. Integration tests that need a real
@@ -64,6 +67,41 @@ jobs:
       - name: Run frontend tests (includes contract test)
         working-directory: frontend
         run: npm run test
+
+  public-routes-smoke:
+    # Loads every public page in a real browser against a PRODUCTION build and
+    # fails on any console error. Added after a React hydration error (#418)
+    # was found on the live site during a platform review — no CI job had ever
+    # opened a public page and looked at the console.
+    #
+    # Deliberately runs only tests/e2e/public-routes.spec.ts. The rest of
+    # tests/e2e/ exercises authenticated flows that need a backend and is not
+    # gated here.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run public-route smoke tests
+        working-directory: frontend
+        env:
+          PW_PROD: "1"
+        run: npx playwright test tests/e2e/public-routes.spec.ts --project=chromium --reporter=list
 
   backend-pytest:
     runs-on: ubuntu-latest
