@@ -53,6 +53,19 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Credential surface check. Every email sender is fail-open, so an unset
+    # provider is invisible at runtime — production ran with no mail configured
+    # at all, silently disabling password reset, invitations and receipts.
+    # State it once per boot so it is discoverable without reading the code.
+    from .email import mail_configured
+    if mail_configured():
+        logger.info("Email configured: %s via %s", settings.mail_from, settings.smtp_host)
+    else:
+        logger.warning(
+            "EMAIL DISABLED — SMTP_PASSWORD is unset. Password reset, team "
+            "invitations, payment receipts and ops alerts will not be delivered."
+        )
+
     if settings.streaming_enabled:
         logger.info("Initializing ClickHouse OLAP schema...")
         try:
@@ -84,7 +97,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     # WR-03: give outstanding fire-and-forget email tasks a brief grace
-    # period to complete their SendGrid POSTs before cancellation.
+    # period to complete their SMTP sends before cancellation.
     try:
         await drain_pending_email_tasks(timeout=5.0)
     except Exception as exc:

@@ -2,7 +2,7 @@
 
 Covers:
 - A1: DB schema DDL for auth_tokens table + partial index + email_verified_at column
-- A2: Email send functions fail-open when sendgrid_api_key is empty/None
+- A2: Email send functions fail-open when smtp_password is empty/None
 - A3: TokenPayload/LoginResponse/SignupResponse email_verified fields; encode_jwt signature;
       DEFAULT_RULES includes reset-password entry
 - A4: POST /auth/reset-password always returns 200 (anti-enumeration)
@@ -118,13 +118,13 @@ class TestA1DatabaseSchema:
 # ---------------------------------------------------------------------------
 
 class TestA2EmailFailOpen:
-    """Email functions must silently return (no exception, no SendGrid call)
-    when settings.sendgrid_api_key is empty or None."""
+    """Email functions must silently return (no exception, no SMTP connection)
+    when settings.smtp_password is empty or None."""
 
     def _patch_settings_no_key(self):
-        """Context manager: patch settings.sendgrid_api_key to empty string."""
+        """Context manager: patch settings.smtp_password to empty string."""
         from burnlens_cloud import config as config_mod
-        return patch.object(config_mod.settings, "sendgrid_api_key", "")
+        return patch.object(config_mod.settings, "smtp_password", "")
 
     @pytest.mark.asyncio
     async def test_send_welcome_email_fail_open_when_no_key(self):
@@ -155,7 +155,7 @@ class TestA2EmailFailOpen:
 
     @pytest.mark.asyncio
     async def test_send_welcome_email_spawns_task_when_key_is_set(self):
-        """When sendgrid_api_key IS set, asyncio.create_task must be called
+        """When smtp_password IS set, asyncio.create_task must be called
         (a background task is spawned). We verify by patching create_task
         and asserting it was called at least once."""
         from burnlens_cloud import config as config_mod
@@ -170,13 +170,13 @@ class TestA2EmailFailOpen:
             tasks_created.append(t)
             return t
 
-        with patch.object(config_mod.settings, "sendgrid_api_key", "SG.fake"), \
-             patch.object(config_mod.settings, "sendgrid_from_email", "noreply@burnlens.app"), \
+        with patch.object(config_mod.settings, "smtp_password", "re_fake_key"), \
+             patch.object(config_mod.settings, "mail_from", "noreply@burnlens.app"), \
              patch("burnlens_cloud.email.asyncio.create_task", side_effect=capturing_create_task):
             await send_welcome_email("user@example.com", "TestWorkspace")
 
         assert len(tasks_created) >= 1, (
-            "send_welcome_email must spawn asyncio.create_task when sendgrid_api_key is set"
+            "send_welcome_email must spawn asyncio.create_task when smtp_password is set"
         )
 
     @pytest.mark.asyncio
@@ -192,13 +192,13 @@ class TestA2EmailFailOpen:
             tasks_created.append(t)
             return t
 
-        with patch.object(config_mod.settings, "sendgrid_api_key", "SG.fake"), \
-             patch.object(config_mod.settings, "sendgrid_from_email", "noreply@burnlens.app"), \
+        with patch.object(config_mod.settings, "smtp_password", "re_fake_key"), \
+             patch.object(config_mod.settings, "mail_from", "noreply@burnlens.app"), \
              patch("burnlens_cloud.email.asyncio.create_task", side_effect=capturing_create_task):
             await send_verify_email("user@example.com", "https://burnlens.app/verify-email?token=abc")
 
         assert len(tasks_created) >= 1, (
-            "send_verify_email must spawn asyncio.create_task when sendgrid_api_key is set"
+            "send_verify_email must spawn asyncio.create_task when smtp_password is set"
         )
 
 
