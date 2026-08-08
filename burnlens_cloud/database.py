@@ -743,17 +743,17 @@ async def init_db():
               AND retention_days = 90
         """)
 
-        # Phase 6: per-workspace sparse override column (merged over plan defaults by resolve_limits)
+        # Phase 6: per-workspace sparse override column (merged over plan defaults by resolve_limits).
+        # resolve_limits() below is LANGUAGE SQL, so Postgres parses its body at
+        # CREATE time — a missing limit_overrides fails init_db() outright on any
+        # fresh database. Existing deployments already carry the column.
         await conn.execute("""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'workspaces' AND column_name = 'routing_overrides'
-                ) THEN
-                    ALTER TABLE workspaces ADD COLUMN routing_overrides JSONB;
-                END IF;
-            END $$;
+            ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS limit_overrides JSONB
+        """)
+
+        # Phase 10: per-workspace model routing overrides
+        await conn.execute("""
+            ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS routing_overrides JSONB
         """)
 
         # Phase 7 (D-04..D-08): Paddle lifecycle state columns — all nullable except cancel_at_period_end (boolean NOT NULL DEFAULT false)

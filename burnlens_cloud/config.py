@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     """Cloud backend configuration from environment variables."""
 
     # Database
-    database_url: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/burnlens_cloud")
+    # asyncpg.create_pool() parses this DSN itself — the SQLAlchemy-style
+    # "postgresql+asyncpg://" scheme is rejected with ClientConfigurationError.
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://localhost/burnlens_cloud")
 
     # JWT — in production, JWT_SECRET must be set to >=32 chars (validated post-init).
     jwt_secret: str = os.getenv("JWT_SECRET", "")
