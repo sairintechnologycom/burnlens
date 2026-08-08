@@ -395,6 +395,8 @@ async def paddle_webhook(request: Request):
             await _handle_payment_failed(data)
         elif event_type == "transaction.completed":
             await _handle_transaction_completed(data)
+        elif event_type in ("api_key.expiring", "api_key.expired", "api_key.revoked"):
+            await _handle_api_key_lifecycle(event_type, data)
         else:
             logger.debug("Unhandled Paddle event: %s", event_type)
         await execute_insert(
@@ -409,6 +411,46 @@ async def paddle_webhook(request: Request):
         )
 
     return {"received": True}
+
+
+async def _handle_api_key_lifecycle(event_type: str, data: dict) -> None:
+    """Paddle API key expiring/expired/revoked → operator alert.
+
+    A Paddle API key expiry takes checkout down completely and silently: every
+    call returns 403 `forbidden`, `POST /billing/checkout` answers 502, and
+    customers simply cannot pay. That is exactly what happened between
+    2026-07-16 and 2026-08-08 — Paddle fired `api_key.expiring` a week ahead and
+    nothing was listening.
+
+    Only alerts for the key this deployment actually uses; other keys (MCP
+    tooling, local scripts) expiring are not an outage.
+    """
+    key_name = data.get("name") or data.get("description") or "(unnamed)"
+    expires_at = data.get("expires_at")
+    last4 = (data.get("key") or "")[-4:]
+
+    # Is this the key we're configured with? Paddle sends only the last 4
+    # characters, never the secret, so match on that when available.
+    ours = (not last4) or settings.paddle_api_key.endswith(last4)
+    if not ours:
+        logger.info(
+            "Paddle %s for key %s — not the key this deployment uses, ignoring",
+            event_type, key_name,
+        )
+        return
+
+    from .email import send_ops_alert
+    await send_ops_alert(
+        f"Paddle API key {event_type.split('.')[1]}: {key_name}",
+        f"Event: {event_type}\n"
+        f"Key: {key_name}\n"
+        f"Expires at: {expires_at}\n\n"
+        f"This is the key PADDLE_API_KEY is set to. When it lapses, every Paddle "
+        f"call returns 403 and /billing/checkout returns 502 — customers cannot "
+        f"subscribe, silently.\n\n"
+        f"Fix: create a replacement key with transaction/subscription/customer "
+        f"read+write, then set PADDLE_API_KEY on the burnlens-proxy service.",
+    )
 
 
 async def _handle_subscription_activated(data: dict) -> None:

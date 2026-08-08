@@ -317,6 +317,51 @@ async def test_subscription_activated_populates_all_columns(app_client):
 
 
 # ---------------------------------------------------------------------------
+# 7c: api_key.expiring — the key this deployment uses must raise an ops alert.
+#
+# A lapsed Paddle key 403s every call and takes checkout down silently. Paddle
+# warns 7 days ahead; nothing was listening, so checkout was dead from
+# 2026-07-16 to 2026-08-08.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_api_key_expiring_raises_ops_alert(app_client):
+    event = {
+        "event_id": "evt_key_1",
+        "event_type": "api_key.expiring",
+        "data": {
+            "id": "apikey_01",
+            "name": "burnlens_railway_key2",
+            "expires_at": "2026-11-06T09:35:28Z",
+            "status": "active",
+        },
+    }
+    raw = json.dumps(event).encode("utf-8")
+    sig = _sign(raw)
+
+    async def _query_side_effect(q, *args):
+        if "INSERT INTO paddle_events" in q:
+            return [{"event_id": "evt_key_1"}]
+        return []
+
+    alert = AsyncMock()
+    with patch("burnlens_cloud.billing.execute_query", AsyncMock(side_effect=_query_side_effect)), \
+         patch("burnlens_cloud.billing.execute_insert", AsyncMock(return_value="UPDATE 1")), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        async with await app_client() as ac:
+            resp = await ac.post(
+                "/billing/webhook",
+                content=raw,
+                headers={"Content-Type": "application/json", "Paddle-Signature": sig},
+            )
+
+    assert resp.status_code == 200
+    assert alert.await_count == 1, "api_key.expiring must raise an operator alert"
+    subject = alert.await_args.args[0]
+    assert "expiring" in subject and "burnlens_railway_key2" in subject
+
+
+# ---------------------------------------------------------------------------
 # 7b: subscription.trialing — trial START must upgrade the plan too.
 #
 # Paddle fires subscription.activated only once a trial has elapsed AND the

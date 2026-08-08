@@ -458,3 +458,32 @@ async def send_payment_receipt_email(
             logger.exception("send_payment_receipt_email: failed for %s", recipient_email)
 
     track_email_task(asyncio.create_task(_send_background()))
+
+
+async def send_ops_alert(subject: str, body: str) -> None:
+    """Email the operator about an infrastructure problem. Fail-open — never raises.
+
+    No template: these are rare, operator-facing, and must not depend on the
+    template registry staying in sync. Falls back to a CRITICAL log when
+    OPS_ALERT_EMAIL or SendGrid is unconfigured, so the signal is never lost
+    entirely.
+    """
+    logger.critical("OPS ALERT: %s — %s", subject, body)
+    if not settings.ops_alert_email or not settings.sendgrid_api_key:
+        return
+
+    async def _send_background() -> None:
+        try:
+            html_body = f"<h2>{_html.escape(subject)}</h2><pre>{_html.escape(body)}</pre>"
+            message = Mail(
+                from_email=Email(settings.sendgrid_from_email),
+                to_emails=[To(settings.ops_alert_email)],
+                subject=f"[BurnLens ops] {subject}",
+                html_content=Content("text/html", html_body),
+            )
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+        except Exception:
+            logger.exception("send_ops_alert: failed to deliver %s", subject)
+
+    track_email_task(asyncio.create_task(_send_background()))
