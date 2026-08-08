@@ -3,11 +3,14 @@
 import html as _html
 import logging
 import asyncio
+import smtplib
 import urllib.parse
 from pathlib import Path
 from typing import Optional, TypedDict
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+# NOTE: this module is itself named `email`, but Python 3 absolute imports mean
+# `email.message` resolves to the stdlib package, not to us. Relative imports
+# require an explicit dot.
+from email.message import EmailMessage
 from .config import settings
 from .database import execute_query
 from .pii_crypto import decrypt_pii
@@ -65,6 +68,62 @@ TEMPLATE_REGISTRY: dict[str, TemplateSpec] = {
 _pending_email_tasks: "set[asyncio.Task]" = set()
 
 
+def mail_configured() -> bool:
+    """Whether outbound email can be sent at all.
+
+    Every sender checks this and no-ops when false. That is deliberately
+    fail-open — a dead mail provider must never break signup or billing — but
+    it also means a missing credential is invisible, which is how production
+    ran with no email configured at all. `main.py` logs a startup banner when
+    this is false so the condition is at least stated once per boot.
+    """
+    return bool(settings.smtp_password)
+
+
+def _smtp_send(recipient_email: str, subject: str, html_body: str) -> None:
+    """Deliver one HTML email over SMTP. Blocking — call via asyncio.to_thread.
+
+    Provider-agnostic: works with Resend, Brevo, SES, Postmark. STARTTLS on the
+    submission port is the common denominator; the implicit-TLS port (465)
+    would need SMTP_SSL instead.
+    """
+    msg = EmailMessage()
+    msg["From"] = settings.mail_from
+    msg["To"] = recipient_email
+    msg["Subject"] = subject
+    # Multipart alternative: text part first, HTML second. A bare HTML body
+    # scores badly with spam filters and breaks text-only clients.
+    msg.set_content("This email requires an HTML-capable client to display.")
+    msg.add_alternative(html_body, subtype="html")
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as server:
+        server.starttls()
+        server.login(settings.smtp_username, settings.smtp_password)
+        server.send_message(msg)
+
+
+def deliver(recipient_email: str, subject: str, html_body: str, what: str) -> bool:
+    """Queue an email for background delivery. Fail-open — never raises.
+
+    Returns True when the send was queued, False when email is unconfigured.
+    A True return means queued, not delivered: SMTP failures surface in the
+    logs from the background task, not here.
+    """
+    if not mail_configured():
+        logger.warning("%s: email not configured (SMTP_PASSWORD unset), skipping", what)
+        return False
+
+    async def _send_background() -> None:
+        try:
+            await asyncio.to_thread(_smtp_send, recipient_email, subject, html_body)
+            logger.info("%s: sent to %s", what, recipient_email)
+        except Exception:
+            logger.exception("%s: failed for %s", what, recipient_email)
+
+    track_email_task(asyncio.create_task(_send_background()))
+    return True
+
+
 def track_email_task(task: "asyncio.Task") -> "asyncio.Task":
     """Register a fire-and-forget email task so the event loop retains it.
 
@@ -79,7 +138,7 @@ def track_email_task(task: "asyncio.Task") -> "asyncio.Task":
 async def drain_pending_email_tasks(timeout: float = 5.0) -> None:
     """Wait up to `timeout` seconds for outstanding email tasks to finish.
 
-    Called from the FastAPI lifespan shutdown so in-flight SendGrid POSTs
+    Called from the FastAPI lifespan shutdown so in-flight SMTP sends
     have a grace period to complete before the process exits. Any tasks
     still pending after the timeout are left to whatever cleanup the event
     loop performs during shutdown (typically cancellation).
@@ -112,8 +171,8 @@ async def send_invitation_email(
     Returns:
         True if email sent successfully, False otherwise
     """
-    if not settings.sendgrid_api_key:
-        logger.warning("SendGrid API key not configured, skipping email send")
+    if not mail_configured():
+        logger.warning("send_invitation_email: email not configured, skipping")
         return False
 
     try:
@@ -143,34 +202,7 @@ async def send_invitation_email(
         # Resolve dynamic subject (spec subject also uses a placeholder).
         subject = spec["subject"].replace("{{workspace_name}}", safe_workspace)
 
-        # Create email
-        message = Mail(
-            from_email=Email(settings.sendgrid_from_email),
-            to_emails=To(recipient_email),
-            subject=subject,
-            html_content=Content("text/html", html_content),
-        )
-
-        # Send email asynchronously (fire and forget)
-        def _send():
-            try:
-                sg = SendGridAPIClient(settings.sendgrid_api_key)
-                sg.send(message)
-                logger.info(f"Invitation email sent to {recipient_email}")
-                return True
-            except Exception as e:
-                logger.error(f"Failed to send invitation email to {recipient_email}: {e}")
-                return False
-
-        async def _send_background():
-            """Send email in background."""
-            await asyncio.to_thread(_send)
-
-        # Run in background task (non-blocking). Register with track_email_task
-        # so the lifespan shutdown drain covers invitation sends too.
-        track_email_task(asyncio.create_task(_send_background()))
-
-        return True
+        return deliver(recipient_email, subject, html_content, "send_invitation_email")
 
     except Exception as e:
         logger.error(f"Error preparing invitation email: {e}")
@@ -190,10 +222,10 @@ async def send_usage_warning_email(
     Returns False and logs a warning on any failure — never raises. This is a
     fire-and-forget SMTP send invoked from the ingest hot path (see D-08).
     """
-    # Fail-open: no SendGrid configuration -> nothing to do.
-    if not settings.sendgrid_api_key:
+    # Fail-open: no mail configuration -> nothing to do.
+    if not mail_configured():
         logger.warning(
-            "SendGrid API key not configured, skipping usage warning email for workspace=%s",
+            "send_usage_warning_email: email not configured, skipping for workspace=%s",
             workspace_id,
         )
         return False
@@ -280,42 +312,12 @@ async def send_usage_warning_email(
             else "You've hit your BurnLens monthly cap"
         )
 
-        message = Mail(
-            from_email=Email(settings.sendgrid_from_email),
-            to_emails=To(recipient_email),
-            subject=subject,
-            html_content=Content("text/html", html_content),
+        return deliver(
+            recipient_email,
+            subject,
+            html_content,
+            f"send_usage_warning_email(threshold={threshold}%, workspace={workspace_id})",
         )
-
-        def _send():
-            try:
-                sg = SendGridAPIClient(settings.sendgrid_api_key)
-                sg.send(message)
-                logger.info(
-                    "Usage warning email sent (threshold=%s%%) for workspace=%s",
-                    threshold,
-                    workspace_id,
-                )
-                return True
-            except Exception as e:
-                logger.error(
-                    "Failed to send usage warning email (threshold=%s%%) for workspace=%s: %s",
-                    threshold,
-                    workspace_id,
-                    e,
-                )
-                return False
-
-        # Define background wrapper BEFORE scheduling — avoids the NameError trap
-        # present in send_invitation_email's analog.
-        async def _send_background():
-            """Send email in background thread, off the ingest hot path."""
-            await asyncio.to_thread(_send)
-
-        # WR-03: register with module-level set so the task is not dropped
-        # by GC and the lifespan shutdown can drain outstanding sends.
-        track_email_task(asyncio.create_task(_send_background()))
-        return True
 
     except Exception as e:
         logger.error(
@@ -326,103 +328,40 @@ async def send_usage_warning_email(
         return False
 
 
+def _render(template_key: str, **replacements: str) -> tuple[str, str]:
+    """Render a registry template to (subject, html). Placeholders are literal
+    `{{name}}` markers — callers escape any user-supplied value first."""
+    spec = TEMPLATE_REGISTRY[template_key]
+    html_body = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
+    subject = spec["subject"]
+    for key, value in replacements.items():
+        html_body = html_body.replace(f"{{{{{key}}}}}", value)
+        subject = subject.replace(f"{{{{{key}}}}}", value)
+    return subject, html_body
+
+
 async def send_welcome_email(recipient_email: str, workspace_name: str) -> None:
     """Send welcome email to new user. Fail-open — never raises."""
-    if not settings.sendgrid_api_key:
-        logger.warning("send_welcome_email: SendGrid not configured, skipping")
-        return
-
-    async def _send_background() -> None:
-        try:
-            spec = TEMPLATE_REGISTRY["welcome"]
-            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
-            html_body = template.replace("{{workspace_name}}", _html.escape(workspace_name))
-            message = Mail(
-                from_email=Email(settings.sendgrid_from_email),
-                to_emails=[To(recipient_email)],
-                subject=spec["subject"],
-                html_content=Content("text/html", html_body),
-            )
-            sg = SendGridAPIClient(settings.sendgrid_api_key)
-            sg.send(message)
-        except Exception:
-            logger.exception("send_welcome_email: failed for %s", recipient_email)
-
-    track_email_task(asyncio.create_task(_send_background()))
+    subject, html_body = _render("welcome", workspace_name=_html.escape(workspace_name))
+    deliver(recipient_email, subject, html_body, "send_welcome_email")
 
 
 async def send_verify_email(recipient_email: str, verify_url: str) -> None:
     """Send email-verification link. Fail-open — never raises."""
-    if not settings.sendgrid_api_key:
-        logger.warning("send_verify_email: SendGrid not configured, skipping")
-        return
-
-    async def _send_background() -> None:
-        try:
-            spec = TEMPLATE_REGISTRY["verify_email"]
-            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
-            html_body = template.replace("{{verify_url}}", verify_url)
-            message = Mail(
-                from_email=Email(settings.sendgrid_from_email),
-                to_emails=[To(recipient_email)],
-                subject=spec["subject"],
-                html_content=Content("text/html", html_body),
-            )
-            sg = SendGridAPIClient(settings.sendgrid_api_key)
-            sg.send(message)
-        except Exception:
-            logger.exception("send_verify_email: failed for %s", recipient_email)
-
-    track_email_task(asyncio.create_task(_send_background()))
+    subject, html_body = _render("verify_email", verify_url=verify_url)
+    deliver(recipient_email, subject, html_body, "send_verify_email")
 
 
 async def send_password_changed_email(recipient_email: str) -> None:
     """Notify user their password was changed. Fail-open — never raises."""
-    if not settings.sendgrid_api_key:
-        logger.warning("send_password_changed_email: SendGrid not configured, skipping")
-        return
-
-    async def _send_background() -> None:
-        try:
-            spec = TEMPLATE_REGISTRY["password_changed"]
-            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
-            message = Mail(
-                from_email=Email(settings.sendgrid_from_email),
-                to_emails=[To(recipient_email)],
-                subject=spec["subject"],
-                html_content=Content("text/html", template),
-            )
-            sg = SendGridAPIClient(settings.sendgrid_api_key)
-            sg.send(message)
-        except Exception:
-            logger.exception("send_password_changed_email: failed for %s", recipient_email)
-
-    track_email_task(asyncio.create_task(_send_background()))
+    subject, html_body = _render("password_changed")
+    deliver(recipient_email, subject, html_body, "send_password_changed_email")
 
 
 async def send_reset_password_email(recipient_email: str, reset_url: str) -> None:
     """Send password-reset link email. Fail-open — never raises."""
-    if not settings.sendgrid_api_key:
-        logger.warning("send_reset_password_email: SendGrid not configured, skipping")
-        return
-
-    async def _send_background() -> None:
-        try:
-            spec = TEMPLATE_REGISTRY["reset_password"]
-            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
-            html_body = template.replace("{{reset_url}}", reset_url)
-            message = Mail(
-                from_email=Email(settings.sendgrid_from_email),
-                to_emails=[To(recipient_email)],
-                subject=spec["subject"],
-                html_content=Content("text/html", html_body),
-            )
-            sg = SendGridAPIClient(settings.sendgrid_api_key)
-            sg.send(message)
-        except Exception:
-            logger.exception("send_reset_password_email: failed for %s", recipient_email)
-
-    track_email_task(asyncio.create_task(_send_background()))
+    subject, html_body = _render("reset_password", reset_url=reset_url)
+    deliver(recipient_email, subject, html_body, "send_reset_password_email")
 
 
 async def send_payment_receipt_email(
@@ -432,32 +371,13 @@ async def send_payment_receipt_email(
     plan_name: str,
 ) -> None:
     """Send payment receipt after successful Paddle transaction. Fail-open — never raises."""
-    if not settings.sendgrid_api_key:
-        logger.warning("send_payment_receipt_email: SendGrid not configured, skipping")
-        return
-
-    async def _send_background() -> None:
-        try:
-            spec = TEMPLATE_REGISTRY["payment_receipt"]
-            template = (_TEMPLATE_DIR / spec["template_file"]).read_text(encoding="utf-8")
-            html_body = (
-                template
-                .replace("{{workspace_name}}", _html.escape(workspace_name))
-                .replace("{{amount_str}}", _html.escape(amount_str))
-                .replace("{{plan_name}}", _html.escape(plan_name))
-            )
-            message = Mail(
-                from_email=Email(settings.sendgrid_from_email),
-                to_emails=[To(recipient_email)],
-                subject=spec["subject"],
-                html_content=Content("text/html", html_body),
-            )
-            sg = SendGridAPIClient(settings.sendgrid_api_key)
-            sg.send(message)
-        except Exception:
-            logger.exception("send_payment_receipt_email: failed for %s", recipient_email)
-
-    track_email_task(asyncio.create_task(_send_background()))
+    subject, html_body = _render(
+        "payment_receipt",
+        workspace_name=_html.escape(workspace_name),
+        amount_str=_html.escape(amount_str),
+        plan_name=_html.escape(plan_name),
+    )
+    deliver(recipient_email, subject, html_body, "send_payment_receipt_email")
 
 
 async def send_ops_alert(subject: str, body: str) -> None:
@@ -465,25 +385,17 @@ async def send_ops_alert(subject: str, body: str) -> None:
 
     No template: these are rare, operator-facing, and must not depend on the
     template registry staying in sync. Falls back to a CRITICAL log when
-    OPS_ALERT_EMAIL or SendGrid is unconfigured, so the signal is never lost
+    OPS_ALERT_EMAIL or SMTP is unconfigured, so the signal is never lost
     entirely.
     """
     logger.critical("OPS ALERT: %s — %s", subject, body)
-    if not settings.ops_alert_email or not settings.sendgrid_api_key:
+    if not settings.ops_alert_email:
         return
 
-    async def _send_background() -> None:
-        try:
-            html_body = f"<h2>{_html.escape(subject)}</h2><pre>{_html.escape(body)}</pre>"
-            message = Mail(
-                from_email=Email(settings.sendgrid_from_email),
-                to_emails=[To(settings.ops_alert_email)],
-                subject=f"[BurnLens ops] {subject}",
-                html_content=Content("text/html", html_body),
-            )
-            sg = SendGridAPIClient(settings.sendgrid_api_key)
-            sg.send(message)
-        except Exception:
-            logger.exception("send_ops_alert: failed to deliver %s", subject)
-
-    track_email_task(asyncio.create_task(_send_background()))
+    html_body = f"<h2>{_html.escape(subject)}</h2><pre>{_html.escape(body)}</pre>"
+    deliver(
+        settings.ops_alert_email,
+        f"[BurnLens ops] {subject}",
+        html_body,
+        "send_ops_alert",
+    )

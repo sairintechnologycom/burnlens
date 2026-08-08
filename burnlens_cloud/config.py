@@ -59,8 +59,15 @@ class Settings(BaseSettings):
     # github_redirect_uri: str = os.getenv("GITHUB_REDIRECT_URI", "https://api.burnlens.app/auth/github/callback")
 
     # Email Configuration
-    sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
-    sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@burnlens.app")
+    # Transactional email over SMTP. Provider-agnostic on purpose — Resend,
+    # Brevo, SES and Postmark all speak SMTP, so switching providers is an env
+    # change, not a code change. SMTP_PASSWORD unset = email disabled (senders
+    # log and no-op).
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.resend.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username: str = os.getenv("SMTP_USERNAME", "resend")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    mail_from: str = os.getenv("MAIL_FROM", "noreply@burnlens.app")
     # Operator alerts (billing credential expiry, etc). Unset = log-only.
     ops_alert_email: str = os.getenv("OPS_ALERT_EMAIL", "")
     cron_secret: str = os.getenv("CRON_SECRET", "")

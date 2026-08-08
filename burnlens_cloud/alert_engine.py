@@ -65,7 +65,7 @@ async def _dispatch_email(
     cycle_end_date: str,
     plan_label: str,
 ) -> bool:
-    """Dispatch email alert via SendGrid. Returns True on success, False on failure."""
+    """Dispatch email alert over SMTP. Returns True on success, False on failure."""
     try:
         return await send_usage_warning_email(
             workspace_id=workspace_id,
