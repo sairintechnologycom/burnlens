@@ -213,6 +213,19 @@ class BurnLensConfig:
     cache: CacheConfig = field(default_factory=CacheConfig)
     retry: RetryConfig = field(default_factory=RetryConfig)
 
+    # A model absent from the pricing data costs $0 as far as BurnLens is
+    # concerned, so its spend never advances any budget — a cap configured
+    # against it silently enforces nothing. When True (the default) such a
+    # request is rejected with 403 *if a budget applies to it*, rather than
+    # forwarded under an unenforceable cap. Requests with no budget attached
+    # are unaffected: unpriced traffic is only blocked where it would
+    # otherwise defeat enforcement.
+    #
+    # Set False to prefer availability over enforcement — e.g. a provider
+    # shipped a model before BurnLens shipped its price. Spend for it will be
+    # recorded as $0 and will not count against any cap.
+    block_unpriced_models: bool = True
+
 
 _FIELD_TYPES: dict[str, type] = {
     "port": int,
@@ -229,6 +242,7 @@ _FIELD_TYPES: dict[str, type] = {
     "secret_key": str,
     "dashboard_user": str,
     "dashboard_pass": str,
+    "block_unpriced_models": bool,
 }
 
 

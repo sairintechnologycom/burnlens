@@ -5,6 +5,15 @@ port: 8420
 host: 127.0.0.1
 log_level: info
 
+# A model with no pricing entry costs $0 to BurnLens, so its spend never
+# advances a budget and any cap over it enforces nothing. By default such a
+# request is rejected with 403 — but only where a budget actually applies to
+# it. Uncapped traffic on a new model is unaffected.
+# Set false to prefer availability over enforcement (e.g. a provider shipped a
+# model before BurnLens shipped its price); its spend then counts as $0.
+# See docs/BUDGET_ENFORCEMENT.md.
+block_unpriced_models: true
+
 # Provider admin keys for Shadow AI discovery via billing APIs
 # openai_admin_key: sk-admin-...
 # anthropic_admin_key: sk-ant-admin-...

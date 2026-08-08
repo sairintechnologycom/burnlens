@@ -54,6 +54,20 @@ def _set_cached_customer_spend(customer: str, spend: float) -> None:
     _customer_spend_cache[customer] = (spend, time.monotonic())
 
 
+def _customer_budget_limit(
+    customer: str, customer_budgets: "CustomerBudgetsConfig"
+) -> float | None:
+    """Monthly limit that applies to ``customer``, or None if uncapped."""
+    limit = customer_budgets.customers.get(customer)
+    return customer_budgets.default if limit is None else limit
+
+
+def _customer_has_budget(
+    customer: str, customer_budgets: "CustomerBudgetsConfig"
+) -> bool:
+    return _customer_budget_limit(customer, customer_budgets) is not None
+
+
 async def check_customer_budget(
     customer: str,
     db_path: str,
@@ -63,10 +77,7 @@ async def check_customer_budget(
 
     Returns (allowed, spent, limit). If no budget applies, allowed is True.
     """
-    # Determine budget limit for this customer
-    limit = customer_budgets.customers.get(customer)
-    if limit is None:
-        limit = customer_budgets.default
+    limit = _customer_budget_limit(customer, customer_budgets)
     if limit is None:
         return True, 0.0, 0.0
 
@@ -407,6 +418,33 @@ async def _upsert_asset(
         logger.warning("Asset upsert failed (non-fatal): %s", exc)
 
 
+def _reject_unpriced(
+    provider_name: str, model: str, budget: str
+) -> tuple[int, dict[str, str], bytes, None]:
+    """403 for a request whose model has no price but whose spend is capped.
+
+    Not a 429: no budget was exceeded and retrying will not help. The gateway
+    is refusing because it cannot enforce, which is a configuration problem.
+    """
+    logger.warning(
+        "[BurnLens] Blocked %s/%s — no pricing entry, so the %s budget cannot be "
+        "enforced. Add pricing for this model, or set block_unpriced_models: false "
+        "to allow it (its spend will not count against any cap).",
+        provider_name, model, budget,
+    )
+    return 403, {"content-type": "application/json"}, json.dumps({
+        "error": "unpriced_model_blocked",
+        "provider": provider_name,
+        "model": model,
+        "budget": budget,
+        "detail": (
+            "BurnLens has no pricing for this model, so its spend cannot be "
+            "counted against the budget that applies to this request. Set "
+            "block_unpriced_models: false to allow it unenforced."
+        ),
+    }).encode(), None
+
+
 async def handle_request(
     client: httpx.AsyncClient,
     provider: Provider,
@@ -437,6 +475,21 @@ async def handle_request(
 
     tags = _extract_tags(headers)
 
+    # Resolved once, up front: every budget check below needs to know whether
+    # this model can be priced at all, and the virtual-key allowlist needs the
+    # model name too. `model` is re-resolved after routing may have swapped it.
+    body_json = _safe_json(body_bytes)
+    model = provider.extract_model(body_json, upstream_path) or "unknown"
+
+    # A model with no pricing entry costs $0 to BurnLens, so its spend never
+    # advances a counter and any cap over it enforces nothing. Where a budget
+    # actually applies, refuse the request instead of forwarding it under a cap
+    # that cannot fire. See docs/BUDGET_ENFORCEMENT.md.
+    unpriced = False
+    if config is None or config.block_unpriced_models:
+        from burnlens.cost.calculator import is_model_priced
+        unpriced = not is_model_priced(provider.name, model)
+
     # --- Virtual key gateway (only fires when the client used a bl-sk- token) ---
     # Resolve the virtual key, enforce its model allowlist and per-team monthly
     # budget, and stage a swap of the real upstream key (from the operator's env)
@@ -466,13 +519,15 @@ async def handle_request(
                 "expected": vk.provider,
             }).encode(), None
 
-        vk_model = provider.extract_model(_safe_json(body_bytes), upstream_path) or "unknown"
-        if vk.allowed_models and vk_model not in vk.allowed_models:
+        if vk.allowed_models and model not in vk.allowed_models:
             return 403, {"content-type": "application/json"}, json.dumps({
                 "error": "model_not_allowed",
-                "model": vk_model,
+                "model": model,
                 "allowed_models": vk.allowed_models,
             }).encode(), None
+
+        if vk.monthly_budget_usd is not None and unpriced:
+            return _reject_unpriced(provider.name, model, "virtual-key monthly")
 
         if vk.monthly_budget_usd is not None:
             try:
@@ -523,6 +578,8 @@ async def handle_request(
 
     # --- CODE-2: per-API-key daily hard cap (BEFORE forwarding) ---
     if label and api_key_budgets is not None:
+        if unpriced and api_key_budgets.daily_cap_for(label) is not None:
+            return _reject_unpriced(provider.name, model, f"daily cap on key {label!r}")
         try:
             from burnlens.key_budget import enforce_daily_cap
             breach = await enforce_daily_cap(label, db_path, api_key_budgets)
@@ -543,6 +600,8 @@ async def handle_request(
     # --- Customer budget enforcement (BEFORE forwarding) ---
     customer = tags.get("customer")
     if customer and customer_budgets:
+        if unpriced and _customer_has_budget(customer, customer_budgets):
+            return _reject_unpriced(provider.name, model, f"budget for customer {customer!r}")
         allowed, spent, limit = await check_customer_budget(
             customer, db_path, customer_budgets,
         )
@@ -569,10 +628,9 @@ async def handle_request(
         clean_headers[swap_header] = (
             f"Bearer {real_key}" if swap_header == "authorization" else real_key
         )
-    body_json = _safe_json(body_bytes)
+    # body_json and model were resolved before the budget checks, which need
+    # the model name to decide whether it can be priced.
     streaming = provider.is_streaming(body_json, upstream_path)
-
-    model = provider.extract_model(body_json, upstream_path) or "unknown"
     system_hash = _hash_system_prompt(body_bytes)
 
     # --- Phase 7: Semantic Cache Check ---
@@ -676,6 +734,10 @@ async def handle_request(
             except Exception:
                 pass  # fail open — use original body unmodified
             model = decision.routed_model
+            # Routing swapped the model, so the earlier pricing verdict is stale.
+            if config.block_unpriced_models:
+                from burnlens.cost.calculator import is_model_priced
+                unpriced = not is_model_priced(provider.name, model)
             if getattr(config.routing, "log_downgrades", True):
                 logger.info(
                     "[BurnLens] Downgraded %s → %s | Budget remaining: $%.4f (%.1f%%)",
@@ -702,6 +764,8 @@ async def handle_request(
             allowed, reservation = await engine.check_and_reserve(
                 provider.name, model, body_bytes, request_context
             )
+            if not allowed and reservation.get("unpriced"):
+                return _reject_unpriced(provider.name, model, "budget policy")
             if not allowed:
                 violated = reservation["violated_policy"]
                 reject_body = json.dumps({
