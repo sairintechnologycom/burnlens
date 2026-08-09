@@ -10,6 +10,7 @@ from .config import settings
 from .database import execute_query
 from .plans import resolve_limits
 from .clickhouse import (
+    CLICKHOUSE_TAG_COLUMNS,
     get_spend_summary,
     get_spend_by_model,
     get_spend_by_tag,
@@ -196,10 +197,18 @@ async def get_costs_by_model(
 @router.get("/usage/by-tag", response_model=List[CostByTag])
 async def get_costs_by_tag(
     token: TokenPayload = Depends(verify_token),
-    tag_type: str = Query("team", pattern="^(team|feature|customer)$", description="Tag type: team, feature, customer"),
+    tag_type: str = Query(
+        "team",
+        pattern="^(team|feature|customer|agent_id|workflow_id)$",
+        description="Tag type: team, feature, customer, agent_id, workflow_id",
+    ),
     days: int = Query(7, description="Number of days to look back"),
 ):
-    """Get costs broken down by tag (team, feature, customer) (viewer+ can access)."""
+    """Get costs broken down by tag (viewer+ can access).
+
+    agent_id / workflow_id are the economics-graph attribution dimensions —
+    cost per agent and cost per workflow.
+    """
     if tag_type == "customer":
         await require_feature("customers_view")(token=token)
     elif tag_type == "team":
@@ -209,8 +218,10 @@ async def get_costs_by_tag(
     days = clamp_days_by_plan(days, token.plan)
     cutoff = await parse_period(f"{days}d")
 
-    # Use ClickHouse if streaming is enabled
-    if settings.streaming_enabled:
+    # Use ClickHouse if streaming is enabled and it has a column for this tag.
+    # agent_id / workflow_id live only in the Postgres `tags` JSONB, so they
+    # skip straight to the query below rather than failing into the fallback.
+    if settings.streaming_enabled and tag_type in CLICKHOUSE_TAG_COLUMNS:
         try:
             results = await get_spend_by_tag(
                 str(token.workspace_id),

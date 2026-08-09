@@ -74,6 +74,10 @@ class _RecordingProvider:
         self.calls.add("extract_usage")
         return self._inner.extract_usage(response_body)
 
+    def count_tool_calls(self, response_body):
+        self.calls.add("count_tool_calls")
+        return self._inner.count_tool_calls(response_body)
+
     def extract_usage_from_stream_chunk(self, chunk, accumulator):
         self.calls.add("extract_usage_from_stream_chunk")
         return self._inner.extract_usage_from_stream_chunk(chunk, accumulator)
@@ -140,7 +144,7 @@ class TestNonStreamingHooksReached:
                    transport, initialized_db)
 
         for hook in ("resolve_upstream_url", "extract_model", "is_streaming",
-                     "extract_usage", "headers_to_strip"):
+                     "extract_usage", "count_tool_calls", "headers_to_strip"):
             assert hook in provider.calls, (
                 f"{hook}() was never called by handle_request — the proxy is "
                 "bypassing the Provider interface again (see module docstring)"

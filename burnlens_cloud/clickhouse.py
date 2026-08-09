@@ -11,6 +11,14 @@ logger = logging.getLogger(__name__)
 _client: Optional[Client] = None
 _client_lock = asyncio.Lock()
 
+# Tags that exist as dedicated columns in request_records_raw / daily_spend_rollup.
+# The streaming plane (Kafka -> ClickHouse) is off by default and predates the
+# economics-graph tags, so agent_id / workflow_id are deliberately absent: adding
+# them means new columns on three tables plus both materialized views, and the
+# Postgres path already answers those queries. Callers must check this before
+# routing a by-tag query here.
+CLICKHOUSE_TAG_COLUMNS: tuple[str, ...] = ("feature", "team", "customer")
+
 
 def get_clickhouse_client() -> Client:
     """Get or create synchronous ClickHouse client."""
@@ -285,8 +293,14 @@ async def get_spend_by_model(workspace_id: str, start_date: str, end_date: str) 
 
 
 async def get_spend_by_tag(workspace_id: str, tag_type: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """Query spend broken down by a specific tag (feature, team, customer) from rollup table."""
-    if tag_type not in ("feature", "team", "customer"):
+    """Query spend broken down by a specific tag from the rollup table.
+
+    Only the tags in :data:`CLICKHOUSE_TAG_COLUMNS` exist as columns here. Newer
+    tags (agent_id, workflow_id) live only in the Postgres ``tags`` JSONB, so
+    callers must route those to Postgres instead of falling back on the
+    exception below.
+    """
+    if tag_type not in CLICKHOUSE_TAG_COLUMNS:
         raise ValueError(f"Invalid tag type: {tag_type}")
 
     tag_column = f"tag_{tag_type}"

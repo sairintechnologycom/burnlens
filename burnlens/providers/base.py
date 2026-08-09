@@ -106,3 +106,40 @@ class Provider(ABC):
         ``:streamGenerateContent``, Bedrock's ``/converse-stream``).
         """
         return bool(request_body.get("stream", False))
+
+    def count_tool_calls(self, response_body: dict) -> int:
+        """Return the number of tool/function calls in a non-streaming response.
+
+        The default handles all three wire shapes in use today, so no provider
+        currently overrides it:
+
+        * OpenAI-compatible — ``choices[].message.tool_calls`` (also covers
+          Azure OpenAI, Groq, Together, Mistral, xAI, DeepSeek).
+        * Anthropic — ``content[]`` blocks with ``type == "tool_use"`` (also
+          covers Bedrock's Claude responses).
+        * Google — ``candidates[].content.parts[]`` entries with ``functionCall``.
+
+        Best-effort telemetry, never load-bearing for cost: any unexpected shape
+        returns 0 rather than raising.
+        """
+        if not isinstance(response_body, dict):
+            return 0
+        count = 0
+        try:
+            for choice in response_body.get("choices") or []:
+                calls = (choice or {}).get("message", {}).get("tool_calls")
+                if isinstance(calls, list):
+                    count += len(calls)
+
+            for block in response_body.get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    count += 1
+
+            for candidate in response_body.get("candidates") or []:
+                parts = (candidate or {}).get("content", {}).get("parts")
+                for part in parts or []:
+                    if isinstance(part, dict) and part.get("functionCall"):
+                        count += 1
+        except (AttributeError, TypeError):
+            return 0
+        return count

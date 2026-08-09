@@ -216,6 +216,50 @@ async def test_costs_by_tag(dash_client, valid_jwt_token):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("tag_type", ["agent_id", "workflow_id"])
+async def test_costs_by_economics_graph_tag(dash_client, valid_jwt_token, tag_type):
+    """Economics-graph Phase A: cost by agent and cost by workflow.
+
+    These are plain JSONB tags, so the Postgres branch serves them with the
+    tag name bound as a parameter -- assert it is passed through rather than
+    silently defaulting to team.
+    """
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = [
+            {
+                "tag_value": "refund-agent",
+                "request_count": 12,
+                "total_cost": 4.20,
+                "total_input_tokens": 1000,
+                "total_output_tokens": 200,
+            }
+        ]
+
+        response = await dash_client.get(
+            f"/api/v1/usage/by-tag?tag_type={tag_type}&days=7",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["tag"] == "refund-agent"
+    assert data[0]["total_cost_usd"] == 4.20
+    # The tag name reaches the query as the third bound parameter.
+    assert mock_query.call_args.args[3] == tag_type
+
+
+@pytest.mark.asyncio
+async def test_costs_by_tag_rejects_unknown_tag(dash_client, valid_jwt_token):
+    """The pattern is the only thing standing between a caller and an arbitrary
+    JSONB key, so it must still reject anything off the list."""
+    response = await dash_client.get(
+        "/api/v1/usage/by-tag?tag_type=owner_email&days=7",
+        headers={"Authorization": f"Bearer {valid_jwt_token}"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_costs_timeline(dash_client, valid_jwt_token):
     """Test cost timeline endpoint."""
     from datetime import date
