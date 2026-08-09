@@ -21,6 +21,29 @@ logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 500
 
+# Tags allowed to leave the local machine, as bare tag names.
+#
+# This tuple is the single source of truth for the three hops a tag has to
+# survive on its way to the cloud: the flattened wire payload
+# (:func:`_row_to_payload`), the privacy whitelist (:data:`SYNC_ALLOWED_FIELDS`)
+# and the backend's re-nesting map (``burnlens_cloud.models._lift_flat_tags``).
+# Historically each hop was hand-maintained, so a tag added to the interceptor's
+# ``_ALLOWED_TAGS`` reached SQLite and then vanished silently. Deriving the
+# whitelist and the payload from one list removes two of those hops;
+# tests/test_tag_plumbing_wired.py guards the third.
+#
+# Tags NOT listed here stay local deliberately: repo/branch/dev/pr/commit_sha
+# name private code and people, and app_id/env/service are not yet modelled
+# backend-side. Adding one is a privacy decision, not a plumbing detail.
+CLOUD_SYNCED_TAGS: tuple[str, ...] = (
+    "feature",
+    "team",
+    "customer",
+    "key_label",
+    "agent_id",
+    "workflow_id",
+)
+
 SYNC_ALLOWED_FIELDS = frozenset({
     "timestamp",
     "provider",
@@ -36,14 +59,11 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "system_prompt_hash",
     "cache_hit",
     "cache_saved_usd",
+    "tool_calls",
     "trace_id",
     "event_id",
     "request_id",
-    "tag_feature",
-    "tag_team",
-    "tag_customer",
-    "tag_key_label",
-})
+} | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
 
 
 def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -330,12 +350,12 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         system_prompt_hash=row.get("system_prompt_hash"),
         cache_hit=row.get("cache_hit", 0),
         cache_saved_usd=row.get("cache_saved_usd", 0.0),
+        tool_calls=row.get("tool_calls", 0),
         # Correlation ids for OTEL span export (never prompt content):
         trace_id=row.get("trace_id"),
         event_id=row.get("event_id"),
         request_id=row.get("request_id"),
-        tag_feature=tags.get("feature"),
-        tag_team=tags.get("team"),
-        tag_customer=tags.get("customer"),
-        tag_key_label=tags.get("key_label"),
+        # Flattened tags, derived from CLOUD_SYNCED_TAGS so a new synced tag
+        # cannot be half-wired. The backend re-nests these into `tags`.
+        **{f"tag_{name}": tags.get(name) for name in CLOUD_SYNCED_TAGS},
     )

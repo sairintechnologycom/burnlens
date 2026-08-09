@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS requests (
     prompt_rag_tokens    INTEGER NOT NULL DEFAULT 0,
     prompt_history_tokens INTEGER NOT NULL DEFAULT 0,
     cache_hit            INTEGER NOT NULL DEFAULT 0,
-    cache_saved_usd      REAL NOT NULL DEFAULT 0.0
+    cache_saved_usd      REAL NOT NULL DEFAULT 0.0,
+    tool_calls           INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -349,6 +350,9 @@ async def init_db(db_path: str) -> None:
 
     # Virtual keys (gateway) table
     await migrate_create_virtual_keys_table(db_path)
+
+    # Economics graph Phase A: per-request tool-call count
+    await migrate_add_tool_calls(db_path)
 
     logger.debug("Database initialized at %s", db_path)
 
@@ -685,6 +689,22 @@ async def migrate_add_key_label(db_path: str) -> None:
             )
 
 
+async def migrate_add_tool_calls(db_path: str) -> None:
+    """Add the ``tool_calls`` column to requests (agent/workflow attribution).
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "tool_calls" not in columns:
+            await db.execute(
+                "ALTER TABLE requests ADD COLUMN tool_calls INTEGER NOT NULL DEFAULT 0"
+            )
+            await db.commit()
+            logger.info("Migration: added tool_calls column to requests table")
+
+
 async def migrate_add_ttft_column(db_path: str) -> None:
     """Add ``ttft_ms`` column to requests table.
 
@@ -805,6 +825,49 @@ async def get_spend_by_customer_this_month(db_path: str) -> dict[str, float]:
         rows = await cursor.fetchall()
 
     return {row["customer"]: row["total_cost"] for row in rows}
+
+
+async def get_retry_stats(
+    db_path: str,
+    since: str,
+    window_seconds: int = 60,
+) -> dict[str, float]:
+    """Count requests that look like retries of a failed call, and their cost.
+
+    A request is a retry when an earlier request in the same trace, for the same
+    model, failed (status >= 400) within ``window_seconds`` before it. Derived at
+    query time on purpose -- no ``is_retry`` column -- so the heuristic can be
+    tuned without a migration or a backfill.
+
+    ``EXISTS`` rather than a join, so a request following several failures is
+    still counted once.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT COUNT(*) AS retry_count,
+                   COALESCE(SUM(r.cost_usd), 0.0) AS retry_cost_usd
+            FROM requests r
+            WHERE r.trace_id IS NOT NULL
+              AND r.timestamp >= ?
+              AND EXISTS (
+                  SELECT 1 FROM requests p
+                  WHERE p.trace_id = r.trace_id
+                    AND p.model = r.model
+                    AND p.status_code >= 400
+                    AND p.id < r.id
+                    AND (julianday(r.timestamp) - julianday(p.timestamp)) * 86400.0 <= ?
+              )
+            """,
+            (since, window_seconds),
+        )
+        row = await cursor.fetchone()
+
+    return {
+        "retry_count": row["retry_count"] or 0,
+        "retry_cost_usd": row["retry_cost_usd"] or 0.0,
+    }
 
 
 async def get_customer_request_count(
@@ -1287,8 +1350,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 ttft_ms,
                 prompt_system_tokens, prompt_user_tokens,
                 prompt_tools_tokens, prompt_rag_tokens,
-                prompt_history_tokens, cache_hit, cache_saved_usd
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                prompt_history_tokens, cache_hit, cache_saved_usd,
+                tool_calls
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1337,6 +1401,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.prompt_history_tokens,
                 record.cache_hit,
                 record.cache_saved_usd,
+                record.tool_calls,
             ),
         )
         await db.commit()

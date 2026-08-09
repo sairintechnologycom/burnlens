@@ -157,23 +157,17 @@ _STRIP_REQUEST_HEADERS = frozenset(
 _STRIP_RESPONSE_HEADERS = _STRIP_REQUEST_HEADERS | frozenset(["content-encoding"])
 
 
-_ENV_TAG_FALLBACKS: tuple[str, ...] = (
-    "feature",
-    "team",
-    "customer",
-    "repo",
-    "dev",
-    "pr",
-    "branch",
-)
-
-
 # Canonical tags allowed for extraction from headers and environment.
 # Restricting this prevents "tag injection" where malicious headers spoof budget/org context.
+#
+# Adding a tag here only makes it *collectable* — it lands in the local SQLite
+# ``tags`` JSON automatically. Getting it as far as the cloud additionally
+# requires listing it in ``burnlens.cloud.sync.CLOUD_SYNCED_TAGS``, which is
+# guarded by tests/test_tag_plumbing_wired.py.
 _ALLOWED_TAGS = {
     "team", "feature", "app_id", "env", "repo", "branch", "commit_sha",
     "workspace_id", "org_id", "trace_id", "customer", "key_label", "service",
-    "dev", "pr"
+    "dev", "pr", "agent_id", "workflow_id"
 }
 
 
@@ -192,7 +186,14 @@ def _extract_tags(headers: dict[str, str]) -> dict[str, str]:
     for key, value in headers.items():
         k_lower = key.lower()
         if k_lower.startswith(prefix):
-            tag_name = k_lower[len(prefix):]
+            # Hyphens normalise to underscores so both spellings of a
+            # multi-word tag work: `x-burnlens-tag-agent-id` and
+            # `x-burnlens-tag-agent_id` both mean `agent_id`. Only the
+            # underscore form matched before, which made every multi-word tag
+            # (app_id, key_label, commit_sha, org_id, agent_id, workflow_id)
+            # silently undeliverable through nginx — it drops headers
+            # containing underscores unless underscores_in_headers is on.
+            tag_name = k_lower[len(prefix):].replace("-", "_")
             if tag_name in _ALLOWED_TAGS:
                 # Basic value sanitization: truncate and strip
                 tags[tag_name] = value.strip()[:100]
@@ -886,9 +887,11 @@ async def _handle_non_streaming(
     resp_body = response.content
     _log_upstream_error_hint(response.status_code, resp_body, provider.name)
     usage = TokenUsage()
+    tool_calls = 0
     try:
         resp_json = response.json()
         usage = provider.extract_usage(resp_json)
+        tool_calls = provider.count_tool_calls(resp_json)
     except Exception:
         pass
 
@@ -976,6 +979,7 @@ async def _handle_non_streaming(
         prompt_tools_tokens=prompt_analysis["prompt_tools_tokens"],
         prompt_rag_tokens=prompt_analysis["prompt_rag_tokens"],
         prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
+        tool_calls=tool_calls,
         # Phase 1: Canonical event fields
         event_id=uuid7(),
         request_id=_extract_request_id(provider.name, response.headers, resp_body),
@@ -1314,6 +1318,11 @@ async def _log_streaming_usage(
         prompt_tools_tokens=prompt_analysis["prompt_tools_tokens"],
         prompt_rag_tokens=prompt_analysis["prompt_rag_tokens"],
         prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
+        # tool_calls stays 0 on the streaming path: SSE fragments each call across
+        # deltas (OpenAI tool_calls[].index, Anthropic content_block_start), so
+        # counting needs accumulator state rather than a single body parse. Any
+        # per-agent tool-call metric therefore under-counts streaming agents —
+        # extend extract_usage_from_stream_chunk's accumulator before relying on it.
         # Phase 1 fields
         event_id=event_id,
         request_id=request_id,
@@ -1546,10 +1555,12 @@ async def _log_cache_hit(
         
         provider = _get_provider(provider_name)
         usage = TokenUsage()
+        tool_calls = 0
         try:
             resp_json = json.loads(response_body)
             if provider:
                 usage = provider.extract_usage(resp_json)
+                tool_calls = provider.count_tool_calls(resp_json)
         except Exception:
             pass
 
@@ -1596,6 +1607,7 @@ async def _log_cache_hit(
             prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
             cache_hit=1,
             cache_saved_usd=saved_cost,
+            tool_calls=tool_calls,
             event_id=uuid7(),
             trace_id=meta.get("trace_id"),
             workspace_id=meta.get("workspace_id"),

@@ -4,6 +4,21 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+# Tag names the OSS proxy flattens onto the wire as `tag_<name>`. This MUST stay
+# equal to `burnlens.cloud.sync.CLOUD_SYNCED_TAGS`; the two live in separate
+# deployables (proxy ships to PyPI, this backend to Railway) so the list cannot
+# simply be imported. tests/test_tag_plumbing_wired.py fails if they drift — a
+# tag missing here is silently dropped, erasing attribution end to end.
+CLOUD_SYNCED_TAGS: tuple[str, ...] = (
+    "feature",
+    "team",
+    "customer",
+    "key_label",
+    "agent_id",
+    "workflow_id",
+)
+
+
 # Request/Response Schemas
 class WorkspaceBase(BaseModel):
     """Base workspace schema."""
@@ -43,6 +58,8 @@ class RequestRecordBase(BaseModel):
     # Semantic-cache outcome from the OSS proxy (1 = served from cache).
     cache_hit: int = 0
     cache_saved_usd: float = 0.0
+    # Tool/function calls the model made on this request (0 on streaming).
+    tool_calls: int = 0
     # Correlation ids used only to build correlatable OTEL export spans.
     trace_id: Optional[str] = None
     event_id: Optional[str] = None
@@ -63,15 +80,10 @@ class RequestRecordBase(BaseModel):
         if data.get("tags"):
             return data
         nested: dict[str, Any] = {}
-        for src, dst in (
-            ("tag_feature", "feature"),
-            ("tag_team", "team"),
-            ("tag_customer", "customer"),
-            ("tag_key_label", "key_label"),
-        ):
-            v = data.get(src)
+        for name in CLOUD_SYNCED_TAGS:
+            v = data.get(f"tag_{name}")
             if v is not None:
-                nested[dst] = v
+                nested[name] = v
         if nested:
             data = {**data, "tags": nested}
         return data

@@ -344,7 +344,8 @@ async def init_db():
                 system_prompt_hash TEXT,
                 received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 cache_hit INT NOT NULL DEFAULT 0,
-                cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0
+                cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0,
+                tool_calls INT NOT NULL DEFAULT 0
             )
         """)
 
@@ -358,6 +359,19 @@ async def init_db():
                 ) THEN
                     ALTER TABLE request_records ADD COLUMN cache_hit INT NOT NULL DEFAULT 0;
                     ALTER TABLE request_records ADD COLUMN cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0;
+                END IF;
+            END $$;
+        """)
+
+        # Migration: economics-graph Phase A tool-call count for pre-existing installs
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records' AND column_name = 'tool_calls'
+                ) THEN
+                    ALTER TABLE request_records ADD COLUMN tool_calls INT NOT NULL DEFAULT 0;
                 END IF;
             END $$;
         """)

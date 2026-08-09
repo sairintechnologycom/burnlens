@@ -29,7 +29,7 @@ burnlens start
 
 1. **Drop-in proxy.** Point your SDK's `BASE_URL` at `localhost:8420`. Existing code works unchanged. The proxy is designed for low overhead and supports streaming passthrough.
 
-2. **Tag what matters.** Three request headers (`X-BurnLens-Tag-Feature`, `X-BurnLens-Tag-Team`, `X-BurnLens-Tag-Customer`) attribute any call to any dimension. Tags are stripped before the request reaches the AI provider. If you enable cloud sync, tag values are uploaded to your workspace alongside cost metadata — never prompt or response bodies.
+2. **Tag what matters.** Request headers (`X-BurnLens-Tag-Feature`, `X-BurnLens-Tag-Team`, `X-BurnLens-Tag-Customer`, plus `X-BurnLens-Tag-Agent-Id` and `X-BurnLens-Tag-Workflow-Id` for agent workloads) attribute any call to any dimension. Tags are stripped before the request reaches the AI provider. If you enable cloud sync, tag values are uploaded to your workspace alongside cost metadata — never prompt or response bodies.
 
 3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts. Exact behaviour under concurrency, streaming, retries, and unpriced models is specified in [Budget enforcement semantics](docs/BUDGET_ENFORCEMENT.md).
 
@@ -52,6 +52,19 @@ client = openai.OpenAI(default_headers={
 ```
 
 Tags are stripped before the request reaches OpenAI. They never appear in the provider API payload.
+
+**Agent workloads.** Tag with `X-BurnLens-Tag-Agent-Id` and `X-BurnLens-Tag-Workflow-Id` to get cost per agent and cost per workflow instead of only cost per model:
+
+```python
+client = openai.OpenAI(default_headers={
+    "X-BurnLens-Tag-Agent-Id": "refund-agent",
+    "X-BurnLens-Tag-Workflow-Id": "refund_review",
+})
+```
+
+Break spend down with `GET /api/costs/by-tag?tag=agent_id` locally, or `GET /api/v1/usage/by-tag?tag_type=agent_id` on BurnLens Cloud. Tool and function calls are counted per request, so a looping agent shows up as tool-call volume rather than just a larger bill.
+
+Multi-word tag headers accept either spelling — `X-BurnLens-Tag-Agent-Id` or `X-BurnLens-Tag-Agent_Id`. Prefer the hyphenated form: nginx drops headers containing underscores unless `underscores_in_headers` is on.
 
 ---
 

@@ -114,6 +114,7 @@ class RequestRecord:
     prompt_history_tokens: int = 0
     cache_hit: int = 0
     cache_saved_usd: float = 0.0
+    tool_calls: int = 0
 
     # Phase 1: Canonical event fields
     event_id: str | None = None
