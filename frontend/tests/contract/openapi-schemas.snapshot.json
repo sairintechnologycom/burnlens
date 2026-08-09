@@ -1254,6 +1254,11 @@
         "title": "Timestamp",
         "type": "string"
       },
+      "tool_calls": {
+        "default": 0,
+        "title": "Tool Calls",
+        "type": "integer"
+      },
       "trace_id": {
         "anyOf": [
           {
@@ -1385,6 +1390,11 @@
         "format": "date-time",
         "title": "Timestamp",
         "type": "string"
+      },
+      "tool_calls": {
+        "default": 0,
+        "title": "Tool Calls",
+        "type": "integer"
       },
       "trace_id": {
         "anyOf": [
