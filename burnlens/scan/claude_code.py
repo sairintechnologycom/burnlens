@@ -26,6 +26,7 @@ from typing import Iterator
 from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import (
     _reset_dev_identity_cache,
+    repo_workflow_id,
     resolve_dev_identity,
 )
 from burnlens.storage.models import RequestRecord
@@ -204,6 +205,10 @@ def parse_session(session: ClaudeSession) -> Iterator[RequestRecord]:
                 "dev": dev,
                 "session": session.session_id,
             }
+            # Joins this session's cost to merged-PR outcomes for the same repo.
+            workflow_id = repo_workflow_id(session.project_basename)
+            if workflow_id:
+                tags["workflow_id"] = workflow_id
 
             yield RequestRecord(
                 provider="anthropic",
