@@ -6,6 +6,68 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.14.0] — 2026-08-10
+
+Cost per accepted outcome: spend divided by what it produced, not just
+attributed. Agent and workflow attribution (Phase A), outcome events
+(Phase B), and outcomes derived from merged pull requests (Phase C).
+
+### Added
+- **`agent_id` and `workflow_id` tags.** Spend now splits by agent and by
+  workflow, not only by model. Set them like any other tag —
+  `X-BurnLens-Tag-Agent-Id`, `X-BurnLens-Tag-Workflow-Id` — and read them back
+  with `GET /api/costs/by-tag?tag=agent_id`. Both sync to BurnLens Cloud.
+- **Tool-call counts per request**, across the OpenAI, Anthropic and Google
+  response shapes, so a looping agent shows up as tool-call volume rather than
+  only as a larger bill. Non-streaming responses only — SSE fragments each call
+  across deltas, so a streaming request reports `0` and any per-agent tool-call
+  metric under-counts streaming agents.
+- **Outcome events.** `burnlens outcome record --workflow W --status accepted`
+  records a business result; `burnlens outcome show` reports cost per accepted
+  outcome per workflow, with rework and unattributed spend broken out. Also on
+  `GET /api/costs/outcomes` and, on Cloud, `POST /v1/outcomes` +
+  `GET /api/v1/outcomes/summary`.
+
+  `outcome_id` is yours and is the idempotency key: re-posting one is ignored,
+  so at-least-once delivery cannot inflate the count the cost is divided by.
+  A repeat can never overwrite a recorded status either — a replayed delivery
+  must not flip a newer result back to a stale one.
+- **`burnlens outcome derive` — cost per merged PR with nothing to integrate.**
+  Reads closed pull requests through the `gh` CLI and turns them into outcomes:
+  merged is accepted, closed-unmerged is rejected, still-open is skipped rather
+  than guessed at. Outcome ids are deterministic, so re-running only adds newly
+  closed PRs and it is safe on a schedule. All four coding-agent scanners now
+  tag sessions with a workflow, so scanned agent spend joins the same query.
+
+  Attribution is per repository, not per PR: session logs record which repo a
+  session ran in, not which branch. With several PRs in flight, total repo
+  spend over merged PRs is the honest reading of what one merged PR costs.
+- **`get_retry_stats()`** derives retries at query time — a call following a
+  failure in the same trace, same model, inside a window — so the heuristic can
+  be tuned without a migration or a backfill.
+
+### Fixed
+- **Multi-word tag headers only matched the underscore spelling.**
+  `X-BurnLens-Tag-App-Id` was silently ignored; only `X-BurnLens-Tag-App_Id`
+  worked. Since nginx drops headers containing underscores unless
+  `underscores_in_headers` is on, every multi-word tag (`app_id`, `key_label`,
+  `commit_sha`, `org_id`) was effectively undeliverable behind it. Hyphens now
+  normalise to underscores, so both spellings work.
+
+### Notes
+- **How the cost is divided.** A request is charged to the first outcome of its
+  workflow at-or-after it, within a window (24h by default, `--window` to
+  change). Spend with no outcome after it is reported as *unattributed* rather
+  than dropped or spread around.
+
+  `Per accepted` divides **total** workflow spend by accepted outcomes, not only
+  the spend that landed on successes — failed attempts cost real money, and
+  charging them to the successes is what one working result costs. It is empty,
+  never `$0`, when nothing has been accepted yet.
+- A model missing from the pricing tables still contributes `$0`, which
+  understates any cost-per-outcome figure. Check `burnlens pricing` if a number
+  looks low.
+
 ## [OSS `burnlens` v1.13.0] — 2026-08-08
 
 ### Fixed
