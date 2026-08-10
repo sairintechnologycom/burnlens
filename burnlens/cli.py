@@ -772,6 +772,31 @@ async def _run_gemini_scan(
         console.print(top_table)
 
 
+def _warn_unpriced() -> None:
+    """Tell the user which models imported at $0 because we have no pricing.
+
+    Without this a missing pricing entry is invisible: the scan reports a
+    total, the total is just wrong and low. Printed once per scan, after every
+    provider has run, so one model missing from ten sessions is one line.
+    """
+    from burnlens.cost.calculator import drain_unpriced_models
+
+    unpriced = drain_unpriced_models()
+    if not unpriced:
+        return
+    console.print(
+        f"\n[yellow]⚠ {len(unpriced)} model(s) had no pricing entry and were "
+        "imported at $0.00 — your real spend is higher than the total above."
+        "[/yellow]"
+    )
+    for prov, model in unpriced:
+        console.print(f"  [yellow]•[/yellow] {prov}/{model}")
+    console.print(
+        "[dim]Add them to pricing_data/<provider>.json, then re-run with "
+        "--dry-run to check. Already-imported $0 records are not recosted.[/dim]"
+    )
+
+
 @app.command()
 def scan(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
@@ -854,6 +879,8 @@ def scan(
                 await _run_gemini_scan(
                     cfg.db_path, since=since_dt, dry_run=dry_run
                 )
+
+        _warn_unpriced()
 
     asyncio.run(_run())
 

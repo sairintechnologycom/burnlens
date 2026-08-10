@@ -89,12 +89,28 @@ def is_model_priced(provider: str, model: str) -> bool:
     return resolve_pricing(provider, model) is not None
 
 
+# Every (provider, model) that priced as $0 because we had no entry for it.
+# Scans import silently at $0 otherwise — the claude-opus-5 gap cost real money
+# before anyone noticed. The proxy has `_reject_unpriced`; this is the read side.
+# ponytail: process-global set, fine for a CLI run. Thread it through the scan
+# result objects if this ever needs to be per-scan.
+_unpriced_seen: set[tuple[str, str]] = set()
+
+
+def drain_unpriced_models() -> list[tuple[str, str]]:
+    """Return and clear the (provider, model) pairs that costed as $0 unpriced."""
+    seen = sorted(_unpriced_seen)
+    _unpriced_seen.clear()
+    return seen
+
+
 def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
     """Return total cost in USD for the given token usage.
 
-    Returns 0.0 if model is not in the pricing DB (logs a warning). Callers
-    that need to distinguish "genuinely free" from "unknown to us" must ask
-    ``is_model_priced`` — this return value cannot tell them apart.
+    Returns 0.0 if model is not in the pricing DB (logs a warning, and records
+    the pair for ``drain_unpriced_models``). Callers that need to distinguish
+    "genuinely free" from "unknown to us" must ask ``is_model_priced`` — this
+    return value cannot tell them apart.
 
     For ``provider='cursor'`` the model is routed to the underlying provider's
     pricing (Anthropic for Claude/Auto, OpenAI for GPT/o-series). Cursor is
@@ -102,6 +118,7 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
     """
     pricing = resolve_pricing(provider, model)
     if pricing is None:
+        _unpriced_seen.add((provider, model))
         return 0.0
 
     # Long-context tier keyed on total prompt size. Google/OpenAI report the
