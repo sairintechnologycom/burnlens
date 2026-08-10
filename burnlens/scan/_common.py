@@ -13,6 +13,25 @@ from pathlib import Path
 
 _DEV_IDENTITY_CACHE: dict[str, str] = {}
 
+# Prefix for repo-scoped workflows, so a derived workflow id can never collide
+# with a workflow name a user chose for their own application traffic.
+_REPO_WORKFLOW_PREFIX = "repo:"
+
+
+def repo_workflow_id(repo: str | None) -> str | None:
+    """Workflow id for agent work scoped to a repository, or None without a repo.
+
+    This is the join key between two things produced by different code paths:
+    agent session cost (the scanners here) and merged-PR outcomes
+    (:mod:`burnlens.outcomes`). If the two ever disagree on the string, the
+    join silently yields nothing and every cost reads as unattributed — no
+    error, just a dashboard of zeros. Both sides call this one function, and
+    tests/test_economics_graph_phase_c.py fails if either stops.
+    """
+    if not repo:
+        return None
+    return f"{_REPO_WORKFLOW_PREFIX}{repo}"
+
 
 def _git_user_email(project_path: str) -> str | None:
     """Best-effort ``git config user.email`` lookup. Returns None on any failure."""

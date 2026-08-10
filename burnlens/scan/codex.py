@@ -27,7 +27,11 @@ from pathlib import Path
 from typing import Iterator
 
 from burnlens.cost.calculator import TokenUsage, calculate_cost
-from burnlens.scan._common import _reset_dev_identity_cache, resolve_dev_identity
+from burnlens.scan._common import (
+    _reset_dev_identity_cache,
+    repo_workflow_id,
+    resolve_dev_identity,
+)
 from burnlens.storage.models import RequestRecord
 
 logger = logging.getLogger(__name__)
@@ -229,6 +233,8 @@ def parse_session(session: CodexSession) -> Iterator[RequestRecord]:
                 tags: dict[str, str] = {"dev": dev, "session": session.session_id}
                 if tag_repo:
                     tags["repo"] = tag_repo
+                    # Joins this session's cost to merged-PR outcomes for the repo.
+                    tags["workflow_id"] = repo_workflow_id(tag_repo)
 
                 yield RequestRecord(
                     provider="openai",

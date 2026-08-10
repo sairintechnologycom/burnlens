@@ -99,6 +99,22 @@ Three things worth knowing about the number:
 
 A workflow with spend and no accepted outcomes reports no unit cost at all rather than `$0` — the absence is the signal.
 
+### Coding agents: no instrumentation required
+
+For agent work you don't have to report anything. A merged pull request already *is* an accepted outcome, and a closed-unmerged one is a rejected outcome — so BurnLens reads them out of GitHub and joins them to the agent spend it scanned off disk:
+
+```bash
+burnlens scan --provider claude     # agent session cost, from local logs
+burnlens outcome derive             # merged PRs -> outcomes, via the gh CLI
+burnlens outcome show               # cost per merged PR
+```
+
+Measured on this repository while building it: **81 merged PRs, $407 of Claude Code spend, about $5.03 per merged PR.** (A floor, not a ceiling — any model missing from the pricing tables contributes $0, so check `burnlens pricing` if a number looks low.)
+
+Both commands are idempotent and safe on a schedule: outcome ids are derived deterministically from the repo and PR number, so re-running only ever adds newly-closed PRs.
+
+Cost is attributed per repository rather than per PR, because agent session logs record which repo a session ran in, not which branch. With several PRs in flight that is the honest reading of what one merged PR costs.
+
 ---
 
 ## Use Cases

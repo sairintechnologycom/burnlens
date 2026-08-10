@@ -1863,6 +1863,51 @@ def outcome_record(
     asyncio.run(_run())
 
 
+@outcome_app.command("derive")
+def outcome_derive(
+    repo_path: Path = typer.Option(Path("."), "--repo", "-r", help="Path to a git checkout"),
+    limit: int = typer.Option(200, "--limit", help="Most recent closed PRs to read"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Derive outcomes from merged pull requests — no instrumentation needed.
+
+    A merged PR is an accepted outcome, a closed-unmerged one is rejected. Run
+    this after `burnlens scan` and `burnlens outcome show` reports what a merged
+    PR actually costs in agent spend.
+
+    Idempotent: outcome ids are deterministic, so re-running only adds PRs
+    closed since last time. Safe on a schedule.
+    """
+    from burnlens.outcomes import DeriveError, derive_pr_outcomes
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        try:
+            result = await derive_pr_outcomes(
+                cfg.db_path, repo_path=str(repo_path), limit=limit
+            )
+        except DeriveError as exc:
+            console.print(f"[red]Could not derive outcomes:[/red] {exc}")
+            raise typer.Exit(code=1)
+
+        console.print(
+            f"[green]Derived[/green] {result.inserted} new outcome(s) for "
+            f"[cyan]{result.workflow_id}[/cyan] "
+            f"({result.accepted} merged, {result.rejected} closed unmerged"
+            + (f", {result.duplicates} already recorded" if result.duplicates else "")
+            + ")"
+        )
+        if result.skipped_open:
+            console.print(
+                f"[dim]{result.skipped_open} pull request(s) skipped — still open "
+                "or undated, so they have no outcome yet.[/dim]"
+            )
+        console.print("Run [cyan]burnlens outcome show[/cyan] to see cost per merged PR.")
+
+    asyncio.run(_run())
+
+
 @outcome_app.command("show")
 def outcome_show(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
