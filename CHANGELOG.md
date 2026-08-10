@@ -6,6 +6,33 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Cloud `burnlens-cloud`] — 2026-08-10 (deployed only)
+
+Reconciliation: BurnLens's number, checked against the provider's own bill.
+
+### Added
+- **Daily provider reconciliation (economics-graph Phase E).** A workspace owner
+  stores a read-only billing key per provider
+  (`PUT /settings/reconciliation/{anthropic|openai}`); once a day
+  `POST /cron/reconcile` asks that provider what it charged for the previous UTC
+  day, sums what BurnLens computed from proxied traffic over the same window,
+  and records the drift. `GET /api/v1/reconciliation` serves the dashboard badge
+  — "reconciled ✓ −0.4% drift" / "12.1% drift" / "unreconciled".
+
+  Drift over 2% emails the operator alert address. Drift is a diagnosis, not a
+  failure: calls that bypassed the proxy, a pricing entry we haven't updated, an
+  unpriced model, and rounding all produce it, and BurnLens counting *less* than
+  the bill is the normal direction. The dashboard badge says so on hover.
+
+  Two unit systems meet here and only one is dollars: Anthropic's cost report
+  returns **minor units** (`"123.45"` USD is $1.23), OpenAI's returns dollars.
+  `tests/test_reconciliation.py` pins both — mutating the `/100` fails it.
+- Keys are Fernet-encrypted with `OTEL_ENCRYPTION_KEY` and never returned by any
+  endpoint. A key the provider rejects is refused at save time rather than
+  stored, so the badge can't sit on "unreconciled" with no explanation.
+- `.github/workflows/cron-reconcile.yml` runs the job at 06:00 UTC — late enough
+  that provider billing has settled the previous day.
+
 ## [OSS `burnlens` v1.14.0] — 2026-08-10
 
 Cost per accepted outcome: spend divided by what it produced, not just

@@ -20,6 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .alert_engine import evaluate_all_workspaces
 from .config import settings
 from .database import get_pool
+from .reconciliation import reconcile_all_workspaces
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/cron", tags=["cron"])
@@ -58,3 +59,25 @@ async def evaluate_alerts(
     except Exception as exc:
         log.error("cron/evaluate-alerts: unhandled error: %s", exc)
         return {"evaluated": 0, "fired": 0}
+
+
+@router.post("/reconcile")
+async def reconcile(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    """
+    Daily cron endpoint. Compares each workspace's provider bill for yesterday
+    against BurnLens's own total and records the drift.
+
+    Returns {"checked": N, "failed": M, "alerted": K} always — fail-open, same
+    as the alert cron: a provider outage must not make the endpoint look broken
+    to whatever is scheduling it.
+    """
+    _verify_cron_secret(credentials)
+    try:
+        result = await reconcile_all_workspaces()
+        log.info("cron/reconcile: %s", result)
+        return result
+    except Exception as exc:
+        log.error("cron/reconcile: unhandled error: %s", exc)
+        return {"checked": 0, "failed": 0, "alerted": 0}

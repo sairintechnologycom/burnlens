@@ -67,7 +67,8 @@ CREDENTIALS: list[Credential] = [
     Credential("PADDLE_TEAMS_ANNUAL_PRICE_ID", lambda: bool(settings.paddle_teams_annual_price_id),
                "annual Teams checkout", False),
     Credential("OTEL_ENCRYPTION_KEY", lambda: bool(settings.otel_encryption_key),
-               "OTEL exporter credential storage", False),
+               "OTEL exporter credentials and reconciliation billing keys "
+               "(503 on save, daily reconciliation stops)", False),
 ]
 
 

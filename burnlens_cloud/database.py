@@ -415,6 +415,47 @@ async def init_db():
             ON request_records(workspace_id, (tags->>'workflow_id'), ts)
         """)
 
+        # Economics-graph Phase E: reconciliation against provider billing APIs.
+        # The key is a read-only billing credential, Fernet-encrypted with
+        # OTEL_ENCRYPTION_KEY; it is never returned by any endpoint.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS reconciliation_credentials (
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                api_key_encrypted TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (workspace_id, provider)
+            )
+        """)
+
+        # One row per workspace/provider/UTC day. drift_pct is NULL when the
+        # provider billed nothing — there is no percentage of zero.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS reconciliation_runs (
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                day DATE NOT NULL,
+                provider_cost_usd NUMERIC(14, 6) NOT NULL,
+                burnlens_cost_usd NUMERIC(14, 6) NOT NULL,
+                drift_pct DOUBLE PRECISION,
+                computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (workspace_id, provider, day)
+            )
+        """)
+
+        # The badge reads the latest day per provider.
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_reconciliation_runs_latest
+            ON reconciliation_runs(workspace_id, provider, day DESC)
+        """)
+
+        # The daily job sums proxied spend per provider over one UTC day.
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_records_provider_ts
+            ON request_records(workspace_id, provider, ts)
+        """)
+
         # Create indexes
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_request_records_workspace_ts

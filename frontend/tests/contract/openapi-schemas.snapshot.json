@@ -1207,6 +1207,87 @@
     "title": "PricingResponse",
     "type": "object"
   },
+  "ProviderReconciliation": {
+    "description": "How BurnLens's number compared to one provider's own bill, most recent day.\n\n`drift_pct` is how far BurnLens sits from the provider, signed: negative\nmeans BurnLens counted less than the bill (the usual case \u2014 traffic that\ndid not go through the proxy). None when the provider reported no spend,\nbecause there is nothing to divide by.",
+    "properties": {
+      "burnlens_cost_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Burnlens Cost Usd"
+      },
+      "computed_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Computed At"
+      },
+      "day": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Day"
+      },
+      "drift_pct": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Drift Pct"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "provider_cost_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Provider Cost Usd"
+      },
+      "status": {
+        "enum": [
+          "reconciled",
+          "drifted",
+          "unreconciled"
+        ],
+        "title": "Status",
+        "type": "string"
+      }
+    },
+    "required": [
+      "provider",
+      "status"
+    ],
+    "title": "ProviderReconciliation",
+    "type": "object"
+  },
   "RecommendationItem": {
     "description": "A model-switch recommendation (mirrors the OSS local-dashboard shape).",
     "properties": {
@@ -1269,6 +1350,22 @@
       "reason"
     ],
     "title": "RecommendationItem",
+    "type": "object"
+  },
+  "ReconciliationCredentialRequest": {
+    "description": "A provider billing-API key used only to read that provider's cost report.",
+    "properties": {
+      "api_key": {
+        "maxLength": 500,
+        "minLength": 8,
+        "title": "Api Key",
+        "type": "string"
+      }
+    },
+    "required": [
+      "api_key"
+    ],
+    "title": "ReconciliationCredentialRequest",
     "type": "object"
   },
   "RequestRecordBase": {

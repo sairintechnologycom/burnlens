@@ -14,6 +14,7 @@ import {
   UsageCurrentCycleFields,
   AvailablePlanFields,
   ApiKeysSummaryFields,
+  ProviderReconciliationFields,
 } from "@/lib/contracts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +45,7 @@ const CONTRACTS = [
   { endpoint: "/billing/summary (usage)", schema: "UsageCurrentCycle", fields: UsageCurrentCycleFields },
   { endpoint: "/billing/summary (available_plans[])", schema: "AvailablePlan", fields: AvailablePlanFields },
   { endpoint: "/billing/summary (api_keys)", schema: "ApiKeysSummary", fields: ApiKeysSummaryFields },
+  { endpoint: "/api/v1/reconciliation", schema: "ProviderReconciliation", fields: ProviderReconciliationFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that
@@ -79,6 +81,10 @@ const NUMERIC_FIELDS = new Set([
   "monthly_request_cap",
   "active_count",
   "limit",
+  // ProviderReconciliation: the badge formats these with .toFixed().
+  "provider_cost_usd",
+  "burnlens_cost_usd",
+  "drift_pct",
 ]);
 const STRING_FIELDS = new Set([
   "model",

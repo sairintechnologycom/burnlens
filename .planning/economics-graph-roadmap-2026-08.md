@@ -118,6 +118,8 @@ Exit criteria: replayed synthetic burst on a tagged agent fires exactly one dedu
 
 ### Phase E — Reconciliation (the trust feature; independent, any time after A)
 
+**STATUS: BUILT 2026-08-10** — `burnlens_cloud/reconciliation.py` (provider cost clients + drift + credential and status endpoints), `reconciliation_credentials` / `reconciliation_runs` tables, `POST /cron/reconcile` + `.github/workflows/cron-reconcile.yml` (06:00 UTC), dashboard badge in `frontend/src/app/dashboard/page.tsx`, `tests/test_reconciliation.py`. Cloud-only — no proxy change, so no PyPI release. Google/Bedrock/Azure have no usable per-day cost API wired, so they simply cannot be reconciled and the badge omits them rather than implying agreement. ⚠️ **Anthropic's cost report returns MINOR UNITS** (`"123.45"` USD = $1.23); OpenAI's returns dollars. Mixing them up is a silent 100x.
+
 **Goal**: BurnLens's number provably matches the provider's bill. Nobody trusts a cost tool until it survives this comparison.
 
 Build:

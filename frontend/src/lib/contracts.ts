@@ -212,3 +212,28 @@ export const BillingSummaryFields: Record<keyof BillingSummary, true> = {
   available_plans: true,
   api_keys: true,
 };
+
+// --- /api/v1/reconciliation  ->  ProviderReconciliation (economics graph Phase E) ---
+// The trust badge. `drift_pct` is signed against the provider's own bill:
+// negative means BurnLens counted less than the invoice, which is the normal
+// direction (traffic that never went through the proxy). Null when the provider
+// billed nothing — there is no percentage of zero, so the UI shows the status
+// word instead of a number.
+export interface ProviderReconciliation {
+  provider: string;
+  status: "reconciled" | "drifted" | "unreconciled";
+  day: string | null; // ISO date
+  provider_cost_usd: number | null;
+  burnlens_cost_usd: number | null;
+  drift_pct: number | null;
+  computed_at: string | null; // ISO-8601
+}
+export const ProviderReconciliationFields: Record<keyof ProviderReconciliation, true> = {
+  provider: true,
+  status: true,
+  day: true,
+  provider_cost_usd: true,
+  burnlens_cost_usd: true,
+  drift_pct: true,
+  computed_at: true,
+};

@@ -181,6 +181,28 @@ class WorkflowEconomics(BaseModel):
     business_value_accepted: Optional[float] = None
 
 
+class ReconciliationCredentialRequest(BaseModel):
+    """A provider billing-API key used only to read that provider's cost report."""
+    api_key: str = Field(..., min_length=8, max_length=500)
+
+
+class ProviderReconciliation(BaseModel):
+    """How BurnLens's number compared to one provider's own bill, most recent day.
+
+    `drift_pct` is how far BurnLens sits from the provider, signed: negative
+    means BurnLens counted less than the bill (the usual case — traffic that
+    did not go through the proxy). None when the provider reported no spend,
+    because there is nothing to divide by.
+    """
+    provider: str
+    status: Literal["reconciled", "drifted", "unreconciled"]
+    day: Optional[date] = None
+    provider_cost_usd: Optional[float] = None
+    burnlens_cost_usd: Optional[float] = None
+    drift_pct: Optional[float] = None
+    computed_at: Optional[datetime] = None
+
+
 class LoginRequest(BaseModel):
     """Interactive browser login request.
 

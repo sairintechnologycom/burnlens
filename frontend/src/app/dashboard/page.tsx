@@ -9,10 +9,49 @@ import BarChart from "@/components/charts/BarChart";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-import type { UsageSummary, RequestRow, CostTimelinePoint } from "@/lib/contracts";
+import type {
+  UsageSummary,
+  RequestRow,
+  CostTimelinePoint,
+  ProviderReconciliation,
+} from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Why a number can legitimately disagree with the bill. Shown on hover so drift
+// reads as a diagnosis, not a failure.
+const DRIFT_CAUSES =
+  "Common causes: calls that bypassed the proxy, a provider pricing change we " +
+  "haven't picked up yet, an unpriced model, and rounding.";
+
+function ReconciliationBadge({ r }: { r: ProviderReconciliation }) {
+  const drift = r.drift_pct;
+  const color =
+    r.status === "reconciled" ? "var(--green)" : r.status === "drifted" ? "var(--amber)" : "var(--muted)";
+
+  let label: string;
+  let title: string;
+  if (r.status === "unreconciled") {
+    label = `${r.provider} · unreconciled`;
+    title = "Billing key stored, but no daily comparison has run yet.";
+  } else {
+    const amount = drift === null ? "n/a" : `${drift > 0 ? "+" : ""}${drift.toFixed(1)}%`;
+    label =
+      r.status === "reconciled"
+        ? `${r.provider} · reconciled ✓ ${amount} drift`
+        : `${r.provider} · ${amount} drift`;
+    title =
+      `${r.day}: provider billed $${(r.provider_cost_usd ?? 0).toFixed(2)}, ` +
+      `BurnLens computed $${(r.burnlens_cost_usd ?? 0).toFixed(2)}. ${DRIFT_CAUSES}`;
+  }
+
+  return (
+    <span className="tag" title={title} style={{ background: "var(--bg3)", color }}>
+      {label}
+    </span>
+  );
 }
 
 function latencyClass(ms: number): string {
@@ -27,6 +66,7 @@ function DashboardContent() {
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [timeseries, setTimeseries] = useState<{ label: string; cost: number }[]>([]);
   const [requests, setRequests] = useState<RequestRow[]>([]);
+  const [reconciliation, setReconciliation] = useState<ProviderReconciliation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestLimit, setRequestLimit] = useState(20);
@@ -36,10 +76,11 @@ function DashboardContent() {
     setLoading(true);
     setError("");
     try {
-      const [sum, ts, reqs] = await Promise.all([
+      const [sum, ts, reqs, recon] = await Promise.all([
         apiFetch(`/api/v1/usage/summary?days=${days}`, session.token),
         apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.token).catch(() => []),
         apiFetch(`/api/v1/requests?days=${days}&limit=${requestLimit}`, session.token).catch(() => []),
+        apiFetch(`/api/v1/reconciliation`, session.token).catch(() => []),
       ]);
       setSummary(sum);
 
@@ -56,6 +97,7 @@ function DashboardContent() {
         }));
       setTimeseries(sorted);
       setRequests(reqs as RequestRow[]);
+      setReconciliation(recon as ProviderReconciliation[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
       else setError(err.message);
@@ -139,6 +181,15 @@ function DashboardContent() {
           </div>
         </div>
       </div>
+
+      {/* Trust badge: does our number match the provider's bill? */}
+      {reconciliation.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 16px 0" }}>
+          {reconciliation.map((r) => (
+            <ReconciliationBadge key={r.provider} r={r} />
+          ))}
+        </div>
+      )}
 
       {!hasData && (
         <div className="card" style={{ margin: 16, padding: 32 }}>
