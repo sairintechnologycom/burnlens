@@ -6,6 +6,29 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Unreleased] — `burnlens` (proxy)
+
+### Added
+- **Per-agent anomaly baselines (economics-graph Phase D).** Every agent is now
+  measured against its own history rather than an org-wide average: the hourly
+  detection run compares each agent seen in the last hour to a 7-day baseline of
+  its own hourly spend and retry rate, built from the `agent_id` tag. Three
+  signals, in precedence order — a suspected loop (more than
+  `agent_loop_max_requests` calls sharing one `trace_id` inside
+  `agent_loop_window_minutes`), a spend deviation past
+  `agent_deviation_multiplier` with an `agent_min_spend_usd` floor, and a
+  retry-rate deviation. Highest-ranked signal wins, so one runaway burst
+  produces one alert naming the cause, not three describing it.
+
+  When the `commit_sha` seen during the burst differs from the one before it,
+  the alert says "started after deploy <sha>".
+
+  All five thresholds are `[alerts]` config keys. Alerts ride the existing
+  anomaly path — same `fired_alerts` dedup, same Slack and terminal output.
+
+  Not baselined: tool-call counts. `tool_calls` is 0 on the SSE streaming path,
+  so a tool-call baseline would silently under-count every streaming agent.
+
 ## [Cloud `burnlens-cloud`] — 2026-08-10 (deployed only)
 
 Reconciliation: BurnLens's number, checked against the provider's own bill.

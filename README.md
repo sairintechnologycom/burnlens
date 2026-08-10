@@ -186,6 +186,12 @@ budgets:
     acme-corp: 50.00
 alerts:
   slack_webhook: https://hooks.slack.com/...
+  # Per-agent baselines: alert when an agent tagged `agent_id` burns 3x its own
+  # 7-day hourly average, or loops on one trace_id. Defaults shown.
+  agent_deviation_multiplier: 3.0
+  agent_min_spend_usd: 1.00
+  agent_loop_max_requests: 20
+  agent_loop_window_minutes: 10
 ```
 
 ---

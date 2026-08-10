@@ -35,6 +35,31 @@ def calculate_mad(values: list[float], median: float) -> float:
     return calculate_median(abs_deviations)
 
 
+def parse_timestamp(ts_str: str) -> datetime:
+    """Parse a stored request timestamp, assuming UTC when no offset is present.
+
+    Rows written before timezone-aware timestamps landed are naive, so a bare
+    ``fromisoformat`` would yield naive datetimes that cannot be compared with
+    the aware ``now`` every window check is built on.
+    """
+    if ts_str.endswith("Z"):
+        ts_str = ts_str[:-1] + "+00:00"
+    elif "+" not in ts_str and "-" not in ts_str[10:]:
+        ts_str += "+00:00"
+    return datetime.fromisoformat(ts_str)
+
+
+def max_requests_in_span(times: list[datetime], span: timedelta) -> int:
+    """Largest number of ascending-ordered ``times`` falling inside one ``span``."""
+    left = 0
+    best = 0
+    for right, t in enumerate(times):
+        while t - times[left] > span:
+            left += 1
+        best = max(best, right - left + 1)
+    return best
+
+
 def calculate_mean_std(values: list[float]) -> tuple[float, float]:
     """Calculate mean and standard deviation in pure Python."""
     if not values:
@@ -44,6 +69,44 @@ def calculate_mean_std(values: list[float]) -> tuple[float, float]:
     variance = sum((x - mean) ** 2 for x in values) / n
     std = variance ** 0.5
     return mean, std
+
+
+async def check_active_agents(
+    db_path: str,
+    config: BurnLensConfig,
+    lookback_minutes: int = 60,
+) -> int:
+    """Run per-agent baseline checks for every agent that ran in the lookback.
+
+    Scanning active agents on the hourly detection tick rather than on every
+    request keeps the 7-day baseline query off the proxy's hot path.  Returns
+    the number of agents checked.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(minutes=lookback_minutes)).isoformat()
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            SELECT DISTINCT json_extract(tags, '$.agent_id')
+            FROM requests
+            WHERE timestamp >= ? AND json_extract(tags, '$.agent_id') IS NOT NULL
+            """,
+            (since,),
+        )
+        agent_ids = [r[0] for r in await cursor.fetchall() if r[0]]
+
+    if not agent_ids:
+        return 0
+
+    detector = AnomalyDetector(config, db_path)
+    for agent_id in agent_ids:
+        try:
+            await detector.check_agent(agent_id)
+        except Exception as exc:
+            logger.error(
+                "Agent anomaly check failed for agent_id=%s: %s", agent_id, exc, exc_info=True
+            )
+    return len(agent_ids)
 
 
 class AnomalyDetector:
@@ -60,6 +123,15 @@ class AnomalyDetector:
         "15m": {"duration_min": 15, "min_count": 50, "min_cost": 1.50},
         "1h": {"duration_min": 60, "min_count": 100, "min_cost": 5.00},
     }
+
+    # Per-agent baselines (Phase D).  The current window matches the baseline
+    # bucket size, so "this hour" is compared against past hours of the same length.
+    AGENT_WINDOW_MINUTES = 60
+    RETRY_WINDOW_SECONDS = 60
+    AGENT_MIN_RETRY_SAMPLE = 5
+    # With no retries anywhere in the baseline, only an outright majority of
+    # retried calls is worth waking someone for.
+    AGENT_NO_BASELINE_RETRY_RATE = 0.5
 
     def __init__(self, config: BurnLensConfig, db_path: str) -> None:
         self.config = config
@@ -158,13 +230,7 @@ class AnomalyDetector:
         requests_data: list[tuple[datetime, float, str | None]] = []
         for r in rows:
             try:
-                # Handle possible naive or timezone-aware timestamps
-                ts_str = r[0]
-                if ts_str.endswith("Z"):
-                    ts_str = ts_str[:-1] + "+00:00"
-                elif "+" not in ts_str and "-" not in ts_str[10:]:
-                    ts_str += "+00:00"
-                dt = datetime.fromisoformat(ts_str)
+                dt = parse_timestamp(r[0])
                 requests_data.append((dt, float(r[1] or 0.0), r[2]))
             except Exception:
                 pass
@@ -311,6 +377,235 @@ class AnomalyDetector:
                 details=details,
             )
 
+    async def check_agent(self, agent_id: str) -> None:
+        """Compare one agent's trailing hour against its own 7-day hourly baseline.
+
+        Fires at most one event per run.  A suspected loop outranks a spend
+        deviation, which outranks a retry-rate deviation, so a single runaway
+        burst -- which trips all three at once -- produces one alert naming the
+        root signal rather than three describing the same cause.
+        """
+        cfg = self.config.alerts
+        now = datetime.now(timezone.utc)
+        window = timedelta(minutes=self.AGENT_WINDOW_MINUTES)
+        window_start = now - window
+        baseline_start = now - timedelta(days=cfg.agent_baseline_days)
+
+        rows = await self._fetch_agent_requests(agent_id, baseline_start)
+        if not rows:
+            return
+
+        bucket_sec = window.total_seconds()
+        num_buckets = int((window_start - baseline_start).total_seconds() // bucket_sec)
+        if num_buckets <= 0:
+            return
+
+        costs = [0.0] * num_buckets
+        counts = [0] * num_buckets
+        retries = [0] * num_buckets
+        current: list[tuple[datetime, float, str | None, str | None, bool]] = []
+        prior_sha: str | None = None
+
+        for dt, cost, trace_id, sha, is_retry in rows:
+            if dt >= window_start:
+                current.append((dt, cost, trace_id, sha, is_retry))
+                continue
+            if sha:
+                # Rows arrive ascending, so this settles on the last commit seen
+                # before the window -- what the agent was running on beforehand.
+                prior_sha = sha
+            idx = int((dt - baseline_start).total_seconds() // bucket_sec)
+            if 0 <= idx < num_buckets:
+                costs[idx] += cost
+                counts[idx] += 1
+                retries[idx] += 1 if is_retry else 0
+
+        if not current:
+            return
+
+        curr_cost = sum(r[1] for r in current)
+        curr_count = len(current)
+        curr_retries = sum(1 for r in current if r[4])
+
+        med_cost = calculate_median(costs)
+        med_count = calculate_median([float(c) for c in counts])
+        spend_ratio = curr_cost / med_cost if med_cost > 0 else float("inf")
+
+        window_shas = [s for _, _, _, s, _ in current if s]
+        new_sha = window_shas[-1] if window_shas and window_shas[-1] != prior_sha else None
+        deploy_note = f" — started after deploy {new_sha[:12]}" if new_sha else ""
+
+        base: dict[str, Any] = {
+            "window": "agent_1h",
+            "commit_sha": new_sha,
+            "request_count": curr_count,
+            "baseline_request_count": med_count,
+        }
+
+        # 1. Loop: many requests sharing one trace inside a short span.
+        by_trace: dict[str, list[datetime]] = {}
+        for dt, _cost, trace_id, _sha, _retry in current:
+            if trace_id:
+                by_trace.setdefault(trace_id, []).append(dt)
+
+        loop_span = timedelta(minutes=cfg.agent_loop_window_minutes)
+        loop_trace: str | None = None
+        loop_count = 0
+        for trace_id, times in by_trace.items():
+            n = max_requests_in_span(times, loop_span)
+            if n > loop_count:
+                loop_trace, loop_count = trace_id, n
+
+        if loop_count > cfg.agent_loop_max_requests:
+            details = dict(base)
+            details.update(
+                {
+                    "signal": "loop",
+                    "current_value": loop_count,
+                    "median_value": med_count,
+                    "z_score": 0.0,
+                    "duplicate_ratio": 0.0,
+                    "trace_id": loop_trace,
+                    "description": (
+                        f"Suspected loop for agent '{agent_id}': {loop_count} requests "
+                        f"share trace {loop_trace} within {cfg.agent_loop_window_minutes} "
+                        f"minutes (threshold {cfg.agent_loop_max_requests}), "
+                        f"${curr_cost:.4f} spent{deploy_note}."
+                    ),
+                }
+            )
+            await self._trigger_event(
+                event_type="runaway_loop",
+                scope="agent",
+                target=agent_id,
+                severity="critical" if loop_count >= 2 * cfg.agent_loop_max_requests else "warning",
+                details=details,
+            )
+            return
+
+        # 2. Spend deviation against the agent's own hourly baseline.
+        if curr_cost >= cfg.agent_min_spend_usd and spend_ratio >= cfg.agent_deviation_multiplier:
+            ratio_text = (
+                "with no prior baseline"
+                if med_cost <= 0
+                else f"{spend_ratio:.1f}x its usual"
+            )
+            details = dict(base)
+            details.update(
+                {
+                    "signal": "spend",
+                    "current_value": curr_cost,
+                    "median_value": med_cost,
+                    "multiplier": spend_ratio,
+                    "z_score": 0.0,
+                    "description": (
+                        f"Agent '{agent_id}' spent ${curr_cost:.4f} in the last hour, "
+                        f"{ratio_text} hourly ${med_cost:.4f} over the past "
+                        f"{cfg.agent_baseline_days} days{deploy_note}."
+                    ),
+                }
+            )
+            await self._trigger_event(
+                event_type="cost_spike",
+                scope="agent",
+                target=agent_id,
+                severity=(
+                    "critical"
+                    if spend_ratio >= 2 * cfg.agent_deviation_multiplier
+                    else "warning"
+                ),
+                details=details,
+            )
+            return
+
+        # 3. Retry-rate deviation.  Reported as a cost_spike event because the
+        # anomaly_events CHECK constraint predates this signal; details['signal']
+        # is what tells the two apart.
+        if curr_count < self.AGENT_MIN_RETRY_SAMPLE:
+            return
+
+        curr_rate = curr_retries / curr_count
+        rates = [retries[i] / counts[i] for i in range(num_buckets) if counts[i] > 0]
+        med_rate = calculate_median(rates)
+        deviated = (
+            curr_rate >= cfg.agent_deviation_multiplier * med_rate
+            if med_rate > 0
+            else curr_rate >= self.AGENT_NO_BASELINE_RETRY_RATE
+        )
+        if curr_rate <= 0 or not deviated:
+            return
+
+        details = dict(base)
+        details.update(
+            {
+                "signal": "retry_rate",
+                "current_value": curr_cost,
+                "median_value": med_cost,
+                "retry_rate": curr_rate,
+                "baseline_retry_rate": med_rate,
+                "z_score": 0.0,
+                "description": (
+                    f"Agent '{agent_id}' retried {curr_rate * 100:.1f}% of "
+                    f"{curr_count} requests in the last hour (baseline "
+                    f"{med_rate * 100:.1f}%), ${curr_cost:.4f} spent{deploy_note}."
+                ),
+            }
+        )
+        await self._trigger_event(
+            event_type="cost_spike",
+            scope="agent",
+            target=agent_id,
+            severity="warning",
+            details=details,
+        )
+
+    async def _fetch_agent_requests(
+        self,
+        agent_id: str,
+        since: datetime,
+    ) -> list[tuple[datetime, float, str | None, str | None, bool]]:
+        """Load an agent's requests since ``since``, with retries flagged.
+
+        The retry flag mirrors ``database.get_retry_stats``: a request is a retry
+        when an earlier call in the same trace, for the same model, failed within
+        ``RETRY_WINDOW_SECONDS`` before it.  Derived here rather than stored, so
+        the two stay tunable together.
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                SELECT r.timestamp,
+                       r.cost_usd,
+                       r.trace_id,
+                       COALESCE(r.commit_sha, json_extract(r.tags, '$.commit_sha')),
+                       EXISTS (
+                           SELECT 1 FROM requests p
+                           WHERE p.trace_id = r.trace_id
+                             AND p.model = r.model
+                             AND p.status_code >= 400
+                             AND p.id < r.id
+                             AND (julianday(r.timestamp) - julianday(p.timestamp))
+                                 * 86400.0 <= ?
+                       )
+                FROM requests r
+                WHERE r.timestamp >= ?
+                  AND json_extract(r.tags, '$.agent_id') = ?
+                ORDER BY r.timestamp ASC
+                """,
+                (self.RETRY_WINDOW_SECONDS, since.isoformat(), agent_id),
+            )
+            rows = await cursor.fetchall()
+
+        parsed: list[tuple[datetime, float, str | None, str | None, bool]] = []
+        for r in rows:
+            try:
+                parsed.append(
+                    (parse_timestamp(r[0]), float(r[1] or 0.0), r[2], r[3], bool(r[4]))
+                )
+            except Exception:
+                pass
+        return parsed
+
     async def _trigger_event(
         self,
         event_type: str,
@@ -384,8 +679,12 @@ class AnomalyDetector:
                 body.append(f"${details.get('current_value', 0.0):.4f}\n")
                 body.append("Median Cost:  ", style="bold")
                 body.append(f"${details.get('median_value', 0.0):.4f}\n")
-                body.append("Z-Score:      ", style="bold")
-                body.append(f"{details.get('z_score', 0.0):.2f}\n")
+                if "multiplier" in details:
+                    body.append("Multiplier:   ", style="bold")
+                    body.append(f"{details['multiplier']:.1f}x\n")
+                else:
+                    body.append("Z-Score:      ", style="bold")
+                    body.append(f"{details.get('z_score', 0.0):.2f}\n")
             else:  # runaway_loop
                 body.append("Current Count: ", style="bold")
                 body.append(f"{details.get('current_value', 0)}\n")

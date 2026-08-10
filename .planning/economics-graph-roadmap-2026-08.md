@@ -106,6 +106,8 @@ Exit criteria: on the BurnLens repo itself, dashboard shows real cost-per-merged
 
 ### Phase D — Agent anomaly baselines (runs parallel to B/C after A)
 
+**STATUS: BUILT 2026-08-10** — `AnomalyDetector.check_agent()` + `check_active_agents()` in `burnlens/detection/anomaly.py`, called from `run_detection` in `scheduler.py`; five `[alerts]` config keys; `tests/test_agent_anomaly_baselines.py`. Proxy-only, so it ships on the next `v*` tag, not on a deploy. Deviations from the spec below: (a) **no tool-call baseline** — `tool_calls` is 0 on the SSE streaming path, so it would silently under-count every streaming agent; (b) the retry-rate deviation reports as an `anomaly_events` `cost_spike` row with `details['signal'] = 'retry_rate'`, because that table's `CHECK(event_type IN ('cost_spike','runaway_loop'))` predates the signal and widening it means a table rebuild; (c) signals are ranked loop > spend > retry and only the top one fires, which is what makes "exactly one alert" hold when a burst trips all three.
+
 **Goal**: "Agent spent 4.8x normal after a change" alert.
 
 Build:

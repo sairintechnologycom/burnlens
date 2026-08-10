@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from burnlens.detection.anomaly import check_active_agents
 from burnlens.detection.billing import run_all_parsers
 from burnlens.detection.classifier import classify_new_assets
 from burnlens.storage.database import archive_old_discovery_events, purge_old_fired_alerts
@@ -90,10 +91,11 @@ def register_detection_jobs(
 
 
 async def run_detection(db_path: str, config: BurnLensConfig) -> None:
-    """Run all billing parsers and classify new assets.
+    """Run all billing parsers, classify new assets, check agent baselines.
 
-    Calls run_all_parsers (billing API detection) followed by
-    classify_new_assets (provider signature matching for shadow assets).
+    Calls run_all_parsers (billing API detection), classify_new_assets (provider
+    signature matching for shadow assets), then check_active_agents (per-agent
+    spend/retry/loop baselines).
 
     This function is designed to fail open: any exception is caught,
     logged, and swallowed so that scheduler failures never crash the proxy.
@@ -106,7 +108,13 @@ async def run_detection(db_path: str, config: BurnLensConfig) -> None:
         logger.info("Starting detection run")
         await run_all_parsers(db_path, config)
         classified = await classify_new_assets(db_path)
-        logger.info("Detection run complete — classified %d shadow assets", classified)
+        agents = await check_active_agents(db_path, config)
+        logger.info(
+            "Detection run complete — classified %d shadow assets, "
+            "checked %d active agents against their baselines",
+            classified,
+            agents,
+        )
     except Exception:
         logger.error("Detection run failed", exc_info=True)
 
