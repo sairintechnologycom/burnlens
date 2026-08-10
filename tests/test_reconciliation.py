@@ -127,11 +127,17 @@ async def test_anthropic_admin_key_uses_x_api_key_header():
 @respx.mock
 @pytest.mark.asyncio
 async def test_anthropic_oauth_token_uses_bearer_header():
+    """Real OAuth tokens are `sk-ant-oat01-...` — they share the admin key's
+    `sk-ant-` prefix, so the routing test must match on `sk-ant-admin`.
+    A fixture without the prefix passes even when the routing is wrong."""
     route = respx.get("https://api.anthropic.com/v1/organizations/cost_report").mock(
         return_value=httpx.Response(200, json={"data": [], "has_more": False})
     )
-    await _anthropic_day_cost("oat-token", DAY)
-    assert route.calls[0].request.headers["authorization"] == "Bearer oat-token"
+    token = "sk-ant-oat01-abc123"
+    await _anthropic_day_cost(token, DAY)
+    req = route.calls[0].request
+    assert req.headers["authorization"] == f"Bearer {token}"
+    assert "x-api-key" not in req.headers
 
 
 @respx.mock

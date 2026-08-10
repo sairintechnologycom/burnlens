@@ -62,7 +62,9 @@ async def _anthropic_day_cost(api_key: str, day: date) -> float:
     """Anthropic org cost for one UTC day, in USD."""
     headers = {"anthropic-version": "2023-06-01"}
     # Admin API keys authenticate with x-api-key; OAuth tokens with a bearer.
-    if api_key.startswith("sk-ant-"):
+    # Match on `sk-ant-admin` specifically: OAuth tokens are `sk-ant-oat01-...`,
+    # so a bare `sk-ant-` test sends them as x-api-key and Anthropic 401s.
+    if api_key.startswith("sk-ant-admin"):
         headers["x-api-key"] = api_key
     else:
         headers["Authorization"] = f"Bearer {api_key}"
