@@ -129,6 +129,13 @@ class AlertsConfig:
     api_key_budgets: ApiKeyBudgetsConfig = field(default_factory=ApiKeyBudgetsConfig)
     alert_recipients: list[str] = field(default_factory=list)
 
+    # Per-agent anomaly baselines (economics graph, Phase D).
+    agent_baseline_days: int = 7
+    agent_deviation_multiplier: float = 3.0
+    agent_min_spend_usd: float = 1.00
+    agent_loop_max_requests: int = 20
+    agent_loop_window_minutes: int = 10
+
 
 @dataclass
 class BudgetPolicy:
@@ -358,6 +365,15 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
             customer_budgets=customer_budgets,
             api_key_budgets=api_key_budgets,
             alert_recipients=alert_recipients,
+            agent_baseline_days=int(alerts_data.get("agent_baseline_days", 7)),
+            agent_deviation_multiplier=float(
+                alerts_data.get("agent_deviation_multiplier", 3.0)
+            ),
+            agent_min_spend_usd=float(alerts_data.get("agent_min_spend_usd", 1.00)),
+            agent_loop_max_requests=int(alerts_data.get("agent_loop_max_requests", 20)),
+            agent_loop_window_minutes=int(
+                alerts_data.get("agent_loop_window_minutes", 10)
+            ),
         )
         kwargs["alerts"] = alerts
 
