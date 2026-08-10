@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Unreleased]
+
+### Added
+- **`burnlens scan` now warns when a model has no pricing entry.** A missing
+  pricing row does not error — it prices at $0.00, so the scan reports a total
+  that is simply too low, and nothing on screen says so. That is exactly how
+  `claude-opus-5` went unnoticed. Scans now collect every `(provider, model)`
+  pair that costed at $0 for lack of a pricing entry and print them once at the
+  end of the run, deduplicated across all four scanners.
+
+  The collection point is `calculate_cost` itself, so all scanners (Claude Code,
+  Cursor, Codex, Gemini CLI) are covered without per-scanner code.
+
 ## [OSS `burnlens` v1.15.1] — 2026-08-10
 
 ### Fixed

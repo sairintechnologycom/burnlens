@@ -543,3 +543,27 @@ class TestTieredPricing:
 
         p = {"input_per_million": 1.0}
         assert apply_tiered(p, 10_000_000) is p
+
+
+class TestUnpricedTracking:
+    """A model with no pricing entry must be reported, not silently $0."""
+
+    def test_unpriced_model_is_recorded_and_drained(self):
+        from burnlens.cost.calculator import drain_unpriced_models
+
+        drain_unpriced_models()  # clear anything earlier tests left behind
+        usage = TokenUsage(input_tokens=1000, output_tokens=500)
+
+        assert calculate_cost("anthropic", "claude-not-a-real-model", usage) == 0.0
+        assert drain_unpriced_models() == [
+            ("anthropic", "claude-not-a-real-model")
+        ]
+        # Draining clears — a second scan does not re-warn about old models.
+        assert drain_unpriced_models() == []
+
+    def test_priced_model_is_not_recorded(self):
+        from burnlens.cost.calculator import drain_unpriced_models
+
+        drain_unpriced_models()
+        calculate_cost("anthropic", "claude-opus-5", TokenUsage(input_tokens=1000))
+        assert drain_unpriced_models() == []
