@@ -131,6 +131,62 @@ class CloudSync:
         except (ValueError, TypeError) as exc:
             logger.warning("Cloud sync: failed to apply routing overrides: %s", exc)
 
+    def _api_base(self) -> str:
+        """Strip any ingest path off the configured endpoint to get the API root.
+
+        Configs written before 1.4.2 (including the old default) pointed at
+        /api/v1/ingest — a path that never existed on the backend (404) — so
+        both that and the correct /v1/ingest have to be tolerated here. Every
+        route is then built from this root, so a second endpoint cannot
+        rediscover the same 404.
+        """
+        endpoint = self.cloud_config.endpoint.rstrip("/")
+        for suffix in ("/api/v1/ingest", "/v1/ingest"):
+            if endpoint.endswith(suffix):
+                return endpoint[: -len(suffix)]
+        return endpoint
+
+    async def push_outcomes(self, outcomes: list[dict[str, Any]]) -> bool:
+        """POST a batch of outcomes to the cloud. True on HTTP 200.
+
+        Unlike cost records these are user-authored business events, not
+        auto-captured traffic, so there is no field whitelist to apply — the
+        caller chose every value.
+        """
+        import time
+
+        if time.monotonic() < self._backoff_until:
+            return False
+        if not outcomes:
+            return False
+
+        client = self._get_client()
+        api_key = self.cloud_config.api_key or ""
+        try:
+            resp = await client.post(
+                self._api_base() + "/v1/outcomes",
+                json={"outcomes": outcomes},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": api_key,
+                    "X-Requested-With": "burnlens-sync",
+                },
+            )
+            if resp.status_code == 200:
+                return True
+            if resp.status_code == 404:
+                # Backend predates outcomes. Not an error worth retrying every
+                # tick — leave them unsynced and say so once.
+                logger.debug("Cloud sync: backend has no /v1/outcomes endpoint")
+                return False
+            logger.warning(
+                "Cloud sync: outcome push failed with HTTP %d", resp.status_code
+            )
+            return False
+        except httpx.HTTPError as exc:
+            logger.debug("Cloud sync: outcome push error: %s", exc)
+            return False
+
     async def push_batch(self, records: list[dict[str, Any]]) -> bool:
         """POST a batch of sanitized records to the cloud ingest endpoint.
 
@@ -153,16 +209,7 @@ class CloudSync:
                 record.get("system_prompt_hash"), api_key
             )
 
-        endpoint = self.cloud_config.endpoint.rstrip("/")
-        if endpoint.endswith("/api/v1/ingest"):
-            # Configs written before 1.4.2 (including the old default)
-            # pointed at /api/v1/ingest — a path that never existed on the
-            # backend (404). Rewrite to the real route.
-            url = endpoint[: -len("/api/v1/ingest")] + "/v1/ingest"
-        elif endpoint.endswith("/v1/ingest"):
-            url = endpoint
-        else:
-            url = endpoint + "/v1/ingest"
+        url = self._api_base() + "/v1/ingest"
 
         try:
             resp = await client.post(
@@ -240,8 +287,34 @@ class CloudSync:
             except Exception:
                 logger.debug("Cloud sync loop error", exc_info=True)
 
+    async def _sync_outcomes_once(self, db_path: str) -> int:
+        """Push pending outcomes. Returns how many were pushed.
+
+        Deliberately independent of the cost-record push: outcomes are low
+        volume and a backend that cannot accept them yet must not stall cost
+        sync, which is the product's primary job.
+        """
+        rows = await _fetch_unsynced_outcomes(db_path, limit=_BATCH_SIZE)
+        if not rows:
+            return 0
+
+        ok = await self.push_outcomes([_outcome_row_to_payload(r) for r in rows])
+        if not ok:
+            return 0
+
+        await _mark_outcomes_synced(db_path, [r["id"] for r in rows])
+        logger.info("Cloud sync pushed %d outcomes", len(rows))
+        return len(rows)
+
     async def _sync_once(self, db_path: str) -> int:
-        """Run a single sync cycle. Returns the number of records pushed."""
+        """Run a single sync cycle. Returns the number of cost records pushed."""
+        # Outcomes first and guarded: a failure here must not prevent cost
+        # records — the thing customers actually pay for — from syncing.
+        try:
+            await self._sync_outcomes_once(db_path)
+        except Exception:
+            logger.debug("Cloud sync: outcome push failed", exc_info=True)
+
         rows = await _fetch_unsynced(db_path, limit=_BATCH_SIZE)
         if not rows:
             return 0
@@ -320,6 +393,58 @@ async def _mark_synced(db_path: str, ids: list[int]) -> None:
             [now] + ids,
         )
         await db.commit()
+
+
+async def _fetch_unsynced_outcomes(db_path: str, limit: int) -> list[dict[str, Any]]:
+    """Fetch outcomes not yet pushed to the cloud.
+
+    Returns [] if the table doesn't exist yet — a proxy that has never run the
+    Phase B migration must not break the whole sync cycle.
+    """
+    try:
+        async with aiosqlite.connect(db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM outcomes WHERE synced_at IS NULL ORDER BY id ASC LIMIT ?",
+                (limit,),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+    except aiosqlite.OperationalError:
+        return []
+
+
+async def _mark_outcomes_synced(db_path: str, ids: list[int]) -> None:
+    if not ids:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(db_path) as db:
+        placeholders = ",".join("?" for _ in ids)
+        await db.execute(
+            f"UPDATE outcomes SET synced_at = ? WHERE id IN ({placeholders})",
+            [now] + ids,
+        )
+        await db.commit()
+
+
+def _outcome_row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """Convert a local outcome row to the cloud wire format."""
+    metadata = row.get("metadata") or "{}"
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (json.JSONDecodeError, TypeError):
+            metadata = {}
+
+    return dict(
+        outcome_id=row.get("outcome_id"),
+        workflow_id=row.get("workflow_id"),
+        status=row.get("status"),
+        event_time=row.get("event_time"),
+        business_value=row.get("business_value"),
+        currency=row.get("currency"),
+        source=row.get("source") or "cli",
+        metadata=metadata,
+    )
 
 
 def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:

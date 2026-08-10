@@ -1067,6 +1067,126 @@
     "title": "OtelTestResponse",
     "type": "object"
   },
+  "OutcomeIngestRequest": {
+    "description": "Batch of outcomes. Mirrors IngestRequest's header-or-body API key.",
+    "properties": {
+      "api_key": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Api Key"
+      },
+      "outcomes": {
+        "items": {
+          "$ref": "#/components/schemas/OutcomeRecord"
+        },
+        "maxItems": 1000,
+        "title": "Outcomes",
+        "type": "array"
+      }
+    },
+    "required": [
+      "outcomes"
+    ],
+    "title": "OutcomeIngestRequest",
+    "type": "object"
+  },
+  "OutcomeIngestResponse": {
+    "description": "`duplicates` is not an error \u2014 it is the idempotency guarantee reporting\nthat those outcome_ids were already recorded.",
+    "properties": {
+      "accepted": {
+        "title": "Accepted",
+        "type": "integer"
+      },
+      "duplicates": {
+        "title": "Duplicates",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "accepted",
+      "duplicates"
+    ],
+    "title": "OutcomeIngestResponse",
+    "type": "object"
+  },
+  "OutcomeRecord": {
+    "description": "One business outcome produced by a workflow.\n\n`outcome_id` is the caller's own identifier for the business event (ticket\nid, PR number, document id). It is the idempotency key: re-posting the same\none is ignored rather than counted twice, so at-least-once delivery from the\ncaller's side is safe.",
+    "properties": {
+      "business_value": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Business Value"
+      },
+      "currency": {
+        "anyOf": [
+          {
+            "maxLength": 8,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Currency"
+      },
+      "event_time": {
+        "format": "date-time",
+        "title": "Event Time",
+        "type": "string"
+      },
+      "metadata": {
+        "title": "Metadata",
+        "type": "object"
+      },
+      "outcome_id": {
+        "maxLength": 200,
+        "minLength": 1,
+        "title": "Outcome Id",
+        "type": "string"
+      },
+      "source": {
+        "default": "api",
+        "maxLength": 32,
+        "title": "Source",
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "accepted",
+          "rejected",
+          "failed"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "workflow_id": {
+        "maxLength": 200,
+        "minLength": 1,
+        "title": "Workflow Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "outcome_id",
+      "workflow_id",
+      "status",
+      "event_time"
+    ],
+    "title": "OutcomeRecord",
+    "type": "object"
+  },
   "PricingResponse": {
     "description": "Response for current pricing (default or custom).",
     "properties": {
@@ -1853,6 +1973,77 @@
       "token"
     ],
     "title": "VerifyEmailBody",
+    "type": "object"
+  },
+  "WorkflowEconomics": {
+    "description": "Unit economics for one workflow.\n\n`cost_per_accepted_usd` divides TOTAL workflow spend by accepted outcomes,\nnot just the spend allocated to accepted ones \u2014 failed and rejected attempts\ncost real money, so charging them to the successes is the honest unit cost.\nThe components below show how much of it is rework.\n\nNone when there are no accepted outcomes yet: a workflow burning money with\nnothing to show for it has no meaningful unit cost, and reporting 0 or\ninfinity there would be worse than reporting nothing.",
+    "properties": {
+      "accepted_count": {
+        "title": "Accepted Count",
+        "type": "integer"
+      },
+      "business_value_accepted": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Business Value Accepted"
+      },
+      "cost_accepted_usd": {
+        "title": "Cost Accepted Usd",
+        "type": "number"
+      },
+      "cost_per_accepted_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Cost Per Accepted Usd"
+      },
+      "cost_rework_usd": {
+        "title": "Cost Rework Usd",
+        "type": "number"
+      },
+      "cost_total_usd": {
+        "title": "Cost Total Usd",
+        "type": "number"
+      },
+      "cost_unattributed_usd": {
+        "title": "Cost Unattributed Usd",
+        "type": "number"
+      },
+      "failed_count": {
+        "title": "Failed Count",
+        "type": "integer"
+      },
+      "rejected_count": {
+        "title": "Rejected Count",
+        "type": "integer"
+      },
+      "workflow_id": {
+        "title": "Workflow Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "workflow_id",
+      "accepted_count",
+      "rejected_count",
+      "failed_count",
+      "cost_total_usd",
+      "cost_accepted_usd",
+      "cost_rework_usd",
+      "cost_unattributed_usd"
+    ],
+    "title": "WorkflowEconomics",
     "type": "object"
   },
   "WorkspaceMemberResponse": {

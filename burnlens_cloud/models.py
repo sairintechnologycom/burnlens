@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -119,6 +119,66 @@ class IngestResponse(BaseModel):
     accepted: int
     rejected: int
     routing_overrides: Optional[dict] = None
+
+
+OUTCOME_STATUSES = ("accepted", "rejected", "failed")
+
+
+class OutcomeRecord(BaseModel):
+    """One business outcome produced by a workflow.
+
+    `outcome_id` is the caller's own identifier for the business event (ticket
+    id, PR number, document id). It is the idempotency key: re-posting the same
+    one is ignored rather than counted twice, so at-least-once delivery from the
+    caller's side is safe.
+    """
+    outcome_id: str = Field(..., min_length=1, max_length=200)
+    workflow_id: str = Field(..., min_length=1, max_length=200)
+    status: Literal["accepted", "rejected", "failed"]
+    event_time: datetime
+    business_value: Optional[float] = None
+    currency: Optional[str] = Field(None, max_length=8)
+    # 'api' for caller-posted, 'derived' for outcomes BurnLens infers itself
+    # (Phase C infers "PR merged" from git context).
+    source: str = Field("api", max_length=32)
+    metadata: dict = Field(default_factory=dict)
+
+
+class OutcomeIngestRequest(BaseModel):
+    """Batch of outcomes. Mirrors IngestRequest's header-or-body API key."""
+    api_key: Optional[str] = None
+    outcomes: list[OutcomeRecord] = Field(..., max_length=1_000)
+
+
+class OutcomeIngestResponse(BaseModel):
+    """`duplicates` is not an error — it is the idempotency guarantee reporting
+    that those outcome_ids were already recorded."""
+    accepted: int
+    duplicates: int
+
+
+class WorkflowEconomics(BaseModel):
+    """Unit economics for one workflow.
+
+    `cost_per_accepted_usd` divides TOTAL workflow spend by accepted outcomes,
+    not just the spend allocated to accepted ones — failed and rejected attempts
+    cost real money, so charging them to the successes is the honest unit cost.
+    The components below show how much of it is rework.
+
+    None when there are no accepted outcomes yet: a workflow burning money with
+    nothing to show for it has no meaningful unit cost, and reporting 0 or
+    infinity there would be worse than reporting nothing.
+    """
+    workflow_id: str
+    accepted_count: int
+    rejected_count: int
+    failed_count: int
+    cost_total_usd: float
+    cost_accepted_usd: float
+    cost_rework_usd: float
+    cost_unattributed_usd: float
+    cost_per_accepted_usd: Optional[float] = None
+    business_value_accepted: Optional[float] = None
 
 
 class LoginRequest(BaseModel):

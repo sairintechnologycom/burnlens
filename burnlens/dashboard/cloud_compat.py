@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 usage_router = APIRouter(tags=["cloud-compat-usage"])
 requests_router = APIRouter(tags=["cloud-compat-requests"])
+outcomes_router = APIRouter(tags=["cloud-compat-outcomes"])
 
 _DEFAULT_DB = str(Path.home() / ".burnlens" / "burnlens.db")
 
@@ -267,4 +268,43 @@ async def recommendations(request: Request) -> list[dict]:
             "reason": r.reason,
         }
         for r in recs
+    ]
+
+
+# ------------------------------------------------- /api/v1/outcomes/summary
+
+@outcomes_router.get("/summary")
+async def outcomes_summary(
+    request: Request,
+    days: int = Query(default=30, ge=1, le=365),
+    window_seconds: int = Query(default=86_400, ge=1, le=604_800),
+) -> list[dict]:
+    """Cloud-compatible unit economics: cost per accepted outcome, per workflow.
+
+    Same path and shape as the cloud backend's route, so a frontend page built
+    against one works against the other.
+    """
+    from burnlens.storage.database import get_workflow_economics
+
+    rows = await get_workflow_economics(
+        _db_path(request), since=_since_iso(days), window_seconds=window_seconds
+    )
+    return [
+        {
+            "workflow_id": r.workflow_id,
+            "accepted_count": r.accepted_count,
+            "rejected_count": r.rejected_count,
+            "failed_count": r.failed_count,
+            "cost_total_usd": round(r.cost_total_usd, 6),
+            "cost_accepted_usd": round(r.cost_accepted_usd, 6),
+            "cost_rework_usd": round(r.cost_rework_usd, 6),
+            "cost_unattributed_usd": round(r.cost_unattributed_usd, 6),
+            "cost_per_accepted_usd": (
+                round(r.cost_per_accepted_usd, 6)
+                if r.cost_per_accepted_usd is not None
+                else None
+            ),
+            "business_value_accepted": r.business_value_accepted,
+        }
+        for r in rows
     ]
