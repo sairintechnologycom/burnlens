@@ -44,6 +44,13 @@ vkey_app = typer.Typer(
 )
 app.add_typer(vkey_app, name="vkey")
 
+outcome_app = typer.Typer(
+    name="outcome",
+    help="Record business outcomes to get cost per accepted outcome.",
+    add_completion=False,
+)
+app.add_typer(outcome_app, name="outcome")
+
 
 @wal_app.command("doctor")
 def wal_doctor(
@@ -1779,6 +1786,160 @@ def routing(
             )
 
         console.print(table)
+
+    asyncio.run(_run())
+
+
+@outcome_app.command("record")
+def outcome_record(
+    workflow: str = typer.Option(..., "--workflow", "-w", help="Workflow this outcome belongs to (matches X-BurnLens-Tag-Workflow-Id)"),
+    status: str = typer.Option(..., "--status", "-s", help="accepted | rejected | failed"),
+    outcome_id: Optional[str] = typer.Option(None, "--id", help="Your id for this business event. Defaults to a generated one; pass it to make re-runs idempotent."),
+    value: Optional[float] = typer.Option(None, "--value", help="Business value of this outcome"),
+    currency: Optional[str] = typer.Option(None, "--currency", help="Currency for --value, e.g. USD"),
+    at: Optional[str] = typer.Option(None, "--at", help="Event time as ISO-8601. Defaults to now."),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Record a business outcome so spend can be divided by results.
+
+    Cost tells you what a workflow spent. This tells you what it produced, so
+    `burnlens outcome show` can report what one accepted result actually costs.
+    """
+    from datetime import datetime, timezone
+
+    from burnlens.storage.database import insert_outcome
+    from burnlens.storage.models import OUTCOME_STATUSES, Outcome
+
+    if status not in OUTCOME_STATUSES:
+        console.print(
+            f"[red]--status must be one of: {', '.join(OUTCOME_STATUSES)}[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    if at:
+        try:
+            event_time = datetime.fromisoformat(at)
+        except ValueError:
+            console.print(f"[red]--at is not valid ISO-8601: {at}[/red]")
+            raise typer.Exit(code=1)
+        if event_time.tzinfo is None:
+            event_time = event_time.replace(tzinfo=timezone.utc)
+    else:
+        event_time = datetime.now(timezone.utc)
+
+    if outcome_id is None:
+        from burnlens.storage.models import uuid7
+
+        outcome_id = uuid7()
+
+    cfg = load_config(config)
+    outcome = Outcome(
+        outcome_id=outcome_id,
+        workflow_id=workflow,
+        status=status,
+        event_time=event_time,
+        business_value=value,
+        currency=currency,
+        source="cli",
+    )
+
+    async def _run() -> None:
+        from burnlens.storage.database import init_db
+
+        await init_db(cfg.db_path)
+        row_id = await insert_outcome(cfg.db_path, outcome)
+        if row_id:
+            console.print(
+                f"[green]Recorded[/green] {status} outcome [cyan]{outcome_id}[/cyan] "
+                f"for workflow [cyan]{workflow}[/cyan]"
+            )
+        else:
+            # Not an error: the id is the idempotency key, so a repeat is a
+            # no-op by design rather than a double count.
+            console.print(
+                f"[yellow]Already recorded[/yellow] outcome [cyan]{outcome_id}[/cyan] — ignored"
+            )
+
+    asyncio.run(_run())
+
+
+@outcome_app.command("show")
+def outcome_show(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(30, "--days", "-d", help="Days to look back"),
+    window: int = typer.Option(86_400, "--window", help="Seconds after a request an outcome may still claim its cost"),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON"),
+) -> None:
+    """Show cost per accepted outcome, per workflow."""
+    import json as json_mod
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.database import get_workflow_economics, init_db
+
+        await init_db(cfg.db_path)
+        rows = await get_workflow_economics(
+            cfg.db_path, since=_since_iso(days), window_seconds=window
+        )
+
+        if json_output:
+            console.print(json_mod.dumps([
+                {
+                    "workflow_id": r.workflow_id,
+                    "accepted": r.accepted_count,
+                    "rejected": r.rejected_count,
+                    "failed": r.failed_count,
+                    "cost_total_usd": round(r.cost_total_usd, 6),
+                    "cost_rework_usd": round(r.cost_rework_usd, 6),
+                    "cost_unattributed_usd": round(r.cost_unattributed_usd, 6),
+                    "cost_per_accepted_usd": (
+                        round(r.cost_per_accepted_usd, 6)
+                        if r.cost_per_accepted_usd is not None else None
+                    ),
+                }
+                for r in rows
+            ], indent=2))
+            return
+
+        if not rows:
+            console.print("[yellow]No workflow-tagged spend or outcomes yet.[/yellow]")
+            console.print(
+                "Tag requests with [cyan]X-BurnLens-Tag-Workflow-Id[/cyan], then record "
+                "results with [cyan]burnlens outcome record[/cyan]."
+            )
+            return
+
+        table = Table(title=f"Cost per accepted outcome (last {days}d)")
+        table.add_column("Workflow", style="cyan")
+        table.add_column("Accepted", justify="right")
+        table.add_column("Rejected/Failed", justify="right")
+        table.add_column("Total cost", justify="right")
+        table.add_column("Rework", justify="right")
+        table.add_column("Unattributed", justify="right")
+        table.add_column("Per accepted", justify="right", style="green")
+
+        for r in rows:
+            per = (
+                _fmt_cost(r.cost_per_accepted_usd)
+                if r.cost_per_accepted_usd is not None
+                else "-"
+            )
+            table.add_row(
+                r.workflow_id,
+                str(r.accepted_count),
+                str(r.rejected_count + r.failed_count),
+                _fmt_cost(r.cost_total_usd),
+                _fmt_cost(r.cost_rework_usd),
+                _fmt_cost(r.cost_unattributed_usd),
+                per,
+            )
+
+        console.print(table)
+        console.print(
+            "[dim]Per accepted = total workflow spend / accepted outcomes — failed "
+            "attempts are charged to the successes, which is what one result really costs.[/dim]"
+        )
 
     asyncio.run(_run())
 

@@ -54,6 +54,33 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 """
 
+# Economics-graph Phase B. `outcome_id` is the caller's own business-event id
+# and the idempotency key: UNIQUE makes re-recording the same outcome a no-op,
+# so a rerun of a derived-outcome importer (Phase C) cannot double-count.
+_CREATE_OUTCOMES_TABLE = """
+CREATE TABLE IF NOT EXISTS outcomes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    outcome_id      TEXT    NOT NULL UNIQUE,
+    workflow_id     TEXT    NOT NULL,
+    status          TEXT    NOT NULL CHECK (status IN ('accepted', 'rejected', 'failed')),
+    business_value  REAL,
+    currency        TEXT,
+    event_time      TEXT    NOT NULL,
+    source          TEXT    NOT NULL DEFAULT 'cli',
+    metadata        TEXT    NOT NULL DEFAULT '{}',
+    created_at      TEXT    NOT NULL,
+    synced_at       TEXT
+);
+"""
+
+_CREATE_OUTCOMES_WORKFLOW_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_outcomes_workflow_time ON outcomes(workflow_id, event_time);
+"""
+
+_CREATE_OUTCOMES_SYNCED_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_outcomes_synced_at ON outcomes(synced_at);
+"""
+
 _CREATE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON requests(timestamp);
 """
@@ -353,6 +380,9 @@ async def init_db(db_path: str) -> None:
 
     # Economics graph Phase A: per-request tool-call count
     await migrate_add_tool_calls(db_path)
+
+    # Economics graph Phase B: business outcomes
+    await migrate_create_outcomes_table(db_path)
 
     logger.debug("Database initialized at %s", db_path)
 
@@ -825,6 +855,155 @@ async def get_spend_by_customer_this_month(db_path: str) -> dict[str, float]:
         rows = await cursor.fetchall()
 
     return {row["customer"]: row["total_cost"] for row in rows}
+
+
+async def migrate_create_outcomes_table(db_path: str) -> None:
+    """Create the ``outcomes`` table + indexes. Safe to call repeatedly."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(_CREATE_OUTCOMES_TABLE)
+        await db.execute(_CREATE_OUTCOMES_WORKFLOW_INDEX)
+        await db.execute(_CREATE_OUTCOMES_SYNCED_INDEX)
+        await db.commit()
+
+
+async def insert_outcome(db_path: str, outcome: "Outcome") -> int:
+    """Insert an outcome; return its row id, or 0 if it was already recorded.
+
+    ``INSERT OR IGNORE`` against the UNIQUE ``outcome_id`` is what makes this
+    idempotent — re-running a derived-outcome importer must not inflate the
+    denominator of cost-per-outcome.
+    """
+    from datetime import datetime, timezone
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            INSERT OR IGNORE INTO outcomes (
+                outcome_id, workflow_id, status, business_value, currency,
+                event_time, source, metadata, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                outcome.outcome_id,
+                outcome.workflow_id,
+                outcome.status,
+                outcome.business_value,
+                outcome.currency,
+                outcome.event_time.isoformat(),
+                outcome.source,
+                json.dumps(outcome.metadata),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        await db.commit()
+        return cursor.lastrowid if cursor.rowcount else 0
+
+
+# Mirrors the Postgres allocation query in burnlens_cloud/outcomes_api.py: each
+# request is charged to the first outcome of its workflow at-or-after it, inside
+# the window. Requests with no such outcome are reported as unattributed rather
+# than dropped, so spend never silently disappears from the denominator.
+_WORKFLOW_ECONOMICS_SQL = """
+WITH req AS (
+    SELECT r.timestamp AS ts,
+           r.cost_usd,
+           json_extract(r.tags, '$.workflow_id') AS workflow_id
+    FROM requests r
+    WHERE r.timestamp >= ?
+      AND json_extract(r.tags, '$.workflow_id') IS NOT NULL
+),
+alloc AS (
+    SELECT
+        req.workflow_id,
+        req.cost_usd,
+        (
+            SELECT o.status FROM outcomes o
+            WHERE o.workflow_id = req.workflow_id
+              AND o.event_time >= req.ts
+              AND (julianday(o.event_time) - julianday(req.ts)) * 86400.0 < ?
+            ORDER BY o.event_time ASC
+            LIMIT 1
+        ) AS status
+    FROM req
+),
+spend AS (
+    SELECT workflow_id,
+           SUM(cost_usd) AS cost_total,
+           SUM(CASE WHEN status = 'accepted' THEN cost_usd ELSE 0 END) AS cost_accepted,
+           SUM(CASE WHEN status IN ('rejected', 'failed') THEN cost_usd ELSE 0 END) AS cost_rework,
+           SUM(CASE WHEN status IS NULL THEN cost_usd ELSE 0 END) AS cost_unattributed
+    FROM alloc GROUP BY workflow_id
+),
+counts AS (
+    SELECT workflow_id,
+           SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted_count,
+           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
+           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+           SUM(CASE WHEN status = 'accepted' THEN business_value ELSE NULL END) AS business_value_accepted
+    FROM outcomes WHERE event_time >= ? GROUP BY workflow_id
+),
+-- SQLite has no FULL OUTER JOIN before 3.39, so union the key sets instead:
+-- a workflow that only spent money and one that only produced outcomes must
+-- both still appear.
+keys AS (
+    SELECT workflow_id FROM spend
+    UNION
+    SELECT workflow_id FROM counts
+)
+SELECT k.workflow_id                              AS workflow_id,
+       COALESCE(s.cost_total, 0.0)                AS cost_total,
+       COALESCE(s.cost_accepted, 0.0)             AS cost_accepted,
+       COALESCE(s.cost_rework, 0.0)               AS cost_rework,
+       COALESCE(s.cost_unattributed, 0.0)         AS cost_unattributed,
+       COALESCE(c.accepted_count, 0)              AS accepted_count,
+       COALESCE(c.rejected_count, 0)              AS rejected_count,
+       COALESCE(c.failed_count, 0)                AS failed_count,
+       c.business_value_accepted                  AS business_value_accepted
+FROM keys k
+LEFT JOIN spend s ON s.workflow_id = k.workflow_id
+LEFT JOIN counts c ON c.workflow_id = k.workflow_id
+ORDER BY cost_total DESC
+"""
+
+
+async def get_workflow_economics(
+    db_path: str,
+    since: str,
+    window_seconds: int = 86_400,
+) -> list["WorkflowEconomics"]:
+    """Return per-workflow unit economics: what an accepted outcome costs."""
+    from burnlens.storage.models import WorkflowEconomics
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            _WORKFLOW_ECONOMICS_SQL, (since, float(window_seconds), since)
+        )
+        rows = await cursor.fetchall()
+
+    results = []
+    for row in rows:
+        accepted = int(row["accepted_count"])
+        cost_total = float(row["cost_total"])
+        results.append(
+            WorkflowEconomics(
+                workflow_id=row["workflow_id"],
+                accepted_count=accepted,
+                rejected_count=int(row["rejected_count"]),
+                failed_count=int(row["failed_count"]),
+                cost_total_usd=cost_total,
+                cost_accepted_usd=float(row["cost_accepted"]),
+                cost_rework_usd=float(row["cost_rework"]),
+                cost_unattributed_usd=float(row["cost_unattributed"]),
+                cost_per_accepted_usd=(cost_total / accepted) if accepted else None,
+                business_value_accepted=(
+                    float(row["business_value_accepted"])
+                    if row["business_value_accepted"] is not None
+                    else None
+                ),
+            )
+        )
+    return results
 
 
 async def get_retry_stats(

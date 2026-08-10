@@ -255,6 +255,60 @@ class RequestRecord:
 
 
 
+OUTCOME_STATUSES = ("accepted", "rejected", "failed")
+
+
+@dataclass
+class Outcome:
+    """A business result produced by a workflow — the other half of unit economics.
+
+    ``outcome_id`` is the caller's own id for the business event (ticket, PR,
+    document). It is the idempotency key, so recording the same outcome twice —
+    a rerun of a derived-outcome importer, a retried CLI call — cannot inflate
+    the count that cost-per-outcome divides by.
+    """
+
+    outcome_id: str
+    workflow_id: str
+    status: str
+    event_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    business_value: float | None = None
+    currency: str | None = None
+    source: str = "cli"
+    metadata: dict = field(default_factory=dict)
+    id: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in OUTCOME_STATUSES:
+            raise ValueError(
+                f"status must be one of {OUTCOME_STATUSES}, got {self.status!r}"
+            )
+
+
+@dataclass
+class WorkflowEconomics:
+    """Unit economics for one workflow.
+
+    ``cost_per_accepted_usd`` divides TOTAL workflow spend by accepted outcomes,
+    not only the spend allocated to accepted ones: failed and rejected attempts
+    cost real money and charging them to the successes is the honest unit cost.
+    It is None when nothing has been accepted yet — a workflow burning money
+    with nothing to show for it has no meaningful unit cost, and 0 or infinity
+    would both read as a number rather than an absence.
+    """
+
+    workflow_id: str
+    accepted_count: int
+    rejected_count: int
+    failed_count: int
+    cost_total_usd: float
+    cost_accepted_usd: float
+    cost_rework_usd: float
+    cost_unattributed_usd: float
+    cost_per_accepted_usd: float | None = None
+    business_value_accepted: float | None = None
+
+
 @dataclass
 class AggregatedUsage:
     """Aggregated cost/usage stats for reporting."""

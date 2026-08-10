@@ -365,3 +365,122 @@ async def test_unsynced_count(db_with_records):
 
     count = await get_unsynced_count(db_with_records)
     assert count == 2
+
+
+# ---------------------------------------------------------------------------
+# outcome sync (economics graph Phase B)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint,expected_url",
+    [
+        ("https://api.burnlens.app/v1/ingest", "https://api.burnlens.app/v1/outcomes"),
+        # The pre-1.4.2 bad default must not leak into the new route either.
+        ("https://api.burnlens.app/api/v1/ingest", "https://api.burnlens.app/v1/outcomes"),
+        ("https://api.burnlens.app", "https://api.burnlens.app/v1/outcomes"),
+    ],
+)
+async def test_push_outcomes_resolves_url(config, endpoint, expected_url):
+    config.cloud.endpoint = endpoint
+    sync = CloudSync(config)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+
+    with patch.object(sync, "_get_client") as mock_client:
+        client = AsyncMock()
+        client.post.return_value = mock_resp
+        mock_client.return_value = client
+        await sync.push_outcomes([{"outcome_id": "o1", "workflow_id": "wf"}])
+
+    assert client.post.call_args.args[0] == expected_url
+
+
+@pytest.mark.asyncio
+async def test_sync_once_pushes_and_marks_outcomes(config, tmp_path):
+    """Outcomes recorded locally reach the cloud and are not re-sent."""
+    from burnlens.cloud.sync import _fetch_unsynced_outcomes
+    from burnlens.storage.database import insert_outcome
+    from burnlens.storage.models import Outcome
+
+    db = str(tmp_path / "sync.db")
+    await init_db(db)
+    await insert_outcome(db, Outcome(outcome_id="o1", workflow_id="wf", status="accepted"))
+
+    sync = CloudSync(config)
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+
+    with patch.object(sync, "_get_client") as mock_client:
+        client = AsyncMock()
+        client.post.return_value = mock_resp
+        mock_client.return_value = client
+        pushed = await sync._sync_outcomes_once(db)
+
+    assert pushed == 1
+    payload = client.post.call_args.kwargs["json"]
+    assert payload["outcomes"][0]["outcome_id"] == "o1"
+    assert payload["outcomes"][0]["status"] == "accepted"
+
+    # Marked synced, so a second cycle is a no-op rather than a duplicate post.
+    assert await _fetch_unsynced_outcomes(db, 10) == []
+
+
+@pytest.mark.asyncio
+async def test_failed_outcome_push_leaves_them_pending(config, tmp_path):
+    """A backend that rejects outcomes must not cause silent data loss —
+    they stay unsynced and retry next tick."""
+    from burnlens.cloud.sync import _fetch_unsynced_outcomes
+    from burnlens.storage.database import insert_outcome
+    from burnlens.storage.models import Outcome
+
+    db = str(tmp_path / "sync.db")
+    await init_db(db)
+    await insert_outcome(db, Outcome(outcome_id="o1", workflow_id="wf", status="accepted"))
+
+    sync = CloudSync(config)
+    mock_resp = MagicMock()
+    mock_resp.status_code = 404  # backend predates outcomes
+
+    with patch.object(sync, "_get_client") as mock_client:
+        client = AsyncMock()
+        client.post.return_value = mock_resp
+        mock_client.return_value = client
+        pushed = await sync._sync_outcomes_once(db)
+
+    assert pushed == 0
+    assert len(await _fetch_unsynced_outcomes(db, 10)) == 1
+
+
+@pytest.mark.asyncio
+async def test_outcome_failure_does_not_block_cost_sync(config, tmp_path):
+    """Cost records are the product's primary job — an outcome push that raises
+    must not stop them syncing."""
+    db = str(tmp_path / "sync.db")
+    await init_db(db)
+    await insert_request(db, RequestRecord(
+        provider="openai", model="gpt-4o", request_path="/v1", cost_usd=1.0,
+    ))
+
+    sync = CloudSync(config)
+    with patch.object(sync, "_sync_outcomes_once", side_effect=RuntimeError("boom")), \
+         patch.object(sync, "push_batch", return_value=True) as push:
+        pushed = await sync._sync_once(db)
+
+    assert pushed == 1
+    push.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_unsynced_outcomes_tolerates_missing_table(tmp_path):
+    """A proxy DB predating Phase B must not break the sync cycle."""
+    from burnlens.cloud.sync import _fetch_unsynced_outcomes
+
+    db = str(tmp_path / "old.db")
+    async with aiosqlite.connect(db) as conn:
+        await conn.execute("CREATE TABLE placeholder (id INTEGER)")
+        await conn.commit()
+
+    assert await _fetch_unsynced_outcomes(db, 10) == []

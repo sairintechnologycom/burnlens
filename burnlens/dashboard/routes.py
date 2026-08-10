@@ -22,7 +22,11 @@ from burnlens.storage.queries import (
     get_usage_by_model,
     get_usage_by_tag,
 )
-from burnlens.storage.database import get_spend_by_team_this_month, get_top_customers_by_cost
+from burnlens.storage.database import (
+    get_spend_by_team_this_month,
+    get_top_customers_by_cost,
+    get_workflow_economics,
+)
 from burnlens.key_budget import compute_keys_today
 from burnlens.analysis.waste import run_all_detectors
 from burnlens.analysis.budget import compute_budget_status
@@ -165,6 +169,46 @@ async def costs_by_tag(
             "total_cost_usd": round(r["total_cost_usd"], 6),
             "total_input_tokens": r["total_input_tokens"],
             "total_output_tokens": r["total_output_tokens"],
+        }
+        for r in rows
+    ]
+
+
+# -------------------------------------------------------- /api/costs/outcomes
+
+@router.get("/costs/outcomes")
+async def costs_outcomes(
+    request: Request,
+    period: str = Query(default="30d"),
+    window_seconds: int = Query(
+        default=86_400,
+        ge=1,
+        le=604_800,
+        description="How long after a request an outcome may still claim its cost",
+    ),
+) -> list:
+    """Per-workflow unit economics: what one accepted outcome actually costs."""
+    db = _db_path(request)
+    since = _parse_period(period)
+    rows = await get_workflow_economics(db, since=since, window_seconds=window_seconds)
+    return [
+        {
+            "workflow_id": r.workflow_id,
+            "accepted_count": r.accepted_count,
+            "rejected_count": r.rejected_count,
+            "failed_count": r.failed_count,
+            "cost_total_usd": round(r.cost_total_usd, 6),
+            "cost_accepted_usd": round(r.cost_accepted_usd, 6),
+            "cost_rework_usd": round(r.cost_rework_usd, 6),
+            "cost_unattributed_usd": round(r.cost_unattributed_usd, 6),
+            # None, not 0: a workflow with spend and nothing accepted has no
+            # unit cost, and 0 would read as "free".
+            "cost_per_accepted_usd": (
+                round(r.cost_per_accepted_usd, 6)
+                if r.cost_per_accepted_usd is not None
+                else None
+            ),
+            "business_value_accepted": r.business_value_accepted,
         }
         for r in rows
     ]

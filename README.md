@@ -68,6 +68,39 @@ Multi-word tag headers accept either spelling — `X-BurnLens-Tag-Agent-Id` or `
 
 ---
 
+## Cost per accepted outcome
+
+Spend alone doesn't tell you whether it was worth it. Report what a workflow *produced* and BurnLens divides one by the other:
+
+```bash
+burnlens outcome record --workflow refund_review --status accepted --id ticket-8412
+burnlens outcome show
+```
+
+```text
+ Workflow        Accepted  Rejected/Failed  Total cost  Rework   Unattributed  Per accepted
+ refund_review   780       140              $18.40      $3.20    $1.10         $0.0236
+```
+
+From an application, post outcomes to BurnLens Cloud instead:
+
+```bash
+curl -X POST https://api.burnlens.app/v1/outcomes \
+  -H "X-API-Key: $BURNLENS_API_KEY" \
+  -d '{"outcomes":[{"outcome_id":"ticket-8412","workflow_id":"refund_review",
+                    "status":"accepted","event_time":"2026-08-09T12:00:00Z"}]}'
+```
+
+Three things worth knowing about the number:
+
+- **`outcome_id` is yours and it is the idempotency key.** Re-posting the same one is ignored, so at-least-once delivery and importer re-runs can't inflate the count that the cost is divided by.
+- **Per accepted = total workflow spend / accepted outcomes.** Failed and rejected attempts are charged to the successes, because that is what one working result actually costs. The `Rework` column shows how much of it was spent on attempts that didn't land.
+- **Unattributed spend is shown, not hidden.** A request is charged to the first outcome of its workflow that follows it within a window (24h by default, `--window` to change). Spend with no outcome after it stays visible in its own column rather than quietly disappearing from the denominator.
+
+A workflow with spend and no accepted outcomes reports no unit cost at all rather than `$0` — the absence is the signal.
+
+---
+
 ## Use Cases
 
 **Coding agents.** Cursor, Claude Code, Cline, Windsurf — attribute cost per PR, repo, or developer. Set a hard daily cap per API key so one runaway agent can't blow the team's monthly budget overnight.

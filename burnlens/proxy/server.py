@@ -240,10 +240,15 @@ def get_app(config: BurnLensConfig) -> FastAPI:
     # ----------------------------------------- cloud-compatible API (for Next.js frontend)
 
     try:
-        from burnlens.dashboard.cloud_compat import usage_router, requests_router
+        from burnlens.dashboard.cloud_compat import (
+            outcomes_router,
+            requests_router,
+            usage_router,
+        )
 
         app.include_router(usage_router, prefix="/api/v1/usage")
         app.include_router(requests_router, prefix="/api/v1")
+        app.include_router(outcomes_router, prefix="/api/v1/outcomes")
     except Exception as exc:
         logger.warning("Could not load cloud-compat API routes: %s", exc)
 

@@ -376,6 +376,45 @@ async def init_db():
             END $$;
         """)
 
+        # Economics-graph Phase B: business outcomes joined to spend by workflow_id.
+        # UNIQUE (workspace_id, outcome_id) is what makes re-posting an outcome
+        # idempotent — the caller's own id is the dedup key, so a retried or
+        # replayed delivery cannot double-count.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS outcomes (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                outcome_id TEXT NOT NULL,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'failed')),
+                business_value NUMERIC(18, 6),
+                currency TEXT,
+                event_time TIMESTAMPTZ NOT NULL,
+                source TEXT NOT NULL DEFAULT 'api',
+                metadata JSONB NOT NULL DEFAULT '{}',
+                received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (workspace_id, outcome_id)
+            )
+        """)
+
+        # The allocation query seeks the first outcome at-or-after each request's
+        # timestamp, per workflow — this index is what keeps that a seek.
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_outcomes_workspace_workflow_time
+            ON outcomes(workspace_id, workflow_id, event_time)
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_outcomes_workspace_time
+            ON outcomes(workspace_id, event_time DESC)
+        """)
+
+        # request_records.tags is JSONB; the allocation query filters on
+        # tags->>'workflow_id', which needs this to avoid a full scan.
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_records_workflow
+            ON request_records(workspace_id, (tags->>'workflow_id'), ts)
+        """)
+
         # Create indexes
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_request_records_workspace_ts
