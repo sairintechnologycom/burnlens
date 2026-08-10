@@ -6,7 +6,7 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
-## [Unreleased] — `burnlens` (proxy)
+## [OSS `burnlens` v1.15.0] — 2026-08-10
 
 ### Added
 - **Per-agent anomaly baselines (economics-graph Phase D).** Every agent is now
