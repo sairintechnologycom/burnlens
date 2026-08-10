@@ -6,6 +6,19 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.15.1] — 2026-08-10
+
+### Fixed
+- **`claude-opus-5` was unpriced, so every request on it cost $0.** An unpriced
+  model does not error — it prices at zero and drags down every metric that
+  divides by cost. Added at Opus 4.8's rates ($5/M input, $25/M output, cache
+  read 0.1x, cache write 1.25x), which is what Anthropic charges for it.
+
+  On a real scan of this repo's Claude Code history, 951 records and 536,207
+  tokens that priced $0.00 now price $137.24 — a quarter of that window's spend.
+  Anyone who ran `burnlens scan` or proxied traffic on `claude-opus-5` was
+  reading a total that was too low; re-scanning re-prices those records.
+
 ## [OSS `burnlens` v1.15.0] — 2026-08-10
 
 ### Added

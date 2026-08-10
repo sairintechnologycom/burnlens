@@ -137,6 +137,7 @@ class TestCostCalculation:
             # claude-sonnet-5 omitted here — its rate is date-scheduled
             # (intro $2/$10 → $3/$15 on 2026-09-01); covered date-pinned below.
             ("anthropic", "claude-mythos-5", 60.00),
+            ("anthropic", "claude-opus-5", 30.00),
             ("google", "gemini-3.1-flash-lite", 1.75),
             ("google", "gemini-3.5-flash", 10.50),
             ("groq", "openai/gpt-oss-20b", 0.375),
