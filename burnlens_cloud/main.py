@@ -25,6 +25,7 @@ from .cron_api import router as cron_router
 from .alerts_api import router as alerts_router
 from .actions_api import router as actions_router
 from .outcomes_api import router as outcomes_router
+from .reconciliation import router as reconciliation_router
 from .deployment.status import get_status_checker
 from .compliance.purge import run_periodic_purge
 from .compliance.retention_prune import run_periodic_retention_prune
@@ -267,6 +268,7 @@ def get_app() -> FastAPI:
     app.include_router(alerts_router)   # /api/v1/alert-rules (Phase 13)
     app.include_router(actions_router)  # /api/v1/actions (Phase 10)
     app.include_router(outcomes_router)  # /v1/outcomes, /api/v1/outcomes/summary (economics graph Phase B)
+    app.include_router(reconciliation_router)  # /settings/reconciliation/*, /api/v1/reconciliation (economics graph Phase E)
 
     return app
 

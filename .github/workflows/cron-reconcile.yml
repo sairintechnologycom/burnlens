@@ -1,0 +1,32 @@
+name: Daily provider reconciliation
+
+# Compares each workspace's provider bill for *yesterday* against BurnLens's own
+# total. 06:00 UTC leaves the provider billing APIs several hours to settle the
+# previous UTC day — running at 00:05 reports drift that is only reporting lag.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"     # 06:00 UTC daily
+  workflow_dispatch:        # allow manual trigger from Actions UI
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: POST /cron/reconcile
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://api.burnlens.app/cron/reconcile \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -H "X-Requested-With: burnlens-cron")
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "status=$status body=$body"
+          if [ "$status" != "200" ]; then
+            echo "::error::Cron endpoint returned HTTP $status"
+            exit 1
+          fi
