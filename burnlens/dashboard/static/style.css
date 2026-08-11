@@ -304,6 +304,94 @@ canvas {
   font-weight: 600;
 }
 
+/* ------------------------------------------------- Finding lifecycle */
+
+.finding-filters {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.finding-filter {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.finding-filter:hover { border-color: var(--accent); color: var(--text); }
+.finding-filter.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.finding-status {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.finding-status.status-open { color: var(--orange); border-color: var(--orange); }
+.finding-status.status-acknowledged { color: var(--yellow); border-color: var(--yellow); }
+.finding-status.status-resolved { color: var(--green); border-color: var(--green); }
+.finding-status.status-accepted_risk { color: var(--text-muted); }
+
+.finding-subject {
+  font-size: 0.68rem;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-bottom: 0.25rem;
+}
+
+.finding-evidence {
+  margin-top: 0.3rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.finding-verdict {
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+
+.finding-verdict.is-saving { color: var(--green); }
+.finding-verdict.verdict-verified:not(.is-saving) { color: var(--red); }
+
+.finding-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.finding-action {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.finding-action:hover { border-color: var(--accent); color: var(--text); }
+.finding-action:disabled { opacity: 0.5; cursor: default; }
+
 /* ----------------------------------------------------------- Anomalies */
 
 #anomaly-panel {

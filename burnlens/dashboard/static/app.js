@@ -71,6 +71,21 @@ async function apiFetch(path) {
   return r.json();
 }
 
+// X-Requested-With is required by the mutation route: it cannot be sent
+// cross-origin without a preflight, which the proxy's CORS policy rejects.
+async function apiPost(path, body) {
+  const r = await fetch(API + path, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(path + ' \u2192 ' + r.status);
+  return r.json();
+}
+
 function makeTd(text, cls) {
   const el = document.createElement('td');
   el.textContent = text;
@@ -272,54 +287,167 @@ async function fetchFeatureChart() {
 
 // -------------------------------------------------------- Waste panel
 
+let findingStatusFilter = 'open';
+
+// What each status can usefully become next. 'open' is offered everywhere else
+// so a decision is always reversible.
+const FINDING_ACTIONS = {
+  open: [
+    ['acknowledged', 'Acknowledge'],
+    ['resolved', 'Mark fixed'],
+    ['accepted_risk', 'Accept'],
+  ],
+  acknowledged: [['resolved', 'Mark fixed'], ['accepted_risk', 'Accept'], ['open', 'Reopen']],
+  resolved: [['open', 'Reopen']],
+  accepted_risk: [['open', 'Reopen']],
+};
+
+function verdictLine(v) {
+  if (!v) return null;
+  if (v.status === 'pending') {
+    return 'Verifying — ' + v.days_remaining.toFixed(1) + ' more day(s) of data needed';
+  }
+  if (v.status === 'no_traffic') {
+    return 'No traffic since the fix — nothing can be concluded';
+  }
+  if (v.status !== 'verified') return null;
+
+  const dir = v.delta_per_request > 0 ? 'saved' : 'regressed';
+  return (
+    'Before ' + fmtCost(v.baseline_cost_per_request) + '/req → after ' +
+    fmtCost(v.current_cost_per_request) + '/req (' +
+    (v.pct_change > 0 ? '+' : '') + v.pct_change.toFixed(1) + '%) · ' +
+    fmtCost(Math.abs(v.projected_monthly_savings_usd)) + '/month ' + dir
+  );
+}
+
 async function fetchWaste() {
-  const findings = await apiFetch('/waste');
   const panel = $('waste-panel');
+  const query = findingStatusFilter ? '?status=' + findingStatusFilter : '';
+
+  const [findings, verdicts] = await Promise.all([
+    apiFetch('/findings' + query),
+    apiFetch('/findings/verify').catch(function() { return []; }),
+  ]);
+
+  const verdictById = {};
+  for (const v of verdicts) verdictById[v.fingerprint] = v;
+
+  const summary = $('waste-summary');
+  if (summary) {
+    const total = findings.reduce(function(sum, f) {
+      return sum + f.estimated_waste_usd;
+    }, 0);
+    summary.textContent = findings.length
+      ? findings.length + ' finding(s) · ' + fmtCost(total) + ' estimated'
+      : '';
+  }
+
   panel.replaceChildren();
 
-  const active = findings.filter(function(f) {
-    return f.severity !== 'low' || f.affected_count > 0;
-  });
-  const display = active.length ? active : findings;
-
-  if (!display.length) {
+  if (!findings.length) {
     const msg = document.createElement('div');
     msg.className = 'empty-state';
-    msg.textContent = 'No waste detected.';
+    msg.textContent = findingStatusFilter === 'open'
+      ? 'No open findings. Run burnlens analyze --save to detect waste.'
+      : 'Nothing here.';
     panel.appendChild(msg);
     return;
   }
 
-  for (const f of display) {
+  for (const f of findings) {
     const item = document.createElement('div');
     item.className = 'waste-item severity-' + f.severity;
 
     const titleRow = document.createElement('div');
     titleRow.className = 'waste-title';
-
-    const titleText = document.createTextNode(f.title + ' ');
-    titleRow.appendChild(titleText);
+    titleRow.appendChild(document.createTextNode(f.title + ' '));
 
     const badge = document.createElement('span');
     badge.className = 'waste-badge ' + f.severity;
     badge.textContent = f.severity;
     titleRow.appendChild(badge);
 
+    const statusBadge = document.createElement('span');
+    statusBadge.className = 'finding-status status-' + f.status;
+    statusBadge.textContent = f.status.replace('_', ' ');
+    titleRow.appendChild(statusBadge);
+
+    const subject = document.createElement('div');
+    subject.className = 'finding-subject';
+    subject.textContent = f.subject_type + ': ' + f.subject_key;
+
     const desc = document.createElement('div');
     desc.className = 'waste-desc';
     desc.textContent = f.description;
 
     item.appendChild(titleRow);
+    item.appendChild(subject);
     item.appendChild(desc);
 
     if (f.estimated_waste_usd > 0) {
       const savings = document.createElement('div');
       savings.className = 'waste-savings';
-      savings.textContent = '~' + fmtCost(f.estimated_waste_usd) + ' estimated waste';
+      savings.textContent = '~' + fmtCost(f.estimated_waste_usd) + ' estimated waste · seen ' +
+        f.detection_count + '×';
       item.appendChild(savings);
     }
 
+    const evidenceKeys = Object.keys(f.evidence || {});
+    if (evidenceKeys.length) {
+      const evidence = document.createElement('div');
+      evidence.className = 'finding-evidence';
+      evidence.textContent = evidenceKeys.map(function(k) {
+        return k.replace(/_/g, ' ') + ': ' + f.evidence[k];
+      }).join(' · ');
+      item.appendChild(evidence);
+    }
+
+    const line = verdictLine(verdictById[f.id]);
+    if (line) {
+      const verified = document.createElement('div');
+      const v = verdictById[f.id];
+      verified.className = 'finding-verdict verdict-' + v.status +
+        (v.status === 'verified' && v.delta_per_request > 0 ? ' is-saving' : '');
+      verified.textContent = line;
+      item.appendChild(verified);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'finding-actions';
+    for (const [next, label] of FINDING_ACTIONS[f.status] || []) {
+      const btn = document.createElement('button');
+      btn.className = 'finding-action';
+      btn.textContent = label;
+      btn.addEventListener('click', async function() {
+        btn.disabled = true;
+        try {
+          await apiPost('/findings/' + f.id + '/status', { status: next });
+          await fetchWaste();
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = 'Failed';
+        }
+      });
+      actions.appendChild(btn);
+    }
+    item.appendChild(actions);
+
     panel.appendChild(item);
+  }
+}
+
+function initFindingFilters() {
+  const bar = $('finding-filters');
+  if (!bar) return;
+  for (const btn of bar.querySelectorAll('.finding-filter')) {
+    btn.addEventListener('click', function() {
+      findingStatusFilter = btn.dataset.status;
+      for (const other of bar.querySelectorAll('.finding-filter')) {
+        other.classList.toggle('is-active', other === btn);
+      }
+      fetchWaste();
+    });
   }
 }
 
@@ -817,6 +945,8 @@ async function refresh() {
     fetchAnomalies(),
   ]);
 }
+
+initFindingFilters();
 
 // Period selector triggers immediate refresh
 $('period-select').addEventListener('change', function() {

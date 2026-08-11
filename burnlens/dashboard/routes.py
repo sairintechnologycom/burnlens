@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import aiosqlite
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from burnlens.storage.queries import (
@@ -254,6 +254,83 @@ async def recent_requests(
     """Most recent N requests, optionally filtered to one PR."""
     db = _db_path(request)
     return await get_recent_requests(db, limit=limit, pr=pr)
+
+
+# ------------------------------------------------------------ /api/findings
+
+def _finding_to_dict(f) -> dict:
+    return {
+        "id": f.fingerprint,
+        "detector": f.detector,
+        "severity": f.severity,
+        "title": f.title,
+        "description": f.description,
+        "subject_type": f.subject_type,
+        "subject_key": f.subject_key,
+        "estimated_waste_usd": round(f.estimated_waste_usd, 6),
+        "affected_count": f.affected_count,
+        "evidence": f.evidence,
+        "status": f.status,
+        "first_seen_at": f.first_seen_at,
+        "last_seen_at": f.last_seen_at,
+        "resolved_at": f.resolved_at,
+        "detection_count": f.detection_count,
+    }
+
+
+@router.get("/findings")
+async def findings(
+    request: Request,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=100, le=500),
+) -> list:
+    """Persisted findings with their lifecycle state.
+
+    Distinct from /api/waste, which recomputes live and has no lifecycle.
+    """
+    from burnlens.storage.findings import list_findings
+
+    db = _db_path(request)
+    stored = await list_findings(db, status=status, limit=limit)
+    return [_finding_to_dict(f) for f in stored]
+
+
+@router.post("/findings/{fingerprint}/status")
+async def set_status(fingerprint: str, request: Request) -> dict:
+    """Move a finding through its lifecycle.
+
+    The dashboard API's only state-changing route. It requires
+    ``X-Requested-With`` because ``server.host`` can be set to 0.0.0.0 to let
+    agents on other machines reach the proxy, which would expose this endpoint
+    too. A custom header cannot be sent cross-origin without a preflight, and
+    the proxy's CORS policy only allows the local dashboard origin.
+    """
+    from burnlens.storage.findings import VALID_STATUSES, set_finding_status
+
+    if not request.headers.get("x-requested-with"):
+        raise HTTPException(status_code=403, detail="Missing X-Requested-With header")
+
+    body = await request.json()
+    status = body.get("status")
+    if status not in VALID_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"status must be one of: {', '.join(VALID_STATUSES)}",
+        )
+
+    if not await set_finding_status(_db_path(request), fingerprint, status):
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return {"id": fingerprint, "status": status}
+
+
+@router.get("/findings/verify")
+async def findings_verify(request: Request) -> list:
+    """Savings verdicts for findings that have a baseline."""
+    from dataclasses import asdict
+
+    from burnlens.storage.findings import verify_all_resolved
+
+    return [asdict(v) for v in await verify_all_resolved(_db_path(request))]
 
 
 # ----------------------------------------------------------- /api/economics
