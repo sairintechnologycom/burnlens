@@ -6,6 +6,37 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.17.0] — 2026-08-11
+
+The findings lifecycle reaches the dashboard. v1.16.0 shipped it CLI-only.
+
+### Added
+- **The dashboard's waste panel now works the findings, not just displays
+  them.** It reads persisted findings rather than recomputing on every load,
+  and gained status filter tabs, the subject each finding belongs to, the
+  evidence behind it, how many times it has been detected, and per-status
+  actions. Resolved findings show their savings verdict inline — including the
+  honest ones, so a fix that is too recent to judge says
+  `Verifying — N more day(s) of data needed` rather than showing a number it
+  cannot justify.
+
+- **Dashboard API routes for the lifecycle:**
+  - `GET /api/findings[?status=]` — persisted findings with lifecycle state
+  - `POST /api/findings/{fingerprint}/status` — move a finding through it
+  - `GET /api/findings/verify` — savings verdicts
+
+  `/api/waste` is unchanged: it recomputes live, has no lifecycle, and other
+  callers still use it.
+
+### Security
+- **`POST /api/findings/{fingerprint}/status` requires an `X-Requested-With`
+  header.** It is the dashboard API's first state-changing route. `server.host`
+  defaults to `127.0.0.1`, but it can be set to `0.0.0.0` so agents on other
+  machines can reach the proxy — which would expose this endpoint too. A custom
+  header cannot be sent cross-origin without a preflight, and the proxy's CORS
+  policy only allows the local dashboard origin. Requests without the header
+  are rejected with 403 and leave the finding untouched.
+
 ## [OSS `burnlens` v1.16.0] — 2026-08-11
 
 Waste detection stops being a snapshot you recompute and becomes a workflow:
