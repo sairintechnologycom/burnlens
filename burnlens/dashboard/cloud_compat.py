@@ -233,7 +233,10 @@ async def waste_alerts(request: Request) -> list[dict]:
     findings = run_all_detectors(requests_data)
     return [
         {
-            "id": f"{f.detector}_{i}",
+            # Fingerprint, not an enumerate index: the id has to survive across
+            # detection runs for the frontend to key rows and for a lifecycle
+            # action to address the same finding twice.
+            "id": f.fingerprint,
             "detector": f.detector,
             "severity": f.severity,
             "title": f.title,
@@ -241,8 +244,10 @@ async def waste_alerts(request: Request) -> list[dict]:
             "estimated_waste_usd": round(f.estimated_waste_usd, 6),
             "monthly_savings": round(f.estimated_waste_usd, 2),
             "affected_count": f.affected_count,
+            "subject_type": f.subject_type,
+            "subject_key": f.subject_key,
         }
-        for i, f in enumerate(findings)
+        for f in findings
     ]
 
 

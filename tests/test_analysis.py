@@ -63,6 +63,22 @@ def _req(
     }
 
 
+def _only(findings: list) -> "object":
+    """Assert a detector produced exactly one finding and return it.
+
+    Detectors emit one finding per subject (workflow, else model), so a
+    single-model fixture yields exactly one. A fixture spanning two models
+    yields two — see the multi-subject tests below.
+    """
+    assert len(findings) == 1, f"expected 1 finding, got {len(findings)}"
+    return findings[0]
+
+
+def _affected(findings: list) -> int:
+    """Total affected requests across every subject."""
+    return sum(f.affected_count for f in findings)
+
+
 def _make_config(
     db_path: str,
     daily_usd: float | None = None,
@@ -85,52 +101,46 @@ def _make_config(
 
 
 class TestContextBloatDetector:
-    def test_empty_requests_returns_low(self):
-        finding = ContextBloatDetector().run([])
-        assert finding.severity == "low"
-        assert finding.affected_count == 0
+    def test_empty_requests_returns_nothing(self):
+        assert ContextBloatDetector().run([]) == []
 
     def test_normal_requests_not_flagged(self):
         # input=500, output=100 → ratio=0.2 well above 0.05 threshold
         requests = [_req(input_tokens=500, output_tokens=100) for _ in range(5)]
-        finding = ContextBloatDetector().run(requests)
-        assert finding.affected_count == 0
-        assert finding.severity == "low"
+        assert ContextBloatDetector().run(requests) == []
 
     def test_bloated_request_triggers(self):
         # input=10_000, output=100 → ratio=0.01 < 0.05, input >= 8_000
         bloated = _req(input_tokens=10_000, output_tokens=100, cost_usd=0.10)
-        finding = ContextBloatDetector().run([bloated])
+        finding = _only(ContextBloatDetector().run([bloated]))
         assert finding.affected_count == 1
         assert finding.severity == "medium"
         assert finding.estimated_waste_usd > 0
 
     def test_bloated_waste_is_50_percent_of_cost(self):
         bloated = _req(input_tokens=10_000, output_tokens=100, cost_usd=0.20)
-        finding = ContextBloatDetector().run([bloated])
+        finding = _only(ContextBloatDetector().run([bloated]))
         assert abs(finding.estimated_waste_usd - 0.10) < 1e-9
 
     def test_high_output_ratio_not_flagged(self):
         # Large input but output ratio is fine: output/input = 0.5 > 0.05
         req = _req(input_tokens=10_000, output_tokens=5_000)
-        finding = ContextBloatDetector().run([req])
-        assert finding.affected_count == 0
+        assert ContextBloatDetector().run([req]) == []
 
     def test_small_input_not_flagged_even_if_low_ratio(self):
         # input=100 < 8_000 threshold, output=1
         req = _req(input_tokens=100, output_tokens=1)
-        finding = ContextBloatDetector().run([req])
-        assert finding.affected_count == 0
+        assert ContextBloatDetector().run([req]) == []
 
     def test_high_count_returns_high_severity(self):
         bloated = [_req(input_tokens=10_000, output_tokens=50) for _ in range(11)]
-        finding = ContextBloatDetector().run(bloated)
+        finding = _only(ContextBloatDetector().run(bloated))
         assert finding.severity == "high"
         assert finding.affected_count == 11
 
     def test_examples_capped_at_three(self):
         bloated = [_req(input_tokens=10_000, output_tokens=50) for _ in range(10)]
-        finding = ContextBloatDetector().run(bloated)
+        finding = _only(ContextBloatDetector().run(bloated))
         assert len(finding.examples) <= 3
 
 
@@ -140,55 +150,65 @@ class TestContextBloatDetector:
 
 
 class TestDuplicateRequestDetector:
-    def test_empty_requests_returns_low(self):
-        finding = DuplicateRequestDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert DuplicateRequestDetector().run([]) == []
 
     def test_no_system_hash_not_counted(self):
         # Requests without system_prompt_hash should be skipped
         requests = [_req(system_prompt_hash=None) for _ in range(10)]
-        finding = DuplicateRequestDetector().run(requests)
-        assert finding.affected_count == 0
+        assert DuplicateRequestDetector().run(requests) == []
 
     def test_below_threshold_not_flagged(self):
         # MIN_OCCURRENCES = 3 — two calls with same hash should not trigger
         reqs = [_req(model="gpt-4o", system_prompt_hash="hash-a") for _ in range(2)]
-        finding = DuplicateRequestDetector().run(reqs)
-        assert finding.affected_count == 0
+        assert DuplicateRequestDetector().run(reqs) == []
 
     def test_at_threshold_triggers(self):
         # Exactly 3 calls with same (model, hash) → 2 redundant calls
         reqs = [_req(model="gpt-4o", system_prompt_hash="hash-a", cost_usd=0.01) for _ in range(3)]
-        finding = DuplicateRequestDetector().run(reqs)
+        finding = _only(DuplicateRequestDetector().run(reqs))
         assert finding.affected_count == 2
         assert finding.estimated_waste_usd > 0
 
     def test_multiple_duplicate_pairs(self):
+        # Two models, no workflow tag → two subjects → two findings.
         reqs = (
             [_req(model="gpt-4o", system_prompt_hash="hash-a") for _ in range(5)]
             + [_req(model="gpt-4o-mini", system_prompt_hash="hash-b") for _ in range(4)]
         )
-        finding = DuplicateRequestDetector().run(reqs)
-        # Affected = (5-1) + (4-1) = 7
-        assert finding.affected_count == 7
+        findings = DuplicateRequestDetector().run(reqs)
+        assert len(findings) == 2
+        assert _affected(findings) == 7  # (5-1) + (4-1)
 
     def test_different_models_same_hash_treated_separately(self):
-        # Same hash but different model → separate duplicate groups
+        # Same hash but different model → separate subjects, so separate findings
         reqs = (
             [_req(model="gpt-4o", system_prompt_hash="hash-x") for _ in range(3)]
             + [_req(model="gpt-4o-mini", system_prompt_hash="hash-x") for _ in range(3)]
         )
-        finding = DuplicateRequestDetector().run(reqs)
-        assert finding.affected_count == 4  # (3-1) + (3-1)
+        findings = DuplicateRequestDetector().run(reqs)
+        assert {f.subject_key for f in findings} == {"gpt-4o", "gpt-4o-mini"}
+        assert _affected(findings) == 4  # (3-1) + (3-1)
+
+    def test_findings_are_scoped_per_workflow_when_tagged(self):
+        """A tagged workflow beats the model as the subject to go fix."""
+        reqs = [
+            {**_req(model="gpt-4o", system_prompt_hash="hash-a"),
+             "tags": {"workflow_id": "nightly-summary"}}
+            for _ in range(3)
+        ]
+        finding = _only(DuplicateRequestDetector().run(reqs))
+        assert finding.subject_type == "workflow"
+        assert finding.subject_key == "nightly-summary"
 
     def test_high_severity_when_many_affected(self):
         reqs = [_req(model="gpt-4o", system_prompt_hash="hash-a") for _ in range(25)]
-        finding = DuplicateRequestDetector().run(reqs)
+        finding = _only(DuplicateRequestDetector().run(reqs))
         assert finding.severity == "high"  # affected > 20
 
     def test_medium_severity_with_some_duplicates(self):
         reqs = [_req(model="gpt-4o", system_prompt_hash="hash-b") for _ in range(5)]
-        finding = DuplicateRequestDetector().run(reqs)
+        finding = _only(DuplicateRequestDetector().run(reqs))
         assert finding.severity == "medium"  # duplicates exist but affected <= 20
 
 
@@ -198,64 +218,57 @@ class TestDuplicateRequestDetector:
 
 
 class TestModelOverkillDetector:
-    def test_empty_requests_returns_low(self):
-        finding = ModelOverkillDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert ModelOverkillDetector().run([]) == []
 
     def test_cheap_model_not_flagged(self):
         # "gpt-4o-mini" is "cheap" tier → should not be flagged
         req = _req(model="gpt-4o-mini", output_tokens=50, cost_usd=0.01)
-        finding = ModelOverkillDetector().run([req])
-        assert finding.affected_count == 0
+        assert ModelOverkillDetector().run([req]) == []
 
     def test_expensive_model_long_output_not_flagged(self):
         # "claude-opus" is expensive but output >= 200 → not overkill
         req = _req(model="claude-opus", output_tokens=300, cost_usd=0.01)
-        finding = ModelOverkillDetector().run([req])
-        assert finding.affected_count == 0
+        assert ModelOverkillDetector().run([req]) == []
 
     def test_expensive_model_short_output_flagged(self):
         # "claude-opus" expensive + output < 200 + cost >= 0.001
         req = _req(model="claude-opus", output_tokens=50, cost_usd=0.01)
-        finding = ModelOverkillDetector().run([req])
+        finding = _only(ModelOverkillDetector().run([req]))
         assert finding.affected_count == 1
         assert finding.severity == "medium"
 
     def test_waste_is_70_percent(self):
         req = _req(model="claude-opus", output_tokens=50, cost_usd=0.10)
-        finding = ModelOverkillDetector().run([req])
+        finding = _only(ModelOverkillDetector().run([req]))
         assert abs(finding.estimated_waste_usd - 0.07) < 1e-9
 
     def test_cost_below_min_not_flagged(self):
         # cost < 0.001 should not be flagged (not meaningful)
         req = _req(model="claude-opus", output_tokens=50, cost_usd=0.0009)
-        finding = ModelOverkillDetector().run([req])
-        assert finding.affected_count == 0
+        assert ModelOverkillDetector().run([req]) == []
 
     def test_o1_model_flagged_as_expensive(self):
         req = _req(model="o1", output_tokens=100, cost_usd=0.05)
-        finding = ModelOverkillDetector().run([req])
-        assert finding.affected_count == 1
+        assert _affected(ModelOverkillDetector().run([req])) == 1
 
     def test_o3_model_flagged_as_expensive(self):
         req = _req(model="o3-mini", output_tokens=100, cost_usd=0.005)
-        finding = ModelOverkillDetector().run([req])
-        assert finding.affected_count == 1
+        assert _affected(ModelOverkillDetector().run([req])) == 1
 
     def test_high_severity_when_many_overkill(self):
         reqs = [_req(model="claude-opus", output_tokens=50, cost_usd=0.01) for _ in range(16)]
-        finding = ModelOverkillDetector().run(reqs)
+        finding = _only(ModelOverkillDetector().run(reqs))
         assert finding.severity == "high"
 
     def test_examples_capped_at_three(self):
         reqs = [_req(model="claude-opus", output_tokens=50, cost_usd=0.01) for _ in range(10)]
-        finding = ModelOverkillDetector().run(reqs)
+        finding = _only(ModelOverkillDetector().run(reqs))
         assert len(finding.examples) <= 3
 
     def test_gpt4_turbo_flagged_as_expensive(self):
         req = _req(model="gpt-4-turbo", output_tokens=100, cost_usd=0.01)
-        finding = ModelOverkillDetector().run([req])
-        assert finding.affected_count == 1
+        assert _affected(ModelOverkillDetector().run([req])) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -264,25 +277,21 @@ class TestModelOverkillDetector:
 
 
 class TestSystemPromptWasteDetector:
-    def test_empty_requests_returns_low(self):
-        finding = SystemPromptWasteDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert SystemPromptWasteDetector().run([]) == []
 
-    def test_no_system_hashes_returns_low(self):
+    def test_no_system_hashes_returns_nothing(self):
         requests = [_req(system_prompt_hash=None) for _ in range(10)]
-        finding = SystemPromptWasteDetector().run(requests)
-        assert finding.severity == "low"
-        assert finding.affected_count == 0
+        assert SystemPromptWasteDetector().run(requests) == []
 
     def test_few_repeats_not_flagged(self):
         # < 5 occurrences — below threshold
         reqs = [_req(system_prompt_hash="hash-a") for _ in range(4)]
-        finding = SystemPromptWasteDetector().run(reqs)
-        assert finding.severity == "low"
+        assert SystemPromptWasteDetector().run(reqs) == []
 
     def test_five_repeats_triggers(self):
         reqs = [_req(system_prompt_hash="hash-a", cost_usd=0.01) for _ in range(5)]
-        finding = SystemPromptWasteDetector().run(reqs)
+        finding = _only(SystemPromptWasteDetector().run(reqs))
         assert finding.severity == "medium"
         assert finding.affected_count == 5
 
@@ -290,17 +299,19 @@ class TestSystemPromptWasteDetector:
         # 5 requests, each $0.10, total cost $0.50
         # 30% of $0.50 = $0.15
         reqs = [_req(system_prompt_hash="hash-b", cost_usd=0.10) for _ in range(5)]
-        finding = SystemPromptWasteDetector().run(reqs)
+        finding = _only(SystemPromptWasteDetector().run(reqs))
         assert abs(finding.estimated_waste_usd - 0.15) < 1e-9
 
     def test_multiple_repeated_hashes(self):
+        # Same model → same subject → one finding covering both prompts.
         reqs = (
             [_req(system_prompt_hash="hash-a") for _ in range(5)]
             + [_req(system_prompt_hash="hash-b") for _ in range(7)]
         )
-        finding = SystemPromptWasteDetector().run(reqs)
+        finding = _only(SystemPromptWasteDetector().run(reqs))
         assert finding.severity == "medium"
         assert finding.affected_count == 12
+        assert finding.evidence["distinct_system_prompts"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -309,14 +320,13 @@ class TestSystemPromptWasteDetector:
 
 
 class TestRunAllDetectors:
-    def test_returns_eight_findings(self):
-        findings = run_all_detectors([])
-        assert len(findings) == 8
+    def test_empty_input_returns_nothing(self):
+        assert run_all_detectors([]) == []
 
-    def test_all_low_severity_on_empty(self):
-        findings = run_all_detectors([])
-        for f in findings:
-            assert f.severity == "low"
+    def test_clean_traffic_returns_nothing(self):
+        """A clean workspace shows an empty list, not eight zero-waste rows."""
+        clean = [_req(model="gpt-4o-mini", input_tokens=500, output_tokens=400) for _ in range(5)]
+        assert run_all_detectors(clean) == []
 
     def test_sorted_by_severity(self):
         # Seed data that triggers high severity for context bloat (11+ requests)
@@ -326,17 +336,21 @@ class TestRunAllDetectors:
         severities = [severity_order[f.severity] for f in findings]
         assert severities == sorted(severities)
 
-    def test_correct_detector_names(self):
-        findings = run_all_detectors([])
-        names = {f.detector for f in findings}
+    def test_detectors_are_named_on_their_findings(self):
+        bloated = [_req(input_tokens=10_000, output_tokens=50, cost_usd=0.01) for _ in range(12)]
+        overkill = [_req(model="claude-opus", output_tokens=50, cost_usd=0.01) for _ in range(3)]
+        names = {f.detector for f in run_all_detectors(bloated + overkill)}
         assert "ContextBloatDetector" in names
-        assert "DuplicateRequestDetector" in names
         assert "ModelOverkillDetector" in names
-        assert "SystemPromptWasteDetector" in names
-        assert "PromptCachingOpportunityDetector" in names
-        assert "OversizedToolSchemaDetector" in names
-        assert "LowRAGEfficiencyDetector" in names
-        assert "HistoryBloatDetector" in names
+
+    def test_every_finding_carries_a_subject(self):
+        """No subject means nothing to go fix and nothing to measure."""
+        bloated = [_req(input_tokens=10_000, output_tokens=50, cost_usd=0.01) for _ in range(12)]
+        findings = run_all_detectors(bloated)
+        assert findings
+        for f in findings:
+            assert f.subject_type in ("workflow", "model")
+            assert f.subject_key
 
 
 # ---------------------------------------------------------------------------
@@ -532,18 +546,16 @@ class TestBudgetTracker:
 
 
 class TestPromptCachingOpportunityDetector:
-    def test_empty_requests_returns_low(self):
-        finding = PromptCachingOpportunityDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert PromptCachingOpportunityDetector().run([]) == []
 
     def test_below_repeats_not_flagged(self):
         reqs = [_req(system_prompt_hash="hash-x", prompt_system_tokens=1500, cache_read_tokens=0) for _ in range(4)]
-        finding = PromptCachingOpportunityDetector().run(reqs)
-        assert finding.affected_count == 0
+        assert PromptCachingOpportunityDetector().run(reqs) == []
 
     def test_caching_opportunity_triggers(self):
         reqs = [_req(system_prompt_hash="hash-x", prompt_system_tokens=1500, cache_read_tokens=0, cost_usd=0.10) for _ in range(5)]
-        finding = PromptCachingOpportunityDetector().run(reqs)
+        finding = _only(PromptCachingOpportunityDetector().run(reqs))
         assert finding.affected_count == 5
         assert finding.severity == "medium"
         assert abs(finding.estimated_waste_usd - 0.15) < 1e-9  # 30% of $0.50
@@ -552,65 +564,58 @@ class TestPromptCachingOpportunityDetector:
         reqs = (
             [_req(system_prompt_hash="hash-x", prompt_system_tokens=1500, cache_read_tokens=1000) for _ in range(5)]
         )
-        finding = PromptCachingOpportunityDetector().run(reqs)
-        assert finding.affected_count == 0
+        assert PromptCachingOpportunityDetector().run(reqs) == []
 
 
 class TestOversizedToolSchemaDetector:
-    def test_empty_requests_returns_low(self):
-        finding = OversizedToolSchemaDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert OversizedToolSchemaDetector().run([]) == []
 
     def test_below_threshold_not_flagged(self):
         # 500 tool tokens < 1000 threshold
         reqs = [_req(prompt_tools_tokens=500, input_tokens=1000) for _ in range(5)]
-        finding = OversizedToolSchemaDetector().run(reqs)
-        assert finding.affected_count == 0
+        assert OversizedToolSchemaDetector().run(reqs) == []
 
     def test_oversized_tools_triggers(self):
         # 1500 tools tokens > 1000, and 1500/3000 = 50% > 30% ratio
         reqs = [_req(prompt_tools_tokens=1500, input_tokens=3000, cost_usd=0.10) for _ in range(3)]
-        finding = OversizedToolSchemaDetector().run(reqs)
+        finding = _only(OversizedToolSchemaDetector().run(reqs))
         assert finding.affected_count == 3
         assert finding.severity == "medium"
         assert abs(finding.estimated_waste_usd - 0.15) < 1e-9  # 50% of $0.30
 
 
 class TestLowRAGEfficiencyDetector:
-    def test_empty_requests_returns_low(self):
-        finding = LowRAGEfficiencyDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert LowRAGEfficiencyDetector().run([]) == []
 
     def test_efficient_rag_not_flagged(self):
         # High rag tokens but also high output tokens (200 >= 100 max)
         reqs = [_req(prompt_rag_tokens=9000, output_tokens=200) for _ in range(5)]
-        finding = LowRAGEfficiencyDetector().run(reqs)
-        assert finding.affected_count == 0
+        assert LowRAGEfficiencyDetector().run(reqs) == []
 
     def test_low_rag_efficiency_triggers(self):
         # RAG = 9000 > 8000, output = 50 < 100
         reqs = [_req(prompt_rag_tokens=9000, output_tokens=50, cost_usd=0.20) for _ in range(3)]
-        finding = LowRAGEfficiencyDetector().run(reqs)
+        finding = _only(LowRAGEfficiencyDetector().run(reqs))
         assert finding.affected_count == 3
         assert finding.severity == "medium"
         assert abs(finding.estimated_waste_usd - 0.30) < 1e-9  # 50% of $0.60
 
 
 class TestHistoryBloatDetector:
-    def test_empty_requests_returns_low(self):
-        finding = HistoryBloatDetector().run([])
-        assert finding.severity == "low"
+    def test_empty_requests_returns_nothing(self):
+        assert HistoryBloatDetector().run([]) == []
 
     def test_no_history_bloat_not_flagged(self):
         # history = 2000 < 5000 threshold
         reqs = [_req(prompt_history_tokens=2000, input_tokens=3000) for _ in range(5)]
-        finding = HistoryBloatDetector().run(reqs)
-        assert finding.affected_count == 0
+        assert HistoryBloatDetector().run(reqs) == []
 
     def test_history_bloat_triggers(self):
         # history = 6000 > 5000, and 6000/10000 = 60% > 50% ratio
         reqs = [_req(prompt_history_tokens=6000, input_tokens=10000, cost_usd=0.20) for _ in range(3)]
-        finding = HistoryBloatDetector().run(reqs)
+        finding = _only(HistoryBloatDetector().run(reqs))
         assert finding.affected_count == 3
         assert finding.severity == "medium"
         assert abs(finding.estimated_waste_usd - 0.24) < 1e-9  # 40% of $0.60
