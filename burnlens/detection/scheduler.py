@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+    from burnlens.storage.findings import SyncResult
+
 from burnlens.detection.anomaly import check_active_agents
 from burnlens.detection.billing import run_all_parsers
 from burnlens.detection.classifier import classify_new_assets
@@ -109,14 +111,38 @@ async def run_detection(db_path: str, config: BurnLensConfig) -> None:
         await run_all_parsers(db_path, config)
         classified = await classify_new_assets(db_path)
         agents = await check_active_agents(db_path, config)
+        sync = await sync_waste_findings(db_path)
         logger.info(
             "Detection run complete — classified %d shadow assets, "
-            "checked %d active agents against their baselines",
+            "checked %d active agents against their baselines, "
+            "waste findings: %d new / %d updated / %d reopened",
             classified,
             agents,
+            sync.new,
+            sync.updated,
+            sync.reopened,
         )
     except Exception:
         logger.error("Detection run failed", exc_info=True)
+
+
+async def sync_waste_findings(db_path: str, days: int = 7) -> "SyncResult":
+    """Run the pure waste detectors and persist the result (BL-E1).
+
+    Detection stays where it was — this only adds the write. Lives on the
+    existing hourly tick rather than the request path: it scans a 7-day window
+    and has no business anywhere near a proxied request.
+    """
+    from burnlens.analysis.waste import run_all_detectors
+    from burnlens.storage.findings import SyncResult, sync_findings
+    from burnlens.storage.queries import get_requests_for_analysis
+
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    requests = await get_requests_for_analysis(db_path, since=since)
+    if not requests:
+        return SyncResult()
+
+    return await sync_findings(db_path, run_all_detectors(requests))
 
 
 def register_alert_jobs(

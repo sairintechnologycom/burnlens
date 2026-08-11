@@ -73,6 +73,42 @@ CREATE TABLE IF NOT EXISTS outcomes (
 );
 """
 
+# BL-E1. Detectors stay pure and recompute from scratch every run; this table is
+# what survives between runs. `fingerprint` is the natural key — detector +
+# subject + detector version, never the dollar figure or the timestamps, so the
+# same underlying issue keeps its identity (and its lifecycle state) as its
+# evidence moves.
+_CREATE_WASTE_FINDINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS waste_findings (
+    fingerprint         TEXT    PRIMARY KEY,
+    detector            TEXT    NOT NULL,
+    subject_type        TEXT    NOT NULL,
+    subject_key         TEXT    NOT NULL,
+    severity            TEXT    NOT NULL,
+    title               TEXT    NOT NULL,
+    description         TEXT    NOT NULL,
+    estimated_waste_usd REAL    NOT NULL DEFAULT 0.0,
+    affected_count      INTEGER NOT NULL DEFAULT 0,
+    evidence            TEXT    NOT NULL DEFAULT '{}',
+    status              TEXT    NOT NULL DEFAULT 'open'
+                        CHECK (status IN ('open', 'acknowledged', 'resolved', 'accepted_risk')),
+    first_seen_at       TEXT    NOT NULL,
+    last_seen_at        TEXT    NOT NULL,
+    resolved_at         TEXT,
+    -- Waste at the moment the user marked it resolved. Captured here because
+    -- it cannot be reconstructed later, and BL-E3 savings verification needs a
+    -- before-figure to compare the following window against.
+    baseline_waste_usd  REAL,
+    detection_count     INTEGER NOT NULL DEFAULT 1,
+    detector_version    INTEGER NOT NULL DEFAULT 1
+);
+"""
+
+_CREATE_WASTE_FINDINGS_STATUS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_waste_findings_status
+    ON waste_findings(status, severity);
+"""
+
 _CREATE_OUTCOMES_WORKFLOW_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_outcomes_workflow_time ON outcomes(workflow_id, event_time);
 """
@@ -383,6 +419,7 @@ async def init_db(db_path: str) -> None:
 
     # Economics graph Phase B: business outcomes
     await migrate_create_outcomes_table(db_path)
+    await migrate_create_waste_findings_table(db_path)
 
     logger.debug("Database initialized at %s", db_path)
 
@@ -863,6 +900,14 @@ async def migrate_create_outcomes_table(db_path: str) -> None:
         await db.execute(_CREATE_OUTCOMES_TABLE)
         await db.execute(_CREATE_OUTCOMES_WORKFLOW_INDEX)
         await db.execute(_CREATE_OUTCOMES_SYNCED_INDEX)
+        await db.commit()
+
+
+async def migrate_create_waste_findings_table(db_path: str) -> None:
+    """Create the ``waste_findings`` table + index. Safe to call repeatedly."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(_CREATE_WASTE_FINDINGS_TABLE)
+        await db.execute(_CREATE_WASTE_FINDINGS_STATUS_INDEX)
         await db.commit()
 
 

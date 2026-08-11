@@ -266,12 +266,15 @@ async def waste(request: Request) -> list:
     findings = run_all_detectors(requests_data)
     return [
         {
+            "id": f.fingerprint,
             "detector": f.detector,
             "severity": f.severity,
             "title": f.title,
             "description": f.description,
             "estimated_waste_usd": round(f.estimated_waste_usd, 6),
             "affected_count": f.affected_count,
+            "subject_type": f.subject_type,
+            "subject_key": f.subject_key,
         }
         for f in findings
     ]

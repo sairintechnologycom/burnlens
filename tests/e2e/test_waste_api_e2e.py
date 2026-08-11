@@ -120,11 +120,18 @@ async def test_dashboard_api_waste_endpoint(seeded_db: str):
     assert resp.status_code == 200
     data = resp.json()
 
-    # The result should contain all 8 findings
-    assert len(data) == 8
-
-    # Verify that our 4 new prompt detectors are represented
+    # Only detectors that actually found waste report. The seed uses gpt-4o
+    # (mid tier), so ModelOverkillDetector has nothing to say and stays silent
+    # rather than emitting a zero-waste row.
     findings_by_detector = {item["detector"]: item for item in data}
+    assert "ModelOverkillDetector" not in findings_by_detector
+    assert len(data) == 7
+    assert all(item["affected_count"] > 0 for item in data)
+
+    # Every finding names the subject to go fix — here the model, since the
+    # seed carries no workflow tag.
+    assert all(item["subject_type"] == "model" for item in data)
+    assert all(item["subject_key"] == "gpt-4o" for item in data)
 
     # 1. PromptCachingOpportunityDetector
     caching = findings_by_detector["PromptCachingOpportunityDetector"]

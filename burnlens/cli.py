@@ -352,6 +352,9 @@ def report(
 def analyze(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
     days: int = typer.Option(1, "--days", "-d", help="Number of days to analyze"),
+    save: bool = typer.Option(
+        False, "--save", help="Persist findings so they gain a status lifecycle"
+    ),
 ) -> None:
     """Run waste detectors and print findings."""
     cfg = load_config(config)
@@ -397,6 +400,16 @@ def analyze(
                 )
             )
 
+        if save:
+            from burnlens.storage.findings import sync_findings
+
+            result = await sync_findings(cfg.db_path, findings)
+            console.print(
+                f"  [dim]Saved: {result.new} new, {result.updated} updated, "
+                f"{result.reopened} reopened. "
+                f"Manage with [bold]burnlens findings list[/bold].[/dim]\n"
+            )
+
         if total_waste > 0:
             console.print(
                 Panel(
@@ -415,6 +428,133 @@ def analyze(
             )
 
         console.print()
+
+    asyncio.run(_run())
+
+
+findings_app = typer.Typer(help="Persisted waste findings and their lifecycle.")
+app.add_typer(findings_app, name="findings")
+
+_STATUS_COLORS = {
+    "open": "red",
+    "acknowledged": "yellow",
+    "resolved": "green",
+    "accepted_risk": "dim",
+}
+
+
+@findings_app.command("list")
+def findings_list(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    status: Optional[str] = typer.Option(
+        None, "--status", "-s", help="open | acknowledged | resolved | accepted_risk"
+    ),
+    limit: int = typer.Option(50, "--limit", "-n"),
+) -> None:
+    """List persisted findings, worst and most expensive first."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.findings import get_waste_summary, list_findings
+
+        stored = await list_findings(cfg.db_path, status=status, limit=limit)
+        if not stored:
+            console.print()
+            console.print(
+                "[green]No findings recorded.[/green] Run [bold]burnlens analyze --save[/bold] "
+                "or let the proxy's hourly detection tick populate them."
+            )
+            console.print()
+            return
+
+        table = Table(title="Waste Findings", show_lines=False)
+        table.add_column("Severity")
+        table.add_column("Finding")
+        table.add_column("Subject")
+        table.add_column("Waste", justify="right")
+        table.add_column("Status")
+        table.add_column("Seen", justify="right")
+        table.add_column("Fingerprint", style="dim")
+
+        for f in stored:
+            sev_color = _SEVERITY_COLORS.get(f.severity, "white")
+            status_color = _STATUS_COLORS.get(f.status, "white")
+            table.add_row(
+                f"[{sev_color}]{f.severity.upper()}[/{sev_color}]",
+                f.title,
+                f"{f.subject_type}:{f.subject_key}",
+                _fmt_cost(f.estimated_waste_usd),
+                f"[{status_color}]{f.status}[/{status_color}]",
+                str(f.detection_count),
+                f.fingerprint[:12],
+            )
+
+        console.print()
+        console.print(table)
+
+        summary = await get_waste_summary(cfg.db_path)
+        console.print(
+            f"\n  Outstanding waste: [bold yellow]"
+            f"{_fmt_cost(summary['detected_waste_usd'])}[/bold yellow] "
+            f"across {summary['open_finding_count']} open finding(s)\n"
+        )
+
+    asyncio.run(_run())
+
+
+@findings_app.command("status")
+def findings_status(
+    fingerprint: str = typer.Argument(..., help="Fingerprint (12-char prefix is enough)"),
+    new_status: str = typer.Argument(
+        ..., help="open | acknowledged | resolved | accepted_risk"
+    ),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Move a finding through its lifecycle."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.findings import (
+            VALID_STATUSES,
+            list_findings,
+            set_finding_status,
+        )
+
+        if new_status not in VALID_STATUSES:
+            console.print(
+                f"[red]Invalid status '{new_status}'.[/red] "
+                f"Expected one of: {', '.join(VALID_STATUSES)}"
+            )
+            raise typer.Exit(1)
+
+        # Accept a prefix so users can copy what `findings list` printed.
+        matches = [
+            f
+            for f in await list_findings(cfg.db_path, limit=1000)
+            if f.fingerprint.startswith(fingerprint)
+        ]
+        if not matches:
+            console.print(f"[red]No finding matching '{fingerprint}'.[/red]")
+            raise typer.Exit(1)
+        if len(matches) > 1:
+            console.print(
+                f"[red]'{fingerprint}' matches {len(matches)} findings.[/red] "
+                "Use a longer prefix."
+            )
+            raise typer.Exit(1)
+
+        target = matches[0]
+        await set_finding_status(cfg.db_path, target.fingerprint, new_status)
+
+        console.print(f"\n  {target.title} ({target.subject_type}:{target.subject_key})")
+        console.print(f"  {target.status} → [bold]{new_status}[/bold]")
+        if new_status == "resolved":
+            console.print(
+                f"  Baseline captured: {_fmt_cost(target.estimated_waste_usd)} "
+                "— future runs compare against this.\n"
+            )
+        else:
+            console.print()
 
     asyncio.run(_run())
 
