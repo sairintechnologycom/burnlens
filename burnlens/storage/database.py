@@ -95,10 +95,17 @@ CREATE TABLE IF NOT EXISTS waste_findings (
     first_seen_at       TEXT    NOT NULL,
     last_seen_at        TEXT    NOT NULL,
     resolved_at         TEXT,
-    -- Waste at the moment the user marked it resolved. Captured here because
-    -- it cannot be reconstructed later, and BL-E3 savings verification needs a
-    -- before-figure to compare the following window against.
+    -- Snapshot of the subject at the moment the user marked it resolved.
+    -- Captured here because it cannot be reconstructed later, and savings
+    -- verification (BL-E3) needs a before-figure.
+    --
+    -- The request count and total cost are what make the comparison FAIR:
+    -- comparing total waste before/after would credit the fix whenever traffic
+    -- simply fell, so verification normalises to cost per request.
     baseline_waste_usd  REAL,
+    baseline_cost_usd   REAL,
+    baseline_requests   INTEGER,
+    baseline_window_days INTEGER,
     detection_count     INTEGER NOT NULL DEFAULT 1,
     detector_version    INTEGER NOT NULL DEFAULT 1
 );
@@ -908,6 +915,20 @@ async def migrate_create_waste_findings_table(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute(_CREATE_WASTE_FINDINGS_TABLE)
         await db.execute(_CREATE_WASTE_FINDINGS_STATUS_INDEX)
+
+        # BL-E3 columns, added to tables created by BL-E1.
+        cursor = await db.execute("PRAGMA table_info(waste_findings)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        for column, ddl in (
+            ("baseline_cost_usd", "REAL"),
+            ("baseline_requests", "INTEGER"),
+            ("baseline_window_days", "INTEGER"),
+        ):
+            if column not in columns:
+                await db.execute(
+                    f"ALTER TABLE waste_findings ADD COLUMN {column} {ddl}"
+                )
+
         await db.commit()
 
 

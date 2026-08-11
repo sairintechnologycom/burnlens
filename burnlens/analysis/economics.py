@@ -69,6 +69,41 @@ async def get_error_spend(db_path: str, since: str) -> tuple[float, int]:
     return (float(row[0]), int(row[1]))
 
 
+async def get_subject_spend(
+    db_path: str,
+    subject_type: str,
+    subject_key: str,
+    since: str,
+    until: str | None = None,
+) -> tuple[float, int]:
+    """Spend and request count for one finding subject over a window.
+
+    Subjects are the same two kinds the detectors produce: a tagged
+    ``workflow_id``, or a model. Anything else has no rows and returns zeroes
+    rather than silently matching everything.
+    """
+    if subject_type == "workflow":
+        predicate = "json_extract(tags, '$.workflow_id') = ?"
+    elif subject_type == "model":
+        predicate = "model = ?"
+    else:
+        return (0.0, 0)
+
+    query = (
+        "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*) FROM requests "
+        f"WHERE {predicate} AND timestamp >= ?"
+    )
+    params: list[Any] = [subject_key, since]
+    if until is not None:
+        query += " AND timestamp < ?"
+        params.append(until)
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(query, params)
+        row = await cursor.fetchone()
+    return (float(row[0]), int(row[1]))
+
+
 async def get_economics_overview(
     db_path: str,
     since: str,

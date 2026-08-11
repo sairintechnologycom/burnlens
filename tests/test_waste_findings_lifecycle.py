@@ -8,7 +8,7 @@ from burnlens.analysis.waste import (
     WasteFinding,
     run_all_detectors,
 )
-from burnlens.storage.database import migrate_create_waste_findings_table
+from burnlens.storage.database import init_db
 from burnlens.storage.findings import (
     get_waste_summary,
     list_findings,
@@ -37,8 +37,10 @@ def _request(**overrides):
 
 @pytest.fixture
 async def db(tmp_path):
+    # Full init_db: resolving a finding snapshots the subject's spend, so the
+    # requests table has to exist.
     path = str(tmp_path / "findings.db")
-    await migrate_create_waste_findings_table(path)
+    await init_db(path)
     return path
 
 
@@ -177,7 +179,9 @@ async def test_resolved_finding_reopens_when_waste_returns(db):
     stored = await list_findings(db)
     assert result.reopened == 1
     assert stored[0].status == "open"
-    assert stored[0].resolved_at is None
+    # resolved_at survives: a fix WAS applied then, even though it did not
+    # hold, and savings verification needs that anchor to compare against.
+    assert stored[0].resolved_at is not None
 
 
 @pytest.mark.asyncio

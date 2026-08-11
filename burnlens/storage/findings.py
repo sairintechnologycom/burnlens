@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiosqlite
@@ -26,6 +26,11 @@ import aiosqlite
 from burnlens.analysis.waste import DETECTOR_VERSION, WasteFinding
 
 VALID_STATUSES = ("open", "acknowledged", "resolved", "accepted_risk")
+
+# How much history the baseline snapshot covers, and how long the after-window
+# must run before a fix can be judged. The same length on both sides so the
+# comparison is like-for-like.
+BASELINE_WINDOW_DAYS = 7
 
 
 @dataclass
@@ -47,6 +52,9 @@ class StoredFinding:
     last_seen_at: str
     resolved_at: str | None
     baseline_waste_usd: float | None
+    baseline_cost_usd: float | None
+    baseline_requests: int | None
+    baseline_window_days: int | None
     detection_count: int
     detector_version: int
 
@@ -86,6 +94,9 @@ def _row_to_finding(row: aiosqlite.Row) -> StoredFinding:
         last_seen_at=row["last_seen_at"],
         resolved_at=row["resolved_at"],
         baseline_waste_usd=row["baseline_waste_usd"],
+        baseline_cost_usd=row["baseline_cost_usd"],
+        baseline_requests=row["baseline_requests"],
+        baseline_window_days=row["baseline_window_days"],
         detection_count=row["detection_count"],
         detector_version=row["detector_version"],
     )
@@ -157,13 +168,16 @@ async def sync_findings(
             reopen = existing["status"] == "resolved"
             new_status = "open" if reopen else existing["status"]
 
+            # resolved_at is NOT cleared on reopen. It records when the fix was
+            # applied, which stays true even though the fix did not hold — and
+            # savings verification needs that anchor to compare against. Status
+            # is what says the finding is open again.
             await db.execute(
                 """
                 UPDATE waste_findings
                    SET severity = ?, description = ?, estimated_waste_usd = ?,
                        affected_count = ?, evidence = ?, last_seen_at = ?,
-                       status = ?, detection_count = detection_count + 1,
-                       resolved_at = CASE WHEN ? THEN NULL ELSE resolved_at END
+                       status = ?, detection_count = detection_count + 1
                  WHERE fingerprint = ?
                 """,
                 (
@@ -174,7 +188,6 @@ async def sync_findings(
                     evidence_json,
                     now,
                     new_status,
-                    reopen,
                     fingerprint,
                 ),
             )
@@ -213,35 +226,222 @@ async def list_findings(
 
 
 async def set_finding_status(
-    db_path: str, fingerprint: str, status: str
+    db_path: str,
+    fingerprint: str,
+    status: str,
+    baseline_window_days: int = BASELINE_WINDOW_DAYS,
 ) -> bool:
     """Move a finding through its lifecycle. Returns False if it doesn't exist.
 
-    Marking a finding resolved snapshots its current waste as
-    ``baseline_waste_usd``. That number cannot be recovered afterwards — the
-    next detection pass overwrites ``estimated_waste_usd`` — and BL-E3 needs a
-    before-figure to judge whether the fix actually saved anything.
+    Marking a finding resolved snapshots the subject's economics as they stood
+    at that moment: its waste, its total spend, and its request count over the
+    preceding window. None of that can be recovered afterwards — the next
+    detection pass overwrites ``estimated_waste_usd``, and the request window
+    slides away.
+
+    The request count is what makes verification honest. Comparing total waste
+    before and after would credit the fix whenever traffic merely fell, so
+    verification divides by requests and compares cost per request.
     """
     if status not in VALID_STATUSES:
         raise ValueError(
             f"invalid status {status!r}; expected one of {', '.join(VALID_STATUSES)}"
         )
 
-    resolving = status == "resolved"
+    if status != "resolved":
+        # resolved_at and the baseline are left intact: they record that a fix
+        # was applied at a point in time, which stays true regardless of what
+        # the finding's status becomes afterwards.
+        async with aiosqlite.connect(db_path) as db:
+            cursor = await db.execute(
+                "UPDATE waste_findings SET status = ? WHERE fingerprint = ?",
+                (status, fingerprint),
+            )
+            await db.commit()
+            return cursor.rowcount > 0
+
+    from burnlens.analysis.economics import get_subject_spend
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT subject_type, subject_key, estimated_waste_usd "
+            "FROM waste_findings WHERE fingerprint = ?",
+            (fingerprint,),
+        )
+        existing = await cursor.fetchone()
+
+    if existing is None:
+        return False
+
+    now = datetime.now(timezone.utc)
+    window_start = (now - timedelta(days=baseline_window_days)).isoformat()
+    baseline_cost, baseline_requests = await get_subject_spend(
+        db_path,
+        existing["subject_type"],
+        existing["subject_key"],
+        since=window_start,
+        until=now.isoformat(),
+    )
+
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
             """
             UPDATE waste_findings
-               SET status = ?,
-                   resolved_at = CASE WHEN ? THEN ? ELSE NULL END,
-                   baseline_waste_usd = CASE
-                       WHEN ? THEN estimated_waste_usd ELSE baseline_waste_usd END
+               SET status = 'resolved',
+                   resolved_at = ?,
+                   baseline_waste_usd = estimated_waste_usd,
+                   baseline_cost_usd = ?,
+                   baseline_requests = ?,
+                   baseline_window_days = ?
              WHERE fingerprint = ?
             """,
-            (status, resolving, _now(), resolving, fingerprint),
+            (
+                now.isoformat(),
+                baseline_cost,
+                baseline_requests,
+                baseline_window_days,
+                fingerprint,
+            ),
         )
         await db.commit()
         return cursor.rowcount > 0
+
+
+@dataclass
+class SavingsVerdict:
+    """Did the fix actually reduce spend? (BL-E3)
+
+    ``status`` is one of:
+
+    - ``verified``    — enough after-window elapsed and traffic to judge
+    - ``pending``     — resolved too recently; ``days_remaining`` says how long
+    - ``no_traffic``  — nothing ran since the fix, so nothing can be concluded
+    - ``no_baseline`` — resolved before baselines were captured, or by a path
+      that did not record one
+
+    Everything is per request. Comparing totals would credit a fix whenever
+    traffic simply fell.
+    """
+
+    fingerprint: str
+    title: str
+    subject_type: str
+    subject_key: str
+    status: str
+    baseline_cost_per_request: float | None = None
+    current_cost_per_request: float | None = None
+    delta_per_request: float | None = None
+    pct_change: float | None = None
+    projected_monthly_savings_usd: float | None = None
+    baseline_requests: int | None = None
+    current_requests: int | None = None
+    days_remaining: float | None = None
+    reopened: bool = False
+
+
+async def verify_savings(
+    db_path: str, fingerprint: str
+) -> SavingsVerdict | None:
+    """Compare a resolved finding's subject before and after the fix.
+
+    Returns None if the fingerprint is unknown.
+    """
+    from burnlens.analysis.economics import get_subject_spend
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM waste_findings WHERE fingerprint = ?", (fingerprint,)
+        )
+        row = await cursor.fetchone()
+
+    if row is None:
+        return None
+
+    finding = _row_to_finding(row)
+    verdict = SavingsVerdict(
+        fingerprint=finding.fingerprint,
+        title=finding.title,
+        subject_type=finding.subject_type,
+        subject_key=finding.subject_key,
+        status="no_baseline",
+        # A finding that was resolved and is open again is itself evidence the
+        # fix did not hold. The numbers below still describe what changed, so
+        # report both rather than picking one.
+        reopened=finding.status == "open" and finding.resolved_at is not None,
+    )
+
+    if not finding.resolved_at or not finding.baseline_requests:
+        # Either never resolved, or resolved with no traffic to compare
+        # against — in both cases there is no honest before-figure.
+        return verdict
+
+    window_days = finding.baseline_window_days or BASELINE_WINDOW_DAYS
+    resolved_at = datetime.fromisoformat(finding.resolved_at)
+    elapsed = datetime.now(timezone.utc) - resolved_at
+
+    if elapsed < timedelta(days=window_days):
+        verdict.status = "pending"
+        verdict.days_remaining = round(
+            (timedelta(days=window_days) - elapsed).total_seconds() / 86_400, 2
+        )
+        return verdict
+
+    current_cost, current_requests = await get_subject_spend(
+        db_path,
+        finding.subject_type,
+        finding.subject_key,
+        since=resolved_at.isoformat(),
+        until=(resolved_at + timedelta(days=window_days)).isoformat(),
+    )
+
+    verdict.baseline_requests = finding.baseline_requests
+    verdict.current_requests = current_requests
+
+    if current_requests == 0:
+        # Silence is not a saving. A workflow that stopped running entirely
+        # would otherwise show as a 100% cost reduction.
+        verdict.status = "no_traffic"
+        return verdict
+
+    baseline_per_request = (finding.baseline_cost_usd or 0.0) / finding.baseline_requests
+    current_per_request = current_cost / current_requests
+
+    verdict.status = "verified"
+    verdict.baseline_cost_per_request = baseline_per_request
+    verdict.current_cost_per_request = current_per_request
+    verdict.delta_per_request = baseline_per_request - current_per_request
+    verdict.pct_change = (
+        ((current_per_request - baseline_per_request) / baseline_per_request * 100)
+        if baseline_per_request
+        else None
+    )
+    # Project at the CURRENT request rate, not the baseline's: the saving you
+    # keep getting depends on how much you run now, not how much you used to.
+    verdict.projected_monthly_savings_usd = (
+        verdict.delta_per_request * current_requests * (30.0 / window_days)
+    )
+    return verdict
+
+
+async def verify_all_resolved(db_path: str) -> list[SavingsVerdict]:
+    """Verify every finding that has a baseline, worst regressions last."""
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT fingerprint FROM waste_findings WHERE baseline_requests IS NOT NULL"
+        )
+        rows = await cursor.fetchall()
+
+    verdicts = []
+    for row in rows:
+        verdict = await verify_savings(db_path, row["fingerprint"])
+        if verdict is not None:
+            verdicts.append(verdict)
+    return sorted(
+        verdicts, key=lambda v: -(v.projected_monthly_savings_usd or 0.0)
+    )
 
 
 async def get_waste_summary(db_path: str) -> dict[str, Any]:
