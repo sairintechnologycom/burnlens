@@ -6,6 +6,67 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.16.0] — 2026-08-11
+
+Waste detection stops being a snapshot you recompute and becomes a workflow:
+find it, act on it, then check whether the money actually moved.
+
+### Added
+- **Waste findings are persisted and have a status lifecycle.** Detection
+  previously recomputed everything on every call and wrote nothing down, so a
+  finding had no identity between runs — no history, and no way to record that
+  something had been fixed. Findings now live in a `waste_findings` table and
+  move through `open → acknowledged → resolved`, plus `accepted_risk`.
+
+  A resolved finding that is detected again **reopens**, because a fix that did
+  not hold has to come back. `accepted_risk` never reopens — the user already
+  decided.
+
+  - `burnlens findings list [--status ...]`
+  - `burnlens findings status <fingerprint> <status>`
+  - `burnlens analyze --save`
+  - findings also sync on the existing hourly detection tick
+
+- **Findings are scoped to a subject** — the tagged `workflow_id` where there is
+  one, otherwise the model. Previously each detector returned a single
+  workspace-wide aggregate, which meant "mark fixed" would have muted an entire
+  category including future offenders, and there would be nothing specific to
+  measure a saving against. Both fields already exist on the request record, so
+  this needs no new instrumentation.
+
+- **`burnlens economics`** and **`GET /api/economics`** — total spend, detected
+  waste, waste rate, error spend, cost per accepted outcome.
+
+  These are a rate plus dimensions, never an additive breakdown. Detector
+  estimates overlap heavily: on a window of $12.00 of spend, five detectors
+  between them estimated $31.20 as avoidable, because one request can trip
+  context bloat, history bloat, oversized tool schemas, low RAG efficiency and
+  model overkill at once. Detected waste is therefore an estimate of avoidable
+  spend, and the rate clamps at 100% rather than reporting a nonsense figure.
+
+  Error spend counts 4xx/5xx requests. It is deliberately not called
+  failed-run cost: the proxy sees individual HTTP requests and cannot tell a
+  failed run from a failed request inside a run that went on to succeed.
+
+- **`burnlens findings verify`** — after a finding is resolved, compares the
+  subject's **cost per request** before and after the fix and projects the
+  monthly saving.
+
+  Per request, not per total: a workflow whose traffic fell to a tenth at an
+  unchanged unit cost would otherwise score as a 90% win. Verification also
+  refuses to guess — it reports `pending` when a fix is too recent to judge and
+  `no_traffic` when nothing has run since, rather than presenting a collapse in
+  spend as a 100% saving.
+
+### Changed
+- **Detectors no longer emit zero-waste placeholder findings.** Clean traffic
+  returns nothing at all instead of eight rows saying "No requests to analyze",
+  so an empty findings list means there is nothing to fix. `/api/waste`
+  correspondingly returns only detectors that found something.
+- **`/api/waste` rows carry a stable `id`** (the finding fingerprint). It was
+  previously an `enumerate` index that changed between runs, so nothing could
+  reliably address the same finding twice.
+
 ## [OSS `burnlens` v1.15.2] — 2026-08-10
 
 ### Added
