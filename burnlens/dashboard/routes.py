@@ -256,6 +256,25 @@ async def recent_requests(
     return await get_recent_requests(db, limit=limit, pr=pr)
 
 
+# ----------------------------------------------------------- /api/economics
+
+@router.get("/economics")
+async def economics(
+    request: Request,
+    period: str = Query(default="30d"),
+) -> dict:
+    """Top-line runtime economics: spend, waste rate, error spend, cost/outcome.
+
+    These are a rate plus dimensions, not an additive breakdown — detectors
+    overlap, and error spend overlaps waste. See burnlens/analysis/economics.py.
+    """
+    from burnlens.analysis.economics import get_economics_overview, overview_to_dict
+
+    db = _db_path(request)
+    since = _parse_period(period)
+    return overview_to_dict(await get_economics_overview(db, since=since))
+
+
 # --------------------------------------------------------------- /api/waste
 
 @router.get("/waste")
