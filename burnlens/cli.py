@@ -432,6 +432,74 @@ def analyze(
     asyncio.run(_run())
 
 
+@app.command()
+def economics(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(30, "--days", "-d", help="Window to report on"),
+) -> None:
+    """Top-line runtime economics: spend, waste rate, error spend, cost/outcome."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.analysis.economics import get_economics_overview
+
+        overview = await get_economics_overview(cfg.db_path, since=_since_iso(days))
+
+        table = Table(title=f"Runtime Economics — last {days} day(s)", show_header=False)
+        table.add_column("Metric")
+        table.add_column("Value", justify="right")
+
+        table.add_row("Total spend", _fmt_cost(overview.total_spend_usd))
+        table.add_row(
+            "Detected waste",
+            f"{_fmt_cost(overview.detected_waste_usd)} "
+            f"({overview.open_finding_count} open finding(s))",
+        )
+        table.add_row("Waste rate", f"{overview.waste_rate * 100:.1f}%")
+        table.add_row(
+            "Cost per accepted outcome",
+            _fmt_cost(overview.cost_per_accepted_usd)
+            if overview.cost_per_accepted_usd is not None
+            else "[dim]no accepted outcomes[/dim]",
+        )
+
+        console.print()
+        console.print(table)
+
+        # Deliberately printed apart from the table above: error spend overlaps
+        # detected waste, so stacking it with the others would read as an
+        # additive breakdown of total spend. It is not one.
+        console.print(
+            f"\n  [dim]Diagnostic — error spend (4xx/5xx): "
+            f"{_fmt_cost(overview.error_spend_usd)} across "
+            f"{overview.error_request_count} request(s). "
+            f"Overlaps detected waste; not a separate slice of total spend.[/dim]"
+        )
+
+        if overview.waste_estimate_clamped:
+            console.print(
+                "\n  [yellow]Detector estimates overlap and exceeded total spend; "
+                "waste rate clamped to 100%.[/yellow]"
+            )
+
+        if overview.waste_by_detector:
+            console.print()
+            breakdown = Table(title="Waste by detector", show_header=False)
+            breakdown.add_column("Detector")
+            breakdown.add_column("Estimated waste", justify="right")
+            for detector, amount in overview.waste_by_detector.items():
+                breakdown.add_row(detector, _fmt_cost(amount))
+            console.print(breakdown)
+            console.print(
+                "  [dim]Categories overlap — one request can trip several "
+                "detectors, so these do not sum to detected waste.[/dim]"
+            )
+
+        console.print()
+
+    asyncio.run(_run())
+
+
 findings_app = typer.Typer(help="Persisted waste findings and their lifecycle.")
 app.add_typer(findings_app, name="findings")
 
