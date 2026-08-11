@@ -100,7 +100,15 @@
     </div>
     <div class="chart-card waste-card">
       <div class="chart-header">
-        <h2>Waste Alerts</h2>
+        <h2>Waste Findings</h2>
+        <span class="chart-note" id="waste-summary"></span>
+      </div>
+      <div class="finding-filters" id="finding-filters">
+        <button class="finding-filter is-active" data-status="open">Open</button>
+        <button class="finding-filter" data-status="acknowledged">Acknowledged</button>
+        <button class="finding-filter" data-status="resolved">Resolved</button>
+        <button class="finding-filter" data-status="accepted_risk">Accepted</button>
+        <button class="finding-filter" data-status="">All</button>
       </div>
       <div id="waste-panel">
         <div class="loading-text">Analyzing…</div>
