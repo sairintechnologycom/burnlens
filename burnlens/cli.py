@@ -627,6 +627,78 @@ def findings_status(
     asyncio.run(_run())
 
 
+@findings_app.command("verify")
+def findings_verify(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Did the fixes actually reduce spend? Compares cost per request."""
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        from burnlens.storage.findings import verify_all_resolved
+
+        verdicts = await verify_all_resolved(cfg.db_path)
+        if not verdicts:
+            console.print(
+                "\n  No resolved findings to verify yet. Mark one fixed with "
+                "[bold]burnlens findings status <fingerprint> resolved[/bold].\n"
+            )
+            return
+
+        console.print()
+        for v in verdicts:
+            subject = f"{v.subject_type}:{v.subject_key}"
+
+            if v.status == "pending":
+                console.print(
+                    f"  [dim]{v.title} ({subject}) — verifying in "
+                    f"{v.days_remaining:.1f} more day(s)[/dim]"
+                )
+                continue
+            if v.status == "no_traffic":
+                console.print(
+                    f"  [yellow]{v.title} ({subject}) — no traffic since the fix, "
+                    "so nothing can be concluded.[/yellow]"
+                )
+                continue
+            if v.status == "no_baseline":
+                console.print(
+                    f"  [dim]{v.title} ({subject}) — resolved without a baseline; "
+                    "cannot verify.[/dim]"
+                )
+                continue
+
+            improved = (v.delta_per_request or 0) > 0
+            colour = "green" if improved else "red"
+            verb = "saved" if improved else "REGRESSED"
+
+            lines = [
+                f"  Before: {_fmt_cost(v.baseline_cost_per_request)}/request "
+                f"({v.baseline_requests} requests)",
+                f"  After:  {_fmt_cost(v.current_cost_per_request)}/request "
+                f"({v.current_requests} requests)",
+                f"  Change: [{colour}]{v.pct_change:+.1f}%[/{colour}]",
+                f"\n  Projected monthly: [{colour}]"
+                f"{_fmt_cost(abs(v.projected_monthly_savings_usd))} {verb}[/{colour}]",
+            ]
+            if v.reopened:
+                lines.append(
+                    "\n  [yellow]Reopened — the waste was detected again "
+                    "after the fix.[/yellow]"
+                )
+
+            console.print(
+                Panel(
+                    "\n".join(lines),
+                    title=f"[bold]{v.title}[/bold] — {subject}",
+                    border_style=colour,
+                )
+            )
+        console.print()
+
+    asyncio.run(_run())
+
+
 @app.command()
 def export(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
