@@ -6,6 +6,30 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.18.0] — 2026-08-12
+
+### Added
+- **The proxy now keeps the caller's span id.** BurnLens already parsed the
+  W3C `traceparent` header for its trace id and discarded the rest; the
+  discarded half is the span that made the call — the run or step the LLM
+  request belongs to. It is now stored as `parent_span_id` on every request,
+  so anyone already running OpenTelemetry can reconstruct run/step structure
+  by grouping on `trace_id` and nesting on `parent_span_id`. No endpoint to
+  call, no dependency to add, and nothing to instrument: requests without a
+  `traceparent` behave exactly as before.
+
+  Only the W3C header carries a span, so the `x-trace-id` / `x-correlation-id`
+  / tag fallbacks leave it empty. The spec's all-zero "no parent" sentinel and
+  malformed values are stored as empty rather than as a fake parent. Existing
+  databases gain the column automatically on next start.
+
+  Nothing surfaces the field yet — this release starts collecting it. A
+  trace-grouped view comes only once the data shows traces actually arrive.
+
+### Changed
+- Cloud sync now includes `parent_span_id` alongside `trace_id`. Like the
+  other correlation ids it is an opaque identifier, never prompt content.
+
 ## [OSS `burnlens` v1.17.0] — 2026-08-11
 
 The findings lifecycle reaches the dashboard. v1.16.0 shipped it CLI-only.
