@@ -476,6 +476,30 @@ def economics(
             f"Overlaps detected waste; not a separate slice of total spend.[/dim]"
         )
 
+        # Not money, so it sits with the diagnostics rather than in the table.
+        # It answers a different question: whether spend CAN be attributed to a
+        # run or step at all, which needs callers to send a W3C traceparent.
+        cov = overview.trace_coverage
+        if cov.columns_missing:
+            console.print(
+                "\n  [dim]Attribution coverage — this database predates the trace "
+                "columns. Start the proxy once to migrate it.[/dim]"
+            )
+        elif cov.traced_count:
+            console.print(
+                f"\n  [dim]Attribution coverage — {cov.traced_count} of "
+                f"{cov.request_count} request(s) carry a W3C trace "
+                f"({cov.traced_rate * 100:.1f}%), {cov.parented_count} naming the "
+                f"calling span, across {cov.distinct_traces} distinct trace(s).[/dim]"
+            )
+        elif cov.request_count:
+            console.print(
+                "\n  [dim]Attribution coverage — no request carries a W3C trace, so "
+                "spend can only be attributed per request, not per run or step. "
+                "Any OpenTelemetry-instrumented client sends the traceparent "
+                "header automatically; nothing else changes without one.[/dim]"
+            )
+
         if overview.waste_estimate_clamped:
             console.print(
                 "\n  [yellow]Detector estimates overlap and exceeded total spend; "
