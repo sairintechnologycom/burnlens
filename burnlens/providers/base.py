@@ -1,11 +1,16 @@
 """Provider plugin interface — base class and config dataclass."""
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
 from burnlens.cost.calculator import TokenUsage
+
+# Substrings that mark an SSE line as possibly carrying a tool call. Used to skip
+# JSON-parsing the (overwhelmingly common) tool-free line.
+_STREAM_TOOL_MARKERS: tuple[str, ...] = ('"tool_calls"', '"tool_use"', '"functionCall"')
 
 
 @dataclass(frozen=True)
@@ -143,3 +148,74 @@ class Provider(ABC):
         except (AttributeError, TypeError):
             return 0
         return count
+
+    def count_tool_calls_in_stream(self, raw_buffer: str) -> int:
+        """Return the number of tool/function calls in a complete SSE response.
+
+        Streaming fragments each call across many deltas, so ``count_tool_calls``
+        — a single body parse — cannot see them, and every streaming request used
+        to record ``tool_calls=0``. One default covers each SSE shape in use, so
+        no provider currently overrides it:
+
+        * OpenAI-compatible — ``choices[].delta.tool_calls[]``, deduped by
+          ``index`` (or ``id``) because the argument fragments repeat it.
+        * Anthropic — ``content_block_start`` events whose block is ``tool_use``.
+        * Google — ``candidates[].content.parts[].functionCall``.
+
+        Takes the *whole* stream buffer, not the usage-gated subset: tool events
+        carry no usage, so ``should_buffer_chunk`` discards them. Only lines
+        carrying a tool marker are parsed, so a tool-free stream costs one
+        substring scan.
+
+        ⚠️ Bedrock's binary event frames are NOT covered — its ``toolUse`` blocks
+        still count 0.
+
+        Best-effort telemetry, never load-bearing for cost: any unexpected shape
+        returns 0 rather than raising.
+        """
+        if not raw_buffer or not any(m in raw_buffer for m in _STREAM_TOOL_MARKERS):
+            return 0
+
+        openai_calls: set = set()  # deduped: many deltas per call
+        count = 0                  # Anthropic/Google: one event per call
+        for line in raw_buffer.splitlines():
+            line = line.strip()
+            if line.startswith("data:"):
+                payload = line[5:].strip()
+            elif line.startswith("{"):
+                payload = line  # Google raw-NDJSON fallback
+            else:
+                continue
+            if not any(m in payload for m in _STREAM_TOOL_MARKERS):
+                continue
+            try:
+                data = json.loads(payload)
+            except ValueError:
+                continue
+            if not isinstance(data, dict):
+                continue
+            try:
+                for choice in data.get("choices") or []:
+                    delta = (choice or {}).get("delta") or {}
+                    for entry in delta.get("tool_calls") or []:
+                        if not isinstance(entry, dict):
+                            continue
+                        # index identifies the call; id only rides the first delta
+                        key = entry.get("index", entry.get("id"))
+                        if key is not None:
+                            openai_calls.add(key)
+
+                if data.get("type") == "content_block_start":
+                    block = data.get("content_block") or {}
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        count += 1
+
+                for candidate in data.get("candidates") or []:
+                    parts = ((candidate or {}).get("content") or {}).get("parts") or []
+                    for part in parts:
+                        if isinstance(part, dict) and part.get("functionCall"):
+                            count += 1
+            except (AttributeError, TypeError):
+                continue
+
+        return len(openai_calls) + count

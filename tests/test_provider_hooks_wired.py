@@ -86,6 +86,10 @@ class _RecordingProvider:
         self.calls.add("should_buffer_chunk")
         return self._inner.should_buffer_chunk(chunk)
 
+    def count_tool_calls_in_stream(self, raw_buffer):
+        self.calls.add("count_tool_calls_in_stream")
+        return self._inner.count_tool_calls_in_stream(raw_buffer)
+
     def headers_to_strip(self):
         self.calls.add("headers_to_strip")
         return self._inner.headers_to_strip()
@@ -168,7 +172,8 @@ class TestStreamingHooksReached:
         )
 
         for hook in ("is_streaming", "should_buffer_chunk",
-                     "extract_usage_from_stream_chunk"):
+                     "extract_usage_from_stream_chunk",
+                     "count_tool_calls_in_stream"):
             assert hook in provider.calls, (
                 f"{hook}() was never called on the streaming path — usage gating "
                 "or extraction has been inlined again (see module docstring)"

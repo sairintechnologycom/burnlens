@@ -1168,9 +1168,19 @@ async def _handle_streaming(
             # keeping only those that contain usage data.  This handles
             # TCP chunk fragmentation that previously lost tokens.
             usage_events = split_sse_events(raw_buffer, provider)
+            # Counted here, not in _log_streaming_usage: tool events carry no
+            # usage, so should_buffer_chunk drops them from usage_events. Passing
+            # an int keeps the whole buffer out of the background task.
+            try:
+                stream_tool_calls = provider.count_tool_calls_in_stream(raw_buffer)
+            except Exception as exc:
+                # Never lose the cost record over best-effort telemetry.
+                logger.debug("Streaming tool-call count failed: %s", exc)
+                stream_tool_calls = 0
             asyncio.create_task(
                 _log_streaming_usage(
                     usage_chunks=usage_events,
+                    tool_calls=stream_tool_calls,
                     provider=provider,
                     model=model,
                     tags=tags,
@@ -1231,6 +1241,7 @@ async def _log_streaming_usage(
     config: "BurnLensConfig | None" = None,
     reservation: dict[str, Any] | None = None,
     body_bytes: bytes | None = None,
+    tool_calls: int = 0,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks, provider)
@@ -1319,11 +1330,9 @@ async def _log_streaming_usage(
         prompt_tools_tokens=prompt_analysis["prompt_tools_tokens"],
         prompt_rag_tokens=prompt_analysis["prompt_rag_tokens"],
         prompt_history_tokens=prompt_analysis["prompt_history_tokens"],
-        # tool_calls stays 0 on the streaming path: SSE fragments each call across
-        # deltas (OpenAI tool_calls[].index, Anthropic content_block_start), so
-        # counting needs accumulator state rather than a single body parse. Any
-        # per-agent tool-call metric therefore under-counts streaming agents —
-        # extend extract_usage_from_stream_chunk's accumulator before relying on it.
+        # Counted from the full stream buffer by provider.count_tool_calls_in_stream()
+        # — see its docstring for the per-provider shapes and the Bedrock gap.
+        tool_calls=tool_calls,
         # Phase 1 fields
         event_id=event_id,
         request_id=request_id,
