@@ -6,6 +6,27 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.19.0] — 2026-08-12
+
+### Fixed
+- **Tool calls are now counted on streaming responses.** The `tool_calls`
+  figure was read from a complete response body, which a streaming response
+  never produces — each call arrives split across many small events. Every
+  streaming request therefore recorded zero tool calls, however many it made.
+  Since agents almost always stream, the number was wrong for exactly the
+  traffic it exists to describe, and anything built on it would have looked
+  credible while being wrong.
+
+  Streaming requests now report a real count for OpenAI-compatible providers
+  (including Azure, Groq, Together, Mistral, xAI and DeepSeek), Anthropic and
+  Google. Parallel tool calls count once each, not once per fragment.
+
+  Bedrock streams a binary frame format rather than SSE and still reports
+  zero. Non-streaming requests were already correct and are unchanged.
+
+  Historical rows are not backfilled — the counts were never recorded, so
+  totals over a window spanning this upgrade will step up at the boundary.
+
 ## [OSS `burnlens` v1.18.0] — 2026-08-12
 
 ### Added
