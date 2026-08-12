@@ -80,6 +80,7 @@ class GenAICostEvent:
     ttft_ms: float | None = None
     cache_hit: int = 0
     cache_saved_usd: float = 0.0
+    parent_span_id: str | None = None
 
 
 @dataclass
@@ -119,6 +120,9 @@ class RequestRecord:
     # Phase 1: Canonical event fields
     event_id: str | None = None
     trace_id: str | None = None
+    # Caller's span id from traceparent: nests LLM calls under the run/step that
+    # made them, without asking anyone to instrument anything.
+    parent_span_id: str | None = None
     workspace_id: str | None = None
     org_id: str | None = None
     team: str | None = None
@@ -180,6 +184,7 @@ class RequestRecord:
             event_id=event_id,
             request_id=self.request_id,
             trace_id=self.trace_id,
+            parent_span_id=self.parent_span_id,
             workspace_id=self.workspace_id,
             org_id=self.org_id,
             team=self.team or (self.tags or {}).get("team"),
@@ -237,6 +242,7 @@ class RequestRecord:
             request_id=event.request_id,
             event_id=event.event_id,
             trace_id=event.trace_id,
+            parent_span_id=event.parent_span_id,
             workspace_id=event.workspace_id,
             org_id=event.org_id,
             team=event.team,
