@@ -1,7 +1,7 @@
 """Tests for OpenTelemetry span forwarding."""
 
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 from burnlens_cloud.telemetry.forwarder import OtelForwarder
 from burnlens_cloud.telemetry.otel_proto import RequestRecordToSpan
@@ -180,6 +180,46 @@ class TestSpanCorrelation:
         a = RequestRecordToSpan.from_record(self._BASE)
         b = RequestRecordToSpan.from_record(self._BASE)
         assert a["traceId"] != b["traceId"]
+
+    def test_parent_span_id_nests_the_span_under_the_caller(self):
+        """The client's span id is what the exported span hangs under."""
+        span = RequestRecordToSpan.from_record(
+            {**self._BASE, "trace_id": self._W3C, "parent_span_id": "00f067aa0ba902b7"}
+        )
+        assert span["parentSpanId"] == "00f067aa0ba902b7"
+        assert span["spanId"] != span["parentSpanId"]
+
+    def test_unusable_parent_leaves_the_span_at_the_trace_root(self):
+        """Never invent a parent: a bad value must not become a nesting target."""
+        for bad in (None, "", "0" * 16, "tooshort", "z" * 16, "00f067aa0ba902b7ff"):
+            span = RequestRecordToSpan.from_record({**self._BASE, "parent_span_id": bad})
+            assert span["parentSpanId"] is None, bad
+
+    @pytest.mark.asyncio
+    async def test_payload_omits_parent_span_id_when_absent(self):
+        """OTLP reads an empty parentSpanId as a broken link, not as a root span."""
+        forwarder = OtelForwarder()
+        sent: list[dict] = []
+
+        async def _capture(url, json=None, **kwargs):
+            sent.append(json)
+            return MagicMock(status_code=200)
+
+        with patch.object(forwarder, "_validate_endpoint", return_value=True), patch(
+            "httpx.AsyncClient.post", new=AsyncMock(side_effect=_capture)
+        ):
+            await forwarder.forward_batch(
+                [
+                    {**self._BASE, "parent_span_id": "00f067aa0ba902b7"},
+                    {**self._BASE},
+                ],
+                "https://otel.example.com/v1/traces",
+                "key",
+            )
+
+        spans = sent[0]["resourceSpans"][0]["scopeSpans"][0]["spans"]
+        assert spans[0]["parentSpanId"] == "00f067aa0ba902b7"
+        assert "parentSpanId" not in spans[1]
 
 
 class TestOtelForwarder:

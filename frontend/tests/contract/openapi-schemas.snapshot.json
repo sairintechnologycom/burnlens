@@ -1426,6 +1426,17 @@
         "title": "Output Tokens",
         "type": "integer"
       },
+      "parent_span_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Parent Span Id"
+      },
       "provider": {
         "title": "Provider",
         "type": "string"
@@ -1557,6 +1568,17 @@
         "default": 0,
         "title": "Output Tokens",
         "type": "integer"
+      },
+      "parent_span_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Parent Span Id"
       },
       "provider": {
         "title": "Provider",

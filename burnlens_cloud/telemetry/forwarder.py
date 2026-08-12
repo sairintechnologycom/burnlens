@@ -127,6 +127,15 @@ class OtelForwarder:
                                         "name": span["name"],
                                         "spanId": span["spanId"],
                                         "traceId": span["traceId"],
+                                        # Omitted entirely when there is no
+                                        # parent: OTLP reads a present-but-empty
+                                        # parentSpanId as a malformed link, not
+                                        # as a root span.
+                                        **(
+                                            {"parentSpanId": span["parentSpanId"]}
+                                            if span.get("parentSpanId")
+                                            else {}
+                                        ),
                                         "attributes": span["attributes"],
                                         "startTimeUnixNano": span["startTimeUnixNano"],
                                         "endTimeUnixNano": span["endTimeUnixNano"],
