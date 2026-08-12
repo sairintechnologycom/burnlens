@@ -5,7 +5,6 @@ Tests go through the full interceptor pipeline (handle_request → DB).
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from unittest.mock import AsyncMock, patch
@@ -19,6 +18,7 @@ from burnlens.proxy.providers import get_provider_for_path
 from burnlens.proxy.streaming import split_sse_events
 from burnlens.storage.database import init_db
 from burnlens.storage.queries import get_recent_requests
+from ..conftest import settle_background_tasks
 
 
 # ---------------------------------------------------------------------------
@@ -26,9 +26,14 @@ from burnlens.storage.queries import get_recent_requests
 # ---------------------------------------------------------------------------
 
 async def _flush_tasks() -> None:
-    """Yield control until background tasks (DB insert, asset upsert) finish."""
-    for _ in range(15):
-        await asyncio.sleep(0.05)
+    """Wait for the interceptor's fire-and-forget writes to land.
+
+    Was a fixed 15 x 50ms sleep, which is a bet that 750ms is always enough:
+    it lost on CI (test_openai_streaming_tokens_captured, 2026-08-12, "Expected
+    at least 1 row"). settle_background_tasks() waits on the tasks themselves,
+    so a slow runner makes it wait longer instead of making it fail.
+    """
+    await settle_background_tasks()
 
 
 def _openai_chat_response(
