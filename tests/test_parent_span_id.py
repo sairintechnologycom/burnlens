@@ -1,9 +1,18 @@
 """BL-E5 slice 1: the caller's span id survives from traceparent into the DB."""
 
+import asyncio
+import json
+
 import aiosqlite
+import httpx
 import pytest
 
-from burnlens.proxy.interceptor import _extract_parent_span_id, _resolve_canonical_metadata
+from burnlens.proxy.interceptor import (
+    _extract_parent_span_id,
+    _resolve_canonical_metadata,
+    handle_request,
+)
+from burnlens.proxy.providers import get_provider_for_path
 from burnlens.storage.database import init_db, insert_request
 from burnlens.storage.models import RequestRecord
 
@@ -48,6 +57,53 @@ async def test_parent_span_id_round_trips_through_storage(tmp_path):
     )
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute("SELECT trace_id, parent_span_id FROM requests")
+        assert await cursor.fetchone() == (
+            "4bf92f3577b34da6a3ce929d0e0e4736",
+            "00f067aa0ba902b7",
+        )
+
+
+class _MockTransport(httpx.AsyncBaseTransport):
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            status_code=200,
+            content=json.dumps(
+                {
+                    "id": "chatcmpl-test",
+                    "model": "gpt-4o",
+                    "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+                }
+            ).encode(),
+            headers={"content-type": "application/json"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_proxied_request_lands_parent_span_id(initialized_db: str) -> None:
+    """The whole path: traceparent header on a real proxied call reaches the row.
+
+    The unit tests above cover extraction and storage separately; this is the
+    only check that the meta dict actually carries the value between them.
+    """
+    await handle_request(
+        client=httpx.AsyncClient(transport=_MockTransport()),
+        provider=get_provider_for_path("/proxy/openai/v1/chat/completions"),
+        path="/proxy/openai/v1/chat/completions",
+        method="POST",
+        headers={"content-type": "application/json", "traceparent": TRACEPARENT},
+        body_bytes=json.dumps({"model": "gpt-4o", "messages": []}).encode(),
+        query_string="",
+        db_path=initialized_db,
+        alert_engine=None,
+    )
+    for _ in range(10):
+        await asyncio.sleep(0.02)
+
+    async with aiosqlite.connect(initialized_db) as db:
+        cursor = await db.execute(
+            "SELECT trace_id, parent_span_id FROM requests ORDER BY id DESC LIMIT 1"
+        )
         assert await cursor.fetchone() == (
             "4bf92f3577b34da6a3ce929d0e0e4736",
             "00f067aa0ba902b7",
