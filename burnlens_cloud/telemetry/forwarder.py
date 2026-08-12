@@ -36,9 +36,20 @@ class OtelForwarder:
             or ip.is_unspecified
         )
 
-    def _validate_endpoint(self, endpoint: str) -> bool:
-        """
-        Validate the OTEL endpoint URL to prevent SSRF.
+    def _safe_target(self, endpoint: str) -> tuple[str, str, str] | None:
+        """Resolve an OTEL endpoint to a connect target that cannot be rebound.
+
+        Returns ``(url, host_header, sni_hostname)`` where ``url`` addresses the
+        exact validated IP, or None if the endpoint is not a safe destination.
+
+        Validating a hostname and then handing that same hostname to httpx
+        leaves a DNS-rebinding window: the attacker's name passes the check on
+        the first resolve and returns 169.254.169.254 on the second, which is
+        the one that actually gets connected to. Pinning the address we checked
+        removes the second resolve, so there is no window to win. TLS is
+        unaffected — the handshake and certificate check still use the real
+        hostname via SNI, so a pinned connection to a mismatched host fails.
+
         - Must be HTTPS.
         - Must not resolve to a private/internal/metadata IP address.
         """
@@ -46,18 +57,21 @@ class OtelForwarder:
             parsed = urlparse(endpoint)
             if parsed.scheme != "https":
                 logger.warning(f"Invalid OTEL endpoint scheme: {parsed.scheme}. Only HTTPS allowed.")
-                return False
+                return None
 
             hostname = parsed.hostname
             if not hostname:
-                return False
+                return None
 
-            # IP literal: check directly.
+            port = parsed.port or 443
+            host_header = hostname if port == 443 else f"{hostname}:{port}"
+
+            # IP literal: check directly. Already an address, so nothing to pin.
             try:
                 if self._ip_is_internal(ipaddress.ip_address(hostname)):
                     logger.warning(f"Blocked internal OTEL endpoint IP: {hostname}")
-                    return False
-                return True
+                    return None
+                return endpoint, host_header, hostname
             except ValueError:
                 pass  # Not a literal — a hostname, resolve it below.
 
@@ -65,25 +79,32 @@ class OtelForwarder:
             # Closes the DNS-based SSRF path (e.g. a name pointing at
             # 169.254.169.254 or 10.x). getaddrinfo blocks briefly, which is
             # fine here — forwarding already runs as a fire-and-forget task.
-            # ponytail: residual TOCTOU (DNS rebinding between this check and
-            #   httpx's own resolve); pin the validated IP as the connect target
-            #   if that ever matters.
             try:
-                infos = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+                infos = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
             except socket.gaierror as e:
                 logger.warning(f"OTEL endpoint {hostname} did not resolve: {e}")
-                return False
+                return None
 
             for info in infos:
                 ip = ipaddress.ip_address(info[4][0])
                 if self._ip_is_internal(ip):
                     logger.warning(f"Blocked OTEL endpoint {hostname} resolving to internal IP {ip}")
-                    return False
+                    return None
 
-            return True
+            if not infos:
+                return None
+            pinned = ipaddress.ip_address(infos[0][4][0])
+            netloc = f"[{pinned}]" if pinned.version == 6 else str(pinned)
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            return parsed._replace(netloc=netloc).geturl(), host_header, hostname
         except Exception as e:
             logger.error(f"Error validating OTEL endpoint {endpoint}: {e}")
-            return False
+            return None
+
+    def _validate_endpoint(self, endpoint: str) -> bool:
+        """True if the endpoint is a safe forwarding destination."""
+        return self._safe_target(endpoint) is not None
 
     async def forward_batch(
         self, records: list[dict], endpoint: str, api_key: str
@@ -106,8 +127,10 @@ class OtelForwarder:
         if not records:
             return True
 
-        if not self._validate_endpoint(endpoint):
+        target = self._safe_target(endpoint)
+        if target is None:
             return False
+        url, host_header, sni_hostname = target
 
         try:
             # Convert records to OTLP spans
@@ -152,12 +175,19 @@ class OtelForwarder:
             # POST to customer endpoint
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.post(
-                    endpoint,
+                    url,
                     json=payload,
                     headers={
                         "Authorization": api_key,
                         "Content-Type": "application/json",
+                        # url points at the pinned IP, so the name the customer
+                        # configured has to be carried explicitly — many
+                        # collectors sit behind name-based routing.
+                        "Host": host_header,
                     },
+                    # Drives both SNI and certificate verification, so pinning
+                    # the IP does not weaken TLS.
+                    extensions={"sni_hostname": sni_hostname},
                 )
 
                 if 200 <= response.status_code < 300:

@@ -68,6 +68,90 @@ class TestEndpointSsrfValidation:
             assert forwarder._validate_endpoint("https://nope.invalid/v1/traces") is False
 
 
+class TestDnsRebindingPin:
+    """The validated address must be the one connected to.
+
+    Checking a hostname and then handing the same hostname to httpx leaves a
+    rebinding window: the attacker's DNS answers public on the check and
+    169.254.169.254 on the connect. Pinning removes the second resolve.
+    """
+
+    _PUBLIC = [(2, 1, 6, "", ("140.82.112.3", 443))]
+
+    async def _post_and_capture(self, forwarder, endpoint, infos):
+        captured = {}
+
+        async def _capture(url, **kwargs):
+            captured["url"] = url
+            captured["headers"] = kwargs.get("headers")
+            captured["extensions"] = kwargs.get("extensions")
+            return MagicMock(status_code=200)
+
+        with patch("socket.getaddrinfo", return_value=infos), patch(
+            "httpx.AsyncClient.post", new=AsyncMock(side_effect=_capture)
+        ):
+            ok = await forwarder.forward_batch(
+                [{"timestamp": "2025-01-01T12:00:00Z", "provider": "p", "model": "m", "duration_ms": 1}],
+                endpoint,
+                "Bearer k",
+            )
+        return ok, captured
+
+    @pytest.mark.asyncio
+    async def test_connects_to_the_validated_ip_not_the_hostname(self, forwarder):
+        ok, cap = await self._post_and_capture(
+            forwarder, "https://otel.example.com/v1/traces", self._PUBLIC
+        )
+        assert ok is True
+        # The hostname must not survive into the connect target, or a second
+        # resolve — the rebinding step — would decide where this lands.
+        assert cap["url"] == "https://140.82.112.3/v1/traces"
+        assert "otel.example.com" not in cap["url"]
+
+    @pytest.mark.asyncio
+    async def test_pinning_preserves_host_and_tls_identity(self, forwarder):
+        """Pinning must not weaken TLS: cert is still checked against the name."""
+        _, cap = await self._post_and_capture(
+            forwarder, "https://otel.example.com/v1/traces", self._PUBLIC
+        )
+        assert cap["headers"]["Host"] == "otel.example.com"
+        assert cap["extensions"]["sni_hostname"] == "otel.example.com"
+
+    @pytest.mark.asyncio
+    async def test_non_default_port_survives_pinning(self, forwarder):
+        _, cap = await self._post_and_capture(
+            forwarder,
+            "https://otel.example.com:4318/v1/traces",
+            [(2, 1, 6, "", ("140.82.112.3", 4318))],
+        )
+        assert cap["url"] == "https://140.82.112.3:4318/v1/traces"
+        assert cap["headers"]["Host"] == "otel.example.com:4318"
+
+    @pytest.mark.asyncio
+    async def test_ipv6_target_is_bracketed(self, forwarder):
+        _, cap = await self._post_and_capture(
+            forwarder,
+            "https://otel.example.com/v1/traces",
+            [(30, 1, 6, "", ("2606:4700::1111", 443, 0, 0))],
+        )
+        assert cap["url"] == "https://[2606:4700::1111]/v1/traces"
+
+    @pytest.mark.asyncio
+    async def test_internal_resolution_still_blocks_the_post(self, forwarder):
+        ok, cap = await self._post_and_capture(
+            forwarder,
+            "https://evil.example.com/v1/traces",
+            [(2, 1, 6, "", ("169.254.169.254", 443))],
+        )
+        assert ok is False
+        assert cap == {}  # never reached the network
+
+    def test_ip_literal_endpoint_is_left_alone(self, forwarder):
+        """A public IP literal is already pinned — no rewrite, no lookup."""
+        target = forwarder._safe_target("https://140.82.112.3/v1/traces")
+        assert target == ("https://140.82.112.3/v1/traces", "140.82.112.3", "140.82.112.3")
+
+
 class TestOtelProtoConversion:
     """Test conversion of request records to OTLP spans."""
 
@@ -205,9 +289,9 @@ class TestSpanCorrelation:
             sent.append(json)
             return MagicMock(status_code=200)
 
-        with patch.object(forwarder, "_validate_endpoint", return_value=True), patch(
-            "httpx.AsyncClient.post", new=AsyncMock(side_effect=_capture)
-        ):
+        with patch.object(
+            forwarder, "_safe_target", return_value=("https://1.2.3.4/v1/traces", "otel.example.com", "otel.example.com")
+        ), patch("httpx.AsyncClient.post", new=AsyncMock(side_effect=_capture)):
             await forwarder.forward_batch(
                 [
                     {**self._BASE, "parent_span_id": "00f067aa0ba902b7"},
