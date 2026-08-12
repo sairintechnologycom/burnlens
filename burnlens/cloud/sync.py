@@ -61,6 +61,7 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "cache_saved_usd",
     "tool_calls",
     "trace_id",
+    "parent_span_id",
     "event_id",
     "request_id",
 } | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
@@ -478,6 +479,7 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         tool_calls=row.get("tool_calls", 0),
         # Correlation ids for OTEL span export (never prompt content):
         trace_id=row.get("trace_id"),
+        parent_span_id=row.get("parent_span_id"),
         event_id=row.get("event_id"),
         request_id=row.get("request_id"),
         # Flattened tags, derived from CLOUD_SYNCED_TAGS so a new synced tag

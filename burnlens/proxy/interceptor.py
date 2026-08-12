@@ -984,6 +984,7 @@ async def _handle_non_streaming(
         event_id=uuid7(),
         request_id=_extract_request_id(provider.name, response.headers, resp_body),
         trace_id=meta["trace_id"],
+        parent_span_id=meta.get("parent_span_id"),
         workspace_id=meta["workspace_id"],
         org_id=meta["org_id"],
         team=meta["team"],
@@ -1327,6 +1328,7 @@ async def _log_streaming_usage(
         event_id=event_id,
         request_id=request_id,
         trace_id=meta.get("trace_id") if meta else None,
+        parent_span_id=meta.get("parent_span_id") if meta else None,
         workspace_id=meta.get("workspace_id") if meta else None,
         org_id=meta.get("org_id") if meta else None,
         team=meta.get("team") if meta else None,
@@ -1396,6 +1398,24 @@ def _extract_trace_id(headers: dict[str, str], tags: dict[str, str]) -> str | No
         if val:
             return val
     return None
+
+
+def _extract_parent_span_id(headers: dict[str, str]) -> str | None:
+    """Extract the caller's span id from traceparent -- the parent of this LLM call.
+
+    Only the W3C header carries it; the custom x-trace-id fallbacks have no span
+    concept. All-zero is the spec's "no parent" sentinel, so it stores as None.
+    """
+    traceparent = {k.lower(): v for k, v in headers.items()}.get("traceparent")
+    if not traceparent:
+        return None
+    parts = traceparent.split("-")
+    if len(parts) < 3 or len(parts[2]) != 16:
+        return None
+    span = parts[2].lower()
+    if span == "0" * 16 or any(c not in "0123456789abcdef" for c in span):
+        return None
+    return span
 
 
 _cached_git_context: dict[str, str] | None = None
@@ -1470,6 +1490,7 @@ def _resolve_canonical_metadata(headers: dict[str, str], tags: dict[str, str]) -
 
     return {
         "trace_id": trace_id,
+        "parent_span_id": _extract_parent_span_id(headers),
         "workspace_id": workspace_id,
         "org_id": org_id,
         "team": team,
@@ -1610,6 +1631,7 @@ async def _log_cache_hit(
             tool_calls=tool_calls,
             event_id=uuid7(),
             trace_id=meta.get("trace_id"),
+            parent_span_id=meta.get("parent_span_id"),
             workspace_id=meta.get("workspace_id"),
             org_id=meta.get("org_id"),
             team=meta.get("team") or tags.get("team"),

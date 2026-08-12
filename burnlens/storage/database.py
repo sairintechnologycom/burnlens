@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS requests (
     system_prompt_hash  TEXT,
     event_id            TEXT,
     trace_id            TEXT,
+    parent_span_id      TEXT,
     workspace_id        TEXT,
     org_id              TEXT,
     team                TEXT,
@@ -558,7 +559,7 @@ async def migrate_add_canonical_event_fields(db_path: str) -> None:
 
         added = []
         fields = [
-            "event_id", "trace_id", "workspace_id", "org_id",
+            "event_id", "trace_id", "parent_span_id", "workspace_id", "org_id",
             "team", "feature", "customer_hash", "app_id",
             "env", "repo", "branch", "commit_sha", "pricing_version"
         ]
@@ -568,6 +569,8 @@ async def migrate_add_canonical_event_fields(db_path: str) -> None:
                     await db.execute("ALTER TABLE requests ADD COLUMN event_id TEXT")
                 elif col == "trace_id":
                     await db.execute("ALTER TABLE requests ADD COLUMN trace_id TEXT")
+                elif col == "parent_span_id":
+                    await db.execute("ALTER TABLE requests ADD COLUMN parent_span_id TEXT")
                 elif col == "workspace_id":
                     await db.execute("ALTER TABLE requests ADD COLUMN workspace_id TEXT")
                 elif col == "org_id":
@@ -1589,7 +1592,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 source, request_id,
                 routed_model, downgrade_reason,
                 budget_remaining_usd, budget_remaining_pct,
-                event_id, trace_id, workspace_id, org_id,
+                event_id, trace_id, parent_span_id, workspace_id, org_id,
                 team, feature, customer_hash, app_id,
                 env, repo, branch, commit_sha, pricing_version,
                 ttft_ms,
@@ -1597,7 +1600,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
                 tool_calls
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1627,6 +1630,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.budget_remaining_pct,
                 event_id,
                 record.trace_id,
+                record.parent_span_id,
                 record.workspace_id,
                 record.org_id,
                 record.team,
