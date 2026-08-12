@@ -62,6 +62,9 @@ class RequestRecordBase(BaseModel):
     tool_calls: int = 0
     # Correlation ids used only to build correlatable OTEL export spans.
     trace_id: Optional[str] = None
+    # The caller's span from the client's traceparent (OSS proxy >= 1.18.0):
+    # what the exported span hangs under, instead of floating in the trace.
+    parent_span_id: Optional[str] = None
     event_id: Optional[str] = None
     request_id: Optional[str] = None
 

@@ -30,6 +30,23 @@ def _derive_trace_id(record: dict) -> str:
     return uuid.uuid4().hex
 
 
+def _parent_span_id(record: dict) -> str | None:
+    """The caller's span id, or None when the client sent no usable parent.
+
+    Only a real 16-hex span is usable: an OTLP consumer reading a hashed or
+    truncated value would nest the span under an id that exists in no other
+    system, which is worse than leaving it at the trace root. The OSS proxy
+    already drops the all-zero "no parent" sentinel before it gets here.
+    """
+    raw = record.get("parent_span_id")
+    if not raw:
+        return None
+    v = str(raw).strip().lower()
+    if len(v) == 16 and set(v) <= _HEX and v != "0" * 16:
+        return v
+    return None
+
+
 def _derive_span_id(record: dict) -> str:
     """64-bit (16-hex) OTLP span id, stable per event for idempotent re-sync."""
     seed = record.get("event_id") or record.get("request_id")
@@ -125,6 +142,7 @@ class RequestRecordToSpan:
         return {
             "traceId": trace_id,
             "spanId": span_id,
+            "parentSpanId": _parent_span_id(record),
             "name": "llm.request",
             "startTimeUnixNano": start_time_nano,
             "endTimeUnixNano": end_time_nano,
