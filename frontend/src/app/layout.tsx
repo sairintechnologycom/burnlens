@@ -1,21 +1,31 @@
 import type { Metadata } from "next";
-import { DM_Mono, Manrope } from "next/font/google";
+import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/lib/contexts/ToastContext";
 import SupportChat from "@/components/SupportChat";
 import { PlausibleScript } from "@/components/PlausibleScript";
 import "./globals.css";
 
-const dmMono = DM_Mono({
-  weight: ["300", "400", "500"],
-  subsets: ["latin"],
+// Self-hosted rather than next/font/google: that helper fetches font metadata
+// from Google at BUILD time, and when a CI runner cannot reach it Turbopack
+// reports an unresolvable internal font module instead of a network error —
+// reddening the deploy's frontend build and blocking backend-only releases.
+// Same latin woff2 subsets Google served, vendored under ./fonts.
+const dmMono = localFont({
+  src: [
+    { path: "./fonts/DMMono-300.woff2", weight: "300", style: "normal" },
+    { path: "./fonts/DMMono-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/DMMono-500.woff2", weight: "500", style: "normal" },
+  ],
   variable: "--font-mono",
+  display: "swap",
 });
 
-const manrope = Manrope({
-  weight: ["400", "500", "600", "700", "800"],
-  subsets: ["latin"],
+const manrope = localFont({
+  // One variable file covers the 400–800 range the design uses.
+  src: [{ path: "./fonts/Manrope-400-800.woff2", weight: "400 800", style: "normal" }],
   variable: "--font-sans",
+  display: "swap",
 });
 
 const SITE_TITLE = "BurnLens — Hard-cap your AI spend across every provider";
