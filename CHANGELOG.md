@@ -6,6 +6,39 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.21.0] — 2026-08-13
+
+### Added
+- **`burnlens runs` groups spend into runs and the steps inside them.** Until
+  now every figure was per request, which is not how the work is actually
+  shaped — a single coding-agent session can be hundreds of requests and tens
+  of dollars, and nothing showed you that.
+
+  ```
+  burnlens runs                  # runs by cost, or --recent
+  burnlens runs 199c4a0a         # the steps inside one run
+  ```
+
+  A run is your coding-agent session, taken from the session id already
+  recorded by `burnlens scan`, so this works on data you have already
+  collected — no new setup and nothing to instrument. For traffic proxied from
+  an OpenTelemetry-instrumented application, the W3C trace id is used instead.
+  `burnlens economics` reports which of the two your data carries. Requests
+  with neither are left out rather than lumped together.
+
+  `GET /api/runs` and `GET /api/runs/{run_id}` return the same data.
+
+  Token counts show the whole prompt with the cached share beside it. Coding
+  agents cache nearly the entire prompt, so counting only uncached input would
+  show a handful of tokens against a dollar of spend.
+
+  Steps are listed in time order, not nested. Scanned data records no calling
+  span, so there is no hierarchy to show for it; where a calling span is
+  present it is displayed per step.
+
+  Databases created before recent versions still work — missing columns are
+  skipped rather than causing an error.
+
 ## [OSS `burnlens` v1.20.0] — 2026-08-13
 
 ### Added
