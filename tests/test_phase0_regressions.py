@@ -17,6 +17,8 @@ from burnlens.proxy.providers import get_provider_for_path
 from burnlens.proxy.server import get_app
 from burnlens.storage.queries import get_recent_requests
 
+from .conftest import settle_background_tasks
+
 
 # ---------------------------------------------------------------------------
 # 1. Feature Flag Tests
@@ -82,10 +84,6 @@ class MockAsyncTransport(httpx.AsyncBaseTransport):
             )
 
 
-# Helper to wait for proxy background tasks (logging/alerts) to flush
-async def _flush_tasks():
-    for _ in range(5):
-        await asyncio.sleep(0.02)
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +116,7 @@ async def test_proxy_passthrough_and_db_write(initialized_db: str):
         db_path=initialized_db,
         alert_engine=None,
     )
-    await _flush_tasks()
+    await settle_background_tasks()
 
     assert status == 200
     assert stream is None
@@ -164,7 +162,7 @@ async def test_proxy_streaming_passthrough(initialized_db: str):
     async for chunk in stream:
         chunks.append(chunk)
 
-    await _flush_tasks()
+    await settle_background_tasks()
 
     assert len(chunks) > 0
     assert b"[DONE]" in chunks[-1]
@@ -235,7 +233,7 @@ async def test_budget_cap_enforcement_prevents_upstream(initialized_db: str):
         api_key_budgets=config.alerts.api_key_budgets,
         config=config,
     )
-    await _flush_tasks()
+    await settle_background_tasks()
 
     # Should return 429 and block upstream call
     assert status == 429
