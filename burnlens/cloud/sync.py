@@ -42,6 +42,11 @@ CLOUD_SYNCED_TAGS: tuple[str, ...] = (
     "key_label",
     "agent_id",
     "workflow_id",
+    # Run key for the hosted Run -> Step view. A session id is the coding-agent
+    # JSONL filename stem -- an opaque UUID naming no code, no person and no
+    # prompt content -- so it carries the same linkability as trace_id, which
+    # already syncs. Approved deliberately 2026-08-13, not defaulted.
+    "session",
 )
 
 SYNC_ALLOWED_FIELDS = frozenset({
@@ -64,6 +69,7 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "parent_span_id",
     "event_id",
     "request_id",
+    "source",
 } | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
 
 
@@ -482,6 +488,9 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         parent_span_id=row.get("parent_span_id"),
         event_id=row.get("event_id"),
         request_id=row.get("request_id"),
+        # "proxy" vs scan_claude/scan_codex/...: which collector wrote the row.
+        # Not prompt content and not identifying — it names the tool, not the work.
+        source=row.get("source"),
         # Flattened tags, derived from CLOUD_SYNCED_TAGS so a new synced tag
         # cannot be half-wired. The backend re-nests these into `tags`.
         **{f"tag_{name}": tags.get(name) for name in CLOUD_SYNCED_TAGS},

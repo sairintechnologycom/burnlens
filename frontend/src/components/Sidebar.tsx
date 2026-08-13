@@ -29,6 +29,7 @@ const GROUPS: SidebarGroup[] = [
       { href: "/dashboard", label: "Overview" },
       { href: "/dashboard/timeline", label: "Cost timeline" },
       { href: "/dashboard/requests", label: "Request log" },
+      { href: "/dashboard/runs", label: "Agent runs" },
     ],
   },
   {

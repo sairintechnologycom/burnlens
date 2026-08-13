@@ -334,3 +334,109 @@ async def test_period_clamping_free_tier(dash_client):
 
     # Teams: 365 days max
     assert clamp_days_by_plan(1000, "teams") == 365
+
+
+# ---------------------------------------------------------------------------
+# Run -> Step view (BL-E5 slice 2, SaaS port)
+# ---------------------------------------------------------------------------
+
+
+def _run_row(**over):
+    row = {
+        "run_id": "sess-abc",
+        "step_count": 3,
+        "cost_usd": 0.69,
+        # Real dogfood ratio: the prompt is almost entirely cache reads, so
+        # input_tokens alone is meaningless next to the cost.
+        "prompt_tokens": 120006,
+        "cached_tokens": 120000,
+        "input_tokens": 6,
+        "output_tokens": 900,
+        "started_at": datetime(2026, 8, 13, 9, 0),
+        "ended_at": datetime(2026, 8, 13, 9, 5),
+        "models": ["claude-opus-5", None],
+        "source": "scan_claude",
+        "by_session": True,
+    }
+    row.update(over)
+    return row
+
+
+@pytest.mark.asyncio
+async def test_runs_requires_auth(dash_client):
+    assert (await dash_client.get("/api/v1/runs")).status_code == 401
+    assert (await dash_client.get("/api/v1/runs/sess-abc")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_runs_list_shape(dash_client, valid_jwt_token):
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = [_run_row()]
+        response = await dash_client.get(
+            "/api/v1/runs", headers={"Authorization": f"Bearer {valid_jwt_token}"}
+        )
+
+    assert response.status_code == 200
+    run = response.json()[0]
+    assert run["run_id"] == "sess-abc"
+    assert run["key_kind"] == "session"
+    assert run["prompt_tokens"] == 120006 and run["cached_tokens"] == 120000
+    assert run["models"] == ["claude-opus-5"]  # NULL model dropped, not rendered
+
+
+@pytest.mark.asyncio
+async def test_runs_queries_are_workspace_scoped(dash_client, valid_jwt_token):
+    """Every run query MUST filter workspace_id — a missing predicate leaks
+    another tenant's runs, which is a breach and not a display bug."""
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.side_effect = [[_run_row()], []]
+        await dash_client.get(
+            "/api/v1/runs/sess-abc",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert mock_query.call_count == 2
+    for call in mock_query.call_args_list:
+        sql = call.args[0]
+        assert "workspace_id = $1" in sql, sql
+
+
+@pytest.mark.asyncio
+async def test_run_detail_404_when_no_rows(dash_client, valid_jwt_token):
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = []
+        response = await dash_client.get(
+            "/api/v1/runs/nope", headers={"Authorization": f"Bearer {valid_jwt_token}"}
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_run_detail_returns_steps_in_order(dash_client, valid_jwt_token):
+    steps = [
+        {
+            "ts": datetime(2026, 8, 13, 9, 1),
+            "model": "claude-opus-5",
+            "prompt_tokens": 100,
+            "cached_tokens": 90,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cost_usd": 0.5,
+            "duration_ms": 1200,
+            "status_code": 200,
+            "parent_span_id": None,
+        }
+    ]
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.side_effect = [[_run_row(by_session=False)], steps]
+        response = await dash_client.get(
+            "/api/v1/runs/sess-abc",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run"]["key_kind"] == "trace"
+    assert len(body["steps"]) == 1
+    assert body["steps"][0]["cached_tokens"] == 90
+    assert "ORDER BY ts" in mock_query.call_args_list[1].args[0]

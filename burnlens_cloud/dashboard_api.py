@@ -418,6 +418,142 @@ async def get_requests(
     ]
 
 
+# Run key, same order and reasoning as burnlens/analysis/runs.py: `session`
+# first because ~all coding-agent traffic is scan-ingested and carries it, and
+# scans can never carry a trace_id (no HTTP request, no traceparent header).
+# trace_id is the fallback for OTEL-instrumented proxy users. Rows with neither
+# are excluded rather than collapsed into one NULL run.
+_RUN_KEY = "COALESCE(tags->>'session', trace_id)"
+
+# Both aggregates read the same columns; prompt_tokens is input + cache reads +
+# writes. Never surface input_tokens alone in a cost context: coding agents
+# cache almost the whole prompt, so a $0.69 step reads as input_tokens=6.
+_RUN_AGGREGATE = f"""
+    SELECT {_RUN_KEY} AS run_id,
+           COUNT(*) AS step_count,
+           COALESCE(SUM(cost_usd), 0) AS cost_usd,
+           COALESCE(SUM(input_tokens + cache_read_tokens + cache_write_tokens), 0) AS prompt_tokens,
+           COALESCE(SUM(cache_read_tokens + cache_write_tokens), 0) AS cached_tokens,
+           COALESCE(SUM(input_tokens), 0) AS input_tokens,
+           COALESCE(SUM(output_tokens), 0) AS output_tokens,
+           MIN(ts) AS started_at,
+           MAX(ts) AS ended_at,
+           array_agg(DISTINCT model) AS models,
+           MAX(source) AS source,
+           bool_or(tags->>'session' IS NOT NULL) AS by_session
+      FROM request_records
+     WHERE workspace_id = $1 AND ts >= $2 AND {_RUN_KEY} IS NOT NULL
+"""
+
+
+def _run_to_dict(row) -> dict:
+    return {
+        "run_id": row["run_id"],
+        "step_count": int(row["step_count"]),
+        "cost_usd": round(float(row["cost_usd"]), 6),
+        "prompt_tokens": int(row["prompt_tokens"]),
+        "cached_tokens": int(row["cached_tokens"]),
+        "input_tokens": int(row["input_tokens"]),
+        "output_tokens": int(row["output_tokens"]),
+        "started_at": row["started_at"],
+        "ended_at": row["ended_at"],
+        "models": sorted(m for m in (row["models"] or []) if m),
+        "source": row["source"],
+        # Which key grouped this run: agent sessions vs OTEL traces.
+        "key_kind": "session" if row["by_session"] else "trace",
+    }
+
+
+@router.get("/runs")
+async def get_runs(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+    limit: int = Query(20, ge=1, le=200),
+    order: str = Query("cost", description="'cost' or 'recent'"),
+):
+    """Agent runs (or OTEL traces) in the window, costliest or most recent first.
+
+    Empty until the workspace's proxy is >= 1.22.0 and has synced: no historical
+    row carries a session tag, and there is no backfill. The UI must say so
+    rather than rendering a convincing empty state.
+    """
+    await require_role("viewer", token)
+    days = clamp_days_by_plan(days, token.plan)
+    cutoff = await parse_period(f"{days}d")
+
+    order_by = "MAX(ts) DESC" if order == "recent" else "SUM(cost_usd) DESC"
+    rows = await execute_query(
+        f"{_RUN_AGGREGATE} GROUP BY run_id ORDER BY {order_by} LIMIT $3",
+        str(token.workspace_id),
+        cutoff,
+        limit,
+    )
+    return [_run_to_dict(r) for r in rows]
+
+
+@router.get("/runs/{run_id}")
+async def get_run(
+    run_id: str,
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+):
+    """One run and its steps in time order. 404 if the id matches nothing.
+
+    `workspace_id = $1` on both queries is what keeps a guessed run id from
+    reading another tenant's steps.
+    """
+    await require_role("viewer", token)
+    days = clamp_days_by_plan(days, token.plan)
+    cutoff = await parse_period(f"{days}d")
+
+    rows = await execute_query(
+        f"{_RUN_AGGREGATE} AND {_RUN_KEY} = $3 GROUP BY run_id",
+        str(token.workspace_id),
+        cutoff,
+        run_id,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    steps = await execute_query(
+        f"""
+        SELECT ts, model,
+               input_tokens + cache_read_tokens + cache_write_tokens AS prompt_tokens,
+               cache_read_tokens + cache_write_tokens AS cached_tokens,
+               input_tokens, output_tokens, cost_usd,
+               duration_ms, status_code, parent_span_id
+          FROM request_records
+         WHERE workspace_id = $1 AND ts >= $2 AND {_RUN_KEY} = $3
+         ORDER BY ts
+        """,
+        # Same window as the aggregate: a run straddling the boundary would
+        # otherwise list steps its own totals do not account for.
+        str(token.workspace_id),
+        cutoff,
+        run_id,
+    )
+
+    return {
+        "run": _run_to_dict(rows[0]),
+        "steps": [
+            {
+                "timestamp": s["ts"],
+                "model": s["model"],
+                "prompt_tokens": int(s["prompt_tokens"] or 0),
+                "cached_tokens": int(s["cached_tokens"] or 0),
+                "input_tokens": int(s["input_tokens"] or 0),
+                "output_tokens": int(s["output_tokens"] or 0),
+                "cost_usd": round(float(s["cost_usd"] or 0), 6),
+                "duration_ms": s["duration_ms"],
+                "status_code": s["status_code"],
+                # Present only for OTEL callers; shown, not used for nesting.
+                "parent_span_id": s["parent_span_id"],
+            }
+            for s in steps
+        ],
+    }
+
+
 @router.get("/waste-alerts")
 async def get_waste_alerts(token: TokenPayload = Depends(verify_token)):
     """Get waste detection findings (stub for MVP)."""

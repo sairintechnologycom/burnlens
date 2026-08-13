@@ -16,7 +16,17 @@ CLOUD_SYNCED_TAGS: tuple[str, ...] = (
     "key_label",
     "agent_id",
     "workflow_id",
+    "session",
 )
+
+# Tags with a dedicated column on the ClickHouse queue/raw tables (see the DDL
+# in clickhouse.py). ingest.py builds the Kafka payload from this, so a key can
+# never be streamed into a column that does not exist, nor a column left
+# unfilled. It is deliberately NARROWER than CLOUD_SYNCED_TAGS: the streaming
+# plane is off by default and predates the newer tags, and the Postgres `tags`
+# JSONB path already answers those queries. Lives here rather than in
+# clickhouse.py so ingest.py need not import clickhouse_connect.
+STREAM_TAG_COLUMNS: tuple[str, ...] = ("feature", "team", "customer", "key_label")
 
 
 # Request/Response Schemas
@@ -67,6 +77,10 @@ class RequestRecordBase(BaseModel):
     parent_span_id: Optional[str] = None
     event_id: Optional[str] = None
     request_id: Optional[str] = None
+    # How the row was collected: "proxy", or scan_claude / scan_codex / ... for
+    # coding-agent log ingestion. Without it the cloud cannot tell agent runs
+    # from proxied application traffic.
+    source: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
