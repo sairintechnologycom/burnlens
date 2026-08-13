@@ -6,6 +6,41 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.22.0] — 2026-08-13
+
+### Added
+- **The session id now syncs to burnlens.app, so runs appear in the hosted
+  dashboard.** `burnlens runs` has worked locally since v1.21.0, but the
+  session id that groups a run stayed on your machine, so the hosted product
+  had nothing to group by. It is now sent along with the tags you had already
+  opted into.
+
+  A session id is the coding-agent log filename — an opaque identifier. No
+  code, no file paths, no prompt content and nothing about you is sent with
+  it, and the tags that would name those (`repo`, `branch`, `dev`, `pr`,
+  `commit_sha`) still stay on your machine as before. If you do not use cloud
+  sync, nothing changes at all.
+
+  `X-BurnLens-Tag-Session` is now accepted as well, so a proxied application
+  can name its own runs.
+
+  There is no backfill: runs appear in the hosted dashboard from the point you
+  upgrade, not before.
+
+- **`source` is synced too**, so the hosted dashboard can tell coding-agent
+  runs apart from proxied application traffic.
+
+## [Cloud `burnlens-cloud`] — 2026-08-13 (deployed only)
+
+### Added
+- **Run → Step view.** `/dashboard/runs` lists runs by cost or recency and
+  drills into the steps inside one, mirroring `burnlens runs`. Token counts
+  show the whole prompt with the cached share beside it, for the same reason
+  as the CLI.
+- `trace_id`, `parent_span_id` and `source` are now persisted on
+  `request_records`. They had been arriving from the proxy and being dropped
+  after OTEL span export.
+
 ## [OSS `burnlens` v1.21.0] — 2026-08-13
 
 ### Added
