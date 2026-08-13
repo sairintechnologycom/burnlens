@@ -352,6 +352,45 @@ async def economics(
     return overview_to_dict(await get_economics_overview(db, since=since))
 
 
+# ---------------------------------------------------------------- /api/runs
+
+
+@router.get("/runs")
+async def runs(
+    request: Request,
+    period: str = Query(default="30d"),
+    limit: int = Query(default=20),
+    order: str = Query(default="cost"),
+) -> list:
+    """Spend grouped into runs — coding-agent sessions, or traces for OTEL callers."""
+    from burnlens.analysis.runs import list_runs, run_to_dict
+
+    found = await list_runs(
+        _db_path(request), since=_parse_period(period), limit=limit, order=order
+    )
+    return [run_to_dict(r) for r in found]
+
+
+@router.get("/runs/{run_id}")
+async def run_detail(
+    request: Request,
+    run_id: str,
+    period: str = Query(default="30d"),
+) -> dict:
+    """One run and its steps in time order.
+
+    Takes a full run id, not a prefix — prefix resolution is a CLI convenience
+    and would make this route silently return the wrong run's costs.
+    """
+    from burnlens.analysis.runs import get_run, run_to_dict, step_to_dict
+
+    result = await get_run(_db_path(request), run_id, since=_parse_period(period))
+    if result is None:
+        raise HTTPException(status_code=404, detail="Run not found in this period")
+    run, steps = result
+    return {**run_to_dict(run), "steps": [step_to_dict(s) for s in steps]}
+
+
 # --------------------------------------------------------------- /api/waste
 
 @router.get("/waste")
