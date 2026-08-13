@@ -6,6 +6,31 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.20.0] — 2026-08-13
+
+### Added
+- **`burnlens economics` now reports attribution coverage.** BurnLens has been
+  recording the trace and calling-span ids from the W3C `traceparent` header
+  since v1.18, but nothing displayed them, so there was no way to tell whether
+  your traffic carries them at all. The command now says how many requests in
+  the window carry a trace, how many name the calling span, and how many
+  distinct traces that forms:
+
+  ```
+  Attribution coverage — 42 of 1203 request(s) carry a W3C trace (3.5%),
+  40 naming the calling span, across 12 distinct trace(s).
+  ```
+
+  This is what decides whether spend can be attributed to a run or step rather
+  than only to individual requests. Any OpenTelemetry-instrumented client sends
+  the header automatically; if none of your traffic does, the command says so
+  and nothing else changes. `GET /api/economics` returns the same figures under
+  `trace_coverage`.
+
+  A database created before those columns existed is reported as needing a
+  migration — start the proxy once — rather than shown as a zero, which would
+  look identical to genuinely having no traces.
+
 ## [OSS `burnlens` v1.19.0] — 2026-08-12
 
 ### Fixed
