@@ -167,7 +167,7 @@ _STRIP_RESPONSE_HEADERS = _STRIP_REQUEST_HEADERS | frozenset(["content-encoding"
 _ALLOWED_TAGS = {
     "team", "feature", "app_id", "env", "repo", "branch", "commit_sha",
     "workspace_id", "org_id", "trace_id", "customer", "key_label", "service",
-    "dev", "pr", "agent_id", "workflow_id"
+    "dev", "pr", "agent_id", "workflow_id", "session"
 }
 
 

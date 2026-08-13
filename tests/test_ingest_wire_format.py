@@ -217,3 +217,59 @@ def test_init_db_registers_jsonb_codec():
     src_codec = inspect.getsource(database._register_jsonb_codec)
     assert "set_type_codec" in src_codec
     assert '"jsonb"' in src_codec or "'jsonb'" in src_codec
+
+
+# ---------------------------------------------------------------------------
+# Run key — trace_id / parent_span_id / source reach the INSERT
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_ingest_persists_run_key_columns(ingest_client):
+    """These three arrived on the model for months and were dropped on insert.
+
+    The column list, the $N placeholders and the value tuple must move
+    together — a mismatch silently writes values into the wrong columns rather
+    than failing, so assert the tuple positionally against the column list.
+    """
+    ws_id = str(uuid4())
+    bulk_insert = AsyncMock()
+
+    payload = _oss_proxy_payload_shape()
+    payload["trace_id"] = "0af7651916cd43dd8448eb211c80319c"
+    payload["parent_span_id"] = "b7ad6b7169203331"
+    payload["source"] = "scan_claude"
+
+    with patch(
+        "burnlens_cloud.ingest.get_workspace_by_api_key",
+        new=AsyncMock(return_value=(ws_id, "free")),
+    ), patch(
+        "burnlens_cloud.ingest._check_quota_or_raise", new=AsyncMock()
+    ), patch(
+        "burnlens_cloud.ingest.execute_query",
+        new=AsyncMock(return_value=[{"otel_endpoint": None, "otel_api_key_encrypted": None, "otel_enabled": False}]),
+    ), patch(
+        "burnlens_cloud.ingest.execute_bulk_insert", new=bulk_insert
+    ), patch(
+        "burnlens_cloud.ingest._record_usage_and_maybe_notify", new=AsyncMock()
+    ):
+        resp = await ingest_client.post(
+            "/v1/ingest",
+            headers={"X-API-Key": "bl_live_qa_test_key"},
+            json={"records": [payload]},
+        )
+
+    assert resp.status_code == 200, resp.text
+    sql, rows = bulk_insert.await_args.args
+
+    columns = sql.split("(", 1)[1].split(")", 1)[0].replace("\n", " ").split(",")
+    columns = [c.strip() for c in columns]
+    values = rows[0]
+    assert len(columns) == len(values), f"{len(columns)} columns vs {len(values)} values"
+    assert sql.count("$") == len(columns), "placeholder count drifted from column count"
+
+    by_name = dict(zip(columns, values))
+    assert by_name["trace_id"] == payload["trace_id"]
+    assert by_name["parent_span_id"] == payload["parent_span_id"]
+    assert by_name["source"] == "scan_claude"
+    assert by_name["tags"] == {"feature": "chat", "team": "backend", "customer": "acme"}

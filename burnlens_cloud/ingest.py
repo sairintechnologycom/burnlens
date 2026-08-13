@@ -8,7 +8,12 @@ from .auth import get_workspace_by_api_key
 from .database import execute_query, execute_bulk_insert
 from .email import send_usage_warning_email, track_email_task
 from .encryption import get_encryption_manager
-from .models import IngestRequest, IngestResponse, QuotaExceededDetail
+from .models import (
+    STREAM_TAG_COLUMNS,
+    IngestRequest,
+    IngestResponse,
+    QuotaExceededDetail,
+)
 from .plans import resolve_limits
 from .telemetry.forwarder import get_forwarder
 from .config import settings
@@ -445,13 +450,24 @@ async def ingest(
                 record.cache_hit,
                 record.cache_saved_usd,
                 record.tool_calls,
+                record.trace_id,
+                record.parent_span_id,
+                record.source,
             )
         )
 
     # Ingest records — stream to Kafka/Redpanda if enabled, else insert to PostgreSQL
     try:
         if settings.streaming_enabled:
-            # Map Pydantic record schema to stream event dict
+            # Map Pydantic record schema to stream event dict.
+            #
+            # Tag keys come from STREAM_TAG_COLUMNS, NOT CLOUD_SYNCED_TAGS: this
+            # payload feeds the ClickHouse queue table, so only tags with a
+            # dedicated column there are worth sending. agent_id / workflow_id /
+            # session have no column and are absent on purpose -- the Postgres
+            # path (tags JSONB) is what the run view and by-tag queries read.
+            # tests/test_tag_plumbing_wired.py pins that omission so it stays
+            # deliberate rather than silent.
             stream_records = []
             for r in request.records:
                 tags = r.tags or {}
@@ -467,10 +483,7 @@ async def ingest(
                     "cost_usd": float(r.cost_usd),
                     "duration_ms": r.duration_ms,
                     "status_code": r.status_code,
-                    "tag_feature": tags.get("feature", ""),
-                    "tag_team": tags.get("team", ""),
-                    "tag_customer": tags.get("customer", ""),
-                    "tag_key_label": tags.get("key_label", ""),
+                    **{f"tag_{name}": tags.get(name, "") for name in STREAM_TAG_COLUMNS},
                     "system_prompt_hash": r.system_prompt_hash or "",
                 })
             await send_records_to_stream(workspace_id, stream_records)
@@ -484,9 +497,9 @@ async def ingest(
                 (workspace_id, ts, provider, model, input_tokens, output_tokens,
                  reasoning_tokens, cache_read_tokens, cache_write_tokens,
                  cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at,
-                 cache_hit, cache_saved_usd, tool_calls)
+                 cache_hit, cache_saved_usd, tool_calls, trace_id, parent_span_id, source)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                        $16, $17, $18)
+                        $16, $17, $18, $19, $20, $21)
                 """,
                 insert_data,
             )

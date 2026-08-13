@@ -36,6 +36,10 @@ from burnlens.proxy.interceptor import _ALLOWED_TAGS
 # trusting the generic checks below.
 ECONOMICS_GRAPH_TAGS = ("agent_id", "workflow_id")
 
+# The run key for the hosted Run -> Step view. Same reasoning: name it, because
+# without it the SaaS has nothing to group requests by.
+RUN_KEY_TAGS = ("session",)
+
 
 @pytest.mark.parametrize("tag", ECONOMICS_GRAPH_TAGS)
 def test_economics_graph_tags_are_collectable(tag):
@@ -45,6 +49,38 @@ def test_economics_graph_tags_are_collectable(tag):
 @pytest.mark.parametrize("tag", ECONOMICS_GRAPH_TAGS)
 def test_economics_graph_tags_are_cloud_synced(tag):
     assert tag in CLOUD_SYNCED_TAGS
+
+
+@pytest.mark.parametrize("tag", RUN_KEY_TAGS)
+def test_run_key_tags_are_cloud_synced(tag):
+    """Scans write `session` straight to SQLite; the proxy takes it as a header.
+
+    Both paths are useless to the hosted run view unless the tag syncs.
+    """
+    assert tag in CLOUD_SYNCED_TAGS
+    assert tag in _ALLOWED_TAGS
+
+
+def test_streaming_payload_tag_omissions_are_deliberate():
+    """Hop 5b: the Kafka payload is narrower than CLOUD_SYNCED_TAGS on purpose.
+
+    ingest.py builds it from STREAM_TAG_COLUMNS -- the tags with a dedicated
+    ClickHouse column. A tag added to CLOUD_SYNCED_TAGS is therefore NOT
+    streamed, which is correct (no column to land in) but was previously a
+    silent hand-written drop. This pins the delta so adding a tag forces the
+    decision instead of skipping it.
+    """
+    pytest.importorskip("burnlens_cloud.models", reason="cloud deps not installed")
+    from burnlens_cloud.models import STREAM_TAG_COLUMNS
+
+    assert set(STREAM_TAG_COLUMNS) <= set(CLOUD_SYNCED_TAGS)
+    unstreamed = [t for t in CLOUD_SYNCED_TAGS if t not in STREAM_TAG_COLUMNS]
+    assert unstreamed == ["agent_id", "workflow_id", "session"], (
+        f"streaming-plane tag coverage changed: {unstreamed}. Either add a "
+        "column to the ClickHouse queue/raw tables + both materialized views "
+        "(clickhouse.py) and list the tag in STREAM_TAG_COLUMNS, or update this "
+        "assertion to record that it stays Postgres-only."
+    )
 
 
 def test_every_synced_tag_is_collectable():
@@ -122,6 +158,17 @@ def test_tool_calls_is_synced():
     payload = _row_to_payload(_row(tool_calls=3))
     assert payload["tool_calls"] == 3
     assert _sanitize_record(payload)["tool_calls"] == 3
+
+
+def test_source_is_synced():
+    """Without it the cloud cannot tell agent-scan rows from proxied traffic."""
+    sanitized = _sanitize_record(_row_to_payload(_row(source="scan_claude")))
+    assert sanitized["source"] == "scan_claude"
+
+
+def test_source_missing_on_old_local_schema_is_tolerated():
+    """Rows come from `SELECT *`; a DB predating the column has no key at all."""
+    assert _row_to_payload(_row())["source"] is None
 
 
 def test_backend_lifts_flat_tags_into_nested_tags():

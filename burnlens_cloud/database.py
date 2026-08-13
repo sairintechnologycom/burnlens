@@ -345,7 +345,10 @@ async def init_db():
                 received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 cache_hit INT NOT NULL DEFAULT 0,
                 cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0,
-                tool_calls INT NOT NULL DEFAULT 0
+                tool_calls INT NOT NULL DEFAULT 0,
+                trace_id TEXT,
+                parent_span_id TEXT,
+                source TEXT
             )
         """)
 
@@ -374,6 +377,33 @@ async def init_db():
                     ALTER TABLE request_records ADD COLUMN tool_calls INT NOT NULL DEFAULT 0;
                 END IF;
             END $$;
+        """)
+
+        # Migration: run-key columns for pre-existing installs. The proxy has
+        # always sent trace_id / parent_span_id (they were consumed for OTEL
+        # span export and dropped); source is new. Nullable with no default —
+        # every historical row genuinely has no value for these.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records' AND column_name = 'trace_id'
+                ) THEN
+                    ALTER TABLE request_records ADD COLUMN trace_id TEXT;
+                    ALTER TABLE request_records ADD COLUMN parent_span_id TEXT;
+                    ALTER TABLE request_records ADD COLUMN source TEXT;
+                END IF;
+            END $$;
+        """)
+
+        # The run view groups and looks up on exactly this expression. It has to
+        # be indexed as the same expression -- an index on the two underlying
+        # columns is not usable for a COALESCE of them, so the run detail lookup
+        # would seq-scan every row the tenant has ever written.
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_records_run_key
+                ON request_records (workspace_id, (COALESCE(tags->>'session', trace_id)), ts)
         """)
 
         # Economics-graph Phase B: business outcomes joined to spend by workflow_id.

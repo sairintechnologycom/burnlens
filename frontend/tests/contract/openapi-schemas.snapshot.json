@@ -1457,6 +1457,17 @@
         ],
         "title": "Request Id"
       },
+      "source": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Source"
+      },
       "status_code": {
         "default": 200,
         "title": "Status Code",
@@ -1604,6 +1615,17 @@
           }
         ],
         "title": "Request Id"
+      },
+      "source": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Source"
       },
       "status_code": {
         "default": 200,
