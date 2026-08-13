@@ -22,6 +22,12 @@ must never be presented that way:
   a run that ultimately succeeded is not a failed run.
 
 Hence: a rate, plus dimensions — never an additive breakdown.
+
+Attribution coverage is the one figure here that is not money. It reports how
+much of the traffic carries a W3C trace, which is the precondition for
+attributing spend at run/step granularity rather than per request. It is
+deliberately shown next to the money: without it, nobody can tell whether
+BurnLens is *able* to answer a run-level question for them.
 """
 from __future__ import annotations
 
@@ -29,6 +35,33 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import aiosqlite
+
+
+@dataclass
+class TraceCoverage:
+    """How much traffic can be attributed at run/step granularity.
+
+    ``traced`` counts requests carrying a W3C ``traceparent`` trace id;
+    ``parented`` counts those that also named the calling span, which is what
+    nests an LLM call under the run or step that made it.
+
+    ``distinct_traces`` is the figure that actually decides whether grouping is
+    worth showing: a thousand requests sharing one trace id groups into a single
+    useless row.
+    """
+
+    request_count: int = 0
+    traced_count: int = 0
+    parented_count: int = 0
+    distinct_traces: int = 0
+    # True when the DB predates the trace columns — the proxy migrates on start.
+    # Distinct from a genuine zero, which would otherwise read the same and is
+    # the whole question this figure exists to answer.
+    columns_missing: bool = False
+
+    @property
+    def traced_rate(self) -> float:
+        return (self.traced_count / self.request_count) if self.request_count else 0.0
 
 
 @dataclass
@@ -47,6 +80,7 @@ class EconomicsOverview:
     # True when detector estimates overlap enough to exceed total spend, so the
     # rate below has been clamped. Surfacing it beats quietly printing >100%.
     waste_estimate_clamped: bool = False
+    trace_coverage: TraceCoverage = field(default_factory=TraceCoverage)
 
 
 async def get_error_spend(db_path: str, since: str) -> tuple[float, int]:
@@ -67,6 +101,41 @@ async def get_error_spend(db_path: str, since: str) -> tuple[float, int]:
         )
         row = await cursor.fetchone()
     return (float(row[0]), int(row[1]))
+
+
+async def get_trace_coverage(db_path: str, since: str) -> TraceCoverage:
+    """How much of the window's traffic carries a W3C trace, and how usable it is.
+
+    ``COUNT(col)`` skips NULLs, so one pass answers all four figures.
+
+    A database written before the trace columns existed raises rather than
+    returning zeroes, and that case is reported separately: "no traces arrived"
+    and "this database cannot record traces" look identical otherwise, and
+    telling them apart is the entire point of the number.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        try:
+            cursor = await db.execute(
+                """
+                SELECT COUNT(*),
+                       COUNT(trace_id),
+                       COUNT(parent_span_id),
+                       COUNT(DISTINCT trace_id)
+                  FROM requests
+                 WHERE timestamp >= ?
+                """,
+                (since,),
+            )
+        except aiosqlite.OperationalError:
+            return TraceCoverage(columns_missing=True)
+        row = await cursor.fetchone()
+
+    return TraceCoverage(
+        request_count=int(row[0]),
+        traced_count=int(row[1]),
+        parented_count=int(row[2]),
+        distinct_traces=int(row[3]),
+    )
 
 
 async def get_subject_spend(
@@ -117,6 +186,7 @@ async def get_economics_overview(
     total_spend = await get_total_cost(db_path, since=since)
     waste = await get_waste_summary(db_path)
     error_spend, error_count = await get_error_spend(db_path, since)
+    trace_coverage = await get_trace_coverage(db_path, since)
 
     # Reuse the existing allocation engine. Aggregate cost-per-accepted is
     # total attributed spend over accepted outcomes — failures charged to
@@ -147,6 +217,7 @@ async def get_economics_overview(
         accepted_count=accepted_count,
         waste_by_detector=waste["by_detector"],
         waste_estimate_clamped=clamped,
+        trace_coverage=trace_coverage,
     )
 
 
@@ -169,4 +240,12 @@ def overview_to_dict(overview: EconomicsOverview) -> dict[str, Any]:
             k: round(v, 6) for k, v in overview.waste_by_detector.items()
         },
         "waste_estimate_clamped": overview.waste_estimate_clamped,
+        "trace_coverage": {
+            "request_count": overview.trace_coverage.request_count,
+            "traced_count": overview.trace_coverage.traced_count,
+            "parented_count": overview.trace_coverage.parented_count,
+            "distinct_traces": overview.trace_coverage.distinct_traces,
+            "traced_rate": round(overview.trace_coverage.traced_rate, 4),
+            "columns_missing": overview.trace_coverage.columns_missing,
+        },
     }
