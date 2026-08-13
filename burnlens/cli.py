@@ -524,6 +524,145 @@ def economics(
     asyncio.run(_run())
 
 
+@app.command()
+def runs(
+    run_id: Optional[str] = typer.Argument(
+        None, help="Run id or unique prefix — omit to list runs"
+    ),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    days: int = typer.Option(30, "--days", "-d", help="Window to report on"),
+    limit: int = typer.Option(20, "--limit", "-n"),
+    recent: bool = typer.Option(
+        False, "--recent", help="Order by most recent instead of most expensive"
+    ),
+) -> None:
+    """Group spend into runs and their steps.
+
+    A run is a coding-agent session, or a trace for OpenTelemetry callers —
+    see burnlens/analysis/runs.py for why that order.
+    """
+    cfg = load_config(config)
+    since = _since_iso(days)
+
+    async def _list() -> None:
+        from burnlens.analysis.runs import list_runs
+
+        found = await list_runs(
+            cfg.db_path, since=since, limit=limit, order="recent" if recent else "cost"
+        )
+        if not found:
+            console.print()
+            console.print(
+                "[yellow]No runs found.[/yellow] Runs are grouped by coding-agent "
+                "session, or by trace for OpenTelemetry callers — traffic with "
+                "neither cannot be grouped. Run [bold]burnlens economics[/bold] to "
+                "see which your data carries."
+            )
+            console.print()
+            return
+
+        table = Table(
+            title=f"Runs — last {days} day(s), "
+            f"{'most recent' if recent else 'most expensive'} first"
+        )
+        table.add_column("Run")
+        table.add_column("Key", style="dim")
+        table.add_column("Where")
+        table.add_column("Steps", justify="right")
+        table.add_column("Cost", justify="right")
+        table.add_column("Models")
+        table.add_column("Started", style="dim")
+
+        for r in found:
+            table.add_row(
+                r.run_id[:12],
+                r.key_kind,
+                r.repo or (r.source or "[dim]—[/dim]"),
+                str(r.step_count),
+                _fmt_cost(r.cost_usd),
+                ", ".join(r.models[:2]) + ("…" if len(r.models) > 2 else ""),
+                r.started_at[:19],
+            )
+
+        console.print()
+        console.print(table)
+        console.print(
+            "  [dim]burnlens runs <run-id-prefix> for the steps inside one run.[/dim]"
+        )
+        console.print()
+
+    async def _detail(prefix: str) -> None:
+        from burnlens.analysis.runs import get_run, resolve_run_id
+
+        matches = await resolve_run_id(cfg.db_path, prefix, since=since)
+        if not matches:
+            console.print(f"\n[red]No run matches[/red] '{prefix}' in the last {days} day(s).\n")
+            raise typer.Exit(1)
+        if len(matches) > 1:
+            # Refuse rather than pick one — showing the wrong run's costs
+            # silently is worse than making the user type two more characters.
+            console.print(f"\n[yellow]'{prefix}' matches {len(matches)} runs:[/yellow]")
+            for m in matches[:10]:
+                console.print(f"  {m}")
+            console.print()
+            raise typer.Exit(1)
+
+        result = await get_run(cfg.db_path, matches[0], since=since)
+        if result is None:
+            console.print(f"\n[red]Run {matches[0]} has no steps in the window.[/red]\n")
+            raise typer.Exit(1)
+        run, steps = result
+
+        console.print()
+        console.print(
+            f"[bold]Run[/bold] {run.run_id}  [dim]({run.key_kind})[/dim]\n"
+            f"  {run.step_count} step(s), {_fmt_cost(run.cost_usd)}, "
+            f"{run.prompt_tokens:,} prompt "
+            f"([dim]{run.cached_tokens:,} cached[/dim]) / "
+            f"{run.output_tokens:,} out\n"
+            f"  {run.started_at[:19]} → {run.ended_at[:19]}"
+            + (f"  ·  {run.repo}" if run.repo else "")
+        )
+
+        table = Table(show_lines=False)
+        table.add_column("#", justify="right", style="dim")
+        table.add_column("Time", style="dim")
+        table.add_column("Model")
+        # Prompt, not "in": coding agents cache nearly the whole prompt, so
+        # input_tokens alone shows 6 tokens against a $0.69 step.
+        table.add_column("Prompt", justify="right")
+        table.add_column("Cached", justify="right", style="dim")
+        table.add_column("Out", justify="right")
+        table.add_column("Cost", justify="right")
+        table.add_column("ms", justify="right")
+        table.add_column("Status", justify="right")
+
+        for i, s in enumerate(steps, 1):
+            status = str(s.status_code or "")
+            table.add_row(
+                str(i),
+                s.timestamp[11:19],
+                s.model or "[dim]—[/dim]",
+                f"{s.prompt_tokens:,}",
+                f"{s.cached_tokens:,}",
+                f"{s.output_tokens:,}",
+                _fmt_cost(s.cost_usd),
+                str(s.duration_ms or ""),
+                f"[red]{status}[/red]" if s.status_code and s.status_code >= 400 else status,
+            )
+
+        console.print()
+        console.print(table)
+        if any(s.parent_span_id for s in steps):
+            console.print(
+                "  [dim]Steps carry a caller span id; they are listed in time "
+                "order, not nested.[/dim]"
+            )
+        console.print()
+
+    asyncio.run(_detail(run_id) if run_id else _list())
+
+
 findings_app = typer.Typer(help="Persisted waste findings and their lifecycle.")
 app.add_typer(findings_app, name="findings")
 
