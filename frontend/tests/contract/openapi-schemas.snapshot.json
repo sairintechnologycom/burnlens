@@ -1976,6 +1976,133 @@
     "title": "RevertActionRequest",
     "type": "object"
   },
+  "SavingsVerdict": {
+    "description": "Did the fix reduce cost per request? Totals are never compared (G12).",
+    "properties": {
+      "baseline_cost_per_request": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Cost Per Request"
+      },
+      "baseline_requests": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Requests"
+      },
+      "current_cost_per_request": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Current Cost Per Request"
+      },
+      "current_requests": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Current Requests"
+      },
+      "days_remaining": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Days Remaining"
+      },
+      "delta_per_request": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Delta Per Request"
+      },
+      "fingerprint": {
+        "title": "Fingerprint",
+        "type": "string"
+      },
+      "pct_change": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Pct Change"
+      },
+      "projected_monthly_savings_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Projected Monthly Savings Usd"
+      },
+      "reopened": {
+        "default": false,
+        "title": "Reopened",
+        "type": "boolean"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "subject_key": {
+        "title": "Subject Key",
+        "type": "string"
+      },
+      "subject_type": {
+        "title": "Subject Type",
+        "type": "string"
+      },
+      "title": {
+        "title": "Title",
+        "type": "string"
+      }
+    },
+    "required": [
+      "fingerprint",
+      "title",
+      "subject_type",
+      "subject_key",
+      "status"
+    ],
+    "title": "SavingsVerdict",
+    "type": "object"
+  },
   "SignupRequest": {
     "description": "Schema for signup request.",
     "properties": {

@@ -1,4 +1,4 @@
-import type { FindingItem } from "@/lib/contracts";
+import type { FindingItem, SavingsVerdict } from "@/lib/contracts";
 
 const ACTIONS: Record<string, [string, string][]> = {
   open: [
@@ -15,6 +15,46 @@ const ACTIONS: Record<string, [string, string][]> = {
   accepted_risk: [["open", "Reopen"]],
 };
 
+function VerdictBlock({ verdict }: { verdict?: SavingsVerdict }) {
+  if (!verdict) return null;
+  const line = verdictLine(verdict);
+  if (!line) return null;
+  const isRegression = (verdict.projected_monthly_savings_usd ?? 0) < 0;
+  return (
+    <div
+      data-testid="finding-verdict"
+      style={{
+        fontSize: 12,
+        marginBottom: 8,
+        color: isRegression ? "var(--red)" : "var(--green)",
+      }}
+    >
+      {line}
+    </div>
+  );
+}
+
+export function verdictLine(v: SavingsVerdict): string | null {
+  if (v.status === "pending") {
+    const days = v.days_remaining ?? 0;
+    return `Verifying — ${days.toFixed(1)} more days of data needed`;
+  }
+  if (v.status === "no_traffic") {
+    return "No traffic since the fix — nothing can be concluded";
+  }
+  if (v.status === "no_baseline") {
+    return "No baseline captured for this fix";
+  }
+  if (v.status !== "verified") return null;
+  const before = v.baseline_cost_per_request ?? 0;
+  const after = v.current_cost_per_request ?? 0;
+  const proj = v.projected_monthly_savings_usd ?? 0;
+  if (proj < 0) {
+    return `Regression: $${before.toFixed(2)} → $${after.toFixed(2)} per request, projected $${Math.abs(proj).toFixed(2)}/month more`;
+  }
+  return `Fix verified: $${before.toFixed(2)} → $${after.toFixed(2)} per request, projected $${proj.toFixed(2)}/month`;
+}
+
 function formatUsd(n: number): string {
   return n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -24,10 +64,12 @@ function formatUsd(n: number): string {
 
 export function FindingsList({
   findings,
+  verdicts = {},
   onStatus,
   pendingId,
 }: {
   findings: FindingItem[];
+  verdicts?: Record<string, SavingsVerdict>;
   onStatus?: (fingerprint: string, status: string) => void;
   pendingId?: string | null;
 }) {
@@ -73,6 +115,7 @@ export function FindingsList({
             ~${formatUsd(f.estimated_waste_usd)} estimated waste · {f.affected_count} request(s) · seen{" "}
             {f.detection_count}×
           </div>
+          <VerdictBlock verdict={verdicts[f.id]} />
           {Object.keys(f.evidence || {}).length > 0 && (
             <details style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8 }}>
               <summary style={{ cursor: "pointer" }}>Evidence</summary>
