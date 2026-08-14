@@ -575,10 +575,8 @@ async def get_run(
     }
 
 
-@router.get("/waste-alerts")
-async def get_waste_alerts(token: TokenPayload = Depends(verify_token)):
-    """Get waste detection findings (stub for MVP)."""
-    return []
+# GET /waste-alerts lives on findings_api.router (BL-F1). The stub that
+# returned [] is gone; do not re-add it here.
 
 
 def _budget_forecast(

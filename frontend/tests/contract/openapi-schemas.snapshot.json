@@ -711,6 +711,176 @@
     "title": "CostTimeline",
     "type": "object"
   },
+  "FindingItem": {
+    "description": "A persisted waste finding (workspace-scoped). ``id`` is the fingerprint.",
+    "properties": {
+      "affected_count": {
+        "title": "Affected Count",
+        "type": "integer"
+      },
+      "baseline_cost_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Cost Usd"
+      },
+      "baseline_requests": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Requests"
+      },
+      "baseline_waste_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Waste Usd"
+      },
+      "baseline_window_days": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Window Days"
+      },
+      "description": {
+        "title": "Description",
+        "type": "string"
+      },
+      "detection_count": {
+        "title": "Detection Count",
+        "type": "integer"
+      },
+      "detector": {
+        "title": "Detector",
+        "type": "string"
+      },
+      "detector_version": {
+        "title": "Detector Version",
+        "type": "integer"
+      },
+      "estimated_waste_usd": {
+        "title": "Estimated Waste Usd",
+        "type": "number"
+      },
+      "evidence": {
+        "title": "Evidence",
+        "type": "object"
+      },
+      "fingerprint": {
+        "title": "Fingerprint",
+        "type": "string"
+      },
+      "first_seen_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "First Seen At"
+      },
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "last_seen_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Last Seen At"
+      },
+      "resolved_at": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Resolved At"
+      },
+      "severity": {
+        "title": "Severity",
+        "type": "string"
+      },
+      "status": {
+        "title": "Status",
+        "type": "string"
+      },
+      "subject_key": {
+        "title": "Subject Key",
+        "type": "string"
+      },
+      "subject_type": {
+        "title": "Subject Type",
+        "type": "string"
+      },
+      "title": {
+        "title": "Title",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "fingerprint",
+      "detector",
+      "subject_type",
+      "subject_key",
+      "severity",
+      "title",
+      "description",
+      "estimated_waste_usd",
+      "affected_count",
+      "evidence",
+      "status",
+      "detection_count",
+      "detector_version"
+    ],
+    "title": "FindingItem",
+    "type": "object"
+  },
+  "FindingStatusBody": {
+    "description": "Lifecycle transition for POST /api/v1/findings/{fingerprint}/status.",
+    "properties": {
+      "status": {
+        "title": "Status",
+        "type": "string"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "FindingStatusBody",
+    "type": "object"
+  },
   "HTTPValidationError": {
     "properties": {
       "detail": {

@@ -445,6 +445,41 @@ async def init_db():
             ON request_records(workspace_id, (tags->>'workflow_id'), ts)
         """)
 
+        # BL-F1: persisted waste findings, workspace-scoped. Column set mirrors
+        # the local SQLite DDL plus workspace_id. No Alembic — same inline
+        # CREATE IF NOT EXISTS pattern as every other cloud table.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS waste_findings (
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                fingerprint TEXT NOT NULL,
+                detector TEXT NOT NULL,
+                subject_type TEXT NOT NULL,
+                subject_key TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                estimated_waste_usd NUMERIC(12, 4) NOT NULL DEFAULT 0,
+                affected_count INT NOT NULL DEFAULT 0,
+                evidence JSONB NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'open'
+                    CHECK (status IN ('open','acknowledged','resolved','accepted_risk')),
+                first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                resolved_at TIMESTAMPTZ,
+                baseline_waste_usd NUMERIC(12, 4),
+                baseline_cost_usd NUMERIC(12, 4),
+                baseline_requests INT,
+                baseline_window_days INT,
+                detection_count INT NOT NULL DEFAULT 1,
+                detector_version INT NOT NULL,
+                PRIMARY KEY (workspace_id, fingerprint)
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_waste_findings_status
+                ON waste_findings (workspace_id, status, severity)
+        """)
+
         # Economics-graph Phase E: reconciliation against provider billing APIs.
         # The key is a read-only billing credential, Fernet-encrypted with
         # OTEL_ENCRYPTION_KEY; it is never returned by any endpoint.

@@ -1067,7 +1067,6 @@ class TestGate05FeatureGates:
         "/api/v1/usage/by-feature",
         "/api/v1/usage/timeseries",
         "/api/v1/requests",
-        "/api/v1/waste-alerts",
         "/api/v1/budget",
     ])
     @pytest.mark.asyncio
