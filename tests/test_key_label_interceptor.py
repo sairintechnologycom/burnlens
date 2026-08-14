@@ -1,7 +1,6 @@
 """CODE-2: interceptor resolves API-key label and stamps it on the row."""
 from __future__ import annotations
 
-import asyncio
 import json
 
 import aiosqlite
@@ -11,6 +10,8 @@ import pytest
 from burnlens.keys import register_key
 from burnlens.proxy.interceptor import _extract_api_key_hash, handle_request
 from burnlens.proxy.providers import get_provider_for_path
+
+from .conftest import settle_background_tasks
 
 
 # ---------------------------------------------------------------------------
@@ -43,8 +44,7 @@ def _openai_payload() -> dict:
 
 
 async def _flush() -> None:
-    for _ in range(10):
-        await asyncio.sleep(0.02)
+    await settle_background_tasks()
 
 
 # ---------------------------------------------------------------------------
