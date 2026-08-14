@@ -25,6 +25,10 @@ function ApiKeysContent() {
   const [newKeyPlaintext, setNewKeyPlaintext] = useState<string | null>(null);
   const [pendingRevoke, setPendingRevoke] = useState<ApiKeyRow | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
+  // A toast alone is not enough for this failure: it renders in the far corner
+  // while the dialog stays open with an enabled button, and it disappears after
+  // five seconds. The dialog has to say why it did not create the key.
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "API Keys | BurnLens";
@@ -55,6 +59,7 @@ function ApiKeysContent() {
   const handleCreate = async () => {
     if (!session || creating) return;
     setCreating(true);
+    setCreateError(null);
     try {
       const body = newKeyName.trim() ? { name: newKeyName.trim() } : {};
       const created = (await apiFetch("/account/api-keys", session.token, {
@@ -71,12 +76,14 @@ function ApiKeysContent() {
       if (err instanceof AuthError) {
         logout();
       } else if (err instanceof PaymentRequiredError) {
-        showToast(
-          "API key limit reached — upgrade your plan to add more.",
-          "error"
+        const limit = err.data.limit as number | undefined;
+        setCreateError(
+          limit
+            ? `Your plan allows ${limit} key${limit === 1 ? "" : "s"}. Revoke one, or upgrade to add more.`
+            : "API key limit reached. Revoke a key, or upgrade to add more."
         );
       } else {
-        showToast("Failed to create key.", "error");
+        setCreateError("Couldn't create the key. Try again.");
       }
     } finally {
       setCreating(false);
@@ -191,7 +198,7 @@ function ApiKeysContent() {
         </div>
         <button
           className="btn btn-cyan"
-          onClick={() => setShowCreate(true)}
+          onClick={() => { setCreateError(null); setShowCreate(true); }}
           type="button"
         >
           Create key
@@ -218,7 +225,7 @@ function ApiKeysContent() {
             description="Create your first key to start syncing to cloud."
             action={{
               label: "Create key",
-              onClick: () => setShowCreate(true),
+              onClick: () => { setCreateError(null); setShowCreate(true); },
             }}
           />
         ) : (
@@ -265,6 +272,15 @@ function ApiKeysContent() {
               autoFocus
               style={{ marginTop: 12, width: "100%" }}
             />
+            {createError && (
+              <div
+                className="error-inline"
+                role="alert"
+                style={{ marginTop: 8, fontFamily: "var(--font-sans)", fontSize: 12 }}
+              >
+                {createError}
+              </div>
+            )}
             <div
               className="api-key-modal-actions"
               style={{

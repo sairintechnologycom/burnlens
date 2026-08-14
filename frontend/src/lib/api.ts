@@ -77,7 +77,17 @@ export async function apiFetch(endpoint: string, token: string, options: Request
     // Best-effort parse — if the body is missing or malformed, throw with empty data
     // and let LockedPanel fall back to default copy.
     const body = await resp.json().catch(() => ({}));
-    throw new PaymentRequiredError(body as PaymentRequiredBody);
+    // FastAPI wraps an HTTPException's `detail` payload one level down, so the
+    // backend's {error, required_plan, limit, …} arrives as {detail: {…}} and
+    // every `err.data.required_plan` read here was silently undefined. Unwrap
+    // it once; a flat body (infra-level 402, or a plain-string detail) passes
+    // through untouched.
+    const detail = (body as { detail?: unknown }).detail;
+    const data =
+      detail && typeof detail === "object" && !Array.isArray(detail)
+        ? (detail as PaymentRequiredBody)
+        : (body as PaymentRequiredBody);
+    throw new PaymentRequiredError(data);
   }
 
   if (!resp.ok) {
