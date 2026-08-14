@@ -1,21 +1,24 @@
 """Findings + waste-alerts HTTP surface (BL-F1)."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from .auth import TokenPayload, require_role, verify_token
+from .dashboard_api import clamp_days_by_plan
 from .database import get_pool
 from .findings import (
     VALID_STATUSES,
     finding_to_dict,
+    get_economics_overview,
     list_findings,
     refresh_findings,
     set_finding_status,
     waste_alert_from_finding,
 )
-from .models import FindingItem, FindingStatusBody
+from .models import EconomicsOverview, FindingItem, FindingStatusBody
 
 router = APIRouter(prefix="/api/v1", tags=["findings"])
 
@@ -75,6 +78,20 @@ async def post_finding_status(
             fingerprint,
         )
     return finding_to_dict(rows[0])
+
+
+@router.get("/economics", response_model=EconomicsOverview)
+async def get_economics(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+):
+    """Spend, waste rate, error spend, cost per accepted outcome."""
+    await require_role("viewer", token)
+    days = clamp_days_by_plan(days, token.plan)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        return await get_economics_overview(conn, token.workspace_id, cutoff)
 
 
 @router.get("/waste-alerts")

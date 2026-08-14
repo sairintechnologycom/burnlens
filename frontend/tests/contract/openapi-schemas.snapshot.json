@@ -711,6 +711,78 @@
     "title": "CostTimeline",
     "type": "object"
   },
+  "EconomicsOverview": {
+    "description": "Top-line runtime economics. Waste is an estimate, not a bucket.",
+    "properties": {
+      "accepted_count": {
+        "title": "Accepted Count",
+        "type": "integer"
+      },
+      "cost_per_accepted_usd": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Cost Per Accepted Usd"
+      },
+      "detected_waste_usd": {
+        "title": "Detected Waste Usd",
+        "type": "number"
+      },
+      "error_request_count": {
+        "title": "Error Request Count",
+        "type": "integer"
+      },
+      "error_spend_usd": {
+        "title": "Error Spend Usd",
+        "type": "number"
+      },
+      "open_finding_count": {
+        "title": "Open Finding Count",
+        "type": "integer"
+      },
+      "total_spend_usd": {
+        "title": "Total Spend Usd",
+        "type": "number"
+      },
+      "trace_coverage": {
+        "$ref": "#/components/schemas/TraceCoverage"
+      },
+      "waste_by_detector": {
+        "additionalProperties": {
+          "type": "number"
+        },
+        "title": "Waste By Detector",
+        "type": "object"
+      },
+      "waste_estimate_clamped": {
+        "title": "Waste Estimate Clamped",
+        "type": "boolean"
+      },
+      "waste_rate": {
+        "title": "Waste Rate",
+        "type": "number"
+      }
+    },
+    "required": [
+      "total_spend_usd",
+      "detected_waste_usd",
+      "waste_rate",
+      "open_finding_count",
+      "error_spend_usd",
+      "error_request_count",
+      "accepted_count",
+      "waste_by_detector",
+      "waste_estimate_clamped",
+      "trace_coverage"
+    ],
+    "title": "EconomicsOverview",
+    "type": "object"
+  },
   "FindingItem": {
     "description": "A persisted waste finding (workspace-scoped). ``id`` is the fingerprint.",
     "properties": {
@@ -2148,6 +2220,45 @@
       }
     },
     "title": "TeamsWebhookRequest",
+    "type": "object"
+  },
+  "TraceCoverage": {
+    "description": "How much of the window's traffic carries a W3C trace.",
+    "properties": {
+      "columns_missing": {
+        "default": false,
+        "title": "Columns Missing",
+        "type": "boolean"
+      },
+      "distinct_traces": {
+        "title": "Distinct Traces",
+        "type": "integer"
+      },
+      "parented_count": {
+        "title": "Parented Count",
+        "type": "integer"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "traced_count": {
+        "title": "Traced Count",
+        "type": "integer"
+      },
+      "traced_rate": {
+        "title": "Traced Rate",
+        "type": "number"
+      }
+    },
+    "required": [
+      "request_count",
+      "traced_count",
+      "parented_count",
+      "distinct_traces",
+      "traced_rate"
+    ],
+    "title": "TraceCoverage",
     "type": "object"
   },
   "UsageCurrentCycle": {
