@@ -103,36 +103,26 @@ async def test_recommendations_requires_auth(dash_client):
     assert response.status_code in (401, 403)
 
 
+def _overkill_row(feature="chat", output_tokens=40, model="gpt-4o"):
+    return {
+        "model": model,
+        "input_tokens": 500,
+        "output_tokens": output_tokens,
+        "reasoning_tokens": 0,
+        "cost_usd": 0.50,
+        "tags": {"feature": feature},
+        "ts": datetime(2026, 8, 13, 9, 0),
+    }
+
+
 @pytest.mark.asyncio
 async def test_recommendations_model_overkill(dash_client, valid_jwt_token):
     """Short-output traffic on an overkill model yields a downgrade rec."""
+    rows = [_overkill_row() for _ in range(21)]
+    rows += [_overkill_row(feature="rare") for _ in range(5)]
+    rows += [_overkill_row(feature="writer", output_tokens=900, model="claude-sonnet-5") for _ in range(21)]
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
-        mock_query.return_value = [
-            {   # triggers: overkill model, avg_out < 200, count > 20
-                "model": "gpt-4o",
-                "feature_tag": "chat",
-                "request_count": 100,
-                "avg_input_tokens": 500.0,
-                "avg_output_tokens": 40.0,
-                "total_cost": 50.0,
-            },
-            {   # below volume threshold — no rec
-                "model": "gpt-4o",
-                "feature_tag": "rare",
-                "request_count": 5,
-                "avg_input_tokens": 500.0,
-                "avg_output_tokens": 40.0,
-                "total_cost": 1.0,
-            },
-            {   # long outputs — no rec
-                "model": "claude-sonnet-5",
-                "feature_tag": "writer",
-                "request_count": 100,
-                "avg_input_tokens": 500.0,
-                "avg_output_tokens": 900.0,
-                "total_cost": 80.0,
-            },
-        ]
+        mock_query.return_value = rows
         response = await dash_client.get(
             "/api/v1/recommendations",
             headers={"Authorization": f"Bearer {valid_jwt_token}"},
@@ -145,7 +135,7 @@ async def test_recommendations_model_overkill(dash_client, valid_jwt_token):
     assert rec["current_model"] == "gpt-4o"
     assert rec["suggested_model"] == "gpt-4o-mini"
     assert rec["feature_tag"] == "chat"
-    assert rec["confidence"] == "high"  # avg_out < 50
+    assert rec["confidence"] == "high"
     assert rec["projected_saving"] > 0
     assert 0 < rec["saving_pct"] <= 100
 
