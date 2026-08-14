@@ -49,6 +49,56 @@ export class PaymentRequiredError extends Error {
   }
 }
 
+/** FastAPI 422 entry: {loc: ["body", "name"], msg: "field required", type: "..."} */
+interface ValidationEntry {
+  loc?: unknown[];
+  msg?: string;
+}
+
+/**
+ * Turn any error body into one sentence a user can read.
+ *
+ * `err.message` from apiFetch is rendered directly in about ten places, so
+ * every shape has to end up as a string. FastAPI's `detail` is a string for a
+ * plain abort, an **object** for a structured one (`HTTPException(detail={…})`)
+ * and an **array** for a 422 validation failure — the old code interpolated all
+ * three, so the structured cases reached users as `[object Object]`. A body
+ * that carries no readable message falls back to the status code rather than
+ * leaking a serialised internal object.
+ */
+export function errorMessageFrom(body: unknown, status: number): string {
+  const fallback = `Request failed (${status})`;
+  if (!body || typeof body !== "object") return fallback;
+
+  const detail = (body as { detail?: unknown }).detail;
+
+  if (typeof detail === "string" && detail.trim()) return detail;
+
+  if (Array.isArray(detail)) {
+    // 422: name the field, not just the rule — "name: field required" beats
+    // "field required" when a form has more than one input.
+    const parts = (detail as ValidationEntry[])
+      .map((e) => {
+        if (!e || typeof e.msg !== "string") return null;
+        const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : undefined;
+        return typeof field === "string" && field !== "body"
+          ? `${field}: ${e.msg}`
+          : e.msg;
+      })
+      .filter(Boolean);
+    return parts.length ? parts.join("; ") : fallback;
+  }
+
+  // Structured detail, or a top-level shape. Only known message-bearing keys
+  // are surfaced; anything else is backend internals and stays hidden.
+  const source = (detail && typeof detail === "object" ? detail : body) as Record<string, unknown>;
+  for (const key of ["message", "error", "msg"]) {
+    const v = source[key];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return fallback;
+}
+
 export async function apiFetch(endpoint: string, token: string, options: RequestInit = {}) {
   const url = `${BASE_URL}${endpoint}`;
   const headers: Record<string, string> = {
@@ -91,8 +141,8 @@ export async function apiFetch(endpoint: string, token: string, options: Request
   }
 
   if (!resp.ok) {
-    const errorData = await resp.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(errorData.detail || `Request failed with status ${resp.status}`);
+    const body = await resp.json().catch(() => null);
+    throw new Error(errorMessageFrom(body, resp.status));
   }
 
   return resp.json();
