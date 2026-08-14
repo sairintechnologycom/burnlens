@@ -6,6 +6,15 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.23.1] — 2026-08-14
+
+### Fixed
+- **`burnlens sync --now` failed immediately with
+  `AttributeError: 'CloudConfig' object has no attribute 'cloud'`.** The command
+  handed the sync client only the cloud section of the config when the client
+  wants the whole thing, so the manual push has never worked. Background sync
+  from the running proxy was unaffected, as was `burnlens sync --status`.
+
 ## [OSS `burnlens` v1.23.0] — 2026-08-14
 
 ### Fixed
