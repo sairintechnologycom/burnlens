@@ -60,24 +60,26 @@ def test_top_no_db(tmp_path):
     assert result.exit_code == 0
 
 
-def test_sync_now_constructs_cloud_sync(tmp_path):
-    """`sync --now` must reach the push path without crashing on construction.
+def test_sync_now_on_fresh_db(tmp_path):
+    """`sync --now` must work on a machine where the proxy has never run.
 
-    CloudSync takes the whole BurnLensConfig and reads `.cloud` itself; the CLI
-    passed `cfg.cloud`, so every `burnlens sync --now` died with
-    `AttributeError: 'CloudConfig' object has no attribute 'cloud'`. Every unit
-    test in test_cloud_sync.py builds CloudSync directly with the right
-    argument, so none of them saw it — this drives the CLI instead.
+    Two bugs met here. CloudSync takes the whole BurnLensConfig and reads
+    `.cloud` itself, but the CLI passed `cfg.cloud`, so every invocation died
+    with `AttributeError: 'CloudConfig' object has no attribute 'cloud'`. Once
+    that was fixed the command still traceback-dumped on a db_path with no
+    schema — it ran the synced_at migration alone instead of init_db, and
+    aiosqlite creates the missing file, so the ALTER hit "no such table:
+    requests".
+
+    Every test in test_cloud_sync.py builds CloudSync directly with the right
+    argument against a prepared DB, so neither was visible there. This drives
+    the real command against an uninitialised path — deliberately no init_db.
     """
-    import asyncio
     from unittest.mock import patch
 
     from burnlens.config import BurnLensConfig, CloudConfig
-    from burnlens.storage.database import init_db
 
-    db = str(tmp_path / "test.db")
-    asyncio.run(init_db(db))
-
+    db = str(tmp_path / "never-created.db")
     cfg = BurnLensConfig(db_path=db, cloud=CloudConfig(enabled=True, api_key="bl_test"))
 
     # Empty DB — no unsynced rows, so the run completes without any network I/O.
@@ -86,3 +88,9 @@ def test_sync_now_constructs_cloud_sync(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "No un-synced records" in result.output
+
+    with patch("burnlens.cli.load_config", return_value=cfg):
+        status = runner.invoke(app, ["sync", "--status"])
+
+    assert status.exit_code == 0, status.output
+    assert "Un-synced: 0" in status.output
