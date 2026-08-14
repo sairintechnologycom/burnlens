@@ -18,6 +18,10 @@ class GoogleProvider(Provider):
         streaming_format="sse-google",
         pricing_key="google",
         env_var="",  # Google SDK does not support a base-URL env var; use burnlens.patch
+        # promptTokenCount covers the whole prompt, cachedContentTokenCount is a
+        # subset of it. Moot while extract_usage never sets cache_read_tokens,
+        # but the flag has to be right before it does.
+        prompt_tokens_include_cache=True,
     )
 
     # Compiled once at module import. Linear regex (no nested quantifiers,

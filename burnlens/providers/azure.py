@@ -61,6 +61,7 @@ class AzureOpenAIProvider(OpenAIProvider):
         streaming_format="sse-openai",
         pricing_key="openai",  # Azure serves OpenAI models at OpenAI prices
         env_var="AZURE_OPENAI_ENDPOINT",  # SDK var the CLI wrapper repoints
+        prompt_tokens_include_cache=True,  # OpenAI wire format
     )
 
     @property

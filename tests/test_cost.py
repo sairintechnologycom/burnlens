@@ -233,14 +233,16 @@ class TestCostCalculation:
         assert abs(cost - 3.75) < 1e-4
 
     def test_anthropic_cache_read(self):
-        # claude-3-5-sonnet: cache_read=$0.30/M
-        # 1000 input with 800 cache_read
-        # billable_input = 1000 - 800 = 200
-        # input_cost = 200 * 3.00/1e6 = 0.0006
-        # cache_read_cost = 800 * 0.30/1e6 = 0.00024
+        # claude-3-5-sonnet: input=$3.00/M, cache_read=$0.30/M
+        #
+        # Anthropic's `input_tokens` EXCLUDES the cached tokens — the two counts
+        # are disjoint — so all 1000 input tokens are billable. This test used
+        # to assert 200 (input minus cache_read), which is the OpenAI rule
+        # applied to the wrong provider and under-billed the uncached input.
+        # See tests/test_prompt_token_semantics.py.
         usage = TokenUsage(input_tokens=1000, cache_read_tokens=800)
         cost = calculate_cost("anthropic", "claude-3-5-sonnet-20241022", usage)
-        expected = 200 * 3.00 / 1e6 + 800 * 0.30 / 1e6
+        expected = 1000 * 3.00 / 1e6 + 800 * 0.30 / 1e6
         assert abs(cost - expected) < 1e-9
 
     def test_gpt4o_mini_cheap_tier(self):

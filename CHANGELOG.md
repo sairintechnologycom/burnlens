@@ -6,6 +6,29 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.23.0] — 2026-08-14
+
+### Fixed
+- **Prompt sizes in `burnlens runs` were roughly double for OpenAI, Azure,
+  Google and the OpenAI-compatible providers.** Those APIs report the whole
+  prompt as one number with the cached share as a *part* of it; Anthropic
+  reports the uncached input and the cache reads as two *separate* numbers.
+  BurnLens added them together in both cases, so a 12,000-token prompt with
+  11,000 cached was shown as 23,000. Costs were never affected. Measured
+  against a live request, not inferred.
+
+  The run view now also reports the uncached share rather than the raw column,
+  so the three figures add up: prompt = uncached + cached.
+
+- **Anthropic requests that were only partly cached were under-billed.**
+  BurnLens subtracted the cache reads from the input tokens before pricing
+  them, which is the right rule for OpenAI and the wrong one for Anthropic. A
+  request with 5,000 uncached input tokens and 3,000 cache reads was priced as
+  2,000 input tokens. Coding-agent traffic hid this — when the whole prompt is
+  cached the uncached input is a handful of tokens — but any application that
+  caches part of its prompt was quoted low. Costs recorded from now on are
+  slightly higher for that traffic, and correct; existing rows are unchanged.
+
 ## [OSS `burnlens` v1.22.0] — 2026-08-13
 
 ### Added
@@ -29,6 +52,14 @@ qualified with the package it covers.
 
 - **`source` is synced too**, so the hosted dashboard can tell coding-agent
   runs apart from proxied application traffic.
+
+## [Cloud `burnlens-cloud`] — 2026-08-14 (deployed only)
+
+### Fixed
+- Same prompt-token correction as OSS v1.23.0, in the hosted run view — the
+  provider list is duplicated in `burnlens_cloud.models` because the backend
+  cannot import the proxy's registry, and `tests/test_prompt_token_semantics.py`
+  fails if the two drift.
 
 ## [Cloud `burnlens-cloud`] — 2026-08-13 (deployed only)
 

@@ -28,6 +28,23 @@ CLOUD_SYNCED_TAGS: tuple[str, ...] = (
 # clickhouse.py so ingest.py need not import clickhouse_connect.
 STREAM_TAG_COLUMNS: tuple[str, ...] = ("feature", "team", "customer", "key_label")
 
+# Providers whose `input_tokens` already INCLUDES the cached share, so adding
+# cache_read_tokens to it double-counts. Anthropic-style providers report the
+# two disjointly and must be summed. MUST stay equal to
+# `burnlens.providers.registry.inclusive_prompt_token_providers()`, which is
+# derived from the ProviderConfig flag; tests/test_prompt_token_semantics.py
+# fails if they drift. Same duplication reason as CLOUD_SYNCED_TAGS above.
+INCLUSIVE_PROMPT_TOKEN_PROVIDERS: tuple[str, ...] = (
+    "azure",
+    "deepseek",
+    "google",
+    "groq",
+    "mistral",
+    "openai",
+    "together",
+    "xai",
+)
+
 
 # Request/Response Schemas
 class WorkspaceBase(BaseModel):

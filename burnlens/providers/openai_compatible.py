@@ -26,6 +26,7 @@ class OpenAICompatibleProvider(OpenAIProvider):
             streaming_format="sse-openai",
             pricing_key=name,
             env_var=env_var,
+            prompt_tokens_include_cache=True,  # OpenAI wire format
         )
 
 
