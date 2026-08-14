@@ -1750,7 +1750,8 @@ def sync_cmd(
             return
 
         if now:
-            cloud = CloudSync(cfg.cloud)
+            # Whole config, not cfg.cloud — CloudSync reads config.cloud itself.
+            cloud = CloudSync(cfg)
             try:
                 console.print("Syncing to [cyan]burnlens.app[/cyan]...")
                 count = await cloud.sync_now(cfg.db_path)
