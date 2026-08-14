@@ -20,16 +20,4 @@ test.describe('Dashboard Features', () => {
     await expect(syncButton).toBeVisible();
     await expect(seedButton).toBeVisible();
   });
-
-  test('should show optimization opportunities card', async ({ authenticatedPage: page }) => {
-    await page.goto('/dashboard');
-    
-    // Check for optimization message or card
-    await expect(page.getByText('Optimization Opportunities')).toBeVisible();
-    await expect(page.getByText('Estimated Monthly Savings', { exact: false })).toBeVisible();
-    
-    // Navigate to optimizations
-    await page.getByRole('link', { name: /View All/i }).click();
-    await expect(page).toHaveURL(/\/optimizations/);
-  });
 });

@@ -10,22 +10,18 @@ test.describe('App Navigation', () => {
     // Check for sidebar links
     const sidebar = page.locator('aside.desktop-sidebar');
     await expect(sidebar.getByText('Overview')).toBeVisible();
-    await expect(sidebar.getByText('Optimizations')).toBeVisible();
     await expect(sidebar.getByText('Alerts')).toBeVisible();
     await expect(sidebar.getByText('Settings')).toBeVisible();
   });
 
-  test('should navigate between dashboard and optimizations', async ({ authenticatedPage: page }) => {
+  test('should navigate between dashboard and alerts', async ({ authenticatedPage: page }) => {
     await page.goto('/dashboard');
 
-    // Navigate to Optimizations via sidebar
     const sidebar = page.locator('aside.desktop-sidebar');
-    await sidebar.getByText('Optimizations').click();
+    await sidebar.getByText('Alerts').click();
 
-    // Wait for URL
-    await expect(page).toHaveURL(/\/optimizations/);
+    await expect(page).toHaveURL(/\/alerts/);
 
-    // Navigate back to Dashboard via sidebar
     await sidebar.getByText('Overview').click();
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(page.locator('h1')).toHaveText('Overview');
