@@ -8,13 +8,7 @@ import BarChart from "@/components/charts/BarChart";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface TimeseriesPoint {
-  date: string;
-  provider: string;
-  cost: number;
-  calls: number;
-}
+import type { CostTimelinePoint } from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,10 +28,10 @@ function TimelineContent() {
     try {
       const ts = await apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.token);
       const byDate: Record<string, { cost: number; calls: number }> = {};
-      (ts as TimeseriesPoint[]).forEach((p) => {
+      (ts as CostTimelinePoint[]).forEach((p) => {
         if (!byDate[p.date]) byDate[p.date] = { cost: 0, calls: 0 };
-        byDate[p.date].cost += p.cost || 0;
-        byDate[p.date].calls += p.calls || 0;
+        byDate[p.date].cost += p.total_cost_usd || 0;
+        byDate[p.date].calls += p.request_count || 0;
       });
       const sorted = Object.entries(byDate)
         .sort(([a], [b]) => a.localeCompare(b))
