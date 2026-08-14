@@ -337,6 +337,31 @@ class FindingStatusBody(BaseModel):
     status: str
 
 
+class TraceCoverage(BaseModel):
+    """How much of the window's traffic carries a W3C trace."""
+    request_count: int
+    traced_count: int
+    parented_count: int
+    distinct_traces: int
+    traced_rate: float
+    columns_missing: bool = False
+
+
+class EconomicsOverview(BaseModel):
+    """Top-line runtime economics. Waste is an estimate, not a bucket."""
+    total_spend_usd: float
+    detected_waste_usd: float
+    waste_rate: float
+    open_finding_count: int
+    error_spend_usd: float
+    error_request_count: int
+    cost_per_accepted_usd: Optional[float] = None
+    accepted_count: int
+    waste_by_detector: dict[str, float]
+    waste_estimate_clamped: bool
+    trace_coverage: TraceCoverage
+
+
 class RecommendationItem(BaseModel):
     """A model-switch recommendation (mirrors the OSS local-dashboard shape)."""
     current_model: str
