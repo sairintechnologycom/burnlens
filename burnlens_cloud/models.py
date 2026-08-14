@@ -307,6 +307,36 @@ class TeamBudgetRow(BaseModel):
     status: str
 
 
+class FindingItem(BaseModel):
+    """A persisted waste finding (workspace-scoped). ``id`` is the fingerprint."""
+    id: str
+    fingerprint: str
+    detector: str
+    subject_type: str
+    subject_key: str
+    severity: str
+    title: str
+    description: str
+    estimated_waste_usd: float
+    affected_count: int
+    evidence: dict[str, Any]
+    status: str
+    first_seen_at: Optional[str] = None
+    last_seen_at: Optional[str] = None
+    resolved_at: Optional[str] = None
+    baseline_waste_usd: Optional[float] = None
+    baseline_cost_usd: Optional[float] = None
+    baseline_requests: Optional[int] = None
+    baseline_window_days: Optional[int] = None
+    detection_count: int
+    detector_version: int
+
+
+class FindingStatusBody(BaseModel):
+    """Lifecycle transition for POST /api/v1/findings/{fingerprint}/status."""
+    status: str
+
+
 class RecommendationItem(BaseModel):
     """A model-switch recommendation (mirrors the OSS local-dashboard shape)."""
     current_model: str
