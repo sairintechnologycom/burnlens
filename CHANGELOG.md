@@ -6,6 +6,15 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.23.2] — 2026-08-14
+
+### Fixed
+- **`burnlens sync` printed a traceback on a machine where the proxy had never
+  run.** The command prepared the database differently from every other
+  command, so against a database with no tables yet it failed with
+  `no such table: requests` instead of reporting that there was nothing to
+  sync. Affects a fresh install running `sync` before any traffic is recorded.
+
 ## [OSS `burnlens` v1.23.1] — 2026-08-14
 
 ### Fixed
