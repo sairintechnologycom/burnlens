@@ -7,7 +7,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  TrendingDown,
   Bell,
   Settings,
   LogOut,
@@ -18,10 +17,9 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 
 const NAV_ITEMS = [
-  { href: "/dashboard",      icon: LayoutDashboard, label: "Overview" },
-  { href: "/optimizations",  icon: TrendingDown,     label: "Optimizations" },
-  { href: "/alerts",         icon: Bell,             label: "Alerts" },
-  { href: "/settings",       icon: Settings,         label: "Settings" },
+  { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
+  { href: "/alerts",    icon: Bell,            label: "Alerts" },
+  { href: "/settings",  icon: Settings,        label: "Settings" },
 ];
 
 function NavItem({ href, icon: Icon, label, onClick }: { href: string; icon: any; label: string; onClick?: () => void }) {
