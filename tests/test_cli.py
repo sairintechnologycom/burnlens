@@ -58,3 +58,31 @@ def test_top_no_db(tmp_path):
          patch("burnlens.cli.time.sleep", side_effect=KeyboardInterrupt):
         result = runner.invoke(app, ["top"])
     assert result.exit_code == 0
+
+
+def test_sync_now_constructs_cloud_sync(tmp_path):
+    """`sync --now` must reach the push path without crashing on construction.
+
+    CloudSync takes the whole BurnLensConfig and reads `.cloud` itself; the CLI
+    passed `cfg.cloud`, so every `burnlens sync --now` died with
+    `AttributeError: 'CloudConfig' object has no attribute 'cloud'`. Every unit
+    test in test_cloud_sync.py builds CloudSync directly with the right
+    argument, so none of them saw it — this drives the CLI instead.
+    """
+    import asyncio
+    from unittest.mock import patch
+
+    from burnlens.config import BurnLensConfig, CloudConfig
+    from burnlens.storage.database import init_db
+
+    db = str(tmp_path / "test.db")
+    asyncio.run(init_db(db))
+
+    cfg = BurnLensConfig(db_path=db, cloud=CloudConfig(enabled=True, api_key="bl_test"))
+
+    # Empty DB — no unsynced rows, so the run completes without any network I/O.
+    with patch("burnlens.cli.load_config", return_value=cfg):
+        result = runner.invoke(app, ["sync", "--now"])
+
+    assert result.exit_code == 0, result.output
+    assert "No un-synced records" in result.output
