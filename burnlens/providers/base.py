@@ -22,6 +22,14 @@ class ProviderConfig:
     streaming_format: str  # "sse-openai", "sse-anthropic", "sse-google"
     pricing_key: str     # matches pricing_data/{pricing_key}.json
     env_var: str = ""    # SDK env var, e.g. "OPENAI_BASE_URL"; "" if unsupported
+    # Does this provider's reported input-token count already INCLUDE the
+    # cached tokens? OpenAI and Google report the whole prompt as
+    # `prompt_tokens`/`promptTokenCount` with the cached share as a subset of
+    # it; Anthropic reports `input_tokens` and `cache_read_input_tokens` as
+    # DISJOINT counts. Getting this wrong is silent in both directions: summing
+    # the columns double-counts the cache for the inclusive providers, and
+    # subtracting it under-bills the uncached input for the disjoint ones.
+    prompt_tokens_include_cache: bool = False
 
 
 class Provider(ABC):

@@ -104,6 +104,20 @@ def drain_unpriced_models() -> list[tuple[str, str]]:
     return seen
 
 
+def _includes_cache(provider: str) -> bool:
+    """Whether ``provider`` reports input_tokens inclusive of the cached share.
+
+    Imported lazily: burnlens.providers.base imports TokenUsage from this
+    module, so a top-level import would be circular. An unregistered provider
+    name (scan-only sources such as ``cursor``) is treated as disjoint, which
+    is the conservative side — it bills the uncached input rather than
+    silently dropping it.
+    """
+    from burnlens.providers.registry import inclusive_prompt_token_providers
+
+    return provider in inclusive_prompt_token_providers()
+
+
 def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
     """Return total cost in USD for the given token usage.
 
@@ -129,12 +143,18 @@ def calculate_cost(provider: str, model: str, usage: TokenUsage) -> float:
 
     per_million = 1_000_000.0
 
-    # Base input cost — cache-read and audio tokens are subsets of input_tokens
-    # billed at their own rates, so exclude both from the text-input count.
+    # Base input cost. Audio tokens are always a subset of input_tokens. Cache
+    # reads are a subset only for the providers that report an all-inclusive
+    # prompt count (OpenAI, Google); Anthropic reports them separately, and
+    # subtracting there under-bills the uncached input — invisibly, because the
+    # result is still a plausible number. Claude Code hides this (input_tokens
+    # is ~6 when everything is cached) but a partially-cached Anthropic request
+    # with input=5000, cache_read=3000 would bill 2000 instead of 5000.
     # ponytail: if a token is both cached and audio the double-subtract under-counts
     # text slightly; max(0, …) floors it. Split by modality if that ever matters.
+    cached_is_subset = usage.cache_read_tokens if _includes_cache(provider) else 0
     billable_input = max(
-        0, usage.input_tokens - usage.cache_read_tokens - usage.audio_input_tokens
+        0, usage.input_tokens - cached_is_subset - usage.audio_input_tokens
     )
     input_cost = billable_input * pricing.get("input_per_million", 0.0) / per_million
 

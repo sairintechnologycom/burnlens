@@ -38,6 +38,46 @@ RUN_KEY = "COALESCE(json_extract(tags, '$.session'), trace_id)"
 _SESSION_TAG = "json_extract(tags, '$.session')"
 
 
+def _prompt_tokens_sql() -> str:
+    """SQL for the whole prompt: uncached input + cache reads + cache writes.
+
+    Provider-dependent, and wrong in both directions if assumed. OpenAI/Google
+    already fold the cached share into input_tokens, so adding it back
+    double-counts (a 12k prompt with 11k cached rendered as 23k). Anthropic
+    reports the two disjointly, so they must be summed. The provider list comes
+    from the registry — see :func:`inclusive_prompt_token_providers`.
+    """
+    from burnlens.providers.registry import inclusive_prompt_token_providers
+
+    inclusive = ", ".join(f"'{p}'" for p in inclusive_prompt_token_providers())
+    if not inclusive:
+        return "input_tokens + cache_read_tokens + cache_write_tokens"
+    return (
+        "CASE WHEN provider IN (" + inclusive + ") "
+        "THEN input_tokens ELSE input_tokens + cache_read_tokens END "
+        "+ cache_write_tokens"
+    )
+
+
+def _uncached_input_sql() -> str:
+    """SQL for the uncached share of the prompt.
+
+    Reported alongside the whole prompt and the cached share, so the three have
+    to add up: prompt = uncached + cached. Raw ``input_tokens`` cannot be shown
+    directly — for OpenAI/Google it IS the whole prompt, so it would read as
+    60,000 uncached next to 55,000 cached against a 60,000 prompt.
+    """
+    from burnlens.providers.registry import inclusive_prompt_token_providers
+
+    inclusive = ", ".join(f"'{p}'" for p in inclusive_prompt_token_providers())
+    if not inclusive:
+        return "input_tokens"
+    return (
+        "CASE WHEN provider IN (" + inclusive + ") "
+        "THEN MAX(input_tokens - cache_read_tokens, 0) ELSE input_tokens END"
+    )
+
+
 @dataclass(frozen=True)
 class _Schema:
     """SQL expressions this database can actually evaluate.
@@ -79,6 +119,11 @@ class Run:
     # agents cache almost everything, so `input_tokens` alone reads as 6 tokens
     # against a $0.69 step — a number that looks like a bug rather than a cache
     # hit. Both figures are kept so the split stays visible.
+    #
+    # `input_tokens` here is the UNCACHED share, not the raw column: for
+    # OpenAI/Google that column is the whole prompt, so showing it raw would put
+    # 60,000 "uncached" next to 55,000 "cached" on a 60,000-token prompt. These
+    # three always satisfy prompt = input + cached.
     prompt_tokens: int
     cached_tokens: int
     input_tokens: int
@@ -115,9 +160,9 @@ def _run_select(s: _Schema) -> str:
     SELECT {s.run_key} AS run_id,
            COUNT(*),
            COALESCE(SUM(cost_usd), 0.0),
-           COALESCE(SUM(input_tokens + cache_read_tokens + cache_write_tokens), 0),
+           COALESCE(SUM({_prompt_tokens_sql()}), 0),
            COALESCE(SUM(cache_read_tokens + cache_write_tokens), 0),
-           COALESCE(SUM(input_tokens), 0),
+           COALESCE(SUM({_uncached_input_sql()}), 0),
            COALESCE(SUM(output_tokens), 0),
            MIN(timestamp),
            MAX(timestamp),
@@ -207,9 +252,9 @@ async def get_run(db_path: str, run_id: str, since: str) -> tuple[Run, list[Step
         cursor = await db.execute(
             f"""
             SELECT timestamp, model,
-                   input_tokens + cache_read_tokens + cache_write_tokens,
+                   {_prompt_tokens_sql()},
                    cache_read_tokens + cache_write_tokens,
-                   input_tokens, output_tokens, cost_usd,
+                   {_uncached_input_sql()}, output_tokens, cost_usd,
                    duration_ms, status_code, {s.parent_span}
               FROM requests
              WHERE timestamp >= ? AND {s.run_key} = ?

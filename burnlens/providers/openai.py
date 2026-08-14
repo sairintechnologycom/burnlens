@@ -17,6 +17,7 @@ class OpenAIProvider(Provider):
         streaming_format="sse-openai",
         pricing_key="openai",
         env_var="OPENAI_BASE_URL",
+        prompt_tokens_include_cache=True,
     )
 
     def resolve_upstream_url(self, request_path: str, headers: dict[str, str]) -> str:

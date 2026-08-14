@@ -17,6 +17,7 @@ from .clickhouse import (
     get_spend_timeseries,
 )
 from .models import (
+    INCLUSIVE_PROMPT_TOKEN_PROVIDERS,
     StatsSummary,
     CostByModel,
     CostByTag,
@@ -425,6 +426,26 @@ async def get_requests(
 # are excluded rather than collapsed into one NULL run.
 _RUN_KEY = "COALESCE(tags->>'session', trace_id)"
 
+# The whole prompt, provider-aware. OpenAI/Google fold the cached share into
+# input_tokens, so adding it back double-counts; Anthropic reports the two
+# disjointly, so they must be summed. Assuming either shape is silently wrong
+# for the other — a 12k prompt with 11k cached rendered as 23k before this.
+_PROMPT_TOKENS = (
+    "CASE WHEN provider IN ("
+    + ", ".join(f"'{p}'" for p in INCLUSIVE_PROMPT_TOKEN_PROVIDERS)
+    + ") THEN input_tokens ELSE input_tokens + cache_read_tokens END"
+    " + cache_write_tokens"
+)
+
+# The uncached share. Raw input_tokens cannot be shown next to cached_tokens —
+# for OpenAI/Google it IS the whole prompt, so it would read as 60,000 uncached
+# beside 55,000 cached on a 60,000-token prompt. prompt = input + cached always.
+_UNCACHED_INPUT = (
+    "CASE WHEN provider IN ("
+    + ", ".join(f"'{p}'" for p in INCLUSIVE_PROMPT_TOKEN_PROVIDERS)
+    + ") THEN GREATEST(input_tokens - cache_read_tokens, 0) ELSE input_tokens END"
+)
+
 # Both aggregates read the same columns; prompt_tokens is input + cache reads +
 # writes. Never surface input_tokens alone in a cost context: coding agents
 # cache almost the whole prompt, so a $0.69 step reads as input_tokens=6.
@@ -432,9 +453,9 @@ _RUN_AGGREGATE = f"""
     SELECT {_RUN_KEY} AS run_id,
            COUNT(*) AS step_count,
            COALESCE(SUM(cost_usd), 0) AS cost_usd,
-           COALESCE(SUM(input_tokens + cache_read_tokens + cache_write_tokens), 0) AS prompt_tokens,
+           COALESCE(SUM({_PROMPT_TOKENS}), 0) AS prompt_tokens,
            COALESCE(SUM(cache_read_tokens + cache_write_tokens), 0) AS cached_tokens,
-           COALESCE(SUM(input_tokens), 0) AS input_tokens,
+           COALESCE(SUM({_UNCACHED_INPUT}), 0) AS input_tokens,
            COALESCE(SUM(output_tokens), 0) AS output_tokens,
            MIN(ts) AS started_at,
            MAX(ts) AS ended_at,
@@ -518,9 +539,9 @@ async def get_run(
     steps = await execute_query(
         f"""
         SELECT ts, model,
-               input_tokens + cache_read_tokens + cache_write_tokens AS prompt_tokens,
+               {_PROMPT_TOKENS} AS prompt_tokens,
                cache_read_tokens + cache_write_tokens AS cached_tokens,
-               input_tokens, output_tokens, cost_usd,
+               {_UNCACHED_INPUT} AS input_tokens, output_tokens, cost_usd,
                duration_ms, status_code, parent_span_id
           FROM request_records
          WHERE workspace_id = $1 AND ts >= $2 AND {_RUN_KEY} = $3
