@@ -476,6 +476,142 @@ async def verify_all_resolved(conn, workspace_id) -> list[dict[str, Any]]:
     )
 
 
+def recommendations_from_records(records: list[dict[str, Any]]) -> list[Any]:
+    """Run the canonical recommender rules over already-fetched request dicts.
+
+    ``analyse_model_fit`` opens SQLite. Calling it here would need a proxy
+    change or a throwaway DB. The rules and pricing helpers are imported from
+    ``burnlens.analysis.recommender`` so there is still one engine; this is
+    only the Postgres adapter.
+    """
+    from collections import defaultdict
+
+    from burnlens.analysis.recommender import (
+        _CHEAPER_EQUIVALENT,
+        _match_overkill_model,
+        _match_reasoning_model,
+        _project_cost,
+    )
+    from .models import RecommendationItem
+
+    def _feature(r: dict[str, Any]) -> str:
+        tags = r.get("tags") or {}
+        if not isinstance(tags, dict):
+            return "(untagged)"
+        return str(tags.get("feature") or "(untagged)")
+
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for r in records:
+        groups[(str(r.get("model") or ""), _feature(r))].append(r)
+
+    recs: list[RecommendationItem] = []
+    for (model, feature_tag), bucket in groups.items():
+        count = len(bucket)
+        avg_in = sum(int(r.get("input_tokens") or 0) for r in bucket) / count
+        avg_out = sum(int(r.get("output_tokens") or 0) for r in bucket) / count
+        current_cost = sum(float(r.get("cost_usd") or 0) for r in bucket)
+        avg_reasoning = sum(int(r.get("reasoning_tokens") or 0) for r in bucket) / count
+
+        matched_key = _match_overkill_model(model)
+        if matched_key is not None and avg_out < 200 and count > 20:
+            suggested = _CHEAPER_EQUIVALENT[matched_key]
+            projected = _project_cost(count, avg_in, avg_out, suggested)
+            if projected is not None:
+                saving = current_cost - projected
+                pct = (saving / current_cost * 100) if current_cost > 0 else 0.0
+                recs.append(
+                    RecommendationItem(
+                        current_model=model,
+                        suggested_model=suggested,
+                        feature_tag=feature_tag,
+                        request_count=count,
+                        avg_output_tokens=round(avg_out, 1),
+                        current_cost=round(current_cost, 6),
+                        projected_cost=round(projected, 6),
+                        projected_saving=round(saving, 6),
+                        saving_pct=round(pct, 1),
+                        confidence="high" if avg_out < 50 else "medium",
+                        reason=(
+                            f"Average output is only {avg_out:.0f} tokens across {count} requests "
+                            f"— {suggested} can handle short tasks at a fraction of the cost"
+                        ),
+                    )
+                )
+
+        matched_r = _match_reasoning_model(model)
+        if (
+            matched_r is not None
+            and 0 < avg_out < 100
+            and avg_reasoning > avg_out * 5
+        ):
+            suggested = "gpt-4o-mini"
+            projected = _project_cost(count, avg_in, avg_out, suggested)
+            if projected is not None:
+                saving = current_cost - projected
+                pct = (saving / current_cost * 100) if current_cost > 0 else 0.0
+                ratio = avg_reasoning / avg_out if avg_out else 0
+                recs.append(
+                    RecommendationItem(
+                        current_model=model,
+                        suggested_model=suggested,
+                        feature_tag=feature_tag,
+                        request_count=count,
+                        avg_output_tokens=round(avg_out, 1),
+                        current_cost=round(current_cost, 6),
+                        projected_cost=round(projected, 6),
+                        projected_saving=round(saving, 6),
+                        saving_pct=round(pct, 1),
+                        confidence="medium",
+                        reason=(
+                            f"Reasoning tokens are {ratio:.0f}x output tokens "
+                            f"— this task may not need deep reasoning"
+                        ),
+                    )
+                )
+
+    cutoff_24h = _now() - timedelta(hours=24)
+    cache_groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for r in records:
+        tags = r.get("tags") or {}
+        if not isinstance(tags, dict) or not tags.get("feature"):
+            continue
+        ts = r.get("ts")
+        if isinstance(ts, datetime) and _as_aware(ts) < cutoff_24h:
+            continue
+        cache_groups[(str(r.get("model") or ""), str(tags["feature"]))].append(r)
+
+    for (model, feature_tag), bucket in cache_groups.items():
+        count = len(bucket)
+        avg_in = sum(int(r.get("input_tokens") or 0) for r in bucket) / count
+        if count <= 50 or avg_in <= 2000:
+            continue
+        current_cost = sum(float(r.get("cost_usd") or 0) for r in bucket)
+        avg_out = sum(int(r.get("output_tokens") or 0) for r in bucket) / count
+        saving_pct = 30.0
+        saving = current_cost * saving_pct / 100
+        recs.append(
+            RecommendationItem(
+                current_model=model,
+                suggested_model="prompt-caching",
+                feature_tag=feature_tag,
+                request_count=count,
+                avg_output_tokens=round(avg_out, 1),
+                current_cost=round(current_cost, 6),
+                projected_cost=round(current_cost - saving, 6),
+                projected_saving=round(saving, 6),
+                saving_pct=round(saving_pct, 1),
+                confidence="low",
+                reason=(
+                    f"High-volume feature with large prompts ({avg_in:.0f} avg input tokens, "
+                    f"{count} requests/24h) — prompt caching could save ~{saving_pct:.0f}%"
+                ),
+            )
+        )
+
+    recs.sort(key=lambda r: r.projected_saving, reverse=True)
+    return recs
+
+
 async def get_economics_overview(
     conn,
     workspace_id,
