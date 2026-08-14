@@ -6,7 +6,7 @@ import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError, errorMessageFrom } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-import type { EconomicsOverview, FindingItem } from "@/lib/contracts";
+import type { EconomicsOverview, FindingItem, SavingsVerdict } from "@/lib/contracts";
 import { FindingsList } from "./FindingsList";
 
 function formatUsd(n: number): string {
@@ -61,6 +61,7 @@ function WasteContent() {
   const { days } = usePeriod();
   const [econ, setEcon] = useState<EconomicsOverview | null>(null);
   const [findings, setFindings] = useState<FindingItem[]>([]);
+  const [verdicts, setVerdicts] = useState<Record<string, SavingsVerdict>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -70,12 +71,18 @@ function WasteContent() {
     setLoading(true);
     setError("");
     try {
-      const [e, f] = await Promise.all([
+      const [e, f, v] = await Promise.all([
         apiFetch(`/api/v1/economics?days=${days}`, session.token),
         apiFetch("/api/v1/findings", session.token),
+        apiFetch("/api/v1/findings/verify", session.token).catch(() => []),
       ]);
       setEcon(e as EconomicsOverview);
       setFindings(f as FindingItem[]);
+      const byFp: Record<string, SavingsVerdict> = {};
+      for (const item of v as SavingsVerdict[]) {
+        byFp[item.fingerprint] = item;
+      }
+      setVerdicts(byFp);
     } catch (err: unknown) {
       if (err instanceof AuthError) logout();
       else if (err instanceof Error) setError(err.message);
@@ -144,7 +151,12 @@ function WasteContent() {
             code={"burnlens dashboard"}
           />
         ) : (
-          <FindingsList findings={findings} onStatus={onStatus} pendingId={pendingId} />
+          <FindingsList
+            findings={findings}
+            verdicts={verdicts}
+            onStatus={onStatus}
+            pendingId={pendingId}
+          />
         )}
       </div>
     </div>

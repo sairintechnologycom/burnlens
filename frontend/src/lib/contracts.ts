@@ -315,6 +315,40 @@ export interface FindingItem {
   detection_count: number;
   detector_version: number;
 }
+// --- /api/v1/findings/verify  ->  SavingsVerdict ---
+export interface SavingsVerdict {
+  fingerprint: string;
+  title: string;
+  subject_type: string;
+  subject_key: string;
+  status: string;
+  baseline_cost_per_request: number | null;
+  current_cost_per_request: number | null;
+  delta_per_request: number | null;
+  pct_change: number | null;
+  projected_monthly_savings_usd: number | null;
+  baseline_requests: number | null;
+  current_requests: number | null;
+  days_remaining: number | null;
+  reopened: boolean;
+}
+export const SavingsVerdictFields: Record<keyof SavingsVerdict, true> = {
+  fingerprint: true,
+  title: true,
+  subject_type: true,
+  subject_key: true,
+  status: true,
+  baseline_cost_per_request: true,
+  current_cost_per_request: true,
+  delta_per_request: true,
+  pct_change: true,
+  projected_monthly_savings_usd: true,
+  baseline_requests: true,
+  current_requests: true,
+  days_remaining: true,
+  reopened: true,
+};
+
 export const FindingItemFields: Record<keyof FindingItem, true> = {
   id: true,
   fingerprint: true,

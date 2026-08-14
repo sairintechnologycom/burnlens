@@ -16,9 +16,10 @@ from .findings import (
     list_findings,
     refresh_findings,
     set_finding_status,
+    verify_all_resolved,
     waste_alert_from_finding,
 )
-from .models import EconomicsOverview, FindingItem, FindingStatusBody
+from .models import EconomicsOverview, FindingItem, FindingStatusBody, SavingsVerdict
 
 router = APIRouter(prefix="/api/v1", tags=["findings"])
 
@@ -26,6 +27,15 @@ router = APIRouter(prefix="/api/v1", tags=["findings"])
 def _require_requested_with(x_requested_with: Optional[str]) -> None:
     if not x_requested_with:
         raise HTTPException(status_code=403, detail="Missing X-Requested-With header")
+
+
+@router.get("/findings/verify", response_model=list[SavingsVerdict])
+async def get_findings_verify(token: TokenPayload = Depends(verify_token)):
+    """Savings verdicts for findings that have a baseline."""
+    await require_role("viewer", token)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        return await verify_all_resolved(conn, token.workspace_id)
 
 
 @router.get("/findings", response_model=list[FindingItem])

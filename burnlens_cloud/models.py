@@ -347,6 +347,24 @@ class TraceCoverage(BaseModel):
     columns_missing: bool = False
 
 
+class SavingsVerdict(BaseModel):
+    """Did the fix reduce cost per request? Totals are never compared (G12)."""
+    fingerprint: str
+    title: str
+    subject_type: str
+    subject_key: str
+    status: str
+    baseline_cost_per_request: Optional[float] = None
+    current_cost_per_request: Optional[float] = None
+    delta_per_request: Optional[float] = None
+    pct_change: Optional[float] = None
+    projected_monthly_savings_usd: Optional[float] = None
+    baseline_requests: Optional[int] = None
+    current_requests: Optional[int] = None
+    days_remaining: Optional[float] = None
+    reopened: bool = False
+
+
 class EconomicsOverview(BaseModel):
     """Top-line runtime economics. Waste is an estimate, not a bucket."""
     total_spend_usd: float

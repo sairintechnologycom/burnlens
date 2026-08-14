@@ -17,6 +17,7 @@ import {
   ProviderReconciliationFields,
   EconomicsOverviewFields,
   FindingItemFields,
+  SavingsVerdictFields,
   TraceCoverageFields,
 } from "@/lib/contracts";
 
@@ -52,6 +53,7 @@ const CONTRACTS = [
   { endpoint: "/api/v1/economics", schema: "EconomicsOverview", fields: EconomicsOverviewFields },
   { endpoint: "/api/v1/economics (trace_coverage)", schema: "TraceCoverage", fields: TraceCoverageFields },
   { endpoint: "/api/v1/findings", schema: "FindingItem", fields: FindingItemFields },
+  { endpoint: "/api/v1/findings/verify", schema: "SavingsVerdict", fields: SavingsVerdictFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that
@@ -111,6 +113,13 @@ const NUMERIC_FIELDS = new Set([
   "parented_count",
   "distinct_traces",
   "traced_rate",
+  "baseline_cost_per_request",
+  "current_cost_per_request",
+  "delta_per_request",
+  "pct_change",
+  "projected_monthly_savings_usd",
+  "days_remaining",
+  "current_requests",
 ]);
 const STRING_FIELDS = new Set([
   "model",
@@ -142,6 +151,7 @@ const BOOLEAN_FIELDS = new Set([
   "cancel_at_period_end",
   "waste_estimate_clamped",
   "columns_missing",
+  "reopened",
 ]);
 
 // Check a manifest field's OpenAPI type against how the frontend uses it. We use

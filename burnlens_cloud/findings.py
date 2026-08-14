@@ -377,6 +377,105 @@ async def set_finding_status(
     return _rowcount(result) > 0
 
 
+def _verdict_base(finding: dict[str, Any]) -> dict[str, Any]:
+    resolved_at = finding.get("resolved_at")
+    return {
+        "fingerprint": finding["fingerprint"],
+        "title": finding["title"],
+        "subject_type": finding["subject_type"],
+        "subject_key": finding["subject_key"],
+        "status": "no_baseline",
+        "baseline_cost_per_request": None,
+        "current_cost_per_request": None,
+        "delta_per_request": None,
+        "pct_change": None,
+        "projected_monthly_savings_usd": None,
+        "baseline_requests": None,
+        "current_requests": None,
+        "days_remaining": None,
+        "reopened": finding.get("status") == "open" and resolved_at is not None,
+    }
+
+
+async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any] | None:
+    """Compare a finding's subject before and after resolve (G12)."""
+    row = await conn.fetchrow(
+        """
+        SELECT * FROM waste_findings
+         WHERE workspace_id = $1 AND fingerprint = $2
+        """,
+        workspace_id,
+        fingerprint,
+    )
+    if row is None:
+        return None
+
+    finding = dict(row)
+    verdict = _verdict_base(finding)
+    if not finding.get("resolved_at") or not finding.get("baseline_requests"):
+        return verdict
+
+    window_days = int(finding.get("baseline_window_days") or BASELINE_WINDOW_DAYS)
+    resolved_at = _as_aware(finding["resolved_at"])
+    if resolved_at is None:
+        return verdict
+
+    elapsed = _now() - resolved_at
+    if elapsed < timedelta(days=window_days):
+        verdict["status"] = "pending"
+        verdict["days_remaining"] = round(
+            (timedelta(days=window_days) - elapsed).total_seconds() / 86_400, 2
+        )
+        return verdict
+
+    current_cost, current_requests = await get_subject_spend(
+        conn,
+        workspace_id,
+        finding["subject_type"],
+        finding["subject_key"],
+        since=resolved_at,
+        until=resolved_at + timedelta(days=window_days),
+    )
+    verdict["baseline_requests"] = int(finding["baseline_requests"])
+    verdict["current_requests"] = current_requests
+
+    if current_requests == 0:
+        verdict["status"] = "no_traffic"
+        return verdict
+
+    baseline_per = float(finding.get("baseline_cost_usd") or 0.0) / finding["baseline_requests"]
+    current_per = current_cost / current_requests
+    delta = baseline_per - current_per
+    verdict["status"] = "verified"
+    verdict["baseline_cost_per_request"] = baseline_per
+    verdict["current_cost_per_request"] = current_per
+    verdict["delta_per_request"] = delta
+    verdict["pct_change"] = (
+        ((current_per - baseline_per) / baseline_per * 100) if baseline_per else None
+    )
+    verdict["projected_monthly_savings_usd"] = delta * current_requests * (30.0 / window_days)
+    return verdict
+
+
+async def verify_all_resolved(conn, workspace_id) -> list[dict[str, Any]]:
+    """Verify every finding that has a baseline. Reopened ones still verify."""
+    rows = await conn.fetch(
+        """
+        SELECT fingerprint FROM waste_findings
+         WHERE workspace_id = $1 AND baseline_requests IS NOT NULL
+        """,
+        workspace_id,
+    )
+    verdicts = []
+    for row in rows:
+        verdict = await verify_savings(conn, workspace_id, row["fingerprint"])
+        if verdict is not None:
+            verdicts.append(verdict)
+    return sorted(
+        verdicts, key=lambda v: -(v["projected_monthly_savings_usd"] or 0.0)
+    )
+
+
 async def get_economics_overview(
     conn,
     workspace_id,
