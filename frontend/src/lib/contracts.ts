@@ -116,17 +116,22 @@ export interface CostByTagBudgetRow extends CostByTagRow {
 // --- /api/v1/usage/timeseries  ->  CostTimeline ---
 export interface CostTimelinePoint {
   date: string;
+  request_count: number;
   total_cost_usd: number;
 }
 export const CostTimelineFields: Record<keyof CostTimelinePoint, true> = {
   date: true,
+  request_count: true,
   total_cost_usd: true,
 };
 
 // --- /api/v1/requests  ->  RequestRecordResponse ---
 export interface RequestRow {
   timestamp: string;
+  provider: string;
   model: string;
+  input_tokens: number;
+  output_tokens: number;
   cost_usd: number;
   duration_ms?: number;
   // tags shape is freeform; the contract test only checks key presence, not nested fields.
@@ -134,7 +139,10 @@ export interface RequestRow {
 }
 export const RequestRowFields: Record<keyof RequestRow, true> = {
   timestamp: true,
+  provider: true,
   model: true,
+  input_tokens: true,
+  output_tokens: true,
   cost_usd: true,
   duration_ms: true,
   tags: true,

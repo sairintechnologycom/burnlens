@@ -7,18 +7,7 @@ import Shell from "@/components/Shell";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface RequestRecord {
-  timestamp: string;
-  model: string;
-  provider: string;
-  feature?: string;
-  team?: string;
-  cost: number;
-  latency_ms?: number;
-  input_tokens: number;
-  output_tokens: number;
-}
+import type { RequestRow } from "@/lib/contracts";
 
 function latencyClass(ms: number): string {
   if (ms < 1000) return "latency-fast";
@@ -29,7 +18,7 @@ function latencyClass(ms: number): string {
 function RequestsContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
-  const [requests, setRequests] = useState<RequestRecord[]>([]);
+  const [requests, setRequests] = useState<RequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [limit, setLimit] = useState(50);
@@ -40,7 +29,7 @@ function RequestsContent() {
     setError("");
     try {
       const data = await apiFetch(`/api/v1/requests?days=${days}&limit=${limit}`, session.token);
-      setRequests(data as RequestRecord[]);
+      setRequests(data as RequestRow[]);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
       else setError(err.message);
@@ -78,7 +67,9 @@ function RequestsContent() {
         </div>
         <div className="stat-cell">
           <div className="stat-label">Total cost</div>
-          <div className="stat-value cyan">${requests.reduce((s, r) => s + r.cost, 0).toFixed(4)}</div>
+          <div className="stat-value cyan">
+            ${requests.reduce((s, r) => s + (r.cost_usd ?? 0), 0).toFixed(4)}
+          </div>
         </div>
       </div>
 
@@ -115,26 +106,26 @@ function RequestsContent() {
                   <td>{r.provider}</td>
                   <td>{r.model}</td>
                   <td>
-                    {r.feature ? (
-                      <span className="tag tag-feature">{r.feature}</span>
+                    {r.tags?.feature ? (
+                      <span className="tag tag-feature">{r.tags.feature}</span>
                     ) : (
                       <span style={{ color: "var(--dim)" }}>—</span>
                     )}
                   </td>
                   <td>
-                    {r.team ? (
-                      <span className="tag tag-team">{r.team}</span>
+                    {r.tags?.team ? (
+                      <span className="tag tag-team">{r.tags.team}</span>
                     ) : (
                       <span style={{ color: "var(--dim)" }}>—</span>
                     )}
                   </td>
                   <td>{r.input_tokens?.toLocaleString() ?? "—"}</td>
                   <td>{r.output_tokens?.toLocaleString() ?? "—"}</td>
-                  <td style={{ color: r.cost > 0.01 ? "var(--amber)" : undefined }}>
-                    ${r.cost.toFixed(4)}
+                  <td style={{ color: (r.cost_usd ?? 0) > 0.01 ? "var(--amber)" : undefined }}>
+                    ${(r.cost_usd ?? 0).toFixed(4)}
                   </td>
-                  <td className={r.latency_ms ? latencyClass(r.latency_ms) : ""}>
-                    {r.latency_ms ? `${r.latency_ms}ms` : "—"}
+                  <td className={r.duration_ms ? latencyClass(r.duration_ms) : ""}>
+                    {r.duration_ms ? `${r.duration_ms}ms` : "—"}
                   </td>
                 </tr>
               ))
