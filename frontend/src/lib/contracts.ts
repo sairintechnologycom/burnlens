@@ -245,3 +245,96 @@ export const ProviderReconciliationFields: Record<keyof ProviderReconciliation, 
   drift_pct: true,
   computed_at: true,
 };
+
+// --- /api/v1/economics  ->  EconomicsOverview ---
+export interface TraceCoverage {
+  request_count: number;
+  traced_count: number;
+  parented_count: number;
+  distinct_traces: number;
+  traced_rate: number;
+  columns_missing: boolean;
+}
+export const TraceCoverageFields: Record<keyof TraceCoverage, true> = {
+  request_count: true,
+  traced_count: true,
+  parented_count: true,
+  distinct_traces: true,
+  traced_rate: true,
+  columns_missing: true,
+};
+
+export interface EconomicsOverview {
+  total_spend_usd: number;
+  detected_waste_usd: number;
+  waste_rate: number;
+  open_finding_count: number;
+  error_spend_usd: number;
+  error_request_count: number;
+  cost_per_accepted_usd: number | null;
+  accepted_count: number;
+  waste_by_detector: Record<string, number>;
+  waste_estimate_clamped: boolean;
+  trace_coverage: TraceCoverage;
+}
+export const EconomicsOverviewFields: Record<keyof EconomicsOverview, true> = {
+  total_spend_usd: true,
+  detected_waste_usd: true,
+  waste_rate: true,
+  open_finding_count: true,
+  error_spend_usd: true,
+  error_request_count: true,
+  cost_per_accepted_usd: true,
+  accepted_count: true,
+  waste_by_detector: true,
+  waste_estimate_clamped: true,
+  trace_coverage: true,
+};
+
+// --- /api/v1/findings  ->  FindingItem ---
+export interface FindingItem {
+  id: string;
+  fingerprint: string;
+  detector: string;
+  subject_type: string;
+  subject_key: string;
+  severity: string;
+  title: string;
+  description: string;
+  estimated_waste_usd: number;
+  affected_count: number;
+  evidence: Record<string, unknown>;
+  status: string;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  resolved_at: string | null;
+  baseline_waste_usd: number | null;
+  baseline_cost_usd: number | null;
+  baseline_requests: number | null;
+  baseline_window_days: number | null;
+  detection_count: number;
+  detector_version: number;
+}
+export const FindingItemFields: Record<keyof FindingItem, true> = {
+  id: true,
+  fingerprint: true,
+  detector: true,
+  subject_type: true,
+  subject_key: true,
+  severity: true,
+  title: true,
+  description: true,
+  estimated_waste_usd: true,
+  affected_count: true,
+  evidence: true,
+  status: true,
+  first_seen_at: true,
+  last_seen_at: true,
+  resolved_at: true,
+  baseline_waste_usd: true,
+  baseline_cost_usd: true,
+  baseline_requests: true,
+  baseline_window_days: true,
+  detection_count: true,
+  detector_version: true,
+};

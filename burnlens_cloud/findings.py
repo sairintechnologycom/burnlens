@@ -377,6 +377,123 @@ async def set_finding_status(
     return _rowcount(result) > 0
 
 
+async def get_economics_overview(
+    conn,
+    workspace_id,
+    since: datetime,
+    window_seconds: float = 86_400.0,
+) -> dict[str, Any]:
+    """Top-line runtime economics. Mirrors ``burnlens.analysis.economics``.
+
+    Waste is an estimate of avoidable spend, never a disjoint bucket (G9).
+    ``cost_per_accepted_usd`` is null when nothing is accepted (G11).
+    """
+    from .outcomes_api import _SUMMARY_SQL
+
+    spend_row = await conn.fetchrow(
+        """
+        SELECT COALESCE(SUM(cost_usd), 0) AS spend
+          FROM request_records
+         WHERE workspace_id = $1 AND ts >= $2
+        """,
+        workspace_id,
+        since,
+    )
+    total_spend = float((spend_row or {}).get("spend") or 0)
+
+    waste_row = await conn.fetchrow(
+        """
+        SELECT COALESCE(SUM(estimated_waste_usd), 0) AS total_waste,
+               COUNT(*) AS open_count
+          FROM waste_findings
+         WHERE workspace_id = $1 AND status IN ('open', 'acknowledged')
+        """,
+        workspace_id,
+    )
+    detected_waste = float((waste_row or {}).get("total_waste") or 0)
+    open_count = int((waste_row or {}).get("open_count") or 0)
+
+    by_det = await conn.fetch(
+        """
+        SELECT detector, COALESCE(SUM(estimated_waste_usd), 0) AS waste
+          FROM waste_findings
+         WHERE workspace_id = $1 AND status IN ('open', 'acknowledged')
+         GROUP BY detector
+         ORDER BY waste DESC
+        """,
+        workspace_id,
+    )
+    waste_by_detector = {r["detector"]: float(r["waste"]) for r in by_det}
+
+    error_row = await conn.fetchrow(
+        """
+        SELECT COALESCE(SUM(cost_usd), 0) AS spend, COUNT(*) AS n
+          FROM request_records
+         WHERE workspace_id = $1 AND ts >= $2 AND status_code >= 400
+        """,
+        workspace_id,
+        since,
+    )
+    error_spend = float((error_row or {}).get("spend") or 0)
+    error_count = int((error_row or {}).get("n") or 0)
+
+    outcome_rows = await conn.fetch(
+        _SUMMARY_SQL, str(workspace_id), since, float(window_seconds)
+    )
+    accepted_count = sum(int(r["accepted_count"] or 0) for r in outcome_rows)
+    attributed_cost = sum(float(r["cost_total"] or 0) for r in outcome_rows)
+    cost_per_accepted = (
+        attributed_cost / accepted_count if accepted_count else None
+    )
+
+    clamped = bool(total_spend) and detected_waste > total_spend
+    if clamped:
+        detected_waste = total_spend
+    waste_rate = (detected_waste / total_spend) if total_spend else 0.0
+
+    trace_row = await conn.fetchrow(
+        """
+        SELECT COUNT(*) AS request_count,
+               COUNT(trace_id) AS traced_count,
+               COUNT(parent_span_id) AS parented_count,
+               COUNT(DISTINCT trace_id) AS distinct_traces
+          FROM request_records
+         WHERE workspace_id = $1 AND ts >= $2
+        """,
+        workspace_id,
+        since,
+    )
+    request_count = int((trace_row or {}).get("request_count") or 0)
+    traced_count = int((trace_row or {}).get("traced_count") or 0)
+    parented_count = int((trace_row or {}).get("parented_count") or 0)
+    distinct_traces = int((trace_row or {}).get("distinct_traces") or 0)
+
+    return {
+        "total_spend_usd": round(total_spend, 6),
+        "detected_waste_usd": round(detected_waste, 6),
+        "waste_rate": round(waste_rate, 4),
+        "open_finding_count": open_count,
+        "error_spend_usd": round(error_spend, 6),
+        "error_request_count": error_count,
+        "cost_per_accepted_usd": (
+            round(cost_per_accepted, 6) if cost_per_accepted is not None else None
+        ),
+        "accepted_count": accepted_count,
+        "waste_by_detector": {k: round(v, 6) for k, v in waste_by_detector.items()},
+        "waste_estimate_clamped": clamped,
+        "trace_coverage": {
+            "request_count": request_count,
+            "traced_count": traced_count,
+            "parented_count": parented_count,
+            "distinct_traces": distinct_traces,
+            "traced_rate": round(
+                (traced_count / request_count) if request_count else 0.0, 4
+            ),
+            "columns_missing": False,
+        },
+    }
+
+
 def _rowcount(result: Any) -> int:
     """asyncpg execute() returns ``UPDATE N``; FakeConn may return an int."""
     if isinstance(result, int):

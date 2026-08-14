@@ -15,6 +15,9 @@ import {
   AvailablePlanFields,
   ApiKeysSummaryFields,
   ProviderReconciliationFields,
+  EconomicsOverviewFields,
+  FindingItemFields,
+  TraceCoverageFields,
 } from "@/lib/contracts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,6 +49,9 @@ const CONTRACTS = [
   { endpoint: "/billing/summary (available_plans[])", schema: "AvailablePlan", fields: AvailablePlanFields },
   { endpoint: "/billing/summary (api_keys)", schema: "ApiKeysSummary", fields: ApiKeysSummaryFields },
   { endpoint: "/api/v1/reconciliation", schema: "ProviderReconciliation", fields: ProviderReconciliationFields },
+  { endpoint: "/api/v1/economics", schema: "EconomicsOverview", fields: EconomicsOverviewFields },
+  { endpoint: "/api/v1/economics (trace_coverage)", schema: "TraceCoverage", fields: TraceCoverageFields },
+  { endpoint: "/api/v1/findings", schema: "FindingItem", fields: FindingItemFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that
@@ -85,6 +91,26 @@ const NUMERIC_FIELDS = new Set([
   "provider_cost_usd",
   "burnlens_cost_usd",
   "drift_pct",
+  "total_spend_usd",
+  "detected_waste_usd",
+  "waste_rate",
+  "open_finding_count",
+  "error_spend_usd",
+  "error_request_count",
+  "cost_per_accepted_usd",
+  "accepted_count",
+  "estimated_waste_usd",
+  "affected_count",
+  "detection_count",
+  "detector_version",
+  "baseline_waste_usd",
+  "baseline_cost_usd",
+  "baseline_requests",
+  "baseline_window_days",
+  "traced_count",
+  "parented_count",
+  "distinct_traces",
+  "traced_rate",
 ]);
 const STRING_FIELDS = new Set([
   "model",
@@ -100,8 +126,23 @@ const STRING_FIELDS = new Set([
   "current_period_ends_at",
   "start",
   "end",
+  "title",
+  "description",
+  "detector",
+  "subject_type",
+  "subject_key",
+  "fingerprint",
+  "id",
+  "first_seen_at",
+  "last_seen_at",
+  "resolved_at",
+  "severity",
 ]);
-const BOOLEAN_FIELDS = new Set(["cancel_at_period_end"]);
+const BOOLEAN_FIELDS = new Set([
+  "cancel_at_period_end",
+  "waste_estimate_clamped",
+  "columns_missing",
+]);
 
 // Check a manifest field's OpenAPI type against how the frontend uses it. We use
 // coarse buckets — the crash class was wrong names + number-vs-string, not deep
