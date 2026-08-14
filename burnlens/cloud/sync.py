@@ -49,6 +49,23 @@ CLOUD_SYNCED_TAGS: tuple[str, ...] = (
     "session",
 )
 
+# Prompt-segment token counts. These are integers only -- how many of the
+# billed input_tokens went to the system prompt, the tool schemas, retrieved
+# context and conversation history. prompt_analyzer scales them to sum to
+# input_tokens, which already syncs, so they disclose prompt *shape*, never
+# prompt content. Without them OversizedToolSchema, LowRAGEfficiency and
+# HistoryBloat are inert on hosted data -- they .get() a missing key and score 0.
+# Approved deliberately 2026-08-14 (BL-F1b), not defaulted.
+#
+# prompt_user_tokens is deliberately NOT here: it measures what the human
+# actually typed, no detector reads it, and it is the most revealing of the five.
+PROMPT_SEGMENT_FIELDS: tuple[str, ...] = (
+    "prompt_system_tokens",
+    "prompt_tools_tokens",
+    "prompt_rag_tokens",
+    "prompt_history_tokens",
+)
+
 SYNC_ALLOWED_FIELDS = frozenset({
     "timestamp",
     "provider",
@@ -70,7 +87,7 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "event_id",
     "request_id",
     "source",
-} | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
+} | set(PROMPT_SEGMENT_FIELDS) | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
 
 
 def _sanitize_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -494,4 +511,7 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         # Flattened tags, derived from CLOUD_SYNCED_TAGS so a new synced tag
         # cannot be half-wired. The backend re-nests these into `tags`.
         **{f"tag_{name}": tags.get(name) for name in CLOUD_SYNCED_TAGS},
+        # Derived from PROMPT_SEGMENT_FIELDS for the same reason. Rows written
+        # before prompt analysis existed have no such column, hence the default.
+        **{name: row.get(name) or 0 for name in PROMPT_SEGMENT_FIELDS},
     )

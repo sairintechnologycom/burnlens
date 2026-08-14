@@ -6,6 +6,25 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.24.0] — 2026-08-14
+
+### Added
+- **Prompt-segment token counts now sync to the hosted dashboard**, so the
+  oversized-tool-schema, low-RAG-efficiency and history-bloat detectors report
+  findings there instead of scoring zero. These are integer counts only — how
+  many of the already-synced `input_tokens` went to the system prompt, tool
+  schemas, retrieved context and conversation history. No prompt text is sent.
+  `prompt_user_tokens`, which measures what the human typed, is deliberately
+  not synced. Local-only users are unaffected; nothing new leaves a machine
+  that has cloud sync switched off.
+
+## [`burnlens-cloud`] — 2026-08-14
+
+### Added
+- `request_records` gained the four `prompt_*_tokens` columns, with a migration
+  that backfills existing rows to `0`. Historical rows have no segmentation, so
+  the detectors stay inert on them rather than inventing a signal.
+
 ## [OSS `burnlens` v1.23.2] — 2026-08-14
 
 ### Fixed

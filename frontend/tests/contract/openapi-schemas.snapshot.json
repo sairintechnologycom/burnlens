@@ -1679,6 +1679,26 @@
         ],
         "title": "Parent Span Id"
       },
+      "prompt_history_tokens": {
+        "default": 0,
+        "title": "Prompt History Tokens",
+        "type": "integer"
+      },
+      "prompt_rag_tokens": {
+        "default": 0,
+        "title": "Prompt Rag Tokens",
+        "type": "integer"
+      },
+      "prompt_system_tokens": {
+        "default": 0,
+        "title": "Prompt System Tokens",
+        "type": "integer"
+      },
+      "prompt_tools_tokens": {
+        "default": 0,
+        "title": "Prompt Tools Tokens",
+        "type": "integer"
+      },
       "provider": {
         "title": "Provider",
         "type": "string"
@@ -1832,6 +1852,26 @@
           }
         ],
         "title": "Parent Span Id"
+      },
+      "prompt_history_tokens": {
+        "default": 0,
+        "title": "Prompt History Tokens",
+        "type": "integer"
+      },
+      "prompt_rag_tokens": {
+        "default": 0,
+        "title": "Prompt Rag Tokens",
+        "type": "integer"
+      },
+      "prompt_system_tokens": {
+        "default": 0,
+        "title": "Prompt System Tokens",
+        "type": "integer"
+      },
+      "prompt_tools_tokens": {
+        "default": 0,
+        "title": "Prompt Tools Tokens",
+        "type": "integer"
       },
       "provider": {
         "title": "Provider",
