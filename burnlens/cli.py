@@ -1735,9 +1735,14 @@ def sync_cmd(
         raise typer.Exit(code=1)
 
     async def _run() -> None:
-        from burnlens.cloud.sync import CloudSync, get_unsynced_count, migrate_add_synced_at
+        from burnlens.cloud.sync import CloudSync, get_unsynced_count
+        from burnlens.storage.database import init_db
 
-        await migrate_add_synced_at(cfg.db_path)
+        # init_db, not migrate_add_synced_at alone: every other command starts
+        # here, and it creates the schema before running the same migration. On
+        # a db_path that doesn't exist yet, aiosqlite happily makes an empty
+        # file, so the bare migration hit "no such table: requests".
+        await init_db(cfg.db_path)
 
         if status:
             unsynced = await get_unsynced_count(cfg.db_path)
