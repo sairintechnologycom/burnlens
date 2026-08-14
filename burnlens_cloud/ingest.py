@@ -453,6 +453,10 @@ async def ingest(
                 record.trace_id,
                 record.parent_span_id,
                 record.source,
+                record.prompt_system_tokens,
+                record.prompt_tools_tokens,
+                record.prompt_rag_tokens,
+                record.prompt_history_tokens,
             )
         )
 
@@ -467,7 +471,9 @@ async def ingest(
             # session have no column and are absent on purpose -- the Postgres
             # path (tags JSONB) is what the run view and by-tag queries read.
             # tests/test_tag_plumbing_wired.py pins that omission so it stays
-            # deliberate rather than silent.
+            # deliberate rather than silent. The prompt_*_tokens segments are
+            # absent for the same reason, and the detectors read the Postgres
+            # path anyway.
             stream_records = []
             for r in request.records:
                 tags = r.tags or {}
@@ -497,9 +503,11 @@ async def ingest(
                 (workspace_id, ts, provider, model, input_tokens, output_tokens,
                  reasoning_tokens, cache_read_tokens, cache_write_tokens,
                  cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at,
-                 cache_hit, cache_saved_usd, tool_calls, trace_id, parent_span_id, source)
+                 cache_hit, cache_saved_usd, tool_calls, trace_id, parent_span_id, source,
+                 prompt_system_tokens, prompt_tools_tokens, prompt_rag_tokens,
+                 prompt_history_tokens)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                        $16, $17, $18, $19, $20, $21)
+                        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
                 """,
                 insert_data,
             )

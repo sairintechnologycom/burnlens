@@ -98,6 +98,14 @@ class RequestRecordBase(BaseModel):
     # coding-agent log ingestion. Without it the cloud cannot tell agent runs
     # from proxied application traffic.
     source: Optional[str] = None
+    # BL-F1b prompt-segment token counts (OSS proxy >= 1.24.0). Integer counts
+    # scaled to sum to input_tokens -- prompt shape, never prompt content.
+    # OversizedToolSchema / LowRAGEfficiency / HistoryBloat are inert without
+    # them. prompt_user_tokens is deliberately not synced.
+    prompt_system_tokens: int = 0
+    prompt_tools_tokens: int = 0
+    prompt_rag_tokens: int = 0
+    prompt_history_tokens: int = 0
 
     @model_validator(mode="before")
     @classmethod

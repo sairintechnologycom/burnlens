@@ -348,7 +348,11 @@ async def init_db():
                 tool_calls INT NOT NULL DEFAULT 0,
                 trace_id TEXT,
                 parent_span_id TEXT,
-                source TEXT
+                source TEXT,
+                prompt_system_tokens INT NOT NULL DEFAULT 0,
+                prompt_tools_tokens INT NOT NULL DEFAULT 0,
+                prompt_rag_tokens INT NOT NULL DEFAULT 0,
+                prompt_history_tokens INT NOT NULL DEFAULT 0
             )
         """)
 
@@ -393,6 +397,28 @@ async def init_db():
                     ALTER TABLE request_records ADD COLUMN trace_id TEXT;
                     ALTER TABLE request_records ADD COLUMN parent_span_id TEXT;
                     ALTER TABLE request_records ADD COLUMN source TEXT;
+                END IF;
+            END $$;
+        """)
+
+        # Migration: BL-F1b prompt-segment token counts for pre-existing
+        # installs. Integer counts only, never prompt content. Historical rows
+        # genuinely have no segmentation, and 0 is what the detectors already
+        # read for a missing key, so defaulting to 0 keeps them inert on old
+        # rows rather than inventing a signal.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records'
+                      AND column_name = 'prompt_system_tokens'
+                ) THEN
+                    ALTER TABLE request_records
+                        ADD COLUMN prompt_system_tokens INT NOT NULL DEFAULT 0,
+                        ADD COLUMN prompt_tools_tokens INT NOT NULL DEFAULT 0,
+                        ADD COLUMN prompt_rag_tokens INT NOT NULL DEFAULT 0,
+                        ADD COLUMN prompt_history_tokens INT NOT NULL DEFAULT 0;
                 END IF;
             END $$;
         """)

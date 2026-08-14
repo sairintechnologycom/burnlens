@@ -239,7 +239,9 @@ async def refresh_findings(conn, workspace_id) -> None:
         rows = await conn.fetch(
             """
             SELECT cost_usd, input_tokens, output_tokens, model, system_prompt_hash,
-                   cache_read_tokens, tags
+                   cache_read_tokens, tags,
+                   prompt_system_tokens, prompt_tools_tokens,
+                   prompt_rag_tokens, prompt_history_tokens
               FROM request_records
              WHERE workspace_id = $1 AND ts >= $2
             """,

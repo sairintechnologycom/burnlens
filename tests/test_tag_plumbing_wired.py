@@ -25,6 +25,7 @@ import pytest
 
 from burnlens.cloud.sync import (
     CLOUD_SYNCED_TAGS,
+    PROMPT_SEGMENT_FIELDS,
     SYNC_ALLOWED_FIELDS,
     _row_to_payload,
     _sanitize_record,
@@ -184,6 +185,70 @@ def test_backend_lifts_flat_tags_into_nested_tags():
     for tag in CLOUD_SYNCED_TAGS:
         assert record.tags.get(tag) == f"{tag}-value"
     assert record.tool_calls == 2
+
+
+def test_prompt_segments_survive_sanitize():
+    """BL-F1b hops 3+4: without these three detectors score 0 on hosted data."""
+    row = _row(**{f: 25 for f in PROMPT_SEGMENT_FIELDS})
+    sanitized = _sanitize_record(_row_to_payload(row))
+    for field in PROMPT_SEGMENT_FIELDS:
+        assert sanitized[field] == 25
+
+
+def test_prompt_user_tokens_never_syncs():
+    """The one segment deliberately withheld: it measures what a human typed."""
+    row = _row(prompt_user_tokens=900, prompt_tools_tokens=25)
+    sanitized = _sanitize_record(_row_to_payload(row))
+    assert "prompt_user_tokens" not in sanitized
+    assert sanitized["prompt_tools_tokens"] == 25
+
+
+def test_prompt_segments_missing_on_old_local_schema_default_to_zero():
+    """Rows come from `SELECT *`; a DB predating prompt analysis has no key."""
+    payload = _row_to_payload(_row())
+    for field in PROMPT_SEGMENT_FIELDS:
+        assert payload[field] == 0
+
+
+def test_backend_parses_prompt_segments():
+    """Hop 5 for BL-F1b: the payload the proxy sends reaches the cloud model."""
+    pytest.importorskip("burnlens_cloud.models", reason="cloud deps not installed")
+    from burnlens_cloud.models import RequestRecordBase
+
+    payload = _sanitize_record(
+        _row_to_payload(_row(**{f: 25 for f in PROMPT_SEGMENT_FIELDS}))
+    )
+    record = RequestRecordBase(**payload)
+    for field in PROMPT_SEGMENT_FIELDS:
+        assert getattr(record, field) == 25
+
+
+def test_prompt_segments_actually_wake_a_detector():
+    """The payoff: OversizedToolSchema is inert without prompt_tools_tokens.
+
+    This is what F1b bought. If a hop above regresses, the detector silently
+    returns nothing rather than erroring -- so assert both directions.
+    """
+    from burnlens.analysis.waste import run_all_detectors
+
+    def rows(tools_tokens):
+        return [
+            {
+                "cost_usd": 0.5,
+                "input_tokens": 10_000,
+                "output_tokens": 100,
+                "model": "gpt-4.1-mini",
+                "tags": {},
+                "prompt_tools_tokens": tools_tokens,
+            }
+            for _ in range(30)
+        ]
+
+    def has_tool_schema_finding(found):
+        return any("tool" in f.detector.lower() for f in found)
+
+    assert has_tool_schema_finding(run_all_detectors(rows(8_000)))
+    assert not has_tool_schema_finding(run_all_detectors(rows(0)))
 
 
 def test_explicit_tags_object_wins_over_flat_keys():
