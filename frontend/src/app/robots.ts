@@ -17,6 +17,7 @@ export default function robots(): MetadataRoute.Robots {
           "/customers",
           "/features",
           "/models",
+          "/outcomes",
           "/savings",
           "/settings",
           "/setup",

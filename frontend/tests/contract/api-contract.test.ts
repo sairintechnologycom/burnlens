@@ -19,6 +19,7 @@ import {
   FindingItemFields,
   SavingsVerdictFields,
   TraceCoverageFields,
+  WorkflowEconomicsFields,
 } from "@/lib/contracts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,7 @@ const CONTRACTS = [
   { endpoint: "/api/v1/economics (trace_coverage)", schema: "TraceCoverage", fields: TraceCoverageFields },
   { endpoint: "/api/v1/findings", schema: "FindingItem", fields: FindingItemFields },
   { endpoint: "/api/v1/findings/verify", schema: "SavingsVerdict", fields: SavingsVerdictFields },
+  { endpoint: "/api/v1/outcomes/summary", schema: "WorkflowEconomics", fields: WorkflowEconomicsFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that
@@ -101,6 +103,13 @@ const NUMERIC_FIELDS = new Set([
   "error_request_count",
   "cost_per_accepted_usd",
   "accepted_count",
+  "rejected_count",
+  "failed_count",
+  "cost_total_usd",
+  "cost_accepted_usd",
+  "cost_rework_usd",
+  "cost_unattributed_usd",
+  "business_value_accepted",
   "estimated_waste_usd",
   "affected_count",
   "detection_count",
@@ -142,6 +151,7 @@ const STRING_FIELDS = new Set([
   "subject_key",
   "fingerprint",
   "id",
+  "workflow_id",
   "first_seen_at",
   "last_seen_at",
   "resolved_at",
