@@ -291,6 +291,32 @@ export const EconomicsOverviewFields: Record<keyof EconomicsOverview, true> = {
   trace_coverage: true,
 };
 
+// --- /api/v1/outcomes/summary  ->  WorkflowEconomics ---
+export interface WorkflowEconomics {
+  workflow_id: string;
+  accepted_count: number;
+  rejected_count: number;
+  failed_count: number;
+  cost_total_usd: number;
+  cost_accepted_usd: number;
+  cost_rework_usd: number;
+  cost_unattributed_usd: number;
+  cost_per_accepted_usd: number | null;
+  business_value_accepted: number | null;
+}
+export const WorkflowEconomicsFields: Record<keyof WorkflowEconomics, true> = {
+  workflow_id: true,
+  accepted_count: true,
+  rejected_count: true,
+  failed_count: true,
+  cost_total_usd: true,
+  cost_accepted_usd: true,
+  cost_rework_usd: true,
+  cost_unattributed_usd: true,
+  cost_per_accepted_usd: true,
+  business_value_accepted: true,
+};
+
 // --- /api/v1/findings  ->  FindingItem ---
 export interface FindingItem {
   id: string;
