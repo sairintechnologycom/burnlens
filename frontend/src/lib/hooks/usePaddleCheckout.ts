@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { initializePaddle, type Paddle } from "@paddle/paddle-js";
+import { CheckoutEventNames, initializePaddle, type Paddle } from "@paddle/paddle-js";
 
 import { apiFetch, AuthError } from "@/lib/api";
+import { useBilling } from "@/lib/contexts/BillingContext";
 import { useToast } from "@/lib/contexts/ToastContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -39,12 +40,39 @@ export interface UsePaddleCheckout {
   startCheckout: (opts: StartCheckoutOptions) => Promise<void>;
 }
 
+// The plan flip is driven by Paddle's `subscription.activated` webhook, which lands
+// server-side some seconds after the buyer sees "transaction completed". Without
+// these nudges the only thing that notices is BillingContext's 60s poll, so a paying
+// user watches a stale "Free" plan with no acknowledgement that anything happened.
+// ponytail: fixed retry ladder rather than polling until the plan actually changes —
+// swap for a real until-changed loop if the webhook ever lags past 30s.
+const POST_CHECKOUT_REFRESH_DELAYS_MS = [0, 2_000, 5_000, 10_000, 20_000, 30_000];
+
+/**
+ * Which refreshes a Paddle checkout event should schedule. Exported so the money
+ * path is testable without a DOM: every other checkout event (`checkout.closed`,
+ * `checkout.payment.error`, …) must schedule nothing, or a user who abandons the
+ * form gets told their plan is activating.
+ */
+export function activationRefreshDelays(eventName: string | undefined): number[] {
+  return eventName === CheckoutEventNames.CHECKOUT_COMPLETED
+    ? POST_CHECKOUT_REFRESH_DELAYS_MS
+    : [];
+}
+
 export function usePaddleCheckout(): UsePaddleCheckout {
   const { session, logout } = useAuth();
   const { showToast } = useToast();
+  const { refresh } = useBilling();
   const paddleRef = useRef<Paddle | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // initializePaddle runs once on mount, so its eventCallback closes over the first
+  // render's `refresh`/`showToast`. Read them through a ref so the callback always
+  // calls the current ones.
+  const handlersRef = useRef({ refresh, showToast });
+  handlersRef.current = { refresh, showToast };
 
   useEffect(() => {
     if (!PADDLE_TOKEN) {
@@ -53,7 +81,22 @@ export function usePaddleCheckout(): UsePaddleCheckout {
       return;
     }
     let cancelled = false;
-    initializePaddle({ environment: PADDLE_ENV, token: PADDLE_TOKEN })
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    initializePaddle({
+      environment: PADDLE_ENV,
+      token: PADDLE_TOKEN,
+      eventCallback: (event) => {
+        const delays = activationRefreshDelays(event.name);
+        if (cancelled || delays.length === 0) return;
+        handlersRef.current.showToast(
+          "Payment received — activating your plan. This can take a few seconds.",
+          "success",
+        );
+        for (const delay of delays) {
+          timers.push(setTimeout(() => handlersRef.current.refresh(), delay));
+        }
+      },
+    })
       .then((p) => {
         if (cancelled) return;
         paddleRef.current = p;
@@ -65,6 +108,7 @@ export function usePaddleCheckout(): UsePaddleCheckout {
       });
     return () => {
       cancelled = true;
+      timers.forEach(clearTimeout);
     };
   }, []);
 
