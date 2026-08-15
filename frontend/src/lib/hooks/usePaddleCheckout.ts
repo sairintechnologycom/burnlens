@@ -40,39 +40,64 @@ export interface UsePaddleCheckout {
   startCheckout: (opts: StartCheckoutOptions) => Promise<void>;
 }
 
-// The plan flip is driven by Paddle's `subscription.activated` webhook, which lands
-// server-side some seconds after the buyer sees "transaction completed". Without
-// these nudges the only thing that notices is BillingContext's 60s poll, so a paying
-// user watches a stale "Free" plan with no acknowledgement that anything happened.
-// ponytail: fixed retry ladder rather than polling until the plan actually changes —
-// swap for a real until-changed loop if the webhook ever lags past 30s.
-const POST_CHECKOUT_REFRESH_DELAYS_MS = [0, 2_000, 5_000, 10_000, 20_000, 30_000];
+// The plan flip is driven by Paddle's subscription webhooks, which land server-side
+// some seconds after the buyer sees "transaction completed". Without these nudges the
+// only thing that notices is BillingContext's 60s poll, so a paying user watches a
+// stale plan with no acknowledgement that anything happened.
+//
+// This was first written as a fixed 0/2/5/10/20/30s ladder. A live Cloud→Teams upgrade
+// on 2026-08-15 then flipped on the *last* rung, i.e. the real lag reached ~30s and the
+// ladder had no margin left. So poll until the plan actually changes instead of
+// guessing when it will.
+const ACTIVATION_POLL_INTERVAL_MS = 2_000;
+const ACTIVATION_POLL_TIMEOUT_MS = 180_000;
 
 /**
- * Which refreshes a Paddle checkout event should schedule. Exported so the money
- * path is testable without a DOM: every other checkout event (`checkout.closed`,
- * `checkout.payment.error`, …) must schedule nothing, or a user who abandons the
- * form gets told their plan is activating.
+ * True for the one checkout event that means money moved. Exported so the money path
+ * is testable without a DOM: every other checkout event (`checkout.closed`,
+ * `checkout.payment.error`, …) must do nothing, or a user who abandons the form gets
+ * told their plan is activating.
  */
-export function activationRefreshDelays(eventName: string | undefined): number[] {
-  return eventName === CheckoutEventNames.CHECKOUT_COMPLETED
-    ? POST_CHECKOUT_REFRESH_DELAYS_MS
-    : [];
+export function isActivationEvent(eventName: string | undefined): boolean {
+  return eventName === CheckoutEventNames.CHECKOUT_COMPLETED;
+}
+
+/**
+ * Whether to stop polling for the post-checkout plan flip.
+ *
+ * `targetPlan` is what the buyer just paid for. Comparing against it — rather than
+ * "changed from what it was" — is what makes this correct for a Cloud→Teams upgrade,
+ * where the pre-checkout plan is already a paid one.
+ */
+export function activationPollDone(
+  currentPlan: string | undefined,
+  targetPlan: string,
+  elapsedMs: number,
+): boolean {
+  if (currentPlan?.toLowerCase() === targetPlan.toLowerCase()) return true;
+  // Give up eventually rather than polling a dead webhook forever. BillingContext's
+  // own 60s poll still runs, so a very late webhook is picked up regardless.
+  return elapsedMs >= ACTIVATION_POLL_TIMEOUT_MS;
 }
 
 export function usePaddleCheckout(): UsePaddleCheckout {
   const { session, logout } = useAuth();
   const { showToast } = useToast();
-  const { refresh } = useBilling();
+  const { billing, refresh } = useBilling();
   const paddleRef = useRef<Paddle | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // The plan the buyer is currently paying for, set by startCheckout. Read inside the
+  // eventCallback, which has no other way to know what was purchased.
+  const targetPlanRef = useRef<CheckoutPlan | null>(null);
+
   // initializePaddle runs once on mount, so its eventCallback closes over the first
-  // render's `refresh`/`showToast`. Read them through a ref so the callback always
-  // calls the current ones.
-  const handlersRef = useRef({ refresh, showToast });
-  handlersRef.current = { refresh, showToast };
+  // render's values. Read them through a ref so the callback always sees the current
+  // ones — `billing` in particular changes on every refresh, and the poll below is
+  // reading it to decide when to stop.
+  const handlersRef = useRef({ refresh, showToast, billing });
+  handlersRef.current = { refresh, showToast, billing };
 
   useEffect(() => {
     if (!PADDLE_TOKEN) {
@@ -81,20 +106,36 @@ export function usePaddleCheckout(): UsePaddleCheckout {
       return;
     }
     let cancelled = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    let pollTimer: ReturnType<typeof setInterval> | undefined;
     initializePaddle({
       environment: PADDLE_ENV,
       token: PADDLE_TOKEN,
       eventCallback: (event) => {
-        const delays = activationRefreshDelays(event.name);
-        if (cancelled || delays.length === 0) return;
+        if (cancelled || !isActivationEvent(event.name)) return;
+        const targetPlan = targetPlanRef.current;
         handlersRef.current.showToast(
           "Payment received — activating your plan. This can take a few seconds.",
           "success",
         );
-        for (const delay of delays) {
-          timers.push(setTimeout(() => handlersRef.current.refresh(), delay));
-        }
+        handlersRef.current.refresh();
+        if (!targetPlan) return;
+
+        // Poll until the webhook has actually landed and the plan reads back as the
+        // one just bought.
+        const startedAt = Date.now();
+        clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+          const done = activationPollDone(
+            handlersRef.current.billing?.plan,
+            targetPlan,
+            Date.now() - startedAt,
+          );
+          if (done || cancelled) {
+            clearInterval(pollTimer);
+            return;
+          }
+          handlersRef.current.refresh();
+        }, ACTIVATION_POLL_INTERVAL_MS);
       },
     })
       .then((p) => {
@@ -108,7 +149,7 @@ export function usePaddleCheckout(): UsePaddleCheckout {
       });
     return () => {
       cancelled = true;
-      timers.forEach(clearTimeout);
+      clearInterval(pollTimer);
     };
   }, []);
 
@@ -116,6 +157,7 @@ export function usePaddleCheckout(): UsePaddleCheckout {
     async ({ plan, period = "monthly" }: StartCheckoutOptions) => {
       if (!session || loading) return;
       setLoading(true);
+      targetPlanRef.current = plan;
       try {
         const data = await apiFetch("/billing/checkout", session.token, {
           method: "POST",
