@@ -244,6 +244,7 @@ export default function LandingPage() {
             <a href="#pricing">Pricing</a>
             <a href="https://github.com/sairintechnologycom/burnlens#readme">Docs</a>
             <Link href="/demo" className="outline">Live demo</Link>
+            <Link href="/setup">Log in</Link>
             <Link href="/setup?intent=register" className="primary">Create workspace</Link>
           </div>
           <button
@@ -274,6 +275,7 @@ export default function LandingPage() {
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <a href="https://github.com/sairintechnologycom/burnlens#readme" onClick={() => setMenuOpen(false)}>Docs</a>
               <Link href="/demo" onClick={() => setMenuOpen(false)}>Live demo</Link>
+              <Link href="/setup" onClick={() => setMenuOpen(false)}>Log in</Link>
               <Link href="/setup?intent=register" className="lp-mobile-cta" onClick={() => setMenuOpen(false)}>Create workspace</Link>
             </div>
           </>
