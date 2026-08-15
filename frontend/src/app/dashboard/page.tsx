@@ -14,10 +14,16 @@ import type {
   RequestRow,
   CostTimelinePoint,
   ProviderReconciliation,
+  EconomicsOverview,
 } from "@/lib/contracts";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Same formatter as /waste so the Overview Waste KPI and detected_waste_usd match.
+function formatWaste(n: number): string {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
 // Why a number can legitimately disagree with the bill. Shown on hover so drift
@@ -67,6 +73,7 @@ function DashboardContent() {
   const [timeseries, setTimeseries] = useState<{ label: string; cost: number }[]>([]);
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [reconciliation, setReconciliation] = useState<ProviderReconciliation[]>([]);
+  const [economics, setEconomics] = useState<EconomicsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestLimit, setRequestLimit] = useState(20);
@@ -76,13 +83,15 @@ function DashboardContent() {
     setLoading(true);
     setError("");
     try {
-      const [sum, ts, reqs, recon] = await Promise.all([
+      const [sum, ts, reqs, recon, econ] = await Promise.all([
         apiFetch(`/api/v1/usage/summary?days=${days}`, session.token),
         apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.token).catch(() => []),
         apiFetch(`/api/v1/requests?days=${days}&limit=${requestLimit}`, session.token).catch(() => []),
         apiFetch(`/api/v1/reconciliation`, session.token).catch(() => []),
+        apiFetch(`/api/v1/economics?days=${days}`, session.token).catch(() => null),
       ]);
       setSummary(sum);
+      setEconomics(econ as EconomicsOverview | null);
 
       // Aggregate timeseries by date
       const byDate: Record<string, number> = {};
@@ -112,7 +121,7 @@ function DashboardContent() {
 
   const totalCost = summary?.total_cost_usd ?? 0;
   const totalCalls = summary?.total_requests ?? 0;
-  const wasteAmount = totalCost * 0.15; // estimate
+  const wasteAmount = economics?.detected_waste_usd ?? null;
   const avgPerReq = totalCalls > 0 ? totalCost / totalCalls : 0;
 
   if (loading && !summary) {
@@ -170,8 +179,12 @@ function DashboardContent() {
         </div>
         <div className="stat-cell">
           <div className="stat-label">Waste</div>
-          <div className={`stat-value${wasteAmount > 0 ? " amber" : ""}`}>
-            {hasData ? `$${formatCost(wasteAmount)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+          <div className={`stat-value${wasteAmount != null && wasteAmount > 0 ? " amber" : ""}`}>
+            {wasteAmount == null ? (
+              <span style={{ color: "var(--dim)" }}>—</span>
+            ) : (
+              `$${formatWaste(wasteAmount)}`
+            )}
           </div>
         </div>
         <div className="stat-cell">
@@ -195,17 +208,35 @@ function DashboardContent() {
         <div className="card" style={{ margin: 16, padding: 32 }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
-              Connect your first provider
+              Connect this workspace
             </div>
-            <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 480, lineHeight: 1.5 }}>
-              Install BurnLens locally, point your SDK at the proxy, and spend shows up here within seconds.
-              No code changes, no account required to start.
+            <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
+              Install the local proxy, log in with the ingest key from signup, and point your SDK at it.
+              Spend appears within ~60s of the first synced request.
             </div>
-            <div className="empty-state-code" style={{ marginTop: 8 }}>
-              <span className="empty-state-code-prompt">$</span>pip install burnlens &amp;&amp; burnlens start
+            <div className="empty-state-code" style={{ marginTop: 8, textAlign: "left" }}>
+              <div><span className="empty-state-code-prompt">$</span> pip install burnlens</div>
+              <div><span className="empty-state-code-prompt">$</span> burnlens start</div>
+              <div><span className="empty-state-code-prompt">$</span> burnlens login --api-key bl_live_...</div>
+              <div><span className="empty-state-code-prompt">$</span> export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai</div>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
+              Using Claude Code, Cursor, Codex, or Gemini CLI? Run{" "}
+              <code>burnlens scan</code> instead — reads local logs, no proxy needed.{" "}
+              <Link href="/scan">Scan guide</Link>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
+              Google needs one extra line —{" "}
+              <code>import burnlens.patch; burnlens.patch.patch_google()</code>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-              <Link href="/setup" className="upgrade-btn" style={{ textDecoration: "none" }}>Setup guide</Link>
+              <a
+                href="https://github.com/sairintechnologycom/burnlens#readme"
+                className="upgrade-btn"
+                style={{ textDecoration: "none" }}
+              >
+                Install docs
+              </a>
             </div>
           </div>
         </div>

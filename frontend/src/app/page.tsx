@@ -241,7 +241,9 @@ export default function LandingPage() {
           </Link>
           <div className="lp-nav-right">
             <a href="#how">How it works</a>
+            <Link href="/scan">Scan</Link>
             <a href="#pricing">Pricing</a>
+            <Link href="/security">Security</Link>
             <a href="https://github.com/sairintechnologycom/burnlens#readme">Docs</a>
             <Link href="/demo" className="outline">Live demo</Link>
             <Link href="/setup">Log in</Link>
@@ -272,7 +274,9 @@ export default function LandingPage() {
             <div className="lp-mobile-overlay" onClick={() => setMenuOpen(false)} />
             <div className="lp-mobile-drawer">
               <a href="#how" onClick={() => setMenuOpen(false)}>How it works</a>
+              <Link href="/scan" onClick={() => setMenuOpen(false)}>Scan</Link>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
+              <Link href="/security" onClick={() => setMenuOpen(false)}>Security</Link>
               <a href="https://github.com/sairintechnologycom/burnlens#readme" onClick={() => setMenuOpen(false)}>Docs</a>
               <Link href="/demo" onClick={() => setMenuOpen(false)}>Live demo</Link>
               <Link href="/setup" onClick={() => setMenuOpen(false)}>Log in</Link>
@@ -456,7 +460,7 @@ export default function LandingPage() {
             <div className="lp-usecase-card">
               <h3>Coding agents: per-PR, per-dev attribution</h3>
               <p>
-                Cursor, Claude Code, Cline, Windsurf — see cost per repo, developer,
+                Claude Code, Cursor, Codex, Gemini CLI — see cost per repo, developer,
                 or PR. Hard daily caps per API key stop one runaway agent from
                 burning the team&apos;s monthly budget overnight.
               </p>
@@ -626,7 +630,8 @@ export default function LandingPage() {
                 <li>All 10 providers</li>
                 <li>Waste detection + recommendations</li>
                 <li>Budget alerts + anomaly detection</li>
-                <li>7-day history</li>
+                <li>7-day history · 10,000 records/mo</li>
+                <li>1 API key · 1 seat</li>
               </ul>
               <a href="#install" className="lp-plan-cta outline">Install free</a>
             </div>
@@ -643,7 +648,10 @@ export default function LandingPage() {
                 <li>Up to 3 seats</li>
                 <li>Email alerts</li>
               </ul>
-              <Link href="/setup?intent=register" className="lp-plan-cta primary">Start free trial</Link>
+              <Link href="/setup?intent=register" className="lp-plan-cta primary">Start 7-day free trial</Link>
+              <p style={{ fontSize: 12, color: "var(--l-muted)", marginTop: 8, textAlign: "center" }}>
+                Card required. Cancel anytime before day 7 — no charge.
+              </p>
             </div>
             <div className="lp-plan">
               <div className="lp-plan-name">Teams</div>
@@ -684,15 +692,27 @@ export default function LandingPage() {
             </div>
             <div className="lp-install-line">
               <span className="lp-install-prompt">$</span>
-              <span>burnlens start</span>
+              <span>burnlens scan</span>
+            </div>
+            <div className="lp-install-line">
+              <span className="lp-install-prompt">$</span>
+              <span>burnlens top</span>
             </div>
             <div className="lp-install-line">
               <span className="lp-install-prompt">#</span>
-              <span className="lp-install-comment">Dashboard at localhost:8420/ui</span>
+              <span className="lp-install-comment">Claude Code, Cursor, Codex, Gemini CLI — no account</span>
             </div>
           </div>
+          <p style={{
+            textAlign: "center", marginTop: 16, marginBottom: 0,
+            fontSize: 13, color: "var(--l-muted)", lineHeight: 1.5,
+          }}>
+            Production APIs: <code>burnlens start</code>, then point{" "}
+            <code>OPENAI_BASE_URL</code> at <code>http://127.0.0.1:8420/proxy/openai</code>.
+            Google needs <code>burnlens.patch.patch_google()</code>.
+          </p>
           <div className="lp-install-cta">
-            <Link href="/setup?intent=register" className="lp-btn-go">Create workspace</Link>
+            <Link href="/scan" className="lp-btn-go">See my spend</Link>
             <a href="https://github.com/sairintechnologycom/burnlens" className="lp-btn-gh">View on GitHub</a>
           </div>
         </section>
@@ -708,6 +728,12 @@ export default function LandingPage() {
             <a href="/scan">Scan coding-agent spend</a>
             <span>·</span>
             <a href="/demo">Live demo</a>
+            <span>·</span>
+            <a href="/faq">FAQ</a>
+            <span>·</span>
+            <a href="/troubleshooting">Troubleshooting</a>
+            <span>·</span>
+            <a href="/compare/burnlens-vs-litellm">Compare</a>
             <span>·</span>
             <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
