@@ -7,13 +7,12 @@ import { useEffect, useRef, useState } from "react";
 
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
-  { prompt: false, text: "Collecting burnlens", delay: 800 },
-  { prompt: false, text: "  Downloading burnlens-1.9.0-py3-none-any.whl", delay: 1200 },
-  { prompt: false, text: "Successfully installed burnlens-1.9.0", delay: 1800 },
-  { prompt: true,  text: "burnlens start", delay: 2400 },
-  { prompt: false, text: "BurnLens v1.9.0 \u2022 proxy on :8420 \u2022 dashboard on :8420/ui", delay: 3000, highlight: true },
-  { prompt: false, text: "Intercepting: OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure, Bedrock", delay: 3400 },
-  { prompt: false, text: "Ready. Waiting for requests...", delay: 3800, highlight: true },
+  { prompt: false, text: "Successfully installed burnlens-1.24.0", delay: 800 },
+  { prompt: true,  text: "burnlens scan", delay: 1400 },
+  { prompt: false, text: "Scanning Claude Code   312 sessions \u00b7 $48.21", delay: 2000, highlight: true },
+  { prompt: false, text: "Scanning Cursor         89 sessions \u00b7 $12.84", delay: 2500 },
+  { prompt: true,  text: "burnlens top", delay: 3100 },
+  { prompt: false, text: "burnlens/   $24.18   Claude Code, Cursor", delay: 3700, highlight: true },
 ];
 
 const MOCK_MODELS = [
@@ -285,35 +284,37 @@ export default function LandingPage() {
           </>
         )}
 
-        {/* HERO: left-aligned asymmetric two-column */}
+        {/* HERO: two doors — scan (first number) vs proxy (hard cap) */}
         <section className="lp-hero">
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                Hard-cap your AI spend across every provider — <span className="acc">before the call</span>, not after the bill
+                See what your AI actually costs — then <span className="acc">cap it</span> before the call
               </h1>
               <p className="lp-subline">
-                One local-first proxy for OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock. Hard 429 caps, per-feature attribution, and prompt bodies that go only to your provider — never to BurnLens Cloud. Free for local use; cloud workspaces from $29/mo.
+                Two ways in, no account. Scan local coding-agent logs, or put a local proxy in front of your APIs. Prompt bodies go to your provider — never to BurnLens Cloud.
               </p>
-              <div className="lp-hero-cta">
-                <a href="#install" className="lp-hero-btn primary">
-                  Install free — no account
-                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M5 10h10m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </a>
-                <a
-                  href="https://github.com/sairintechnologycom/burnlens"
-                  className="lp-hero-btn secondary"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.34c-2.22.48-2.69-1.07-2.69-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.88 2.34.67.07-.52.28-.88.51-1.08-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.11 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.91.08 2.11.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.74.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
-                  </svg>
-                  View on GitHub
+              <div className="lp-doors">
+                <Link href="/scan" className="lp-door">
+                  <span className="lp-door-kicker">Coding agents</span>
+                  <span className="lp-door-title">Scan local logs</span>
+                  <p className="lp-door-body">
+                    One command. No proxy. Claude Code, Cursor, Codex, Gemini CLI.
+                  </p>
+                </Link>
+                <a href="#how" className="lp-door">
+                  <span className="lp-door-kicker">Production APIs</span>
+                  <span className="lp-door-title">Hard-cap with a 429</span>
+                  <p className="lp-door-body">
+                    Local proxy. Point <code>OPENAI_BASE_URL</code> at :8420. Google needs <code>patch_google()</code>.
+                  </p>
                 </a>
               </div>
+              <p className="lp-proof">
+                <strong>$5.03</strong> per merged PR on this repository.{" "}
+                81 PRs · $407 Claude Code · a floor (unpriced models count as $0).
+                Cost is per repo — agent logs do not record which PR a session belonged to.
+              </p>
               <div className="lp-provider-strip lp-provider-strip-left">
                 {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "xAI", "DeepSeek", "Azure OpenAI", "AWS Bedrock"].map((p) => (
                   <span key={p} className="lp-provider-chip">{p}</span>
@@ -349,7 +350,7 @@ export default function LandingPage() {
                 fontFamily: "var(--font-mono), monospace",
                 fontSize: 11, color: "var(--l-muted)", letterSpacing: "0.06em"
               }}>
-                localhost:8420/ui — runs on your machine, no account required
+                localhost:8420/ui — after scan, no account required
               </p>
             </div>
           </>
