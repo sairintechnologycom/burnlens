@@ -163,7 +163,19 @@ def _extract_period_start(data: dict) -> Optional[datetime]:
 def _extract_trial_end(data: dict) -> Optional[datetime]:
     # Populated whenever Paddle gives us trial_dates, regardless of status — the
     # Settings card only renders it for status=='trialing' (D-14 is UI concern).
+    #
+    # Paddle puts trial_dates on the LINE ITEM, not the subscription. Verified
+    # against the live entity 2026-08-15: `sub.trial_dates` is absent, no top-level
+    # key contains "trial", and `sub.items[0].trial_dates` holds the real values.
+    # Reading only the top level returned None for every trialing subscription, so
+    # `trial_ends_at` was NULL in production and the Settings card's "Trial ends"
+    # line — gated on that field being truthy — never rendered. The top-level read
+    # stays as a fallback in case a payload ever carries it there.
     try:
+        for item in data.get("items") or []:
+            ends_at = ((item or {}).get("trial_dates") or {}).get("ends_at")
+            if ends_at:
+                return _parse_iso(ends_at)
         return _parse_iso((data.get("trial_dates") or {}).get("ends_at"))
     except Exception:
         return None
