@@ -28,9 +28,9 @@ const manrope = localFont({
   display: "swap",
 });
 
-const SITE_TITLE = "BurnLens — Hard-cap your AI spend across every provider";
+const SITE_TITLE = "BurnLens — See what your AI spent. Cap the next call.";
 const SITE_DESCRIPTION =
-  "Open-source, local-first proxy that hard-caps LLM spend before the call — 429 at the limit, not a surprise bill. Cost attribution across 10 providers including OpenAI, Anthropic, Google, Azure OpenAI, and AWS Bedrock.";
+  "Scan Claude Code, Cursor, Codex, and Gemini CLI logs in one command, or hard-cap production APIs with a local proxy. 429 at the limit, not a surprise bill. Prompt bodies go to your provider, never to BurnLens Cloud.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnlens.app"),
@@ -81,7 +81,7 @@ const structuredData = [
     operatingSystem: "macOS, Linux, Windows",
     url: "https://burnlens.app",
     description:
-      "Open-source LLM FinOps proxy — install with pip, make zero code changes, see every AI API call's real cost across Anthropic, OpenAI, and Google AI.",
+      "Open-source LLM FinOps — scan local coding-agent logs or hard-cap production APIs with a local proxy. Prompt bodies go only to your provider.",
     offers: [
       { "@type": "Offer", name: "Open source proxy", price: "0", priceCurrency: "USD" },
       { "@type": "Offer", name: "Cloud", price: "29", priceCurrency: "USD" },
