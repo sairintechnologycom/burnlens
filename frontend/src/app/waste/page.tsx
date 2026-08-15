@@ -158,6 +158,26 @@ function WasteContent() {
             pendingId={pendingId}
           />
         )}
+        {/*
+          Three of the eight detectors read prompt-segment token counts, which only the
+          proxy interceptor computes. Agent logs never record tool schemas at all, so
+          `burnlens scan` data cannot produce them — see
+          .planning/spike-scan-prompt-segmentation.md. Say so rather than letting a
+          scan-only user read the absence as "no waste found".
+        */}
+        <p
+          style={{
+            margin: "12px 16px 4px",
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "var(--muted)",
+          }}
+        >
+          Oversized tool schemas, low RAG efficiency and history bloat are only detected
+          on traffic routed through the BurnLens proxy. Data imported with{" "}
+          <code>burnlens scan</code> has no prompt breakdown to analyse, so those three
+          checks stay silent for it.
+        </p>
       </div>
     </div>
   );
