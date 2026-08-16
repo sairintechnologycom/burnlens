@@ -35,6 +35,7 @@ landing/
 .codex/
 .playwright-cli/
 CLAUDE.md
+CLAUDE5-MIGRATION-REPORT.md
 AGENTS.md
 GEMINI.md
 HANDOFF.md
@@ -57,3 +58,6 @@ burnlens_export.csv
 # Phase 7 tests — empty env stub used to isolate burnlens_cloud.config from the project .env
 tests/_phase7_billing_test.env
 .vercel
+
+# Claude config migration backups (local only)
+.claude-config-backup-*/
