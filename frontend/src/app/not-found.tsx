@@ -27,7 +27,7 @@ export default function NotFound() {
           <Link href="/dashboard" className="legal-nav-link">Dashboard</Link>
           <Link href="/setup?intent=register" className="legal-nav-link">Sign up</Link>
           <a
-            href="https://github.com/sairintechnologycom/burnlens#readme"
+            href="/docs"
             className="legal-nav-link"
             target="_blank"
             rel="noopener noreferrer"

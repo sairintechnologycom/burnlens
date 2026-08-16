@@ -231,7 +231,7 @@ function DashboardContent() {
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <a
-                href="https://github.com/sairintechnologycom/burnlens#readme"
+                href="/docs"
                 className="upgrade-btn"
                 style={{ textDecoration: "none" }}
               >

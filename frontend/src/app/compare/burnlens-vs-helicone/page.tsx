@@ -132,7 +132,7 @@ export OPENAI_BASE_URL=http://localhost:8420/proxy/openai/v1`}</code>
           </pre>
           <p>Your existing OpenAI SDK code now routes through BurnLens. Repeat with
           <code> ANTHROPIC_BASE_URL</code> for Claude, or use <code>burnlens.patch()</code> for Google AI.
-          See the <a href="https://github.com/sairintechnologycom/burnlens#readme" target="_blank" rel="noopener noreferrer">install guide</a> for full provider coverage.</p>
+          See the <a href="/docs" target="_blank" rel="noopener noreferrer">install guide</a> for full provider coverage.</p>
         </section>
 
         <section>

@@ -78,7 +78,7 @@ function SavingsContent() {
             title="No savings opportunities yet"
             description="We need ~500 requests per feature to confidently recommend a cheaper model. Install the local proxy or connect a provider to start collecting data."
             code={"pip install burnlens\nburnlens start"}
-            action={{ label: "View install docs", href: "https://github.com/sairintechnologycom/burnlens#readme" }}
+            action={{ label: "View install docs", href: "/docs" }}
           />
         ) : (
           <table className="data-table">
