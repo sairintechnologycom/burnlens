@@ -542,3 +542,45 @@ async def update_teams_webhook(
 
     updated_count = int(result.split()[-1]) if result else 0
     return {"updated_rules": updated_count}
+
+
+# ============ Weekly Digest ============
+
+
+class WeeklyDigestRequest(BaseModel):
+    enabled: bool
+
+
+@router.get("/weekly-digest")
+async def get_weekly_digest(
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """Whether this workspace receives the Monday spend digest."""
+    rows = await execute_query(
+        "SELECT weekly_digest_enabled FROM workspaces WHERE id = $1",
+        token.workspace_id,
+    )
+    # Default true mirrors the column default: a workspace row that predates
+    # the migration still gets the digest.
+    enabled = bool(rows[0]["weekly_digest_enabled"]) if rows else True
+    return {"enabled": enabled}
+
+
+@router.put("/weekly-digest")
+async def update_weekly_digest(
+    body: WeeklyDigestRequest,
+    token: TokenPayload = Depends(verify_token),
+) -> dict:
+    """Owner/admin. Opt this workspace in or out of the weekly spend digest.
+
+    This toggle IS the unsubscribe: the digest has no per-recipient opt-out
+    because it goes to the workspace owner, who is the only one who can change
+    it here.
+    """
+    await require_role("admin", token)
+    await execute_insert(
+        "UPDATE workspaces SET weekly_digest_enabled = $1 WHERE id = $2",
+        body.enabled,
+        token.workspace_id,
+    )
+    return {"enabled": body.enabled}

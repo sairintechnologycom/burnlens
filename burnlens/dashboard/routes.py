@@ -29,7 +29,7 @@ from burnlens.storage.database import (
 )
 from burnlens.key_budget import compute_keys_today
 from burnlens.analysis.waste import run_all_detectors
-from burnlens.analysis.budget import compute_budget_status
+from burnlens.analysis.budget import compute_budget_status, period_start_iso
 from burnlens.analysis.recommender import analyse_model_fit
 
 logger = logging.getLogger(__name__)
@@ -422,7 +422,10 @@ async def budget(request: Request) -> dict:
     """Budget status and forecast."""
     db = _db_path(request)
     budget_limit = _budget_limit(request)
-    total_cost = await get_total_cost(db)
+    # Month-to-date, not lifetime: compute_budget_status divides this by the
+    # day of the month to forecast, so an unscoped total reports every dollar
+    # ever spent as this month's and forecasts from it.
+    total_cost = await get_total_cost(db, since=period_start_iso("monthly"))
     status = compute_budget_status(
         spent_usd=total_cost,
         budget_usd=budget_limit,

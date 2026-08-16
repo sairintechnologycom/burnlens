@@ -27,10 +27,20 @@ function SettingsContent() {
     setBilling: applyBilling,
   } = useBilling();
   const [syncing, setSyncing] = useState(false);
+  // null while unknown: rendering a default would show "off" to a workspace
+  // that is actually opted in, and a click would then be a no-op write.
+  const [digestEnabled, setDigestEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     document.title = "Settings | BurnLens";
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    apiFetch("/settings/weekly-digest", session.token)
+      .then((r: any) => setDigestEnabled(Boolean(r?.enabled)))
+      .catch(() => setDigestEnabled(null));
+  }, [session]);
 
   // Phase 7 D-20: post-checkout refresh handoff for Phase 8.
   // When Settings mounts with ?checkout=success in the URL, invalidate the
@@ -99,6 +109,23 @@ function SettingsContent() {
       else showToast("Failed: " + err.message, "error");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleToggleDigest = async () => {
+    if (!session || digestEnabled === null) return;
+    const next = !digestEnabled;
+    setDigestEnabled(next); // optimistic
+    try {
+      await apiFetch("/settings/weekly-digest", session.token, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: next }),
+      });
+      showToast(next ? "Weekly digest on" : "Weekly digest off", "success");
+    } catch (err: any) {
+      setDigestEnabled(!next); // revert
+      if (err instanceof AuthError) logout();
+      else showToast("Failed: " + err.message, "error");
     }
   };
 
@@ -172,6 +199,25 @@ function SettingsContent() {
               <label className="form-label">Teams Webhook</label>
               <button className="btn" style={{ width: "100%" }} onClick={handleUpdateTeamsWebhook} disabled={syncing}>
                 Configure Teams
+              </button>
+            </div>
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <label className="form-label">Weekly digest</label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+              <span style={{ color: "var(--muted)", fontSize: 13 }}>
+                Monday email to the workspace owner: last week&apos;s spend, top
+                models, and open waste findings. Quiet weeks are not sent.
+              </span>
+              <button
+                className="btn"
+                onClick={handleToggleDigest}
+                disabled={digestEnabled === null}
+                aria-pressed={digestEnabled === true}
+                style={{ flexShrink: 0, minWidth: 72 }}
+              >
+                {digestEnabled === null ? "…" : digestEnabled ? "On" : "Off"}
               </button>
             </div>
           </div>

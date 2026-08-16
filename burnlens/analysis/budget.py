@@ -100,6 +100,16 @@ def compute_budget_status(
     )
 
 
+def period_start_iso(period: str, now: datetime | None = None) -> str:
+    """Return ISO timestamp for the start of the given period.
+
+    Public because a budget figure is only meaningful against the spend of that
+    same period: callers that fetch spend themselves must scope the query with
+    this, or they hand a lifetime total to a monthly forecast.
+    """
+    return _period_start_iso(period, now or datetime.now(timezone.utc))
+
+
 def _period_start_iso(period: str, now: datetime) -> str:
     """Return ISO timestamp for the start of the given period."""
     if period == "daily":
