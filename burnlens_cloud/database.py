@@ -352,7 +352,8 @@ async def init_db():
                 prompt_system_tokens INT NOT NULL DEFAULT 0,
                 prompt_tools_tokens INT NOT NULL DEFAULT 0,
                 prompt_rag_tokens INT NOT NULL DEFAULT 0,
-                prompt_history_tokens INT NOT NULL DEFAULT 0
+                prompt_history_tokens INT NOT NULL DEFAULT 0,
+                event_id TEXT
             )
         """)
 
@@ -421,6 +422,39 @@ async def init_db():
                         ADD COLUMN prompt_history_tokens INT NOT NULL DEFAULT 0;
                 END IF;
             END $$;
+        """)
+
+        # Migration: ingest idempotency key for pre-existing installs. The proxy
+        # has always generated a uuid7 event_id per record and sent it in the
+        # sync payload -- the backend parsed it and dropped it, which is why a
+        # retried batch duplicated rows. Nullable with no default: historical
+        # rows genuinely have none, and inventing one would let a real retry of
+        # that batch slip past the constraint.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records' AND column_name = 'event_id'
+                ) THEN
+                    ALTER TABLE request_records ADD COLUMN event_id TEXT;
+                END IF;
+            END $$;
+        """)
+
+        # Scoped to the workspace, not global. A uuid7 will not collide by
+        # accident, but a global unique index would let any tenant suppress
+        # another tenant's write by replaying its event_id -- dedup must not be
+        # a cross-tenant denial of write.
+        #
+        # Partial, so rows written before this column existed -- and any written
+        # by a proxy too old to send one -- stay out of the index rather than
+        # being carried for nothing. ON CONFLICT must repeat this predicate to
+        # infer the index.
+        await conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_request_records_event_id
+                ON request_records (workspace_id, event_id)
+                WHERE event_id IS NOT NULL
         """)
 
         # The run view groups and looks up on exactly this expression. It has to
