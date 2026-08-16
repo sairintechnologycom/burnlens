@@ -243,7 +243,7 @@ export default function LandingPage() {
             <Link href="/scan">Scan</Link>
             <a href="#pricing">Pricing</a>
             <Link href="/security">Security</Link>
-            <a href="https://github.com/sairintechnologycom/burnlens#readme">Docs</a>
+            <Link href="/docs">Docs</Link>
             <Link href="/demo" className="outline">Live demo</Link>
             <Link href="/setup">Log in</Link>
             <Link href="/setup?intent=register" className="primary">Create workspace</Link>
@@ -276,7 +276,7 @@ export default function LandingPage() {
               <Link href="/scan" onClick={() => setMenuOpen(false)}>Scan</Link>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <Link href="/security" onClick={() => setMenuOpen(false)}>Security</Link>
-              <a href="https://github.com/sairintechnologycom/burnlens#readme" onClick={() => setMenuOpen(false)}>Docs</a>
+              <Link href="/docs" onClick={() => setMenuOpen(false)}>Docs</Link>
               <Link href="/demo" onClick={() => setMenuOpen(false)}>Live demo</Link>
               <Link href="/setup" onClick={() => setMenuOpen(false)}>Log in</Link>
               <Link href="/setup?intent=register" className="lp-mobile-cta" onClick={() => setMenuOpen(false)}>Create workspace</Link>
@@ -734,6 +734,8 @@ export default function LandingPage() {
           </div>
           <div className="lp-footer-legal">
             <a href="/scan">Scan coding-agent spend</a>
+            <span>·</span>
+            <a href="/docs">Docs</a>
             <span>·</span>
             <a href="/demo">Live demo</a>
             <span>·</span>

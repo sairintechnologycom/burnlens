@@ -16,6 +16,7 @@ const PUBLIC_ROUTES = [
   '/',
   '/demo',
   '/scan',
+  '/docs',
   '/security',
   '/privacy',
   '/terms',
