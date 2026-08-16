@@ -21,12 +21,16 @@ from .clickhouse import (
 )
 from .models import (
     INCLUSIVE_PROMPT_TOKEN_PROVIDERS,
+    CacheByModelRow,
+    CacheOverview,
     StatsSummary,
     CostByModel,
     CostByTag,
     CostTimeline,
     RecommendationItem,
     RequestRecordResponse,
+    RunDetail,
+    RunSummary,
     TeamBudgetRow,
 )
 
@@ -488,7 +492,7 @@ def _run_to_dict(row) -> dict:
     }
 
 
-@router.get("/runs")
+@router.get("/runs", response_model=List[RunSummary])
 async def get_runs(
     token: TokenPayload = Depends(verify_token),
     days: int = Query(7, description="Number of days to look back"),
@@ -515,7 +519,7 @@ async def get_runs(
     return [_run_to_dict(r) for r in rows]
 
 
-@router.get("/runs/{run_id}")
+@router.get("/runs/{run_id}", response_model=RunDetail)
 async def get_run(
     run_id: str,
     token: TokenPayload = Depends(verify_token),
@@ -576,6 +580,82 @@ async def get_run(
             for s in steps
         ],
     }
+
+
+@router.get("/usage/cache", response_model=CacheOverview)
+async def get_cache_overview(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(7, description="Number of days to look back"),
+):
+    """Prompt-cache economics for the window (viewer+).
+
+    cache_read_rate is cache reads over the WHOLE prompt (_PROMPT_TOKENS), so
+    it stays honest across both provider conventions. Rows synced before the
+    cache columns existed are all-zero and simply dilute the rate — that is
+    correct, not missing data.
+    """
+    await require_role("viewer", token)
+    days = clamp_days_by_plan(days, token.plan)
+    cutoff = await parse_period(f"{days}d")
+
+    totals = await execute_query(
+        f"""
+        SELECT COALESCE(SUM({_PROMPT_TOKENS}), 0) AS prompt_tokens,
+               COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+               COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+               COALESCE(SUM({_UNCACHED_INPUT}), 0) AS uncached_input_tokens,
+               COUNT(*) AS request_count,
+               COALESCE(SUM(cache_hit), 0) AS proxy_cache_hits,
+               COALESCE(SUM(cache_saved_usd), 0) AS proxy_cache_saved_usd
+          FROM request_records
+         WHERE workspace_id = $1 AND ts >= $2
+        """,
+        str(token.workspace_id),
+        cutoff,
+    )
+    row = totals[0] if totals else {}
+    prompt_tokens = int(row.get("prompt_tokens") or 0)
+    cache_read = int(row.get("cache_read_tokens") or 0)
+
+    model_rows = await execute_query(
+        f"""
+        SELECT model,
+               COUNT(*) AS request_count,
+               COALESCE(SUM({_PROMPT_TOKENS}), 0) AS prompt_tokens,
+               COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens
+          FROM request_records
+         WHERE workspace_id = $1 AND ts >= $2 AND model IS NOT NULL
+         GROUP BY model
+         ORDER BY prompt_tokens DESC
+         LIMIT 25
+        """,
+        str(token.workspace_id),
+        cutoff,
+    )
+
+    def _rate(read: int, prompt: int) -> float:
+        return round(read / prompt, 4) if prompt > 0 else 0.0
+
+    return CacheOverview(
+        prompt_tokens=prompt_tokens,
+        cache_read_tokens=cache_read,
+        cache_write_tokens=int(row.get("cache_write_tokens") or 0),
+        uncached_input_tokens=int(row.get("uncached_input_tokens") or 0),
+        cache_read_rate=_rate(cache_read, prompt_tokens),
+        request_count=int(row.get("request_count") or 0),
+        proxy_cache_hits=int(row.get("proxy_cache_hits") or 0),
+        proxy_cache_saved_usd=round(float(row.get("proxy_cache_saved_usd") or 0), 6),
+        by_model=[
+            CacheByModelRow(
+                model=m["model"],
+                request_count=int(m["request_count"]),
+                prompt_tokens=int(m["prompt_tokens"]),
+                cache_read_tokens=int(m["cache_read_tokens"]),
+                cache_read_rate=_rate(int(m["cache_read_tokens"]), int(m["prompt_tokens"])),
+            )
+            for m in model_rows
+        ],
+    )
 
 
 # GET /waste-alerts lives on findings_api.router (BL-F1). The stub that

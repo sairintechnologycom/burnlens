@@ -9,23 +9,16 @@ import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useToast } from "@/lib/contexts/ToastContext";
-
-interface ActivityEntry {
-  id: string;
-  action: string;
-  detail: any;
-  created_at: string;
-  user_email?: string;
-}
+import type { ActivityLogEntry } from "@/lib/contracts";
 
 function ActivityContent() {
   const { session, logout } = useAuth();
   const { showToast } = useToast();
 
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [undoing, setUndoing] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState<number | null>(null);
 
   const fetchActivity = useCallback(async () => {
     if (!session) return;
@@ -47,7 +40,7 @@ function ActivityContent() {
     fetchActivity();
   }, [fetchActivity]);
 
-  const handleUndo = async (entry: ActivityEntry) => {
+  const handleUndo = async (entry: ActivityLogEntry) => {
     if (!session || undoing) return;
     
     // Determine the undo action based on the original action
@@ -78,7 +71,9 @@ function ActivityContent() {
       // For now, I'll simulate or use the existing actions with 'revert' logic
       await apiFetch(`/api/v1/actions/revert`, session.token, {
         method: "POST",
-        body: JSON.stringify({ original_activity_id: entry.id, action: undoAction }),
+        // Backend RevertRequest.original_activity_id is a string; the entry id
+        // is an integer, and Pydantic v2 will not coerce int -> str.
+        body: JSON.stringify({ original_activity_id: String(entry.id), action: undoAction }),
       });
       showToast("Action reverted", "success");
       fetchActivity();
@@ -165,7 +160,7 @@ function ActivityContent() {
                     {JSON.stringify(entry.detail)}
                   </td>
                   <td style={{ fontSize: 12 }}>
-                    {entry.user_email || "System"}
+                    {entry.user?.email || "System"}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     {entry.action.startsWith("action_") && (

@@ -315,6 +315,89 @@ class TeamBudgetRow(BaseModel):
     status: str
 
 
+class RunSummary(BaseModel):
+    """One agent run (or OTEL trace): aggregate of its request rows.
+
+    prompt_tokens is the whole prompt (uncached input + cache reads + writes);
+    input_tokens here is the UNCACHED share only. Never render input_tokens
+    alone in a cost context — coding agents cache ~99% of the prompt.
+    """
+    run_id: str
+    step_count: int
+    cost_usd: float
+    prompt_tokens: int
+    cached_tokens: int
+    input_tokens: int
+    output_tokens: int
+    started_at: datetime
+    ended_at: datetime
+    models: list[str]
+    source: Optional[str] = None
+    key_kind: str  # "session" | "trace"
+
+
+class RunStep(BaseModel):
+    """One request row inside a run, in time order. Same token semantics as
+    RunSummary."""
+    timestamp: datetime
+    model: Optional[str] = None
+    prompt_tokens: int
+    cached_tokens: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    duration_ms: Optional[int] = None
+    status_code: Optional[int] = None
+    parent_span_id: Optional[str] = None
+
+
+class RunDetail(BaseModel):
+    """GET /runs/{run_id}: the run's aggregate plus its steps."""
+    run: RunSummary
+    steps: list[RunStep]
+
+
+class AlertRule(BaseModel):
+    """A workspace alert rule as listed to the dashboard. Webhook URLs are
+    never returned — only has_slack / has_teams presence flags."""
+    id: UUID
+    threshold_pct: int
+    channel: str
+    enabled: bool
+    has_slack: bool
+    has_teams: bool
+    extra_emails: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class CacheByModelRow(BaseModel):
+    """Per-model prompt-cache share for the cache view."""
+    model: str
+    request_count: int
+    prompt_tokens: int
+    cache_read_tokens: int
+    cache_read_rate: float
+
+
+class CacheOverview(BaseModel):
+    """GET /usage/cache: prompt-cache economics for the window.
+
+    Two distinct cache layers: provider prompt caching (cache_read/write
+    tokens, provider-aware — see INCLUSIVE_PROMPT_TOKEN_PROVIDERS) and the OSS
+    proxy's semantic response cache (proxy_cache_hits / proxy_cache_saved_usd).
+    """
+    prompt_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    uncached_input_tokens: int
+    cache_read_rate: float
+    request_count: int
+    proxy_cache_hits: int
+    proxy_cache_saved_usd: float
+    by_model: list[CacheByModelRow]
+
+
 class FindingItem(BaseModel):
     """A persisted waste finding (workspace-scoped). ``id`` is the fingerprint."""
     id: str

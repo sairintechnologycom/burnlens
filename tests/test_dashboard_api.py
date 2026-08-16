@@ -591,3 +591,77 @@ async def test_monthly_export_refuses_a_month_the_plan_cannot_cover(dash_client,
 async def test_monthly_export_requires_auth(dash_client):
     response = await dash_client.get("/api/v1/usage/monthly-export")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Cache view (GET /usage/cache)
+# ---------------------------------------------------------------------------
+
+
+def _cache_totals_row(**over):
+    row = {
+        # Anthropic-style dogfood shape: prompt almost entirely cache reads.
+        "prompt_tokens": 200000,
+        "cache_read_tokens": 150000,
+        "cache_write_tokens": 20000,
+        "uncached_input_tokens": 30000,
+        "request_count": 40,
+        "proxy_cache_hits": 3,
+        "proxy_cache_saved_usd": 0.42,
+    }
+    row.update(over)
+    return row
+
+
+@pytest.mark.asyncio
+async def test_cache_overview_requires_auth(dash_client):
+    assert (await dash_client.get("/api/v1/usage/cache")).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_cache_overview_shape_and_rates(dash_client, valid_jwt_token):
+    model_rows = [
+        {"model": "claude-opus-5", "request_count": 30,
+         "prompt_tokens": 160000, "cache_read_tokens": 140000},
+        {"model": "gpt-5-mini", "request_count": 10,
+         "prompt_tokens": 40000, "cache_read_tokens": 10000},
+    ]
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.side_effect = [[_cache_totals_row()], model_rows]
+        response = await dash_client.get(
+            "/api/v1/usage/cache",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prompt_tokens"] == 200000
+    assert body["cache_read_rate"] == 0.75
+    assert body["proxy_cache_hits"] == 3
+    assert body["proxy_cache_saved_usd"] == 0.42
+    assert [m["model"] for m in body["by_model"]] == ["claude-opus-5", "gpt-5-mini"]
+    assert body["by_model"][0]["cache_read_rate"] == 0.875
+    # Both queries MUST be workspace-scoped — a missing predicate is a leak.
+    for call in mock_query.call_args_list:
+        assert "workspace_id = $1" in call.args[0]
+
+
+@pytest.mark.asyncio
+async def test_cache_overview_zero_prompt_is_zero_rate_not_crash(dash_client, valid_jwt_token):
+    """Empty window: rate is 0.0, never a ZeroDivisionError."""
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.side_effect = [
+            [_cache_totals_row(prompt_tokens=0, cache_read_tokens=0,
+                               cache_write_tokens=0, uncached_input_tokens=0,
+                               request_count=0, proxy_cache_hits=0,
+                               proxy_cache_saved_usd=0)],
+            [],
+        ]
+        response = await dash_client.get(
+            "/api/v1/usage/cache",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cache_read_rate"] == 0.0
+    assert body["by_model"] == []

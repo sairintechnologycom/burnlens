@@ -463,6 +463,7 @@ async def invite_member(
 
 @router.get(
     "/activity",
+    response_model=TeamActivityResponse,
     dependencies=[Depends(require_feature("teams_view"))],
 )
 async def get_activity(
