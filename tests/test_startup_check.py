@@ -105,3 +105,129 @@ async def test_probe_paddle_transport_error_does_not_alert():
 
     assert ok is False
     alert.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# probe_webhook_secret
+#
+# The API key fails loudly (checkout 502s). A mismatched webhook secret fails
+# SILENTLY: Paddle signs with the real secret, _verify_signature rejects it,
+# /billing/webhook 401s, and the customer who just paid stays on free. These
+# tests exist because nothing else in the system would notice.
+# ---------------------------------------------------------------------------
+
+def _settings_response(destinations):
+    resp = MagicMock(status_code=200)
+    resp.json = MagicMock(return_value={"data": destinations})
+    return resp
+
+
+def _client_returning(resp):
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=resp)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return client
+
+
+ACTIVE = {"id": "ntfset_active", "description": "v2", "type": "url",
+          "active": True, "endpoint_secret_key": "pdl_ntfset_REAL"}
+DISABLED = {"id": "ntfset_old", "description": "v1", "type": "url",
+            "active": False, "endpoint_secret_key": "pdl_ntfset_OLD"}
+
+
+@pytest.mark.asyncio
+async def test_probe_webhook_secret_matches_active_destination(caplog):
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import probe_webhook_secret
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_api_key", "pdl_live_good"), \
+         patch.object(config_mod.settings, "paddle_webhook_secret", "pdl_ntfset_REAL"), \
+         patch("burnlens_cloud.startup_check.httpx.AsyncClient",
+               return_value=_client_returning(_settings_response([ACTIVE, DISABLED]))), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        with caplog.at_level("INFO"):
+            ok = await probe_webhook_secret()
+
+    assert ok is True
+    alert.assert_not_awaited()
+    # The secret must never reach a log line.
+    assert "pdl_ntfset_REAL" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_probe_webhook_secret_alerts_when_it_matches_a_disabled_destination():
+    """The likeliest real failure: the destination was replaced, the env var
+    kept the old one. Everything looks configured; every event 401s."""
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import probe_webhook_secret
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_api_key", "pdl_live_good"), \
+         patch.object(config_mod.settings, "paddle_webhook_secret", "pdl_ntfset_OLD"), \
+         patch("burnlens_cloud.startup_check.httpx.AsyncClient",
+               return_value=_client_returning(_settings_response([ACTIVE, DISABLED]))), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        ok = await probe_webhook_secret()
+
+    assert ok is False
+    assert alert.await_count == 1
+    body = alert.await_args.args[1]
+    # Name the disabled destination — that is what saves the investigation.
+    assert "ntfset_old" in body
+    # And name the symptom, since there is no other one.
+    assert "FREE PLAN" in body
+    # Never leak either secret into an alert body.
+    assert "pdl_ntfset_OLD" not in body and "pdl_ntfset_REAL" not in body
+
+
+@pytest.mark.asyncio
+async def test_probe_webhook_secret_alerts_when_it_matches_nothing():
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import probe_webhook_secret
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_api_key", "pdl_live_good"), \
+         patch.object(config_mod.settings, "paddle_webhook_secret", "pdl_ntfset_UNRELATED"), \
+         patch("burnlens_cloud.startup_check.httpx.AsyncClient",
+               return_value=_client_returning(_settings_response([ACTIVE]))), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        ok = await probe_webhook_secret()
+
+    assert ok is False
+    assert alert.await_count == 1
+    assert "no destination at all" in alert.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_probe_webhook_secret_transport_error_does_not_alert():
+    """A Paddle outage is not proof of a mismatch — don't cry wolf."""
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import probe_webhook_secret
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_api_key", "pdl_live_good"), \
+         patch.object(config_mod.settings, "paddle_webhook_secret", "pdl_ntfset_REAL"), \
+         patch("burnlens_cloud.startup_check.httpx.AsyncClient", side_effect=OSError("boom")), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        ok = await probe_webhook_secret()
+
+    assert ok is False
+    alert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_webhook_probe_is_skipped_when_the_api_key_is_dead():
+    """One dead credential must produce ONE alert naming the right credential,
+    not a second one blaming the webhook secret it could not check."""
+    from burnlens_cloud.startup_check import _run_probes
+
+    with patch("burnlens_cloud.startup_check.probe_paddle",
+               AsyncMock(return_value=False)) as paddle, \
+         patch("burnlens_cloud.startup_check.probe_webhook_secret",
+               AsyncMock()) as webhook:
+        await _run_probes()
+
+    paddle.assert_awaited_once()
+    webhook.assert_not_awaited()
