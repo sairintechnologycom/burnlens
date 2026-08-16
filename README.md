@@ -109,7 +109,7 @@ burnlens outcome derive             # merged PRs -> outcomes, via the gh CLI
 burnlens outcome show               # cost per merged PR
 ```
 
-Measured on this repository while building it: **81 merged PRs, $407 of Claude Code spend, about $5.03 per merged PR.** (A floor, not a ceiling — any model missing from the pricing tables contributes $0, so check `burnlens pricing` if a number looks low.)
+Measured on this repository while building it, on 2026-08-16: **97 merged PRs, 2 closed unmerged, $677 of agent spend over 30 days — about $6.98 per accepted PR.** Failed attempts are charged to the successes, which is what one merged PR really costs. (A floor, not a ceiling — any model missing from the pricing tables contributes $0, so check `burnlens pricing` if a number looks low.)
 
 Both commands are idempotent and safe on a schedule: outcome ids are derived deterministically from the repo and PR number, so re-running only ever adds newly-closed PRs.
 

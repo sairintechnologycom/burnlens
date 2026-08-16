@@ -311,9 +311,11 @@ export default function LandingPage() {
                 </a>
               </div>
               <p className="lp-proof">
-                <strong>$5.03</strong> per merged PR on this repository.{" "}
-                81 PRs · $407 Claude Code · a floor (unpriced models count as $0).
-                Cost is per repo — agent logs do not record which PR a session belonged to.
+                <strong>$6.98</strong> per accepted PR on this repository, measured 2026-08-16.{" "}
+                97 merged · 2 closed unmerged · $677 of agent spend over 30 days, with the
+                failed attempts charged to the successes. A floor, not a ceiling — any model
+                missing from the pricing tables counts as $0. Cost is attributed per repo:
+                agent logs record which repo a session ran in, not which branch.
               </p>
               <div className="lp-provider-strip lp-provider-strip-left">
                 {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "xAI", "DeepSeek", "Azure OpenAI", "AWS Bedrock"].map((p) => (
@@ -531,9 +533,14 @@ export default function LandingPage() {
             <div className="lp-usecase-card">
               <h3>Automatic model routing: degrade gracefully</h3>
               <p>
-                When a budget threshold is hit, BurnLens can silently route requests
-                to a cheaper model instead of hard-blocking with 429. Your app stays
+                When a budget you set drops below 20% remaining (or $5), BurnLens routes
+                requests to a cheaper model instead of hard-blocking with 429. Your app stays
                 live — it just gets more cost-efficient.
+              </p>
+              <p style={{ marginTop: 12, fontSize: "var(--fs-12)" }}>
+                On by default, and only ever active once you have set a budget. Every
+                downgrade is logged; set <code>routing.budget_downgrade: false</code> to
+                always receive the model you asked for.
               </p>
             </div>
           </div>

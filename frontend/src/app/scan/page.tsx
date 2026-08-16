@@ -155,6 +155,9 @@ Top repos by spend (last 7 days):
 
 * missing pricing for some preview models — see burnlens/cost/pricing_data/`}</code>
           </pre>
+          <p className="legal-updated" style={{ marginTop: 8 }}>
+            Illustrative output — the shape of what you get, not numbers from a real machine.
+          </p>
         </section>
 
         <section>
