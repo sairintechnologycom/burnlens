@@ -20,6 +20,14 @@ import {
   SavingsVerdictFields,
   TraceCoverageFields,
   WorkflowEconomicsFields,
+  RunSummaryFields,
+  RunStepFields,
+  RunDetailFields,
+  AlertRuleFields,
+  ActivityLogEntryFields,
+  TeamActivityResponseFields,
+  CacheOverviewFields,
+  CacheByModelRowFields,
 } from "@/lib/contracts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +64,14 @@ const CONTRACTS = [
   { endpoint: "/api/v1/findings", schema: "FindingItem", fields: FindingItemFields },
   { endpoint: "/api/v1/findings/verify", schema: "SavingsVerdict", fields: SavingsVerdictFields },
   { endpoint: "/api/v1/outcomes/summary", schema: "WorkflowEconomics", fields: WorkflowEconomicsFields },
+  { endpoint: "/api/v1/runs", schema: "RunSummary", fields: RunSummaryFields },
+  { endpoint: "/api/v1/runs/{run_id}", schema: "RunDetail", fields: RunDetailFields },
+  { endpoint: "/api/v1/runs/{run_id} (steps[])", schema: "RunStep", fields: RunStepFields },
+  { endpoint: "/api/v1/alert-rules", schema: "AlertRule", fields: AlertRuleFields },
+  { endpoint: "/api/v1/team/activity", schema: "TeamActivityResponse", fields: TeamActivityResponseFields },
+  { endpoint: "/api/v1/team/activity (entries[])", schema: "ActivityLogEntry", fields: ActivityLogEntryFields },
+  { endpoint: "/api/v1/usage/cache", schema: "CacheOverview", fields: CacheOverviewFields },
+  { endpoint: "/api/v1/usage/cache (by_model[])", schema: "CacheByModelRow", fields: CacheByModelRowFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that
@@ -129,6 +145,24 @@ const NUMERIC_FIELDS = new Set([
   "projected_monthly_savings_usd",
   "days_remaining",
   "current_requests",
+  // RunSummary / RunStep: token columns the UI runs .toLocaleString on.
+  "step_count",
+  "prompt_tokens",
+  "cached_tokens",
+  "input_tokens",
+  "output_tokens",
+  "status_code",
+  // AlertRule / TeamActivityResponse
+  "threshold_pct",
+  "total",
+  "offset",
+  // CacheOverview / CacheByModelRow
+  "cache_read_tokens",
+  "cache_write_tokens",
+  "uncached_input_tokens",
+  "cache_read_rate",
+  "proxy_cache_hits",
+  "proxy_cache_saved_usd",
 ]);
 const STRING_FIELDS = new Set([
   "model",
@@ -156,18 +190,41 @@ const STRING_FIELDS = new Set([
   "last_seen_at",
   "resolved_at",
   "severity",
+  // RunSummary / RunStep (date-times unwrap to "string")
+  "run_id",
+  "started_at",
+  "ended_at",
+  "key_kind",
+  "source",
+  // AlertRule / ActivityLogEntry
+  "channel",
+  "created_at",
+  "updated_at",
+  "action",
 ]);
 const BOOLEAN_FIELDS = new Set([
   "cancel_at_period_end",
   "waste_estimate_clamped",
   "columns_missing",
   "reopened",
+  "enabled",
+  "has_slack",
+  "has_teams",
 ]);
+
+// Per-schema exceptions to the global field-name tables above.
+// ActivityLogEntry.id is an integer while every other id is a string.
+const SCHEMA_TYPE_OVERRIDES: Record<string, Record<string, "number" | "string">> = {
+  ActivityLogEntry: { id: "number" },
+};
 
 // Check a manifest field's OpenAPI type against how the frontend uses it. We use
 // coarse buckets — the crash class was wrong names + number-vs-string, not deep
 // shape mismatches.
-function typesCompatible(field: string, apiType: string | undefined): boolean {
+function typesCompatible(schema: string, field: string, apiType: string | undefined): boolean {
+  const override = SCHEMA_TYPE_OVERRIDES[schema]?.[field];
+  if (override === "number") return apiType !== undefined && NUMBER_TYPES.has(apiType);
+  if (override === "string") return apiType === "string";
   if (NUMERIC_FIELDS.has(field)) return apiType !== undefined && NUMBER_TYPES.has(apiType);
   if (STRING_FIELDS.has(field)) return apiType === "string";
   if (BOOLEAN_FIELDS.has(field)) return apiType === "boolean";
@@ -204,7 +261,7 @@ describe("frontend↔API contract", () => {
           ).toBeDefined();
           const apiType = openApiType(props[field]);
           expect(
-            typesCompatible(field, apiType),
+            typesCompatible(schema, field, apiType),
             `Field "${field}" on ${schema} is OpenAPI type "${apiType}", ` +
               `incompatible with how the frontend uses it.`,
           ).toBe(true);

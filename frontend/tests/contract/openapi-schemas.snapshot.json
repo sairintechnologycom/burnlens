@@ -1,4 +1,104 @@
 {
+  "ActivityLogEntry": {
+    "description": "Workspace activity log entry.",
+    "properties": {
+      "action": {
+        "title": "Action",
+        "type": "string"
+      },
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "detail": {
+        "title": "Detail",
+        "type": "object"
+      },
+      "id": {
+        "title": "Id",
+        "type": "integer"
+      },
+      "user": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/UserResponse"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "action",
+      "detail",
+      "created_at"
+    ],
+    "title": "ActivityLogEntry",
+    "type": "object"
+  },
+  "AlertRule": {
+    "description": "A workspace alert rule as listed to the dashboard. Webhook URLs are\nnever returned \u2014 only has_slack / has_teams presence flags.",
+    "properties": {
+      "channel": {
+        "title": "Channel",
+        "type": "string"
+      },
+      "created_at": {
+        "format": "date-time",
+        "title": "Created At",
+        "type": "string"
+      },
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "extra_emails": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Extra Emails",
+        "type": "array"
+      },
+      "has_slack": {
+        "title": "Has Slack",
+        "type": "boolean"
+      },
+      "has_teams": {
+        "title": "Has Teams",
+        "type": "boolean"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "threshold_pct": {
+        "title": "Threshold Pct",
+        "type": "integer"
+      },
+      "updated_at": {
+        "format": "date-time",
+        "title": "Updated At",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "threshold_pct",
+      "channel",
+      "enabled",
+      "has_slack",
+      "has_teams",
+      "extra_emails",
+      "created_at",
+      "updated_at"
+    ],
+    "title": "AlertRule",
+    "type": "object"
+  },
   "AlertRulePatch": {
     "properties": {
       "enabled": {
@@ -527,6 +627,97 @@
       }
     },
     "title": "BudgetSettingRequest",
+    "type": "object"
+  },
+  "CacheByModelRow": {
+    "description": "Per-model prompt-cache share for the cache view.",
+    "properties": {
+      "cache_read_rate": {
+        "title": "Cache Read Rate",
+        "type": "number"
+      },
+      "cache_read_tokens": {
+        "title": "Cache Read Tokens",
+        "type": "integer"
+      },
+      "model": {
+        "title": "Model",
+        "type": "string"
+      },
+      "prompt_tokens": {
+        "title": "Prompt Tokens",
+        "type": "integer"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "model",
+      "request_count",
+      "prompt_tokens",
+      "cache_read_tokens",
+      "cache_read_rate"
+    ],
+    "title": "CacheByModelRow",
+    "type": "object"
+  },
+  "CacheOverview": {
+    "description": "GET /usage/cache: prompt-cache economics for the window.\n\nTwo distinct cache layers: provider prompt caching (cache_read/write\ntokens, provider-aware \u2014 see INCLUSIVE_PROMPT_TOKEN_PROVIDERS) and the OSS\nproxy's semantic response cache (proxy_cache_hits / proxy_cache_saved_usd).",
+    "properties": {
+      "by_model": {
+        "items": {
+          "$ref": "#/components/schemas/CacheByModelRow"
+        },
+        "title": "By Model",
+        "type": "array"
+      },
+      "cache_read_rate": {
+        "title": "Cache Read Rate",
+        "type": "number"
+      },
+      "cache_read_tokens": {
+        "title": "Cache Read Tokens",
+        "type": "integer"
+      },
+      "cache_write_tokens": {
+        "title": "Cache Write Tokens",
+        "type": "integer"
+      },
+      "prompt_tokens": {
+        "title": "Prompt Tokens",
+        "type": "integer"
+      },
+      "proxy_cache_hits": {
+        "title": "Proxy Cache Hits",
+        "type": "integer"
+      },
+      "proxy_cache_saved_usd": {
+        "title": "Proxy Cache Saved Usd",
+        "type": "number"
+      },
+      "request_count": {
+        "title": "Request Count",
+        "type": "integer"
+      },
+      "uncached_input_tokens": {
+        "title": "Uncached Input Tokens",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "prompt_tokens",
+      "cache_read_tokens",
+      "cache_write_tokens",
+      "uncached_input_tokens",
+      "cache_read_rate",
+      "request_count",
+      "proxy_cache_hits",
+      "proxy_cache_saved_usd",
+      "by_model"
+    ],
+    "title": "CacheOverview",
     "type": "object"
   },
   "CancelBody": {
@@ -2016,6 +2207,191 @@
     "title": "RevertActionRequest",
     "type": "object"
   },
+  "RunDetail": {
+    "description": "GET /runs/{run_id}: the run's aggregate plus its steps.",
+    "properties": {
+      "run": {
+        "$ref": "#/components/schemas/RunSummary"
+      },
+      "steps": {
+        "items": {
+          "$ref": "#/components/schemas/RunStep"
+        },
+        "title": "Steps",
+        "type": "array"
+      }
+    },
+    "required": [
+      "run",
+      "steps"
+    ],
+    "title": "RunDetail",
+    "type": "object"
+  },
+  "RunStep": {
+    "description": "One request row inside a run, in time order. Same token semantics as\nRunSummary.",
+    "properties": {
+      "cached_tokens": {
+        "title": "Cached Tokens",
+        "type": "integer"
+      },
+      "cost_usd": {
+        "title": "Cost Usd",
+        "type": "number"
+      },
+      "duration_ms": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Duration Ms"
+      },
+      "input_tokens": {
+        "title": "Input Tokens",
+        "type": "integer"
+      },
+      "model": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Model"
+      },
+      "output_tokens": {
+        "title": "Output Tokens",
+        "type": "integer"
+      },
+      "parent_span_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Parent Span Id"
+      },
+      "prompt_tokens": {
+        "title": "Prompt Tokens",
+        "type": "integer"
+      },
+      "status_code": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Status Code"
+      },
+      "timestamp": {
+        "format": "date-time",
+        "title": "Timestamp",
+        "type": "string"
+      }
+    },
+    "required": [
+      "timestamp",
+      "prompt_tokens",
+      "cached_tokens",
+      "input_tokens",
+      "output_tokens",
+      "cost_usd"
+    ],
+    "title": "RunStep",
+    "type": "object"
+  },
+  "RunSummary": {
+    "description": "One agent run (or OTEL trace): aggregate of its request rows.\n\nprompt_tokens is the whole prompt (uncached input + cache reads + writes);\ninput_tokens here is the UNCACHED share only. Never render input_tokens\nalone in a cost context \u2014 coding agents cache ~99% of the prompt.",
+    "properties": {
+      "cached_tokens": {
+        "title": "Cached Tokens",
+        "type": "integer"
+      },
+      "cost_usd": {
+        "title": "Cost Usd",
+        "type": "number"
+      },
+      "ended_at": {
+        "format": "date-time",
+        "title": "Ended At",
+        "type": "string"
+      },
+      "input_tokens": {
+        "title": "Input Tokens",
+        "type": "integer"
+      },
+      "key_kind": {
+        "title": "Key Kind",
+        "type": "string"
+      },
+      "models": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Models",
+        "type": "array"
+      },
+      "output_tokens": {
+        "title": "Output Tokens",
+        "type": "integer"
+      },
+      "prompt_tokens": {
+        "title": "Prompt Tokens",
+        "type": "integer"
+      },
+      "run_id": {
+        "title": "Run Id",
+        "type": "string"
+      },
+      "source": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Source"
+      },
+      "started_at": {
+        "format": "date-time",
+        "title": "Started At",
+        "type": "string"
+      },
+      "step_count": {
+        "title": "Step Count",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "run_id",
+      "step_count",
+      "cost_usd",
+      "prompt_tokens",
+      "cached_tokens",
+      "input_tokens",
+      "output_tokens",
+      "started_at",
+      "ended_at",
+      "models",
+      "key_kind"
+    ],
+    "title": "RunSummary",
+    "type": "object"
+  },
   "SavingsVerdict": {
     "description": "Did the fix reduce cost per request? Totals are never compared (G12).",
     "properties": {
@@ -2314,6 +2690,38 @@
     "title": "StatusResponse",
     "type": "object"
   },
+  "TeamActivityResponse": {
+    "description": "Response for activity log.",
+    "properties": {
+      "entries": {
+        "items": {
+          "$ref": "#/components/schemas/ActivityLogEntry"
+        },
+        "title": "Entries",
+        "type": "array"
+      },
+      "limit": {
+        "title": "Limit",
+        "type": "integer"
+      },
+      "offset": {
+        "title": "Offset",
+        "type": "integer"
+      },
+      "total": {
+        "title": "Total",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "entries",
+      "total",
+      "limit",
+      "offset"
+    ],
+    "title": "TeamActivityResponse",
+    "type": "object"
+  },
   "TeamBudgetRow": {
     "description": "Per-team month-to-date spend vs its configured budget.",
     "properties": {
@@ -2516,6 +2924,49 @@
       "daily"
     ],
     "title": "UsageDailyResponse",
+    "type": "object"
+  },
+  "UserResponse": {
+    "description": "User response model.",
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string"
+      },
+      "id": {
+        "format": "uuid",
+        "title": "Id",
+        "type": "string"
+      },
+      "last_login": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Last Login"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Name"
+      }
+    },
+    "required": [
+      "id",
+      "email"
+    ],
+    "title": "UserResponse",
     "type": "object"
   },
   "ValidationError": {

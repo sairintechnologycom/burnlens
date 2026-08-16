@@ -6,40 +6,13 @@ import Shell from "@/components/Shell";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-
-interface Run {
-  run_id: string;
-  step_count: number;
-  cost_usd: number;
-  prompt_tokens: number;
-  cached_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  started_at: string;
-  ended_at: string;
-  models: string[];
-  source: string | null;
-  key_kind: "session" | "trace";
-}
-
-interface Step {
-  timestamp: string;
-  model: string | null;
-  prompt_tokens: number;
-  cached_tokens: number;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-  duration_ms: number | null;
-  status_code: number | null;
-  parent_span_id: string | null;
-}
+import type { RunSummary as Run, RunDetail } from "@/lib/contracts";
 
 function RunsContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
   const [runs, setRuns] = useState<Run[]>([]);
-  const [detail, setDetail] = useState<{ run: Run; steps: Step[] } | null>(null);
+  const [detail, setDetail] = useState<RunDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [order, setOrder] = useState<"cost" | "recent">("cost");
@@ -68,7 +41,7 @@ function RunsContent() {
         `/api/v1/runs/${encodeURIComponent(runId)}?days=${days}`,
         session.token,
       );
-      setDetail(data as { run: Run; steps: Step[] });
+      setDetail(data as RunDetail);
     } catch (err: any) {
       if (err instanceof AuthError) logout();
       else setError(err.message);

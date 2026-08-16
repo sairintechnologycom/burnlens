@@ -9,18 +9,7 @@ import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useToast } from "@/lib/contexts/ToastContext";
-
-interface AlertRule {
-  id: string;
-  threshold_pct: number;
-  channel: string;
-  enabled: boolean;
-  has_slack: boolean;
-  has_teams: boolean;
-  extra_emails: string[];
-  created_at: string;
-  updated_at: string;
-}
+import type { AlertRule } from "@/lib/contracts";
 
 function AlertsContent() {
   const { session, logout } = useAuth();

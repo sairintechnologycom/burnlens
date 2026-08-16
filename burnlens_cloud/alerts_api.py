@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from .auth import verify_token, require_role
 from .alert_engine import is_valid_teams_webhook
 from .database import execute_query, execute_insert
-from .models import TokenPayload
+from .models import AlertRule, TokenPayload
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["alert-rules"])
@@ -22,10 +22,10 @@ class AlertRulePatch(BaseModel):
     teams_webhook_url: Optional[str] = None
 
 
-@router.get("/alert-rules")
+@router.get("/alert-rules", response_model=List[AlertRule])
 async def list_alert_rules(
     token: TokenPayload = Depends(verify_token),
-) -> List[dict]:
+) -> List[AlertRule]:
     """List all alert rules for the authenticated workspace."""
     await require_role("viewer", token)
     try:

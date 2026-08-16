@@ -28,12 +28,12 @@ const DAY_LABELS = (() => {
 })();
 
 const BY_MODEL = [
-  { name: "claude-sonnet-4",    cost: 142.18, calls: 18421 },
-  { name: "gpt-4o",             cost:  92.04, calls:  9112 },
-  { name: "gemini-2.0-flash",   cost:  38.71, calls: 14208 },
-  { name: "gpt-4o-mini",        cost:  21.94, calls: 21340 },
+  { name: "claude-sonnet-5",    cost: 142.18, calls: 18421 },
+  { name: "gpt-5.6-sol",             cost:  92.04, calls:  9112 },
+  { name: "gemini-3.1-flash",   cost:  38.71, calls: 14208 },
+  { name: "gpt-5-mini",        cost:  21.94, calls: 21340 },
   { name: "claude-haiku-4-5",   cost:  18.62, calls: 12041 },
-  { name: "claude-opus-4-7",    cost:  17.24, calls:    81 },
+  { name: "claude-opus-5",    cost:  17.24, calls:    81 },
 ];
 
 const BY_CUSTOMER = [
@@ -75,16 +75,16 @@ interface DemoRequest {
 }
 
 const RECENT_REQUESTS: DemoRequest[] = [
-  { time: "14:02:11", model: "claude-sonnet-4",  feature: "chat-assistant",  customer: "acme-co-prod",    cost: 0.0214, ms: 1820 },
-  { time: "14:02:08", model: "gemini-2.0-flash", feature: "embeddings-batch",customer: "northwind-trial", cost: 0.0008, ms:  340 },
-  { time: "14:02:04", model: "gpt-4o",           feature: "code-review",     customer: "globex-prod",     cost: 0.0418, ms: 2940 },
-  { time: "14:01:59", model: "claude-opus-4-7",  feature: "doc-search",      customer: "acme-co-prod",    cost: 4.1842, ms: 9120, flag: "spike" },
+  { time: "14:02:11", model: "claude-sonnet-5",  feature: "chat-assistant",  customer: "acme-co-prod",    cost: 0.0214, ms: 1820 },
+  { time: "14:02:08", model: "gemini-3.1-flash", feature: "embeddings-batch",customer: "northwind-trial", cost: 0.0008, ms:  340 },
+  { time: "14:02:04", model: "gpt-5.6-sol",           feature: "code-review",     customer: "globex-prod",     cost: 0.0418, ms: 2940 },
+  { time: "14:01:59", model: "claude-opus-5",  feature: "doc-search",      customer: "acme-co-prod",    cost: 4.1842, ms: 9120, flag: "spike" },
   { time: "14:01:54", model: "—",                feature: "doc-search",      customer: "acme-co-prod",    cost: 0.0000, ms:    0, flag: "429" },
-  { time: "14:01:52", model: "claude-sonnet-4",  feature: "chat-assistant",  customer: "initech-prod",    cost: 0.0182, ms: 1644 },
-  { time: "14:01:48", model: "gpt-4o-mini",      feature: "summary-job",     customer: "wonka-prod",      cost: 0.0021, ms:  410 },
+  { time: "14:01:52", model: "claude-sonnet-5",  feature: "chat-assistant",  customer: "initech-prod",    cost: 0.0182, ms: 1644 },
+  { time: "14:01:48", model: "gpt-5-mini",      feature: "summary-job",     customer: "wonka-prod",      cost: 0.0021, ms:  410 },
   { time: "14:01:43", model: "claude-haiku-4-5", feature: "chat-assistant",  customer: "umbrella-trial",  cost: 0.0034, ms:  812 },
-  { time: "14:01:39", model: "gpt-4o",           feature: "doc-search",      customer: "soylent-prod",    cost: 0.0291, ms: 2114 },
-  { time: "14:01:34", model: "gemini-2.0-flash", feature: "embeddings-batch",customer: "globex-prod",     cost: 0.0007, ms:  298 },
+  { time: "14:01:39", model: "gpt-5.6-sol",           feature: "doc-search",      customer: "soylent-prod",    cost: 0.0291, ms: 2114 },
+  { time: "14:01:34", model: "gemini-3.1-flash", feature: "embeddings-batch",customer: "globex-prod",     cost: 0.0007, ms:  298 },
 ];
 
 const TOTAL_SPEND = 330.73;

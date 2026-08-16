@@ -49,7 +49,8 @@ class TestAlertRulesGet:
         _auth(app, owner_token)
         mock_rows = [
             {"id": str(uuid4()), "threshold_pct": 80, "channel": "email",
-             "enabled": True, "has_slack": False, "extra_emails": [],
+             "enabled": True, "has_slack": False, "has_teams": False,
+             "extra_emails": [],
              "created_at": "2026-01-01T00:00:00", "updated_at": "2026-01-01T00:00:00"},
         ]
         with patch("burnlens_cloud.alerts_api.execute_query", AsyncMock(return_value=mock_rows)):

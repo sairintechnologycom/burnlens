@@ -317,6 +317,173 @@ export const WorkflowEconomicsFields: Record<keyof WorkflowEconomics, true> = {
   business_value_accepted: true,
 };
 
+// --- /api/v1/runs  ->  RunSummary ; /api/v1/runs/{id}  ->  RunDetail ---
+// prompt_tokens is the whole prompt (uncached input + cache reads + writes);
+// input_tokens is the UNCACHED share only. Never render input_tokens alone in
+// a cost context — coding agents cache ~99% of the prompt.
+export interface RunSummary {
+  run_id: string;
+  step_count: number;
+  cost_usd: number;
+  prompt_tokens: number;
+  cached_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  started_at: string;
+  ended_at: string;
+  models: string[];
+  source: string | null;
+  key_kind: "session" | "trace";
+}
+export const RunSummaryFields: Record<keyof RunSummary, true> = {
+  run_id: true,
+  step_count: true,
+  cost_usd: true,
+  prompt_tokens: true,
+  cached_tokens: true,
+  input_tokens: true,
+  output_tokens: true,
+  started_at: true,
+  ended_at: true,
+  models: true,
+  source: true,
+  key_kind: true,
+};
+
+export interface RunStep {
+  timestamp: string;
+  model: string | null;
+  prompt_tokens: number;
+  cached_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  duration_ms: number | null;
+  status_code: number | null;
+  parent_span_id: string | null;
+}
+export const RunStepFields: Record<keyof RunStep, true> = {
+  timestamp: true,
+  model: true,
+  prompt_tokens: true,
+  cached_tokens: true,
+  input_tokens: true,
+  output_tokens: true,
+  cost_usd: true,
+  duration_ms: true,
+  status_code: true,
+  parent_span_id: true,
+};
+
+export interface RunDetail {
+  run: RunSummary;
+  steps: RunStep[];
+}
+export const RunDetailFields: Record<keyof RunDetail, true> = {
+  run: true,
+  steps: true,
+};
+
+// --- /api/v1/alert-rules  ->  AlertRule ---
+// Webhook URLs are never returned — only has_slack / has_teams presence flags.
+export interface AlertRule {
+  id: string;
+  threshold_pct: number;
+  channel: string;
+  enabled: boolean;
+  has_slack: boolean;
+  has_teams: boolean;
+  extra_emails: string[];
+  created_at: string;
+  updated_at: string;
+}
+export const AlertRuleFields: Record<keyof AlertRule, true> = {
+  id: true,
+  threshold_pct: true,
+  channel: true,
+  enabled: true,
+  has_slack: true,
+  has_teams: true,
+  extra_emails: true,
+  created_at: true,
+  updated_at: true,
+};
+
+// --- /api/v1/team/activity  ->  TeamActivityResponse / ActivityLogEntry ---
+// `id` is an integer, unlike every other id in this file. `user` is a nested
+// UserResponse or null ("System" rows); the page reads user.email — never a
+// flat user_email, which the backend has never returned.
+export interface ActivityLogEntry {
+  id: number;
+  action: string;
+  detail: Record<string, unknown>;
+  created_at: string;
+  user: { id: string; email: string; name?: string | null } | null;
+}
+export const ActivityLogEntryFields: Record<keyof ActivityLogEntry, true> = {
+  id: true,
+  action: true,
+  detail: true,
+  created_at: true,
+  user: true,
+};
+
+export interface TeamActivityResponse {
+  entries: ActivityLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+export const TeamActivityResponseFields: Record<keyof TeamActivityResponse, true> = {
+  entries: true,
+  total: true,
+  limit: true,
+  offset: true,
+};
+
+// --- /api/v1/usage/cache  ->  CacheOverview / CacheByModelRow ---
+// Two distinct cache layers: provider prompt caching (cache_read/write tokens,
+// provider-aware conventions handled backend-side) and the OSS proxy's
+// semantic response cache (proxy_cache_hits / proxy_cache_saved_usd).
+// cache_read_rate is reads over the WHOLE prompt.
+export interface CacheByModelRow {
+  model: string;
+  request_count: number;
+  prompt_tokens: number;
+  cache_read_tokens: number;
+  cache_read_rate: number;
+}
+export const CacheByModelRowFields: Record<keyof CacheByModelRow, true> = {
+  model: true,
+  request_count: true,
+  prompt_tokens: true,
+  cache_read_tokens: true,
+  cache_read_rate: true,
+};
+
+export interface CacheOverview {
+  prompt_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  uncached_input_tokens: number;
+  cache_read_rate: number;
+  request_count: number;
+  proxy_cache_hits: number;
+  proxy_cache_saved_usd: number;
+  by_model: CacheByModelRow[];
+}
+export const CacheOverviewFields: Record<keyof CacheOverview, true> = {
+  prompt_tokens: true,
+  cache_read_tokens: true,
+  cache_write_tokens: true,
+  uncached_input_tokens: true,
+  cache_read_rate: true,
+  request_count: true,
+  proxy_cache_hits: true,
+  proxy_cache_saved_usd: true,
+  by_model: true,
+};
+
 // --- /api/v1/findings  ->  FindingItem ---
 export interface FindingItem {
   id: string;
