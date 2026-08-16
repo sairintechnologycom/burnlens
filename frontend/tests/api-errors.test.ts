@@ -156,3 +156,88 @@ describe("errorMessageFrom", () => {
     expect(err.message).toBe("Request failed (502)");
   });
 });
+
+/**
+ * apiDownload: a CSV endpoint shares apiFetch's auth and error handling but
+ * must not have `.json()` called on it. A failed export has to reach the user
+ * as a message — "nothing downloaded" is otherwise indistinguishable from
+ * "that month had no spend".
+ */
+const { apiDownload } = await import("@/lib/api");
+
+interface Click {
+  href: string;
+  download: string;
+}
+
+function stubDownloadDom(): Click[] {
+  const clicks: Click[] = [];
+  const link = {
+    href: "",
+    download: "",
+    click() {
+      clicks.push({ href: link.href, download: link.download });
+    },
+    remove() {},
+  };
+  vi.stubGlobal("document", { createElement: () => link, body: { appendChild: () => {} } });
+  vi.stubGlobal("URL", { createObjectURL: () => "blob:stub", revokeObjectURL: () => {} });
+  return clicks;
+}
+
+function respondCsv(body: string, disposition: string | null) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: { get: (name: string) => (name === "Content-Disposition" ? disposition : null) },
+      blob: async () => body,
+    })),
+  );
+}
+
+describe("apiDownload", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+
+  it("names the file from Content-Disposition when the server sends one", async () => {
+    const clicks = stubDownloadDom();
+    respondCsv("Month,Provider\n", 'attachment; filename=burnlens-costs-2026-07.csv');
+
+    await apiDownload("/api/v1/usage/monthly-export?month=2026-07", "tok", "fallback.csv");
+
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].download).toBe("burnlens-costs-2026-07.csv");
+  });
+
+  it("falls back to the caller's filename when the header is absent", async () => {
+    const clicks = stubDownloadDom();
+    respondCsv("Month,Provider\n", null);
+
+    await apiDownload("/api/v1/usage/monthly-export", "tok", "fallback.csv");
+
+    expect(clicks[0].download).toBe("fallback.csv");
+  });
+
+  it("surfaces a structured backend refusal instead of downloading an error body", async () => {
+    const clicks = stubDownloadDom();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 403,
+        ok: false,
+        json: async () => ({
+          detail: {
+            error: "month_outside_retention",
+            message: "the free plan retains 7 days of history, which does not cover all of 2026-07",
+          },
+        }),
+      })),
+    );
+
+    await expect(
+      apiDownload("/api/v1/usage/monthly-export?month=2026-07", "tok", "fallback.csv"),
+    ).rejects.toThrow(/does not cover all of 2026-07/);
+    expect(clicks).toHaveLength(0);
+  });
+});

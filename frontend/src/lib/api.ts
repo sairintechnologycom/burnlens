@@ -99,7 +99,14 @@ export function errorMessageFrom(body: unknown, status: number): string {
   return fallback;
 }
 
-export async function apiFetch(endpoint: string, token: string, options: RequestInit = {}) {
+/**
+ * Issue the request and apply the shared failure handling, returning the raw
+ * Response so the caller decides how to read the body.
+ *
+ * Split out of `apiFetch` because a CSV download needs identical auth, CSRF and
+ * error semantics but must not have `.json()` called on it.
+ */
+async function apiRequest(endpoint: string, token: string, options: RequestInit = {}) {
   const url = `${BASE_URL}${endpoint}`;
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
@@ -145,5 +152,46 @@ export async function apiFetch(endpoint: string, token: string, options: Request
     throw new Error(errorMessageFrom(body, resp.status));
   }
 
+  return resp;
+}
+
+export async function apiFetch(endpoint: string, token: string, options: RequestInit = {}) {
+  const resp = await apiRequest(endpoint, token, options);
   return resp.json();
+}
+
+/** Pull `filename=…` off a Content-Disposition header, if the server sent one. */
+function filenameFrom(disposition: string | null): string | null {
+  if (!disposition) return null;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return match ? decodeURIComponent(match[1].trim()) : null;
+}
+
+/**
+ * Fetch an endpoint that returns a file and hand it to the browser as a
+ * download. Failures throw the same errors `apiFetch` does, so a caller can
+ * render `err.message` inline rather than leaving the user with a dead button.
+ */
+export async function apiDownload(
+  endpoint: string,
+  token: string,
+  fallbackFilename: string,
+  options: RequestInit = {}
+): Promise<void> {
+  const resp = await apiRequest(endpoint, token, options);
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filenameFrom(resp.headers.get("Content-Disposition")) ?? fallbackFilename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    // Revoking synchronously can cancel the download in Safari; one tick is
+    // enough for the click to have been taken.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 }

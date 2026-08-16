@@ -1,8 +1,11 @@
+import csv
+import io
 import logging
 from calendar import monthrange
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from dateutil import tz
 
 from .auth import verify_token, TokenPayload, require_feature
@@ -808,3 +811,195 @@ async def get_customers(token: TokenPayload = Depends(verify_token)):
         }
         for row in result
     ]
+
+
+# ---------------------------------------------------------------------------
+# Month-end finance export
+# ---------------------------------------------------------------------------
+
+# Provider invoices are cut on the UTC calendar month and line-itemed per model,
+# so the export groups the same way. Cache reads and writes stay in their own
+# columns because Anthropic bills them at rates distinct from fresh input; a
+# single "input tokens" figure cannot be reconciled against that invoice.
+_MONTHLY_EXPORT_COLUMNS = [
+    "Month",
+    "Provider",
+    "Model",
+    "Requests",
+    "Prompt Tokens",
+    "Uncached Input Tokens",
+    "Cache Read Tokens",
+    "Cache Write Tokens",
+    "Output Tokens",
+    "Reasoning Tokens",
+    "Cost (USD)",
+]
+
+
+def _resolve_export_month(month: Optional[str]) -> tuple[datetime, datetime, str]:
+    """Resolve a ``YYYY-MM`` string to a half-open UTC ``[start, end)`` window.
+
+    Defaults to the previous complete month, which is the one finance is
+    reconciling when they run this. Raises 400 on an unparseable month or one
+    that has not started yet.
+    """
+    now = datetime.now(tz.UTC)
+    first_of_current = now.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+
+    if month is None:
+        start = (first_of_current - timedelta(days=1)).replace(day=1)
+    else:
+        try:
+            parsed = datetime.strptime(month, "%Y-%m")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_month",
+                    "message": "month must be formatted YYYY-MM, e.g. 2026-07",
+                    "received": month,
+                },
+            )
+        start = parsed.replace(tzinfo=tz.UTC)
+
+    if start > first_of_current:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "month_in_future",
+                "message": "that month has not started yet",
+                "month": start.strftime("%Y-%m"),
+            },
+        )
+
+    end = start + timedelta(days=monthrange(start.year, start.month)[1])
+    return start, end, start.strftime("%Y-%m")
+
+
+@router.get("/usage/monthly-export")
+async def export_monthly_costs_csv(
+    token: TokenPayload = Depends(verify_token),
+    month: Optional[str] = Query(
+        None,
+        description="Month to export as YYYY-MM. Defaults to the previous complete month.",
+    ),
+) -> Response:
+    """Export one month of cost records as CSV, one row per provider and model.
+
+    This is the reconciliation file: the totals here are what a provider invoice
+    for the same month should agree with. Read from PostgreSQL rather than the
+    ClickHouse rollups the interactive charts use — the row store is the system
+    of record, and a finance export is not on a latency budget.
+    """
+    await require_role("viewer", token)
+
+    start, end, label = _resolve_export_month(month)
+
+    # A plan whose retention window opens after the month started would produce
+    # a file that looks complete and is not. Refusing beats handing finance a
+    # short month they would reconcile against a full invoice.
+    retention_days = settings.plan_history_days.get(token.plan, 7)
+    earliest = datetime.now(tz.UTC) - timedelta(days=retention_days)
+    if start < earliest:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "month_outside_retention",
+                "message": (
+                    f"the {token.plan} plan retains {retention_days} days of history, "
+                    f"which does not cover all of {label}"
+                ),
+                "month": label,
+                "plan": token.plan,
+                "retention_days": retention_days,
+            },
+        )
+
+    rows = await execute_query(
+        f"""
+        SELECT
+            provider,
+            model,
+            COUNT(*) AS request_count,
+            COALESCE(SUM({_PROMPT_TOKENS}), 0) AS prompt_tokens,
+            COALESCE(SUM({_UNCACHED_INPUT}), 0) AS uncached_input_tokens,
+            COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+            COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+            COALESCE(SUM(cost_usd), 0) AS cost_usd
+        FROM request_records
+        WHERE workspace_id = $1 AND ts >= $2 AND ts < $3
+        GROUP BY provider, model
+        ORDER BY cost_usd DESC, provider, model
+        """,
+        str(token.workspace_id),
+        start,
+        end,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(_MONTHLY_EXPORT_COLUMNS)
+
+    # Costs stay Decimal end to end. cost_usd is NUMERIC(12, 8); summing a month
+    # of sub-cent rows as float drifts, and this file exists to match an invoice.
+    totals = dict.fromkeys(
+        (
+            "request_count",
+            "prompt_tokens",
+            "uncached_input_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+        ),
+        0,
+    )
+    total_cost = Decimal(0)
+
+    for row in rows:
+        for key in totals:
+            totals[key] += int(row[key])
+        cost = Decimal(str(row["cost_usd"]))
+        total_cost += cost
+
+        writer.writerow([
+            label,
+            row["provider"],
+            row["model"],
+            int(row["request_count"]),
+            int(row["prompt_tokens"]),
+            int(row["uncached_input_tokens"]),
+            int(row["cache_read_tokens"]),
+            int(row["cache_write_tokens"]),
+            int(row["output_tokens"]),
+            int(row["reasoning_tokens"]),
+            f"{cost:.8f}",
+        ])
+
+    # Finance reconciles the total first and the breakdown second, so the file
+    # carries its own total rather than making them re-sum it in a spreadsheet.
+    writer.writerow([
+        label,
+        "TOTAL",
+        "",
+        totals["request_count"],
+        totals["prompt_tokens"],
+        totals["uncached_input_tokens"],
+        totals["cache_read_tokens"],
+        totals["cache_write_tokens"],
+        totals["output_tokens"],
+        totals["reasoning_tokens"],
+        f"{total_cost:.8f}",
+    ])
+
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=burnlens-costs-{label}.csv"
+        },
+    )
