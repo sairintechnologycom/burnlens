@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import BarChart from "@/components/charts/BarChart";
-import { apiFetch, AuthError } from "@/lib/api";
+import { apiFetch, apiDownload, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 import type {
@@ -64,6 +64,67 @@ function latencyClass(ms: number): string {
   if (ms < 1000) return "latency-fast";
   if (ms <= 3000) return "latency-mid";
   return "latency-slow";
+}
+
+/** The month finance is closing when they open this — never the in-progress one. */
+function previousMonth(): string {
+  const now = new Date();
+  const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  return prev.toISOString().slice(0, 7);
+}
+
+function MonthEndExport({ token }: { token: string }) {
+  const [month, setMonth] = useState(previousMonth);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const download = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await apiDownload(
+        `/api/v1/usage/monthly-export?month=${month}`,
+        token,
+        `burnlens-costs-${month}.csv`
+      );
+    } catch (err: any) {
+      // A failed export is blocking, not incidental: the reason has to stay on
+      // screen, because "nothing downloaded" is otherwise indistinguishable
+      // from "that month had no spend".
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ margin: 16, marginBottom: 0 }}>
+      <div className="section-header">
+        <span className="section-header-title">Month-end export</span>
+        <span className="section-header-action">CSV</span>
+      </div>
+      <div style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          type="month"
+          value={month}
+          max={previousMonth()}
+          onChange={(e) => setMonth(e.target.value)}
+          aria-label="Month to export"
+        />
+        <button onClick={download} disabled={busy || !month}>
+          {busy ? "Preparing…" : "Download CSV"}
+        </button>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>
+          One row per provider and model, with a total to reconcile against the invoice.
+        </span>
+      </div>
+      {error && (
+        <div style={{ padding: "0 16px 16px", fontSize: 13, color: "var(--red, #e5484d)" }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function DashboardContent() {
@@ -262,6 +323,9 @@ function DashboardContent() {
           )}
         </div>
       )}
+
+      {/* Month-end finance export */}
+      {hasData && session && <MonthEndExport token={session.token} />}
 
       {/* Recent requests table */}
       {hasData && (

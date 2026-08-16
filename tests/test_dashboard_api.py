@@ -430,3 +430,164 @@ async def test_run_detail_returns_steps_in_order(dash_client, valid_jwt_token):
     assert len(body["steps"]) == 1
     assert body["steps"][0]["cached_tokens"] == 90
     assert "ORDER BY ts" in mock_query.call_args_list[1].args[0]
+
+
+# ---------------------------------------------------------------------------
+# Month-end finance export
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def free_plan_token():
+    """A free-plan JWT — 7 days of retention, so no whole month is covered."""
+    from burnlens_cloud.auth import encode_jwt
+    return encode_jwt(str(uuid4()), str(uuid4()), "owner", "free")
+
+
+def _export_rows():
+    """One provider row of each cached-prompt convention."""
+    return [
+        {
+            "provider": "anthropic",
+            "model": "claude-opus-5",
+            "request_count": 12,
+            "prompt_tokens": 480000,
+            "uncached_input_tokens": 6000,
+            "cache_read_tokens": 460000,
+            "cache_write_tokens": 14000,
+            "output_tokens": 9000,
+            "reasoning_tokens": 0,
+            "cost_usd": "8.12345678",
+        },
+        {
+            "provider": "openai",
+            "model": "gpt-5.6-sol",
+            "request_count": 3,
+            "prompt_tokens": 60000,
+            "uncached_input_tokens": 5000,
+            "cache_read_tokens": 55000,
+            "cache_write_tokens": 0,
+            "output_tokens": 1200,
+            "reasoning_tokens": 400,
+            "cost_usd": "0.00000022",
+        },
+    ]
+
+
+def test_resolve_export_month_window_is_a_whole_utc_month():
+    from burnlens_cloud.dashboard_api import _resolve_export_month
+
+    start, end, label = _resolve_export_month("2026-02")
+    assert label == "2026-02"
+    assert (start.year, start.month, start.day) == (2026, 2, 1)
+    # Half-open: end is the first instant of the next month, not the last of this.
+    assert (end.year, end.month, end.day) == (2026, 3, 1)
+    assert (end - start).days == 28
+
+    # Leap February must not lose a day of billable traffic.
+    leap_start, leap_end, _ = _resolve_export_month("2024-02")
+    assert (leap_end - leap_start).days == 29
+
+
+def test_resolve_export_month_defaults_to_previous_complete_month():
+    from datetime import datetime
+    from dateutil import tz
+    from burnlens_cloud.dashboard_api import _resolve_export_month
+
+    start, end, label = _resolve_export_month(None)
+    now = datetime.now(tz.UTC)
+
+    # The default must never be the in-progress month: it is the one finance is
+    # closing, so its window has to have already ended.
+    assert end <= now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    assert label == start.strftime("%Y-%m")
+
+
+@pytest.mark.asyncio
+async def test_monthly_export_returns_csv_with_total_row(dash_client, valid_jwt_token):
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = _export_rows()
+        response = await dash_client.get(
+            "/api/v1/usage/monthly-export?month=2026-07",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "burnlens-costs-2026-07.csv" in response.headers["content-disposition"]
+
+    lines = response.text.strip().splitlines()
+    assert lines[0].startswith("Month,Provider,Model,Requests,Prompt Tokens")
+    assert len(lines) == 4  # header + 2 provider rows + TOTAL
+
+    assert lines[1].startswith("2026-07,anthropic,claude-opus-5,12,480000,6000,460000,14000,9000,0,")
+    assert lines[1].endswith("8.12345678")
+
+    total = lines[3].split(",")
+    assert total[1] == "TOTAL"
+    assert total[3] == "15"           # 12 + 3 requests
+    assert total[4] == "540000"       # prompt tokens
+    assert total[6] == "515000"       # cache reads
+    # Summed as Decimal: the sub-cent row must survive rather than round away.
+    assert total[10] == "8.12345700"
+
+
+@pytest.mark.asyncio
+async def test_monthly_export_queries_only_that_month(dash_client, valid_jwt_token):
+    with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
+        mock_query.return_value = []
+        response = await dash_client.get(
+            "/api/v1/usage/monthly-export?month=2026-07",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert response.status_code == 200
+    sql, _workspace_id, start, end = mock_query.call_args[0]
+    assert (start.year, start.month, start.day) == (2026, 7, 1)
+    assert (end.year, end.month, end.day) == (2026, 8, 1)
+    assert "ts >= $2 AND ts < $3" in sql
+
+    # The export must not hand-write input_tokens: OpenAI folds cached tokens in
+    # and Anthropic does not, so only the shared provider-aware fragment is safe.
+    assert "CASE WHEN provider IN (" in sql
+    assert "SUM(input_tokens)" not in sql
+
+
+@pytest.mark.asyncio
+async def test_monthly_export_rejects_unparseable_month(dash_client, valid_jwt_token):
+    response = await dash_client.get(
+        "/api/v1/usage/monthly-export?month=July",
+        headers={"Authorization": f"Bearer {valid_jwt_token}"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "invalid_month"
+
+
+@pytest.mark.asyncio
+async def test_monthly_export_rejects_a_month_that_has_not_started(dash_client, valid_jwt_token):
+    response = await dash_client.get(
+        "/api/v1/usage/monthly-export?month=2099-01",
+        headers={"Authorization": f"Bearer {valid_jwt_token}"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["error"] == "month_in_future"
+
+
+@pytest.mark.asyncio
+async def test_monthly_export_refuses_a_month_the_plan_cannot_cover(dash_client, free_plan_token):
+    """A 7-day plan cannot produce a full month, and a short month reconciled
+    against a full invoice is worse than no file at all."""
+    response = await dash_client.get(
+        "/api/v1/usage/monthly-export",
+        headers={"Authorization": f"Bearer {free_plan_token}"},
+    )
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["error"] == "month_outside_retention"
+    assert detail["retention_days"] == 7
+
+
+@pytest.mark.asyncio
+async def test_monthly_export_requires_auth(dash_client):
+    response = await dash_client.get("/api/v1/usage/monthly-export")
+    assert response.status_code == 401
