@@ -457,6 +457,7 @@ async def ingest(
                 record.prompt_tools_tokens,
                 record.prompt_rag_tokens,
                 record.prompt_history_tokens,
+                record.event_id,
             )
         )
 
@@ -505,9 +506,11 @@ async def ingest(
                  cost_usd, duration_ms, status_code, tags, system_prompt_hash, received_at,
                  cache_hit, cache_saved_usd, tool_calls, trace_id, parent_span_id, source,
                  prompt_system_tokens, prompt_tools_tokens, prompt_rag_tokens,
-                 prompt_history_tokens)
+                 prompt_history_tokens, event_id)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+                        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                ON CONFLICT (workspace_id, event_id) WHERE event_id IS NOT NULL
+                DO NOTHING
                 """,
                 insert_data,
             )
@@ -574,6 +577,10 @@ async def ingest(
             )
             overrides = None
 
+        # `accepted` counts records taken off the client's hands, not rows
+        # written. A replayed batch is deduped by ON CONFLICT above and still
+        # reports accepted -- which is what the proxy needs to hear, since the
+        # records are durably recorded either way and it should stop retrying.
         return IngestResponse(
             accepted=len(request.records),
             rejected=0,

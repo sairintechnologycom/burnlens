@@ -273,3 +273,117 @@ async def test_ingest_persists_run_key_columns(ingest_client):
     assert by_name["parent_span_id"] == payload["parent_span_id"]
     assert by_name["source"] == "scan_claude"
     assert by_name["tags"] == {"feature": "chat", "team": "backend", "customer": "acme"}
+
+
+# ---------------------------------------------------------------------------
+# Ingest idempotency — the proxy has always sent a uuid7 event_id and the
+# backend used to discard it, so a retried batch duplicated every row.
+# ---------------------------------------------------------------------------
+
+
+def _insert_sql_and_rows(bulk_insert):
+    """Pull the (sql, args_list) execute_bulk_insert was called with."""
+    sql, args_list = bulk_insert.await_args[0]
+    return sql, args_list
+
+
+async def _post_one(ingest_client, bulk_insert, record: dict):
+    ws_id = str(uuid4())
+    with patch(
+        "burnlens_cloud.ingest.get_workspace_by_api_key",
+        new=AsyncMock(return_value=(ws_id, "free")),
+    ), patch(
+        "burnlens_cloud.ingest._check_quota_or_raise", new=AsyncMock()
+    ), patch(
+        "burnlens_cloud.ingest.execute_query",
+        new=AsyncMock(return_value=[{"otel_endpoint": None, "otel_api_key_encrypted": None, "otel_enabled": False}]),
+    ), patch(
+        "burnlens_cloud.ingest.execute_bulk_insert", new=bulk_insert
+    ), patch(
+        "burnlens_cloud.ingest._record_usage_and_maybe_notify", new=AsyncMock()
+    ):
+        return await ingest_client.post(
+            "/v1/ingest",
+            headers={"X-API-Key": "bl_live_qa_test_key"},
+            json={"records": [record]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_event_id_reaches_the_insert_and_sql_dedups(ingest_client):
+    bulk_insert = AsyncMock()
+    record = _oss_proxy_payload_shape()
+    record["event_id"] = "01931f6e-0000-7000-8000-abcdefabcdef"
+
+    resp = await _post_one(ingest_client, bulk_insert, record)
+    assert resp.status_code == 200, resp.text
+
+    sql, rows = _insert_sql_and_rows(bulk_insert)
+    assert "event_id" in sql
+    # The predicate has to be repeated here or Postgres cannot infer the
+    # partial unique index and the statement errors at runtime.
+    assert "ON CONFLICT (workspace_id, event_id) WHERE event_id IS NOT NULL" in sql
+    assert "DO NOTHING" in sql
+    assert rows[0][-1] == "01931f6e-0000-7000-8000-abcdefabcdef"
+
+
+@pytest.mark.asyncio
+async def test_record_without_event_id_still_inserts_as_null(ingest_client):
+    """Proxies older than the event_id field must keep working, not 500.
+
+    They land as NULL, which the partial index excludes — so they keep today's
+    duplicate-on-retry behaviour rather than colliding with each other.
+    """
+    bulk_insert = AsyncMock()
+    resp = await _post_one(ingest_client, bulk_insert, _oss_proxy_payload_shape())
+
+    assert resp.status_code == 200, resp.text
+    _sql, rows = _insert_sql_and_rows(bulk_insert)
+    assert rows[0][-1] is None
+
+
+@pytest.mark.asyncio
+async def test_insert_columns_placeholders_and_tuple_all_agree(ingest_client):
+    """A column added without its $N, or without a tuple slot, fails here.
+
+    asyncpg would otherwise only raise against a live database, which this
+    suite mocks away — so the mismatch would ship and break ingest in prod.
+    """
+    import re
+
+    bulk_insert = AsyncMock()
+    record = _oss_proxy_payload_shape()
+    record["event_id"] = "01931f6e-0000-7000-8000-abcdefabcdef"
+    resp = await _post_one(ingest_client, bulk_insert, record)
+    assert resp.status_code == 200, resp.text
+
+    sql, rows = _insert_sql_and_rows(bulk_insert)
+    stmt = sql[: sql.index("ON CONFLICT")]
+
+    columns = stmt[stmt.index("(") + 1 : stmt.index(")")]
+    n_columns = len([c for c in columns.split(",") if c.strip()])
+    n_placeholders = max(int(m) for m in re.findall(r"\$(\d+)", stmt))
+
+    assert n_columns == n_placeholders, (
+        f"{n_columns} columns but highest placeholder is ${n_placeholders}"
+    )
+    assert len(rows[0]) == n_columns, (
+        f"tuple supplies {len(rows[0])}, statement wants {n_columns}"
+    )
+
+
+def test_event_id_unique_index_is_workspace_scoped_and_partial():
+    """Dedup must not become a cross-tenant denial of write.
+
+    A globally unique event_id would let any workspace suppress another's row by
+    replaying its id. The predicate keeps pre-existing NULL rows out of the index.
+    """
+    import pathlib
+
+    ddl = pathlib.Path("burnlens_cloud/database.py").read_text()
+    idx = ddl[ddl.index("idx_request_records_event_id"):]
+    idx = idx[: idx.index('"""')]
+
+    assert "(workspace_id, event_id)" in idx, "index must be scoped to the workspace"
+    assert "WHERE event_id IS NOT NULL" in idx, "index must be partial"
+    assert "UNIQUE" in ddl[ddl.index("CREATE UNIQUE INDEX IF NOT EXISTS idx_request_records_event_id") - 20:ddl.index("idx_request_records_event_id")]
