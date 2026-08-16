@@ -3015,6 +3015,19 @@
     "title": "VerifyEmailBody",
     "type": "object"
   },
+  "WeeklyDigestRequest": {
+    "properties": {
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "title": "WeeklyDigestRequest",
+    "type": "object"
+  },
   "WorkflowEconomics": {
     "description": "Unit economics for one workflow.\n\n`cost_per_accepted_usd` divides TOTAL workflow spend by accepted outcomes,\nnot just the spend allocated to accepted ones \u2014 failed and rejected attempts\ncost real money, so charging them to the successes is the honest unit cost.\nThe components below show how much of it is rework.\n\nNone when there are no accepted outcomes yet: a workflow burning money with\nnothing to show for it has no meaningful unit cost, and reporting 0 or\ninfinity there would be worse than reporting nothing.",
     "properties": {

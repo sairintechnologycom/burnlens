@@ -20,6 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .alert_engine import evaluate_all_workspaces
 from .config import settings
 from .database import get_pool
+from .digest import send_weekly_digests
 from .reconciliation import reconcile_all_workspaces
 
 log = logging.getLogger(__name__)
@@ -81,3 +82,27 @@ async def reconcile(
     except Exception as exc:
         log.error("cron/reconcile: unhandled error: %s", exc)
         return {"checked": 0, "failed": 0, "alerted": 0}
+
+
+@router.post("/weekly-digest")
+async def weekly_digest(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    """
+    Weekly cron endpoint. Emails each opted-in paid workspace its spend digest.
+
+    Returns {"considered": N, "sent": M, "skipped_empty": K} always — fail-open
+    for the same reason as the other two: a mail-provider outage must not make
+    the endpoint look broken to whatever schedules it.
+
+    Not idempotent. Firing it twice in a week sends two digests, so the
+    schedule is the only thing keeping it weekly.
+    """
+    _verify_cron_secret(credentials)
+    try:
+        result = await send_weekly_digests(get_pool())
+        log.info("cron/weekly-digest: %s", result)
+        return result
+    except Exception as exc:
+        log.error("cron/weekly-digest: unhandled error: %s", exc)
+        return {"considered": 0, "sent": 0, "skipped_empty": 0}

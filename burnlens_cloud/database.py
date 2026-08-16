@@ -56,8 +56,26 @@ async def init_db():
                 otel_endpoint TEXT,
                 otel_api_key_encrypted TEXT,
                 otel_enabled BOOLEAN NOT NULL DEFAULT false,
-                otel_last_push TIMESTAMPTZ
+                otel_last_push TIMESTAMPTZ,
+                weekly_digest_enabled BOOLEAN NOT NULL DEFAULT true
             )
+        """)
+
+        # Migration: weekly spend digest opt-out for existing deployments.
+        # Defaults true so the digest ships to workspaces that already exist;
+        # the settings toggle is the opt-out.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces'
+                      AND column_name = 'weekly_digest_enabled'
+                ) THEN
+                    ALTER TABLE workspaces
+                    ADD COLUMN weekly_digest_enabled BOOLEAN NOT NULL DEFAULT true;
+                END IF;
+            END $$;
         """)
 
         # Migration: add Paddle columns for existing deployments (post-Stripe)

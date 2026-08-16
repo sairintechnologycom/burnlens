@@ -1,0 +1,35 @@
+name: Weekly spend digest
+
+# Emails each opted-in paid workspace its previous 7 days of spend. Monday
+# 08:00 UTC: the week it reports is Mon-Sun complete, and it lands before the
+# working day in EU/US-East rather than overnight.
+#
+# The endpoint is NOT idempotent — a re-run sends a second digest, so use
+# workflow_dispatch only when a scheduled run failed to deliver.
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"     # 08:00 UTC Mondays
+  workflow_dispatch:        # allow manual trigger from Actions UI
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: POST /cron/weekly-digest
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://api.burnlens.app/cron/weekly-digest \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -H "X-Requested-With: burnlens-cron")
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "status=$status body=$body"
+          if [ "$status" != "200" ]; then
+            echo "::error::Cron endpoint returned HTTP $status"
+            exit 1
+          fi
