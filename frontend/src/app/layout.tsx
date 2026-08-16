@@ -39,6 +39,17 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  // Both of these are unset in Vercel, so neither meta tag renders in
+  // production — and that is not a gap. Google is verified by DNS TXT on
+  // burnlens.app (`dig +short TXT burnlens.app` shows the
+  // google-site-verification record), which is the stronger method: it is a
+  // domain property, so it covers every subdomain and protocol and survives a
+  // redeploy that drops an env var. Bing inherits that through its "import
+  // from Google Search Console" flow.
+  //
+  // Absence of these meta tags has now twice been read as "the site is not
+  // verified". Check DNS before concluding that again. The env vars stay wired
+  // as the fallback for the day DNS is not available.
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
     other: {
