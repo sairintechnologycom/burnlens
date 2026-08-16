@@ -18,12 +18,16 @@ This module does two things at boot:
 1. Logs an inventory of every external credential: configured or not, and what
    breaks when it isn't. Presence only — cheap, no network.
 2. Probes Paddle for liveness, because presence was the exact thing that lied.
+3. Probes the webhook secret for *agreement* with Paddle. Same lesson, worse
+   symptom: a mismatched signing secret makes `/billing/webhook` 401 every real
+   event, so a customer who paid silently stays on the free plan.
 
 It never blocks or fails startup. A crashlooping API is worse than a degraded
 one, and Railway would restart it forever.
 """
 
 import asyncio
+import hmac
 import logging
 from typing import Callable, NamedTuple
 
@@ -149,11 +153,116 @@ async def probe_paddle() -> bool:
     return False
 
 
-def schedule_startup_checks() -> "asyncio.Task":
-    """Run the inventory now and the liveness probe in the background.
+async def probe_webhook_secret() -> bool:
+    """Verify PADDLE_WEBHOOK_SECRET is the secret Paddle actually signs with.
 
-    The probe is detached so a slow or unreachable Paddle cannot delay boot;
+    The inventory above only proves the secret is PRESENT — the same weakness
+    that let a dead API key report healthy for three weeks. A webhook secret is
+    worse in one way: the API key fails loudly (checkout 502s), while a
+    mismatched webhook secret fails *silently*. Paddle signs with the real
+    secret, `_verify_signature` rejects it, `/billing/webhook` returns 401, and
+    the customer who just paid sits on the free plan. Nothing else notices.
+
+    This is easy to hit because a destination's secret and the env var are
+    rotated in separate places: regenerate one and forget the other and the two
+    drift with no error anywhere.
+
+    Returns True only when the configured secret matches an ACTIVE url
+    destination. Never raises.
+    """
+    if not settings.paddle_webhook_secret:
+        return False  # the inventory has already reported this
+
+    base = (
+        "https://sandbox-api.paddle.com"
+        if settings.paddle_environment == "sandbox"
+        else "https://api.paddle.com"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{base}/notification-settings?per_page=200",
+                headers={"Authorization": f"Bearer {settings.paddle_api_key}"},
+            )
+    except Exception as exc:
+        logger.warning("Paddle webhook probe inconclusive (transport): %s", exc)
+        return False
+
+    if resp.status_code != 200:
+        logger.warning(
+            "Paddle webhook probe inconclusive: GET /notification-settings "
+            "returned %s", resp.status_code,
+        )
+        return False
+
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        logger.warning("Paddle webhook probe inconclusive (bad JSON): %s", exc)
+        return False
+
+    destinations = payload.get("data") or payload.get("notification-settings") or []
+    ours = settings.paddle_webhook_secret
+
+    def _matches(dest: dict) -> bool:
+        # compare_digest over the raw secret — constant time, and the secret
+        # itself never reaches a log line or an alert body.
+        return hmac.compare_digest(str(dest.get("endpoint_secret_key") or ""), ours)
+
+    active = [d for d in destinations if d.get("active") and d.get("type") == "url"]
+    for dest in active:
+        if _matches(dest):
+            logger.info(
+                "Paddle webhook secret matches active destination %s (%s)",
+                dest.get("id"), dest.get("description"),
+            )
+            return True
+
+    # No active destination signs with our secret. Say which one it DOES match
+    # if any — "you kept the secret of a destination you disabled" is by far
+    # the most likely way to get here, and naming it saves the investigation.
+    stale = [d.get("id") for d in destinations if not d.get("active") and _matches(d)]
+    detail = (
+        f"It matches DISABLED destination {stale[0]} — that destination no "
+        f"longer receives events, so every real webhook will 401."
+        if stale else
+        "It matches no destination at all, active or disabled."
+    )
+    active_ids = ", ".join(str(d.get("id")) for d in active) or "none"
+    from .email import send_ops_alert
+    await send_ops_alert(
+        "Paddle webhook secret does not match Paddle",
+        f"PADDLE_WEBHOOK_SECRET does not match any active notification "
+        f"destination.\n\n{detail}\n\n"
+        f"Nothing will look broken: POST /billing/webhook returns 401, Paddle "
+        f"records a failed delivery, and a customer who just paid STAYS ON THE "
+        f"FREE PLAN. There is no other symptom.\n\n"
+        f"Active url destinations: {active_ids}\n\n"
+        f"Fix: copy the signing secret from the active destination in Paddle > "
+        f"Developer tools > Notifications and set PADDLE_WEBHOOK_SECRET on "
+        f"burnlens-proxy. Paddle retains notifications for 90 days and can "
+        f"replay them, and /billing/webhook dedups on event_id, so anything "
+        f"rejected meanwhile can be replayed safely once the secret is fixed.",
+    )
+    return False
+
+
+def schedule_startup_checks() -> "asyncio.Task":
+    """Run the inventory now and the liveness probes in the background.
+
+    The probes are detached so a slow or unreachable Paddle cannot delay boot;
     Railway health checks would kill the deploy long before a 15s timeout.
     """
     log_credential_inventory()
-    return asyncio.create_task(probe_paddle())
+    return asyncio.create_task(_run_probes())
+
+
+async def _run_probes() -> None:
+    """Paddle probes, in order. Never raises.
+
+    The webhook probe only runs once the key is known good: it authenticates
+    with the same key, so a dead key would make it fail too and emit a second
+    alert blaming the wrong credential.
+    """
+    if await probe_paddle():
+        await probe_webhook_secret()
