@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           # Same 3.12 as the test suite and the OpenAPI snapshot. Newer Pythons
           # resolve different wheels and would audit a set prod never runs.
@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
