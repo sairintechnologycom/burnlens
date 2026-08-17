@@ -231,3 +231,74 @@ async def test_webhook_probe_is_skipped_when_the_api_key_is_dead():
 
     paddle.assert_awaited_once()
     webhook.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Paddle key age — warning BEFORE the key dies, not after
+
+
+@pytest.mark.asyncio
+async def test_key_age_alerts_inside_the_warning_window():
+    """probe_paddle only catches a key that is already dead, which is one
+    checkout outage too late."""
+    from datetime import date
+
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import check_paddle_key_age
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_key_rotated_at", "2026-08-16"), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        # 80 days in: 10 left, inside the 14-day window.
+        days_left = await check_paddle_key_age(today=date(2026, 11, 4))
+
+    assert days_left == 10
+    assert alert.await_count == 1
+    assert "expires in 10 day(s)" in alert.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_key_age_stays_quiet_while_there_is_time():
+    from datetime import date
+
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import check_paddle_key_age
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_key_rotated_at", "2026-08-16"), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        days_left = await check_paddle_key_age(today=date(2026, 8, 20))
+
+    assert days_left == 86
+    alert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_key_age_alerts_on_an_already_expired_key():
+    from datetime import date
+
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import check_paddle_key_age
+
+    alert = AsyncMock()
+    with patch.object(config_mod.settings, "paddle_key_rotated_at", "2026-08-16"), \
+         patch("burnlens_cloud.email.send_ops_alert", alert):
+        days_left = await check_paddle_key_age(today=date(2026, 12, 1))
+
+    assert days_left < 0
+    assert alert.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_key_age_is_skipped_when_unset_or_unparseable():
+    """Never raises and never alerts on a bad value — a malformed env var must
+    not page anyone, and must not take down boot."""
+    from burnlens_cloud import config as config_mod
+    from burnlens_cloud.startup_check import check_paddle_key_age
+
+    alert = AsyncMock()
+    for value in ("", "last tuesday", "16-08-2026"):
+        with patch.object(config_mod.settings, "paddle_key_rotated_at", value), \
+             patch("burnlens_cloud.email.send_ops_alert", alert):
+            assert await check_paddle_key_age() is None
+    alert.assert_not_awaited()

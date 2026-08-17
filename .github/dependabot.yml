@@ -1,0 +1,58 @@
+# Dependency update PRs. Nothing here scanned dependencies before this file
+# existed: no Dependabot config, no CodeQL, no audit step — a CVE in a pinned
+# dependency would have sat unnoticed indefinitely.
+#
+# Weekly, not daily: a FinOps backend with two Python packages and one Next.js
+# app does not generate enough churn to justify daily PR noise, and noise is how
+# update PRs start getting merged unread.
+#
+# open-pull-requests-limit is deliberately low per ecosystem for the same
+# reason. Grouping is on for minor/patch so a routine week is one PR to review
+# rather than nine; majors stay separate because they need real reading.
+version: 2
+
+updates:
+  # Hosted backend (burnlens-cloud). requirements.txt is what production runs.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The PyPI package users pip install. Its dependency tree ends up on customer
+  # machines proxying real provider traffic, so it matters most of the four.
+  - package-ecosystem: pip
+    directory: "/packaging/burnlens-proxy"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      proxy-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Actions are a supply-chain surface too: a compromised third-party action
+  # runs with this repo's workflow token.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3

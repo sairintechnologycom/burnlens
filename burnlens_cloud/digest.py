@@ -20,13 +20,19 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from .email import deliver, mail_configured
+from .email import deliver_now, mail_configured
 from .models import INCLUSIVE_PROMPT_TOKEN_PROVIDERS
 from .pii_crypto import decrypt_pii
 
 logger = logging.getLogger(__name__)
 
 DIGEST_DAYS = 7
+
+# A workspace that already got a digest this recently is skipped. This is the
+# whole of the idempotency guard: the endpoint is externally triggered, so a
+# retried or hand-fired run must not mail everyone a second time. Six rather
+# than seven days so a schedule that drifts by an hour still sends.
+DIGEST_MIN_GAP_DAYS = 6
 
 # Same provider-aware prompt total as the dashboard's run queries: OpenAI and
 # Google fold cache reads into input_tokens, Anthropic reports them disjointly.
@@ -244,23 +250,40 @@ async def _owner_email(conn: Any, workspace_id: str) -> Optional[str]:
 
 
 async def send_weekly_digests(db_pool: Any, now: Optional[datetime] = None) -> dict:
-    """Build and queue a digest for every opted-in paid workspace.
+    """Send a digest to every opted-in paid workspace that is due one.
 
-    Returns {"considered": N, "sent": M, "skipped_empty": K}. Fail-open per
-    workspace: one bad row must not stop the rest of the run.
+    Returns {"considered", "sent", "failed", "skipped_empty", "skipped_recent"}.
+    `sent` counts messages the mail provider accepted, not messages queued —
+    the whole point of awaiting delivery here.
+
+    Fail-open per workspace: one bad row must not stop the rest of the run.
     """
     from .config import settings
 
-    considered = sent = skipped_empty = 0
+    now = now or datetime.now(timezone.utc)
+    due_before = now - timedelta(days=DIGEST_MIN_GAP_DAYS)
+    considered = sent = failed = skipped_empty = skipped_recent = 0
+
+    def _result() -> dict:
+        return {
+            "considered": considered,
+            "sent": sent,
+            "failed": failed,
+            "skipped_empty": skipped_empty,
+            "skipped_recent": skipped_recent,
+        }
 
     if not mail_configured():
         logger.warning("weekly digest: email not configured, nothing sent")
-        return {"considered": 0, "sent": 0, "skipped_empty": 0}
+        return _result()
 
     async with db_pool.acquire() as conn:
+        # The recency filter runs in Python rather than SQL so an already-sent
+        # workspace still lands in `considered` and `skipped_recent`. A run that
+        # reports "considered: 0" is indistinguishable from a broken query.
         workspaces = await conn.fetch(
             """
-            SELECT id, name
+            SELECT id, name, weekly_digest_last_sent_at
             FROM workspaces
             WHERE plan != 'free' AND active = true AND weekly_digest_enabled = true
             ORDER BY id
@@ -271,6 +294,11 @@ async def send_weekly_digests(db_pool: Any, now: Optional[datetime] = None) -> d
             workspace_id = str(ws["id"])
             considered += 1
             try:
+                last_sent = ws["weekly_digest_last_sent_at"]
+                if last_sent is not None and last_sent >= due_before:
+                    skipped_recent += 1
+                    continue
+
                 digest = await build_weekly_digest(conn, workspace_id, now=now)
                 if digest is None:
                     skipped_empty += 1
@@ -286,14 +314,25 @@ async def send_weekly_digests(db_pool: Any, now: Optional[datetime] = None) -> d
                     workspace_name=ws["name"] or "your workspace",
                     frontend_url=settings.burnlens_frontend_url,
                 )
-                if deliver(
+                delivered = await deliver_now(
                     recipient,
                     f"BurnLens weekly: ${digest['cost_usd']:,.2f} across {digest['request_count']:,} requests",
                     body,
                     "weekly digest",
-                ):
-                    sent += 1
+                )
+                if not delivered:
+                    failed += 1
+                    continue
+
+                # Stamped only after a confirmed delivery, so a failed send is
+                # retried by the next run instead of being marked done.
+                sent += 1
+                await conn.execute(
+                    "UPDATE workspaces SET weekly_digest_last_sent_at = $2 WHERE id = $1",
+                    ws["id"],
+                    now,
+                )
             except Exception as exc:
                 logger.error("weekly digest: workspace %s failed: %s", workspace_id, exc)
 
-    return {"considered": considered, "sent": sent, "skipped_empty": skipped_empty}
+    return _result()

@@ -6,7 +6,7 @@ fragments — same approach as tests/test_cloud_findings.py.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -17,6 +17,11 @@ from burnlens_cloud.digest import (
 )
 
 NOW = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+
+
+def _workspace(ws_id, name, last_sent=None):
+    """A workspaces row as the send loop reads it."""
+    return {"id": ws_id, "name": name, "weekly_digest_last_sent_at": last_sent}
 
 
 class FakeConn:
@@ -30,9 +35,14 @@ class FakeConn:
         self.waste = waste or {"open_count": 0, "waste_usd": 0}
         self.owner_email = owner_email
         self.workspaces = workspaces if workspaces is not None else [
-            {"id": "ws-1", "name": "Acme"}
+            _workspace("ws-1", "Acme")
         ]
         self.sql_log: list[str] = []
+        self.executed: list[tuple] = []
+
+    async def execute(self, sql, *args):
+        self.sql_log.append(sql)
+        self.executed.append((sql, args))
 
     async def fetchrow(self, sql, *args):
         self.sql_log.append(sql)
@@ -191,49 +201,115 @@ def test_html_says_so_when_there_is_no_prior_week():
 # send_weekly_digests
 
 
-async def test_send_loop_queues_one_email_per_workspace_with_spend():
+EMPTY_RUN = {"considered": 0, "sent": 0, "failed": 0,
+             "skipped_empty": 0, "skipped_recent": 0}
+
+
+async def test_send_loop_sends_one_email_per_workspace_with_spend():
     conn = FakeConn(
         totals=_totals(),
         models=[{"model": "claude-opus-5", "cost": 60.0, "requests": 120}],
     )
     with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
          patch("burnlens_cloud.digest.decrypt_pii", return_value="owner@example.com"), \
-         patch("burnlens_cloud.digest.deliver", return_value=True) as deliver:
+         patch("burnlens_cloud.digest.deliver_now",
+               new=AsyncMock(return_value=True)) as deliver_now:
         result = await send_weekly_digests(FakePool(conn), now=NOW)
 
-    assert result == {"considered": 1, "sent": 1, "skipped_empty": 0}
-    recipient, subject, body, what = deliver.call_args.args
+    assert result == {"considered": 1, "sent": 1, "failed": 0,
+                      "skipped_empty": 0, "skipped_recent": 0}
+    recipient, subject, body, what = deliver_now.call_args.args
     assert recipient == "owner@example.com"
     assert "$100.00" in subject
     assert what == "weekly digest"
 
 
+async def test_a_confirmed_send_is_stamped_on_the_workspace():
+    """The stamp is the idempotency guard; a send that does not record it
+    would let the next run mail the same owner again."""
+    conn = FakeConn(totals=_totals())
+    with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
+         patch("burnlens_cloud.digest.decrypt_pii", return_value="o@e.com"), \
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock(return_value=True)):
+        await send_weekly_digests(FakePool(conn), now=NOW)
+
+    sql, args = next((s, a) for s, a in conn.executed if "weekly_digest_last_sent_at" in s)
+    assert "UPDATE workspaces" in sql
+    assert args == ("ws-1", NOW)
+
+
+async def test_a_workspace_mailed_this_week_is_not_mailed_again():
+    """Re-firing the endpoint must not double-send. This is the whole reason
+    the column exists — the cron is externally triggered and retryable."""
+    conn = FakeConn(
+        totals=_totals(),
+        workspaces=[_workspace("ws-1", "Acme", last_sent=NOW - timedelta(days=1))],
+    )
+    with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
+         patch("burnlens_cloud.digest.decrypt_pii", return_value="o@e.com"), \
+         patch("burnlens_cloud.digest.deliver_now",
+               new=AsyncMock(return_value=True)) as deliver_now:
+        result = await send_weekly_digests(FakePool(conn), now=NOW)
+
+    assert result == {"considered": 1, "sent": 0, "failed": 0,
+                      "skipped_empty": 0, "skipped_recent": 1}
+    deliver_now.assert_not_awaited()
+
+
+async def test_a_workspace_mailed_last_week_is_due_again():
+    conn = FakeConn(
+        totals=_totals(),
+        workspaces=[_workspace("ws-1", "Acme", last_sent=NOW - timedelta(days=7))],
+    )
+    with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
+         patch("burnlens_cloud.digest.decrypt_pii", return_value="o@e.com"), \
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock(return_value=True)):
+        result = await send_weekly_digests(FakePool(conn), now=NOW)
+
+    assert result["sent"] == 1 and result["skipped_recent"] == 0
+
+
+async def test_a_failed_delivery_is_counted_and_left_unstamped():
+    """`sent` must mean delivered. An unstamped failure is retried next run
+    rather than being silently marked done."""
+    conn = FakeConn(totals=_totals())
+    with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
+         patch("burnlens_cloud.digest.decrypt_pii", return_value="o@e.com"), \
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock(return_value=False)):
+        result = await send_weekly_digests(FakePool(conn), now=NOW)
+
+    assert result == {"considered": 1, "sent": 0, "failed": 1,
+                      "skipped_empty": 0, "skipped_recent": 0}
+    assert not [s for s, _ in conn.executed if "weekly_digest_last_sent_at" in s]
+
+
 async def test_send_loop_skips_quiet_workspaces_without_emailing():
     conn = FakeConn(totals=_totals(cost_this=0.0))
     with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
-         patch("burnlens_cloud.digest.deliver") as deliver:
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock()) as deliver_now:
         result = await send_weekly_digests(FakePool(conn), now=NOW)
 
-    assert result == {"considered": 1, "sent": 0, "skipped_empty": 1}
-    deliver.assert_not_called()
+    assert result == {"considered": 1, "sent": 0, "failed": 0,
+                      "skipped_empty": 1, "skipped_recent": 0}
+    deliver_now.assert_not_awaited()
 
 
 async def test_send_loop_noops_when_mail_is_unconfigured():
     """Same fail-open posture as every other sender — no crash, no send."""
     conn = FakeConn(totals=_totals())
     with patch("burnlens_cloud.digest.mail_configured", return_value=False), \
-         patch("burnlens_cloud.digest.deliver") as deliver:
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock()) as deliver_now:
         result = await send_weekly_digests(FakePool(conn), now=NOW)
 
-    assert result == {"considered": 0, "sent": 0, "skipped_empty": 0}
-    deliver.assert_not_called()
+    assert result == EMPTY_RUN
+    deliver_now.assert_not_awaited()
 
 
 async def test_send_loop_survives_one_bad_workspace():
     """One workspace failing must not stop the rest of the run."""
     conn = FakeConn(
         totals=_totals(),
-        workspaces=[{"id": "ws-bad", "name": "Bad"}, {"id": "ws-ok", "name": "Ok"}],
+        workspaces=[_workspace("ws-bad", "Bad"), _workspace("ws-ok", "Ok")],
     )
     calls = {"n": 0}
 
@@ -246,7 +322,7 @@ async def test_send_loop_survives_one_bad_workspace():
     with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
          patch("burnlens_cloud.digest.build_weekly_digest", side_effect=flaky), \
          patch("burnlens_cloud.digest.decrypt_pii", return_value="owner@example.com"), \
-         patch("burnlens_cloud.digest.deliver", return_value=True):
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock(return_value=True)):
         result = await send_weekly_digests(FakePool(conn), now=NOW)
 
     assert calls["n"] == 2
@@ -257,7 +333,7 @@ async def test_send_loop_only_selects_paid_opted_in_workspaces():
     conn = FakeConn(totals=_totals())
     with patch("burnlens_cloud.digest.mail_configured", return_value=True), \
          patch("burnlens_cloud.digest.decrypt_pii", return_value="o@e.com"), \
-         patch("burnlens_cloud.digest.deliver", return_value=True):
+         patch("burnlens_cloud.digest.deliver_now", new=AsyncMock(return_value=True)):
         await send_weekly_digests(FakePool(conn), now=NOW)
 
     ws_sql = next(s for s in conn.sql_log if "FROM workspaces" in s)
@@ -306,7 +382,8 @@ def test_cron_weekly_digest_200_with_secret():
          patch("burnlens_cloud.cron_api.get_pool", return_value=MagicMock()), \
          patch(
              "burnlens_cloud.cron_api.send_weekly_digests",
-             new=AsyncMock(return_value={"considered": 2, "sent": 1, "skipped_empty": 1}),
+             new=AsyncMock(return_value={"considered": 2, "sent": 1, "failed": 0,
+                                        "skipped_empty": 1, "skipped_recent": 0}),
          ):
         with TestClient(_make_cron_app(), raise_server_exceptions=False) as client:
             resp = client.post(
@@ -338,4 +415,4 @@ def test_cron_weekly_digest_fails_open_on_error():
                 headers={"Authorization": "Bearer test-cron-secret"},
             )
     assert resp.status_code == 200
-    assert resp.json() == {"considered": 0, "sent": 0, "skipped_empty": 0}
+    assert resp.json() == EMPTY_RUN

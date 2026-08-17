@@ -29,6 +29,7 @@ one, and Railway would restart it forever.
 import asyncio
 import hmac
 import logging
+from datetime import date
 from typing import Callable, NamedTuple
 
 import httpx
@@ -66,6 +67,8 @@ CREDENTIALS: list[Credential] = [
                "operator alerts — credential expiry goes unnoticed", False),
     Credential("CRON_SECRET", lambda: bool(settings.cron_secret),
                "scheduled job authentication", False),
+    Credential("PADDLE_KEY_ROTATED_AT", lambda: bool(settings.paddle_key_rotated_at),
+               "advance warning before the Paddle key's 90-day expiry", False),
     Credential("PADDLE_CLOUD_ANNUAL_PRICE_ID", lambda: bool(settings.paddle_cloud_annual_price_id),
                "annual Cloud checkout", False),
     Credential("PADDLE_TEAMS_ANNUAL_PRICE_ID", lambda: bool(settings.paddle_teams_annual_price_id),
@@ -247,6 +250,70 @@ async def probe_webhook_secret() -> bool:
     return False
 
 
+PADDLE_KEY_LIFETIME_DAYS = 90
+PADDLE_KEY_WARN_DAYS_LEFT = 14
+
+
+async def check_paddle_key_age(today: date | None = None) -> int | None:
+    """Warn before the Paddle key expires instead of after. Never raises.
+
+    Returns days remaining, or None when the check cannot run.
+
+    `probe_paddle` above catches a key that is ALREADY dead, which is one
+    checkout outage too late — that is exactly how checkout stayed down for
+    three weeks. Paddle keys last 90 days, Paddle has no key-management API and
+    no expiry field on any response, so the creation date cannot be discovered;
+    PADDLE_KEY_ROTATED_AT has to carry it. Rotating the key means updating that
+    variable too, and forgetting to leaves a stale-but-conservative date, which
+    warns early rather than late.
+
+    `today` is injectable so tests do not depend on the wall clock.
+    """
+    if not settings.paddle_key_rotated_at:
+        logger.info(
+            "Paddle key age unknown (PADDLE_KEY_ROTATED_AT unset) — expiry will "
+            "not be warned about, only detected after checkout breaks"
+        )
+        return None
+
+    try:
+        rotated = date.fromisoformat(settings.paddle_key_rotated_at.strip())
+    except ValueError:
+        logger.warning(
+            "PADDLE_KEY_ROTATED_AT=%r is not an ISO date (YYYY-MM-DD) — age check skipped",
+            settings.paddle_key_rotated_at,
+        )
+        return None
+
+    days_left = PADDLE_KEY_LIFETIME_DAYS - ((today or date.today()) - rotated).days
+    if days_left > PADDLE_KEY_WARN_DAYS_LEFT:
+        logger.info("Paddle key age OK — %d days until expiry", days_left)
+        return days_left
+
+    logger.warning("Paddle API key expires in %d day(s)", days_left)
+    from .email import send_ops_alert
+    await send_ops_alert(
+        f"Paddle API key expires in {days_left} day(s)",
+        f"PADDLE_API_KEY was created {rotated.isoformat()} and Paddle keys last "
+        f"{PADDLE_KEY_LIFETIME_DAYS} days.\n\n"
+        f"When it lapses, every Paddle call 403s — including plain reads — so "
+        f"checkout returns 502 and no customer can subscribe. A 403 reads like a "
+        f"scope problem, which is why this has cost three weeks of checkout "
+        f"before.\n\n"
+        f"Fix, in this order:\n"
+        f"1. Create a replacement key in the Paddle dashboard (Developer tools > "
+        f"Authentication) with transaction/subscription/customer read+write. "
+        f"There is no API for this.\n"
+        f"2. `railway variables --set PADDLE_API_KEY=... --set "
+        f"PADDLE_KEY_ROTATED_AT=<today>` — the Railway CONSOLE has silently "
+        f"failed to commit this variable before; the CLI commits and deploys.\n"
+        f"3. Confirm `Paddle credential OK (production)` in the boot log AND "
+        f"that the new key's sha256[:12] is what prod loaded, before revoking "
+        f"the old key. The OK line only proves *a* valid key is live.",
+    )
+    return days_left
+
+
 def schedule_startup_checks() -> "asyncio.Task":
     """Run the inventory now and the liveness probes in the background.
 
@@ -262,7 +329,9 @@ async def _run_probes() -> None:
 
     The webhook probe only runs once the key is known good: it authenticates
     with the same key, so a dead key would make it fail too and emit a second
-    alert blaming the wrong credential.
+    alert blaming the wrong credential. The age check runs for the same reason —
+    warning that a working key expires soon is noise next to "it is dead now".
     """
     if await probe_paddle():
         await probe_webhook_secret()
+        await check_paddle_key_age()

@@ -91,12 +91,13 @@ async def weekly_digest(
     """
     Weekly cron endpoint. Emails each opted-in paid workspace its spend digest.
 
-    Returns {"considered": N, "sent": M, "skipped_empty": K} always — fail-open
-    for the same reason as the other two: a mail-provider outage must not make
-    the endpoint look broken to whatever schedules it.
+    Returns {"considered", "sent", "failed", "skipped_empty", "skipped_recent"}
+    always — fail-open for the same reason as the other two: a mail-provider
+    outage must not make the endpoint look broken to whatever schedules it.
 
-    Not idempotent. Firing it twice in a week sends two digests, so the
-    schedule is the only thing keeping it weekly.
+    Safe to re-fire. A workspace mailed within the last DIGEST_MIN_GAP_DAYS is
+    counted in `skipped_recent` and not mailed again. `sent` counts confirmed
+    deliveries, so a run that reports sent > 0 really did put mail on the wire.
     """
     _verify_cron_secret(credentials)
     try:
@@ -105,4 +106,5 @@ async def weekly_digest(
         return result
     except Exception as exc:
         log.error("cron/weekly-digest: unhandled error: %s", exc)
-        return {"considered": 0, "sent": 0, "skipped_empty": 0}
+        return {"considered": 0, "sent": 0, "failed": 0,
+                "skipped_empty": 0, "skipped_recent": 0}

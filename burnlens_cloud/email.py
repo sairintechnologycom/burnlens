@@ -124,6 +124,31 @@ def deliver(recipient_email: str, subject: str, html_body: str, what: str) -> bo
     return True
 
 
+async def deliver_now(recipient_email: str, subject: str, html_body: str, what: str) -> bool:
+    """Deliver one email and report the real outcome. Fail-open — never raises.
+
+    The awaited counterpart to `deliver`. True here means the mail provider
+    accepted the message, not that a background task was queued — so a caller
+    can return a count someone is willing to trust.
+
+    Use from cron jobs only. `deliver` exists because request handlers must not
+    wait on an SMTP handshake; a weekly job has no such latency to protect, and
+    a queued-but-failed send is invisible unless the log tail happens to still
+    hold the line.
+    """
+    if not mail_configured():
+        logger.warning("%s: email not configured (SMTP_PASSWORD unset), skipping", what)
+        return False
+
+    try:
+        await asyncio.to_thread(_smtp_send, recipient_email, subject, html_body)
+        logger.info("%s: delivered to %s", what, recipient_email)
+        return True
+    except Exception:
+        logger.exception("%s: delivery failed for %s", what, recipient_email)
+        return False
+
+
 def track_email_task(task: "asyncio.Task") -> "asyncio.Task":
     """Register a fire-and-forget email task so the event loop retains it.
 
