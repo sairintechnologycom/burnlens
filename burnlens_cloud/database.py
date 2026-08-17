@@ -57,7 +57,8 @@ async def init_db():
                 otel_api_key_encrypted TEXT,
                 otel_enabled BOOLEAN NOT NULL DEFAULT false,
                 otel_last_push TIMESTAMPTZ,
-                weekly_digest_enabled BOOLEAN NOT NULL DEFAULT true
+                weekly_digest_enabled BOOLEAN NOT NULL DEFAULT true,
+                weekly_digest_last_sent_at TIMESTAMPTZ
             )
         """)
 
@@ -74,6 +75,24 @@ async def init_db():
                 ) THEN
                     ALTER TABLE workspaces
                     ADD COLUMN weekly_digest_enabled BOOLEAN NOT NULL DEFAULT true;
+                END IF;
+            END $$;
+        """)
+
+        # Migration: last confirmed digest delivery. This column IS the digest's
+        # idempotency guard — /cron/weekly-digest is externally triggered, so
+        # without it a retried or hand-fired run mails every owner twice.
+        # NULL means never sent, which is what makes the first run send.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'workspaces'
+                      AND column_name = 'weekly_digest_last_sent_at'
+                ) THEN
+                    ALTER TABLE workspaces
+                    ADD COLUMN weekly_digest_last_sent_at TIMESTAMPTZ;
                 END IF;
             END $$;
         """)

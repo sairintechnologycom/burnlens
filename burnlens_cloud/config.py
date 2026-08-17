@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     paddle_cloud_annual_price_id: str = os.getenv("PADDLE_CLOUD_ANNUAL_PRICE_ID", "")
     paddle_teams_annual_price_id: str = os.getenv("PADDLE_TEAMS_ANNUAL_PRICE_ID", "")
     paddle_environment: str = os.getenv("PADDLE_ENVIRONMENT", "production")  # "sandbox" | "production"
+    # Date PADDLE_API_KEY was created, as YYYY-MM-DD. Paddle keys expire 90 days
+    # out and Paddle exposes no API for the expiry, so the date has to be told to
+    # us; startup_check turns it into a warning before the key dies rather than
+    # after checkout starts 403ing. Unset disables the check.
+    paddle_key_rotated_at: str = os.getenv("PADDLE_KEY_ROTATED_AT", "")
 
     # App
     log_level: str = os.getenv("LOG_LEVEL", "INFO")

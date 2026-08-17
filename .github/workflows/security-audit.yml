@@ -1,0 +1,97 @@
+name: Dependency audit
+
+# Scans dependencies for known CVEs. Nothing did this before: no Dependabot
+# config, no CodeQL, no audit step anywhere. The first local run of this found
+# 12 advisories across 4 packages, 8 of them in starlette — which sits directly
+# on every production request path.
+#
+# Deliberately NOT gated on pull_request. A vulnerability published upstream has
+# nothing to do with the PR in front of you, and a check that goes red for
+# reasons the author cannot fix is a check people learn to ignore — after which
+# it protects nothing. So this runs weekly and fails loudly on its own schedule;
+# GitHub notifies on a failed scheduled run, and Dependabot (see
+# .github/dependabot.yml) opens the actual fix PRs.
+#
+# Monday 06:00 UTC — ahead of the weekly digest cron at 08:00, so a bad Monday
+# surfaces in one sitting.
+#
+# Each job installs its dependency set and then runs `pip-audit` bare, against
+# the installed environment. `pip-audit -r requirements.txt` looks tidier but
+# builds a nested resolver venv, which is both slower and an extra thing that
+# can fail for reasons unrelated to any CVE.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-audit:
+    # The hosted backend. requirements.txt is what production installs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Same 3.12 as the test suite and the OpenAPI snapshot. Newer Pythons
+          # resolve different wheels and would audit a set prod never runs.
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pip-audit
+
+      - name: Audit
+        run: pip-audit --progress-spinner off
+
+  proxy-audit:
+    # The PyPI package users pip install. Its tree ends up on customer machines
+    # proxying real provider traffic, so it is the most exposed of the three.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install proxy package
+        run: |
+          python -m pip install --upgrade pip
+          pip install ./packaging/burnlens-proxy
+          pip install pip-audit
+
+      - name: Audit
+        run: pip-audit --progress-spinner off
+
+  frontend-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Audit frontend deps
+        working-directory: frontend
+        # high, not low: the npm advisory database is noisy at the low/moderate
+        # end for dev-only transitives, and a scan nobody trusts is a scan
+        # nobody reads.
+        run: npm audit --audit-level=high
