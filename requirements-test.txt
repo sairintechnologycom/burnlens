@@ -18,8 +18,8 @@
 # when the proxy's scheduler starts; it is NOT used by burnlens_cloud, which
 # is why it stays out of requirements.txt (Railway runs burnlens_cloud only).
 aiosqlite==0.22.1
-typer==0.12.3
-rich==13.7.1
+typer==0.27.1
+rich==15.0.0
 PyYAML==6.0.1
 APScheduler==3.11.2
 
@@ -30,11 +30,17 @@ opentelemetry-api==1.42.1
 opentelemetry-sdk==1.42.1
 opentelemetry-exporter-otlp-proto-grpc==1.42.1
 
-# OSS proxy CLI dep. typer 0.12.3 is incompatible with click >= 8.2 (the
-# Parameter.make_metavar() signature changed to require `ctx`), and click is
-# only pulled transitively, so pin it explicitly to keep `burnlens` CLI tests
-# green.
-click==8.1.8
+# OSS proxy CLI dep, pinned explicitly because click is only pulled
+# transitively and CI must test the version users actually get.
+#
+# This pin used to hold click at 8.1.8 to keep typer 0.12.3 working
+# (Parameter.make_metavar() gained a required `ctx` argument in click 8.2).
+# That left CI on a click with a known advisory (PYSEC-2026-2132, fixed in
+# 8.3.3) while `pip install burnlens` — whose pyproject declares only
+# `typer>=0.12.0` with no upper bound — already resolved to a fixed click for
+# real users. The pin was protecting CI from an upgrade users had already
+# taken, which is backwards. typer is now bumped to a click-8.4 release.
+click==8.4.2
 
 # Test tooling
 pytest==9.0.3
