@@ -1,0 +1,59 @@
+{
+  "source": "burnlens dogfood database (local proxy + agent log scans)",
+  "workflows": [
+    {
+      "workflow_id": "repo:burnlens",
+      "window_start": "2026-07-10T04:58:07.510000+00:00",
+      "window_end": "2026-08-15T12:06:22.974000+00:00",
+      "requests": 5251,
+      "cost_usd": 710.8501,
+      "accepted": 104,
+      "rejected": 2,
+      "failed": 0,
+      "cost_per_accepted_usd": 6.8351,
+      "tokens_per_accepted": 10461628,
+      "input_tokens": 103530912,
+      "output_tokens": 2858834,
+      "cache_read_tokens": 963561103,
+      "cache_write_tokens": 18058411,
+      "cache_read_share": 0.903,
+      "models": [
+        {
+          "model": "claude-opus-5",
+          "requests": 2748,
+          "cost_usd": 368.8077
+        },
+        {
+          "model": "claude-opus-4-8",
+          "requests": 1409,
+          "cost_usd": 195.431
+        },
+        {
+          "model": "claude-fable-5",
+          "requests": 368,
+          "cost_usd": 94.9295
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "requests": 301,
+          "cost_usd": 33.1516
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "requests": 394,
+          "cost_usd": 17.6411
+        },
+        {
+          "model": "codex-auto-review",
+          "requests": 31,
+          "cost_usd": 0.8892
+        }
+      ]
+    }
+  ],
+  "database": {
+    "total_cost_usd": 11214.9253,
+    "attributed_cost_usd": 4758.1038,
+    "unattributed_cost_usd": 6456.8215
+  }
+}

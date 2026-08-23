@@ -311,11 +311,12 @@ export default function LandingPage() {
                 </a>
               </div>
               <p className="lp-proof">
-                <strong>$6.98</strong> per accepted PR on this repository, measured 2026-08-16.{" "}
-                97 merged · 2 closed unmerged · $677 of agent spend over 30 days, with the
-                failed attempts charged to the successes. A floor, not a ceiling — any model
-                missing from the pricing tables counts as $0. Cost is attributed per repo:
-                agent logs record which repo a session ran in, not which branch.
+                <strong>$6.84</strong> per accepted PR on this repository, measured 2026-08-15.{" "}
+                104 merged · 2 closed unmerged · $710.85 of agent spend, with the failed
+                attempts charged to the successes. A floor, not a ceiling — any model missing
+                from the pricing tables counts as $0. Cost is attributed per repo: agent logs
+                record which repo a session ran in, not which branch.{" "}
+                <a href="/cost-per-outcome">See the full method</a>.
               </p>
               <div className="lp-provider-strip lp-provider-strip-left">
                 {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "xAI", "DeepSeek", "Azure OpenAI", "AWS Bedrock"].map((p) => (
@@ -736,6 +737,8 @@ export default function LandingPage() {
             <a href="/scan">Scan coding-agent spend</a>
             <span>·</span>
             <a href="/llm-pricing">LLM API pricing</a>
+            <span>·</span>
+            <a href="/cost-per-outcome">Cost per merged PR</a>
             <span>·</span>
             <a href="/docs">Docs</a>
             <span>·</span>

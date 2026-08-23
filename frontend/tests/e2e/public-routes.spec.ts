@@ -17,6 +17,7 @@ const PUBLIC_ROUTES = [
   '/demo',
   '/scan',
   '/llm-pricing',
+  '/cost-per-outcome',
   '/docs',
   '/docs/scan',
   '/docs/proxy',
