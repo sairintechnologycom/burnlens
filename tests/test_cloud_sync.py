@@ -484,3 +484,30 @@ async def test_fetch_unsynced_outcomes_tolerates_missing_table(tmp_path):
         await conn.commit()
 
     assert await _fetch_unsynced_outcomes(db, 10) == []
+
+
+@pytest.mark.asyncio
+async def test_sync_now_counts_outcomes(config, tmp_path):
+    """`sync --now` must not report "nothing to push" when it pushed outcomes.
+
+    The count is what the CLI prints, so an outcome-only sync that returns 0
+    tells the user the opposite of what happened.
+    """
+    from burnlens.storage.database import insert_outcome
+    from burnlens.storage.models import Outcome
+
+    db = str(tmp_path / "sync.db")
+    await init_db(db)
+    await insert_outcome(db, Outcome(outcome_id="o1", workflow_id="wf", status="accepted"))
+
+    sync = CloudSync(config)
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+
+    with patch.object(sync, "_get_client") as mock_client:
+        client = AsyncMock()
+        client.post.return_value = mock_resp
+        mock_client.return_value = client
+        total = await sync.sync_now(db)
+
+    assert total == 1

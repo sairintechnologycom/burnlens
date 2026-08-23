@@ -357,8 +357,24 @@ class CloudSync:
         return len(rows)
 
     async def sync_now(self, db_path: str) -> int:
-        """Manual one-shot sync. Returns total records pushed."""
+        """Manual one-shot sync. Returns total records pushed, outcomes included.
+
+        Outcomes are drained here rather than left to ``_sync_once``, whose
+        return value is deliberately cost-records-only for the loop below. That
+        made ``burnlens sync --now`` report "no un-synced records to push" in
+        the very run that pushed 75 outcomes.
+        """
         total = 0
+        while True:
+            try:
+                pushed = await self._sync_outcomes_once(db_path)
+            except Exception:
+                logger.debug("Cloud sync: outcome push failed", exc_info=True)
+                break
+            total += pushed
+            if pushed < _BATCH_SIZE:
+                break
+
         while True:
             count = await self._sync_once(db_path)
             if count < _BATCH_SIZE:
