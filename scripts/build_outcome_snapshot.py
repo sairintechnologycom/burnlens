@@ -31,8 +31,30 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "frontend" / "src" / "data" / "cost-per-outcome.json"
 DB = Path(os.environ.get("BURNLENS_DB", Path.home() / ".burnlens" / "burnlens.db"))
 
-# Public page, real repo names. Additions are a disclosure decision, not a code change.
-PUBLISHABLE = ("repo:burnlens",)
+# Public page, real repo names. Additions are a disclosure decision, not a code
+# change -- the operator widened this to every repository on 2026-08-23.
+#
+# Every entry maps to a real git checkout on the build machine. Four workflow ids
+# in the database do NOT and are deliberately absent: repo:sessions,
+# repo:bhushan, repo:copilot and two "...chatgpt-conversation..." ids are
+# artifacts of how agent session logs encode a working directory, not
+# repositories anyone could look up. Publishing a name nothing can verify is
+# worse than disclosing the spend as unattributed, which is what happens instead.
+PUBLISHABLE = (
+    "repo:deploymentlab",
+    "repo:manan",
+    "repo:zeroslateUI",
+    "repo:burnlens",
+    "repo:pkgsafe",
+    "repo:strata",
+    "repo:mediaOS",
+    "repo:sutra",
+    "repo:DermaLens",
+    "repo:ShubhLifafa",
+    "repo:SiteHQ",
+    "repo:Infracanvas",
+    "repo:interview_copilot",
+)
 
 _WINDOW = """
 SELECT
@@ -87,6 +109,13 @@ def build_workflow(conn: sqlite3.Connection, workflow_id: str) -> dict | None:
         _OUTCOMES, {"w": workflow_id, "start": start, "end": end}
     ).fetchall())
     accepted = counts.get("accepted", 0)
+    # Merged PRs the window excluded. Without this a repo with 31 merged PRs
+    # that all predate its telemetry looks identical to one that merged nothing,
+    # and the first is the interesting case -- it is the window rule made visible.
+    (accepted_all,) = conn.execute(
+        "SELECT COUNT(*) FROM outcomes WHERE workflow_id = :w AND status = 'accepted'",
+        {"w": workflow_id},
+    ).fetchone()
 
     total_tokens = (
         spend["input_tokens"] + spend["output_tokens"]
@@ -101,6 +130,7 @@ def build_workflow(conn: sqlite3.Connection, workflow_id: str) -> dict | None:
         "requests": spend["requests"],
         "cost_usd": round(spend["cost_usd"], 4),
         "accepted": accepted,
+        "accepted_outside_window": accepted_all - accepted,
         "rejected": counts.get("rejected", 0),
         "failed": counts.get("failed", 0),
         # Total spend over accepted outcomes, matching WorkflowEconomics: the
@@ -138,9 +168,28 @@ def build() -> dict:
     finally:
         conn.close()
 
+    # Aggregate over published workflows only. Computed here rather than in the
+    # page so the totals and the rows can never disagree about which repos are
+    # in scope.
+    pub_cost = sum(w["cost_usd"] for w in workflows)
+    pub_accepted = sum(w["accepted"] for w in workflows)
+    priced = [w for w in workflows if w["cost_per_accepted_usd"] is not None]
+
     return {
         "source": "burnlens dogfood database (local proxy + agent log scans)",
         "workflows": workflows,
+        "published": {
+            "repos": len(workflows),
+            "repos_with_unit_cost": len(priced),
+            "requests": sum(w["requests"] for w in workflows),
+            "cost_usd": round(pub_cost, 4),
+            "accepted": pub_accepted,
+            # Blended, not an average of the per-repo rates: a mean of ratios
+            # would weight a 2-PR repo the same as a 104-PR one.
+            "cost_per_accepted_usd": round(pub_cost / pub_accepted, 4) if pub_accepted else None,
+            "cheapest_usd": min((w["cost_per_accepted_usd"] for w in priced), default=None),
+            "dearest_usd": max((w["cost_per_accepted_usd"] for w in priced), default=None),
+        },
         "database": {
             "total_cost_usd": round(total, 4),
             "attributed_cost_usd": round(attributed, 4),
