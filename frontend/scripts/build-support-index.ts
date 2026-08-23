@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chunkMarkdown } from "../src/lib/support/chunker";
+import { CHUNK_MAX_CHARS, SUPPORT_SOURCES } from "../src/lib/support/sources";
 import type { Chunk, SupportIndex } from "../src/lib/support/types";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -9,52 +10,16 @@ const repoRoot = resolve(here, "../..");
 const frontendRoot = resolve(here, "..");
 const outPath = resolve(frontendRoot, "src/lib/support/index.json");
 
-const CHUNK_MAX_CHARS = 1200;
-
-interface Source {
-  absPath: string;
-  source: string;
-  baseUrl: string;
-}
-
-const sources: Source[] = [
-  {
-    absPath: resolve(repoRoot, "README.md"),
-    source: "README.md",
-    baseUrl: "https://github.com/sairintechnologycom/burnlens/blob/main/README.md",
-  },
-  {
-    absPath: resolve(repoRoot, "docs/PROVIDERS.md"),
-    source: "docs/PROVIDERS.md",
-    baseUrl: "https://github.com/sairintechnologycom/burnlens/blob/main/docs/PROVIDERS.md",
-  },
-  {
-    absPath: resolve(repoRoot, "docs/KEY_ROTATION_RUNBOOK.md"),
-    source: "docs/KEY_ROTATION_RUNBOOK.md",
-    baseUrl: "https://github.com/sairintechnologycom/burnlens/blob/main/docs/KEY_ROTATION_RUNBOOK.md",
-  },
-  {
-    absPath: resolve(frontendRoot, "support-knowledge/faq.md"),
-    source: "support-knowledge/faq.md",
-    baseUrl: "https://burnlens.app/faq",
-  },
-  {
-    absPath: resolve(frontendRoot, "support-knowledge/troubleshooting.md"),
-    source: "support-knowledge/troubleshooting.md",
-    baseUrl: "https://burnlens.app/troubleshooting",
-  },
-];
-
 async function loadChunks(): Promise<{ chunks: Chunk[]; missingSources: string[] }> {
   const all: Chunk[] = [];
   const missingSources: string[] = [];
-  for (const src of sources) {
+  for (const src of SUPPORT_SOURCES) {
     let md: string;
     try {
-      md = await readFile(src.absPath, "utf8");
+      md = await readFile(resolve(repoRoot, src.path), "utf8");
     } catch {
-      console.warn(`[build-support-index] skipping missing source: ${src.absPath}`);
-      missingSources.push(src.absPath);
+      console.warn(`[build-support-index] skipping missing source: ${src.path}`);
+      missingSources.push(src.path);
       continue;
     }
     const chunks = chunkMarkdown(
@@ -85,6 +50,18 @@ async function main() {
     return;
   }
   if (chunks.length === 0) throw new Error("No chunks produced — nothing to index");
+
+  // Rewriting on every build stamps a new generatedAt and dirties the tree even
+  // when nothing changed. Developers then revert the churn — which is how the
+  // index went stale for 16 days. Only write when the chunks actually differ.
+  const existing = await readFile(outPath, "utf8").catch(() => null);
+  if (existing) {
+    const committed = JSON.parse(existing) as SupportIndex;
+    if (JSON.stringify(committed.chunks) === JSON.stringify(chunks)) {
+      console.log(`[build-support-index] index already current (${chunks.length} chunks)`);
+      return;
+    }
+  }
 
   const out: SupportIndex = {
     generatedAt: new Date().toISOString(),
