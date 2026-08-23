@@ -1,8 +1,13 @@
-fastapi==0.115.0
+fastapi==0.141.1
+# Pinned explicitly (fastapi only floors it at >=0.46.0) because starlette is
+# the package the CVEs were in: 0.38.6 carried 9 advisories, the last of which
+# (PYSEC-2026-249) is fixed in 1.3.1. An explicit pin keeps pip-audit and
+# Dependabot pointed at it and stops a loose fastapi floor resolving backwards.
+starlette==1.6.0
 uvicorn==0.30.0
 asyncpg==0.30.0
-pydantic==2.7.0
-pydantic-settings==2.4.0
+pydantic==2.13.4
+pydantic-settings==2.15.0
 PyJWT[crypto]==2.13.0
 bcrypt==5.0.0
 httpx==0.27.0

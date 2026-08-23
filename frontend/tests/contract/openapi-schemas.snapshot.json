@@ -12,6 +12,7 @@
         "type": "string"
       },
       "detail": {
+        "additionalProperties": true,
         "title": "Detail",
         "type": "object"
       },
@@ -375,6 +376,7 @@
         "type": "string"
       },
       "detail": {
+        "additionalProperties": true,
         "title": "Detail",
         "type": "object"
       },
@@ -547,6 +549,7 @@
       "routing_overrides": {
         "anyOf": [
           {
+            "additionalProperties": true,
             "type": "object"
           },
           {
@@ -1046,6 +1049,7 @@
         "type": "number"
       },
       "evidence": {
+        "additionalProperties": true,
         "title": "Evidence",
         "type": "object"
       },
@@ -1200,6 +1204,7 @@
       "routing_overrides": {
         "anyOf": [
           {
+            "additionalProperties": true,
             "type": "object"
           },
           {
@@ -1580,6 +1585,7 @@
         "type": "string"
       },
       "metadata": {
+        "additionalProperties": true,
         "title": "Metadata",
         "type": "object"
       },
@@ -1938,6 +1944,7 @@
         "title": "System Prompt Hash"
       },
       "tags": {
+        "additionalProperties": true,
         "title": "Tags",
         "type": "object"
       },
@@ -2117,6 +2124,7 @@
         "title": "System Prompt Hash"
       },
       "tags": {
+        "additionalProperties": true,
         "title": "Tags",
         "type": "object"
       },
@@ -2677,6 +2685,7 @@
       },
       "incidents": {
         "items": {
+          "additionalProperties": true,
           "type": "object"
         },
         "title": "Incidents",
@@ -2971,6 +2980,13 @@
   },
   "ValidationError": {
     "properties": {
+      "ctx": {
+        "title": "Context",
+        "type": "object"
+      },
+      "input": {
+        "title": "Input"
+      },
       "loc": {
         "items": {
           "anyOf": [
