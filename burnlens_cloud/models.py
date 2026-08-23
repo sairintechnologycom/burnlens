@@ -223,6 +223,28 @@ class WorkflowEconomics(BaseModel):
     business_value_accepted: Optional[float] = None
 
 
+class ProviderConcentration(BaseModel):
+    """How much of a workspace's outcomes depend on one provider.
+
+    Spend share alone says who is expensive. It does not say who you cannot
+    leave. `sole_provider_workflows` is the dependency number: workflows where
+    this provider is the only one spending, so there is no evidence anything
+    else can do that work.
+
+    Shares are of workflow-attributed spend and of accepted outcomes inside the
+    window, not of everything the workspace ever spent. `accepted_share` can sum
+    past 1.0 across providers — an outcome several providers contributed to
+    counts for each of them, which is the overlap this endpoint exists to show.
+    """
+    provider: str
+    spend_usd: float
+    spend_share: float
+    accepted_outcomes: int
+    accepted_share: float
+    workflows: int
+    sole_provider_workflows: int
+
+
 class ReconciliationCredentialRequest(BaseModel):
     """A provider billing-API key used only to read that provider's cost report."""
     api_key: str = Field(..., min_length=8, max_length=500)

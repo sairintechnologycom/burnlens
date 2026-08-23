@@ -1646,6 +1646,50 @@
     "title": "PricingResponse",
     "type": "object"
   },
+  "ProviderConcentration": {
+    "description": "How much of a workspace's outcomes depend on one provider.\n\nSpend share alone says who is expensive. It does not say who you cannot\nleave. `sole_provider_workflows` is the dependency number: workflows where\nthis provider is the only one spending, so there is no evidence anything\nelse can do that work.\n\nShares are of workflow-attributed spend and of accepted outcomes inside the\nwindow, not of everything the workspace ever spent. `accepted_share` can sum\npast 1.0 across providers \u2014 an outcome several providers contributed to\ncounts for each of them, which is the overlap this endpoint exists to show.",
+    "properties": {
+      "accepted_outcomes": {
+        "title": "Accepted Outcomes",
+        "type": "integer"
+      },
+      "accepted_share": {
+        "title": "Accepted Share",
+        "type": "number"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "sole_provider_workflows": {
+        "title": "Sole Provider Workflows",
+        "type": "integer"
+      },
+      "spend_share": {
+        "title": "Spend Share",
+        "type": "number"
+      },
+      "spend_usd": {
+        "title": "Spend Usd",
+        "type": "number"
+      },
+      "workflows": {
+        "title": "Workflows",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "provider",
+      "spend_usd",
+      "spend_share",
+      "accepted_outcomes",
+      "accepted_share",
+      "workflows",
+      "sole_provider_workflows"
+    ],
+    "title": "ProviderConcentration",
+    "type": "object"
+  },
   "ProviderReconciliation": {
     "description": "How BurnLens's number compared to one provider's own bill, most recent day.\n\n`drift_pct` is how far BurnLens sits from the provider, signed: negative\nmeans BurnLens counted less than the bill (the usual case \u2014 traffic that\ndid not go through the proxy). None when the provider reported no spend,\nbecause there is nothing to divide by.",
     "properties": {

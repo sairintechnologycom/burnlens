@@ -6,8 +6,9 @@ import EmptyState from "@/components/EmptyState";
 import { apiFetch, AuthError, errorMessageFrom } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
-import type { WorkflowEconomics } from "@/lib/contracts";
+import type { ProviderConcentration, WorkflowEconomics } from "@/lib/contracts";
 import { OutcomesTable, formatPerAccepted, formatUsd } from "./OutcomesTable";
+import { ConcentrationTable } from "./ConcentrationTable";
 
 function KpiStrip({ rows }: { rows: WorkflowEconomics[] }) {
   const accepted = rows.reduce((s, r) => s + r.accepted_count, 0);
@@ -49,6 +50,7 @@ function OutcomesContent() {
   const { session, logout } = useAuth();
   const { days } = usePeriod();
   const [rows, setRows] = useState<WorkflowEconomics[]>([]);
+  const [concentration, setConcentration] = useState<ProviderConcentration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -57,8 +59,12 @@ function OutcomesContent() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch(`/api/v1/outcomes/summary?days=${days}`, session.token);
+      const [data, conc] = await Promise.all([
+        apiFetch(`/api/v1/outcomes/summary?days=${days}`, session.token),
+        apiFetch(`/api/v1/outcomes/concentration?days=${days}`, session.token),
+      ]);
       setRows(Array.isArray(data) ? (data as WorkflowEconomics[]) : []);
+      setConcentration(Array.isArray(conc) ? (conc as ProviderConcentration[]) : []);
     } catch (err: unknown) {
       if (err instanceof AuthError) logout();
       else if (err instanceof Error) setError(err.message);
@@ -127,6 +133,32 @@ function OutcomesContent() {
           Outcomes recorded locally sync to this workspace when cloud sync is on.
         </p>
       </div>
+
+      {concentration.length > 0 && (
+        <div className="card" style={{ margin: 16 }}>
+          <div className="section-header">
+            <span className="section-header-title">Provider dependency</span>
+            <span className="section-header-action">{days}d</span>
+          </div>
+          <ConcentrationTable rows={concentration} />
+          <p
+            style={{
+              margin: "12px 16px 16px",
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "var(--muted)",
+            }}
+          >
+            Spend share says who is expensive. <strong>Sole provider on</strong>{" "}
+            says who you cannot leave: workflows where this provider is the only
+            one spending, so nothing else has been shown to do that work. A
+            provider with a small spend share and a high sole-provider count is
+            the harder dependency of the two. Outcome shares can add up to more
+            than 100% — an accepted outcome that several providers contributed
+            to counts for each of them.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
