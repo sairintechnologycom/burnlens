@@ -15,6 +15,7 @@ import InvoicesCard from "@/components/InvoicesCard";
 import PlanPickerModal from "@/components/PlanPickerModal";
 import UsageCard from "@/components/UsageCard";
 import ApiKeysCard from "@/components/ApiKeysCard";
+import TwoFactorCard from "@/components/TwoFactorCard";
 
 function SettingsContent() {
   const { session, logout } = useAuth();
@@ -157,6 +158,8 @@ function SettingsContent() {
 
       {/* API Keys — Phase 10 Plan 04 (D-22..D-29) */}
       <ApiKeysCard />
+
+      <TwoFactorCard />
 
       {/* Organization */}
       <div className="card" style={{ margin: 16, marginBottom: 0 }}>

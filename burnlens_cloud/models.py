@@ -284,7 +284,17 @@ class SignupResponse(BaseModel):
 
 
 class TokenPayload(BaseModel):
-    """JWT token payload."""
+    """JWT token payload for a full, authenticated session.
+
+    `typ` separates a real session from the short-lived MFA challenge token
+    minted between password and TOTP (see `encode_mfa_challenge`). Pydantic
+    ignores unknown fields, so without an explicit discriminator a challenge
+    token carrying extra claims would deserialise here perfectly happily and be
+    accepted as a session — turning the second factor into a formality.
+
+    Defaults to "session" so JWTs issued before this field existed keep
+    validating for the rest of their expiry rather than logging everyone out.
+    """
     workspace_id: UUID
     user_id: UUID
     role: str  # 'owner' | 'admin' | 'viewer'
@@ -292,6 +302,50 @@ class TokenPayload(BaseModel):
     iat: int
     exp: int
     email_verified: bool = True
+    typ: str = "session"
+
+
+class LoginMFARequiredResponse(BaseModel):
+    """Returned by /auth/login when the account has a confirmed second factor.
+
+    Carries no workspace, no role and no session cookie — only a challenge the
+    client must trade for a real token via /auth/2fa/verify.
+    """
+    mfa_required: bool = True
+    challenge_token: str
+    expires_in: int
+
+
+class TOTPVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str
+
+
+class TOTPSetupResponse(BaseModel):
+    """One-time enrollment material. Returned before 2FA is active."""
+    secret: str
+    otpauth_uri: str
+    qr_svg: str
+
+
+class TOTPConfirmRequest(BaseModel):
+    code: str
+
+
+class TOTPConfirmResponse(BaseModel):
+    enabled: bool
+    recovery_codes: list[str]
+
+
+class TOTPDisableRequest(BaseModel):
+    password: str
+    code: str
+
+
+class TOTPStatusResponse(BaseModel):
+    enabled: bool
+    pending: bool
+    recovery_codes_remaining: int
 
 
 class StatsSummary(BaseModel):

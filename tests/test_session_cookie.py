@@ -86,6 +86,10 @@ async def test_login_sets_httponly_cookie_and_authorizes_subsequent_request(app_
     rows_seq = [
         # users SELECT by email_hash — return password_hash hit.
         [{"id": USER_ID, "password_hash": _bcrypt_hash("pw123456")}],
+        # Second-factor check. NULL = no TOTP enrolled, so login proceeds
+        # straight to a session. This fake is a positional queue, so a new
+        # query anywhere in login shifts every entry below it.
+        [{"totp_confirmed_at": None}],
         # workspace_members JOIN workspaces
         [{
             "workspace_id": WS_ID,

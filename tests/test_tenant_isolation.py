@@ -85,6 +85,10 @@ UNSCOPED_TABLES = frozenset(
         "paddle_events",
         "plan_limits",
         "status_checks",
+        # Scoped to a USER, not a workspace: a second factor belongs to the
+        # human, who may be a member of several workspaces. See the TOTP block
+        # in database.py.
+        "totp_recovery_codes",
         "used_action_tokens",
         "users",
         "workspaces",

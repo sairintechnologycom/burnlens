@@ -20,3 +20,9 @@ python-dateutil==2.9.0
 requests==2.34.2
 clickhouse-connect==0.7.19
 python-multipart==0.0.32
+# TOTP second factor. pyotp implements RFC 6238 (and does the HMAC comparison
+# with compare_digest); qrcode renders the otpauth:// URI as inline SVG so
+# enrollment needs no image host and no frontend QR dependency. Both are pure
+# Python with no transitive deps.
+pyotp==2.10.0
+qrcode==8.2

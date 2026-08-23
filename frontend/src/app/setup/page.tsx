@@ -5,7 +5,7 @@
 import { useState, useEffect, Suspense, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BASE_URL } from "@/lib/api";
+import { BASE_URL, errorMessageFrom } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 
 function isLocalBackend(): boolean {
@@ -58,6 +58,11 @@ function SetupContent() {
   const initialMode: "login" | "register" =
     searchParams.get("intent") === "register" ? "register" : "login";
   const [mode, setMode] = useState<"login" | "register">(initialMode);
+  // Second factor. `mfaChallenge` is the short-lived token /auth/login hands
+  // back instead of a session when the account has TOTP enabled; while it is
+  // set the form renders the code step instead of email/password.
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
@@ -99,6 +104,12 @@ function SetupContent() {
         throw new Error(data.detail || "Login failed");
       }
       const data = await resp.json();
+      if (data.mfa_required) {
+        // No session yet — the password was only the first factor.
+        setMfaChallenge(data.challenge_token);
+        setPassword("");
+        return;
+      }
       storeSession(data);
       router.push(nextPath);
     } catch (err: any) {
@@ -107,6 +118,36 @@ function SetupContent() {
       setLoading(false);
     }
   }, [email, password, router, nextPath]);
+
+  const handleMfaSubmit = useCallback(async () => {
+    if (!mfaChallenge) return;
+    setLoading(true);
+    setError("");
+    try {
+      const resp = await fetch(`${BASE_URL}/auth/2fa/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: JSON.stringify({ challenge_token: mfaChallenge, code: mfaCode }),
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ detail: "Verification failed" }));
+        // The challenge expires after 5 minutes; send the user back to the
+        // password step rather than leaving them retyping codes at a dead token.
+        if (resp.status === 401) {
+          setMfaChallenge(null);
+          setMfaCode("");
+        }
+        throw new Error(errorMessageFrom(data, resp.status));
+      }
+      storeSession(await resp.json());
+      router.push(nextPath);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [mfaChallenge, mfaCode, router, nextPath]);
 
   async function handleForgotSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -416,6 +457,46 @@ function SetupContent() {
                     I saved it — continue
                   </button>
                 </div>
+              ) : mfaChallenge ? (
+                <>
+                  <div className="sp-form-title">Two-factor authentication</div>
+                  <div className="sp-form-sub">
+                    Enter the 6-digit code from your authenticator app, or one of your
+                    recovery codes.
+                  </div>
+
+                  <div className="sp-field">
+                    <label className="sp-label" htmlFor="mfa-code">Code</label>
+                    <input
+                      id="mfa-code"
+                      type="text"
+                      inputMode="text"
+                      autoComplete="one-time-code"
+                      autoFocus
+                      className="sp-input"
+                      placeholder="123456"
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && mfaCode) handleMfaSubmit(); }}
+                    />
+                  </div>
+
+                  <button
+                    className="sp-btn-primary"
+                    onClick={handleMfaSubmit}
+                    disabled={loading || !mfaCode}
+                  >
+                    {loading ? "Verifying..." : "Verify"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setMfaChallenge(null); setMfaCode(""); setError(""); }}
+                    style={{ background: "none", border: "none", color: "var(--s-muted)", cursor: "pointer", fontSize: "var(--fs-13)", padding: 0, marginTop: 8 }}
+                  >
+                    Back to sign in
+                  </button>
+                </>
               ) : mode === "login" ? (
                 <>
                   <div className="sp-form-title">Welcome back</div>
