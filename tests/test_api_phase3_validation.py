@@ -226,7 +226,11 @@ class TestRouterMounting:
         config = BurnLensConfig()
         app = get_app(config)
 
-        routes = [r.path for r in app.routes if hasattr(r, "path")]
+        # Enumerate via the OpenAPI spec, not app.routes: since fastapi 0.141
+        # include_router() leaves lazy `_IncludedRouter` objects in app.routes
+        # that carry no `.path`, so a hasattr(r, "path") filter silently drops
+        # every mounted router and this assertion passes vacuously on nothing.
+        routes = list(app.openapi()["paths"])
 
         expected_fragments = [
             "/api/v1/assets",           # list
