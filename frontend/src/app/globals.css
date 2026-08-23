@@ -719,6 +719,10 @@ img, svg { display: block; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Sole-provider dependency counts on /outcomes; .amber alone is scoped to
+   stat cells and badges, so a table cell needs its own rule. */
+.data-table tbody td.amber { color: var(--amber); }
+
 .data-table tbody tr:hover {
   background: var(--bg2);
 }

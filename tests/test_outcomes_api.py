@@ -335,3 +335,155 @@ async def test_postgres_allocation_matches_sqlite():
         assert float(n["cost_total"]) == pytest.approx(2.50)
     finally:
         await conn.close()
+
+
+# --------------------------------------------- GET /api/v1/outcomes/concentration
+
+
+@pytest.mark.asyncio
+async def test_concentration_requires_auth(outcomes_client):
+    resp = await outcomes_client.get("/api/v1/outcomes/concentration")
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_concentration_computes_shares_from_totals(
+    outcomes_client, valid_jwt_token
+):
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = [
+            {
+                "provider": "anthropic",
+                "spend_usd": 80.0,
+                "accepted_outcomes": 9,
+                "workflows": 3,
+                "sole_provider_workflows": 2,
+                "total_spend": 100.0,
+                "total_accepted": 10,
+            },
+            {
+                "provider": "openai",
+                "spend_usd": 20.0,
+                "accepted_outcomes": 4,
+                "workflows": 2,
+                "sole_provider_workflows": 0,
+                "total_spend": 100.0,
+                "total_accepted": 10,
+            },
+        ]
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/concentration",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert resp.status_code == 200
+    a, o = resp.json()
+    assert a["spend_share"] == pytest.approx(0.8)
+    assert a["accepted_share"] == pytest.approx(0.9)
+    # The dependency signal, and the reason spend share alone is not enough:
+    # openai carries real spend but nothing depends on it alone.
+    assert a["sole_provider_workflows"] == 2
+    assert o["sole_provider_workflows"] == 0
+    # Overlap is allowed to push the shares past 1.0 in total — an outcome two
+    # providers contributed to counts for both.
+    assert a["accepted_share"] + o["accepted_share"] > 1.0
+
+
+@pytest.mark.asyncio
+async def test_concentration_survives_empty_totals(outcomes_client, valid_jwt_token):
+    """A window with rows but no attributed spend must report 0.0, never raise."""
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = [{
+            "provider": "openai",
+            "spend_usd": 0.0,
+            "accepted_outcomes": 0,
+            "workflows": 1,
+            "sole_provider_workflows": 1,
+            "total_spend": 0.0,
+            "total_accepted": 0,
+        }]
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/concentration",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["spend_share"] == 0.0
+    assert resp.json()[0]["accepted_share"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_concentration_passes_window_through(outcomes_client, valid_jwt_token):
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = []
+        await outcomes_client.get(
+            "/api/v1/outcomes/concentration?window_seconds=300",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+    assert q.call_args.args[3] == 300.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not _DSN, reason="set BURNLENS_TEST_PG_DSN to run the Postgres concentration test")
+async def test_postgres_concentration_counts_overlap_and_sole_dependency():
+    """The mocked tests above check the arithmetic; only this one proves the SQL
+    parses and that the DISTINCT/FILTER counting means what the model claims.
+
+    Scenario: openai is the bigger spender but anthropic is the harder
+    dependency, which is precisely the case a spend-ranked table cannot show.
+    """
+    import asyncpg
+
+    from burnlens_cloud.outcomes_api import _CONCENTRATION_SQL
+
+    ws = str(uuid4())
+    conn = await asyncpg.connect(_DSN)
+    try:
+        await conn.execute(_PG_SCHEMA)
+        t0 = datetime.now(timezone.utc) - timedelta(hours=5)
+
+        async def req(minutes, cost, provider, wf):
+            await conn.execute(
+                "INSERT INTO request_records (workspace_id, ts, provider, model, cost_usd, tags)"
+                " VALUES ($1,$2,$3,'m',$4,$5::jsonb)",
+                ws, t0 + timedelta(minutes=minutes), provider, cost,
+                '{"workflow_id": "%s"}' % wf,
+            )
+
+        async def outcome(oid, minutes, wf, status="accepted"):
+            await conn.execute(
+                "INSERT INTO outcomes (workspace_id, outcome_id, workflow_id, status, event_time)"
+                " VALUES ($1,$2,$3,$4,$5)",
+                ws, oid, wf, status, t0 + timedelta(minutes=minutes),
+            )
+
+        # wf_a: openai alone -> openai is the sole provider here.
+        await req(0, 6.0, "openai", "wf_a")
+        await outcome("o1", 1, "wf_a")
+        # wf_b: both providers -> outcome o2 counts for BOTH of them.
+        await req(10, 3.0, "openai", "wf_b")
+        await req(11, 1.0, "anthropic", "wf_b")
+        await outcome("o2", 12, "wf_b")
+        # wf_c: anthropic alone, no accepted outcome -> sole dependency, no credit.
+        await req(20, 2.0, "anthropic", "wf_c")
+
+        rows = await conn.fetch(
+            _CONCENTRATION_SQL, ws, t0 - timedelta(hours=1), 86_400.0
+        )
+        by = {r["provider"]: r for r in rows}
+
+        assert float(by["openai"]["spend_usd"]) == pytest.approx(9.0)
+        assert float(by["anthropic"]["spend_usd"]) == pytest.approx(3.0)
+        # o1 and o2 for openai; only o2 for anthropic.
+        assert by["openai"]["accepted_outcomes"] == 2
+        assert by["anthropic"]["accepted_outcomes"] == 1
+        # Two distinct outcomes total, NOT the 3 a naive sum of the two counts
+        # would give -- o2 must not be double-counted in the denominator.
+        assert by["openai"]["total_accepted"] == 2
+        # Each provider is alone on exactly one workflow.
+        assert by["openai"]["sole_provider_workflows"] == 1
+        assert by["anthropic"]["sole_provider_workflows"] == 1
+        assert by["openai"]["workflows"] == 2
+        assert by["anthropic"]["workflows"] == 2
+    finally:
+        await conn.close()

@@ -317,6 +317,29 @@ export const WorkflowEconomicsFields: Record<keyof WorkflowEconomics, true> = {
   business_value_accepted: true,
 };
 
+// --- /api/v1/outcomes/concentration  ->  ProviderConcentration ---
+// spend_share says who is expensive; sole_provider_workflows says who cannot be
+// left. accepted_share may sum past 1.0 across providers — an outcome several
+// providers contributed to counts for each.
+export interface ProviderConcentration {
+  provider: string;
+  spend_usd: number;
+  spend_share: number;
+  accepted_outcomes: number;
+  accepted_share: number;
+  workflows: number;
+  sole_provider_workflows: number;
+}
+export const ProviderConcentrationFields: Record<keyof ProviderConcentration, true> = {
+  provider: true,
+  spend_usd: true,
+  spend_share: true,
+  accepted_outcomes: true,
+  accepted_share: true,
+  workflows: true,
+  sole_provider_workflows: true,
+};
+
 // --- /api/v1/runs  ->  RunSummary ; /api/v1/runs/{id}  ->  RunDetail ---
 // prompt_tokens is the whole prompt (uncached input + cache reads + writes);
 // input_tokens is the UNCACHED share only. Never render input_tokens alone in

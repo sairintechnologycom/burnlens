@@ -32,6 +32,7 @@ from .database import execute_query
 from .models import (
     OutcomeIngestRequest,
     OutcomeIngestResponse,
+    ProviderConcentration,
     WorkflowEconomics,
 )
 
@@ -226,6 +227,112 @@ async def outcomes_summary(
                     if r["business_value_accepted"] is not None
                     else None
                 ),
+            )
+        )
+    return out
+
+
+# Same allocation rule as _SUMMARY_SQL, narrowed to accepted outcomes: spend
+# share says who is expensive, and only the outcome join says who the workspace
+# cannot leave.
+#
+# `wf_providers` is what makes this more than a group-by. A provider carrying 20%
+# of spend but the ONLY provider on the workflows it touches is a harder
+# dependency than one carrying 60% across workflows two other providers also
+# serve, and no spend-ranked table can show that.
+_CONCENTRATION_SQL = """
+WITH req AS (
+    SELECT r.ts, r.provider, r.cost_usd, r.tags->>'workflow_id' AS workflow_id
+    FROM request_records r
+    WHERE r.workspace_id = $1
+      AND r.ts >= $2
+      AND r.tags->>'workflow_id' IS NOT NULL
+),
+alloc AS (
+    SELECT
+        req.provider,
+        req.cost_usd,
+        req.workflow_id,
+        (
+            SELECT o.outcome_id
+            FROM outcomes o
+            WHERE o.workspace_id = $1
+              AND o.workflow_id = req.workflow_id
+              AND o.status = 'accepted'
+              AND o.event_time >= req.ts
+              AND o.event_time < req.ts + ($3 * interval '1 second')
+            ORDER BY o.event_time ASC
+            LIMIT 1
+        ) AS accepted_outcome_id
+    FROM req
+),
+wf_providers AS (
+    SELECT workflow_id, COUNT(DISTINCT provider) AS n_providers
+    FROM req
+    GROUP BY workflow_id
+),
+totals AS (
+    -- DISTINCT, not a sum of the per-provider counts: an outcome several
+    -- providers contributed to would otherwise inflate the denominator and
+    -- shrink every share.
+    SELECT
+        COALESCE(SUM(cost_usd), 0) AS spend,
+        COUNT(DISTINCT accepted_outcome_id) AS accepted
+    FROM alloc
+)
+SELECT
+    a.provider,
+    COALESCE(SUM(a.cost_usd), 0) AS spend_usd,
+    COUNT(DISTINCT a.accepted_outcome_id) AS accepted_outcomes,
+    COUNT(DISTINCT a.workflow_id) AS workflows,
+    COUNT(DISTINCT a.workflow_id) FILTER (WHERE w.n_providers = 1)
+        AS sole_provider_workflows,
+    t.spend AS total_spend,
+    t.accepted AS total_accepted
+FROM alloc a
+JOIN wf_providers w USING (workflow_id)
+CROSS JOIN totals t
+GROUP BY a.provider, t.spend, t.accepted
+ORDER BY spend_usd DESC
+"""
+
+
+@router.get("/api/v1/outcomes/concentration", response_model=list[ProviderConcentration])
+async def outcomes_concentration(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(30, ge=1, le=365, description="Days to look back"),
+    window_seconds: int = Query(
+        DEFAULT_WINDOW_SECONDS,
+        ge=1,
+        le=604_800,
+        description="How long after a request an outcome may still claim its cost",
+    ),
+):
+    """Which providers the workspace's accepted outcomes actually depend on."""
+    await require_role("viewer", token)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = await execute_query(
+        _CONCENTRATION_SQL, str(token.workspace_id), cutoff, float(window_seconds)
+    )
+
+    out: list[ProviderConcentration] = []
+    for r in rows:
+        total_spend = float(r["total_spend"])
+        total_accepted = int(r["total_accepted"])
+        spend = float(r["spend_usd"])
+        accepted = int(r["accepted_outcomes"])
+        out.append(
+            ProviderConcentration(
+                provider=r["provider"],
+                spend_usd=spend,
+                # Guarded rather than divided in SQL: a window with outcomes but
+                # no attributed spend is a real state, not a division error.
+                spend_share=(spend / total_spend) if total_spend else 0.0,
+                accepted_outcomes=accepted,
+                accepted_share=(accepted / total_accepted) if total_accepted else 0.0,
+                workflows=int(r["workflows"]),
+                sole_provider_workflows=int(r["sole_provider_workflows"]),
             )
         )
     return out
