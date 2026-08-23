@@ -8,11 +8,11 @@ from uuid import uuid4, UUID
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 import bcrypt as _bcrypt
 import jwt
 from jwt.exceptions import InvalidTokenError
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .config import settings
 from .database import execute_query, execute_insert
@@ -238,16 +238,72 @@ def encode_jwt(workspace_id: str, user_id: str, role: str, plan: str, email_veri
     )
 
 
-def decode_jwt(token: str) -> Optional[TokenPayload]:
-    """Decode and validate JWT token."""
+MFA_CHALLENGE_TYP = "mfa_challenge"
+MFA_CHALLENGE_TTL_SECONDS = 5 * 60
+
+
+def encode_mfa_challenge(user_id: str) -> str:
+    """Mint the short-lived token that stands between password and TOTP.
+
+    Deliberately carries NO workspace_id, role or plan. Two independent things
+    then have to fail before this is usable as a session: `decode_jwt` rejects
+    the `typ`, and `TokenPayload` cannot even be constructed from these claims.
+    A single missed check should not be enough to skip the second factor.
+    """
+    now = int(time.time())
+    return jwt.encode(
+        {
+            "typ": MFA_CHALLENGE_TYP,
+            "user_id": user_id,
+            "iat": now,
+            "exp": now + MFA_CHALLENGE_TTL_SECONDS,
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def decode_mfa_challenge(token: str) -> Optional[str]:
+    """Return the user_id from a valid challenge token, else None."""
     try:
         payload = jwt.decode(
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
         )
-        return TokenPayload(**payload)
     except InvalidTokenError:
+        return None
+    if payload.get("typ") != MFA_CHALLENGE_TYP:
+        return None
+    user_id = payload.get("user_id")
+    return str(user_id) if user_id else None
+
+
+def decode_jwt(token: str) -> Optional[TokenPayload]:
+    """Decode and validate a SESSION JWT.
+
+    Rejects any token whose `typ` is not "session" — notably the MFA challenge
+    token, which is signed with the same secret and would otherwise be a valid
+    bearer credential for the whole API.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except InvalidTokenError:
+        return None
+
+    # Absent `typ` means a session token minted before the claim existed.
+    if payload.get("typ", "session") != "session":
+        return None
+
+    try:
+        return TokenPayload(**payload)
+    except ValidationError:
+        # Malformed or partial claims. Reject as unauthenticated rather than
+        # letting a pydantic error escape as a 500 from every authed route.
         return None
 
 
@@ -642,44 +698,14 @@ async def get_workspace_by_api_key(api_key: str) -> Optional[tuple]:
     return (workspace_id, plan)
 
 
-@router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest, response: Response):
+async def issue_session_for_user(user_id: str, response: Response) -> LoginResponse:
+    """Build the authenticated session for `user_id` and set the cookie.
+
+    Extracted from /auth/login so that /auth/2fa/verify mints an IDENTICAL
+    session rather than a parallel re-implementation. A second copy of this is
+    how the two paths drift until one of them forgets `email_verified` or the
+    masked API key and the 2FA route quietly becomes the weaker way in.
     """
-    Login with email and password.
-
-    Workspace ingest keys are deliberately not accepted here: allowing an
-    ingest credential to mint an owner JWT collapses the service-to-service
-    and interactive-user trust boundaries.
-    Returns JWT token and workspace details.
-    """
-    # Normalize email to lowercase so mixed-case typing (e.g. iPhone
-    # auto-capitalize) matches the stored row.
-    if len(request.password) > 128:
-        raise HTTPException(status_code=400, detail="Password too long")
-    email_norm = request.email.strip().lower()
-    from .pii_crypto import lookup_hash as _lh
-    user_result = await execute_query(
-        "SELECT id, password_hash FROM users WHERE email_hash = $1",
-        _lh(email_norm),
-    )
-    if not user_result or not user_result[0]["password_hash"]:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    user_row = user_result[0]
-    if not _bcrypt.checkpw(
-        request.password.encode("utf-8"),
-        user_row["password_hash"].encode("utf-8"),
-    ):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    user_id = str(user_row["id"])
-
-    # Update last_login
-    await execute_insert(
-        "UPDATE users SET last_login = $1 WHERE id = $2",
-        datetime.utcnow(), user_id,
-    )
-
     # Find user's workspace membership. Phase 2c: plaintext owner_email
     # and plaintext api_key columns were dropped; read the encrypted
     # owner_email + the api_key_last4 column needed for masked display.
@@ -744,6 +770,69 @@ async def login(request: LoginRequest, response: Response):
         email_verified=email_verified,
         role=role,
     )
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(request: LoginRequest, response: Response):
+    """
+    Login with email and password.
+
+    Workspace ingest keys are deliberately not accepted here: allowing an
+    ingest credential to mint an owner JWT collapses the service-to-service
+    and interactive-user trust boundaries.
+    Returns JWT token and workspace details.
+    """
+    # Normalize email to lowercase so mixed-case typing (e.g. iPhone
+    # auto-capitalize) matches the stored row.
+    if len(request.password) > 128:
+        raise HTTPException(status_code=400, detail="Password too long")
+    email_norm = request.email.strip().lower()
+    from .pii_crypto import lookup_hash as _lh
+    user_result = await execute_query(
+        "SELECT id, password_hash FROM users WHERE email_hash = $1",
+        _lh(email_norm),
+    )
+    if not user_result or not user_result[0]["password_hash"]:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    user_row = user_result[0]
+    if not _bcrypt.checkpw(
+        request.password.encode("utf-8"),
+        user_row["password_hash"].encode("utf-8"),
+    ):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    user_id = str(user_row["id"])
+
+    # Second factor, if the account has a CONFIRMED one. Checked before
+    # last_login is stamped and before any workspace lookup: a password alone
+    # must not be enough to learn which workspaces this account can reach, nor
+    # to leave a trace that looks like a successful sign-in.
+    #
+    # `totp_confirmed_at IS NOT NULL` is the gate, not the presence of a
+    # secret — a secret exists from the moment enrollment starts, and gating on
+    # it would lock out anyone who opened the setup screen and walked away.
+    totp_row = await execute_query(
+        "SELECT totp_confirmed_at FROM users WHERE id = $1", user_id
+    )
+    if totp_row and totp_row[0]["totp_confirmed_at"]:
+        # No session cookie is set here. The challenge is not a session.
+        return JSONResponse(
+            status_code=200,
+            content={
+                "mfa_required": True,
+                "challenge_token": encode_mfa_challenge(user_id),
+                "expires_in": MFA_CHALLENGE_TTL_SECONDS,
+            },
+        )
+
+    # Update last_login
+    await execute_insert(
+        "UPDATE users SET last_login = $1 WHERE id = $2",
+        datetime.utcnow(), user_id,
+    )
+
+    return await issue_session_for_user(user_id, response)
 
 
 @router.post("/signup", response_model=SignupResponse)

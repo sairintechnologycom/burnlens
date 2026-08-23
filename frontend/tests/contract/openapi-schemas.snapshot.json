@@ -2699,6 +2699,123 @@
     "title": "StatusResponse",
     "type": "object"
   },
+  "TOTPConfirmRequest": {
+    "properties": {
+      "code": {
+        "title": "Code",
+        "type": "string"
+      }
+    },
+    "required": [
+      "code"
+    ],
+    "title": "TOTPConfirmRequest",
+    "type": "object"
+  },
+  "TOTPConfirmResponse": {
+    "properties": {
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "recovery_codes": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Recovery Codes",
+        "type": "array"
+      }
+    },
+    "required": [
+      "enabled",
+      "recovery_codes"
+    ],
+    "title": "TOTPConfirmResponse",
+    "type": "object"
+  },
+  "TOTPDisableRequest": {
+    "properties": {
+      "code": {
+        "title": "Code",
+        "type": "string"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "password",
+      "code"
+    ],
+    "title": "TOTPDisableRequest",
+    "type": "object"
+  },
+  "TOTPSetupResponse": {
+    "description": "One-time enrollment material. Returned before 2FA is active.",
+    "properties": {
+      "otpauth_uri": {
+        "title": "Otpauth Uri",
+        "type": "string"
+      },
+      "qr_svg": {
+        "title": "Qr Svg",
+        "type": "string"
+      },
+      "secret": {
+        "title": "Secret",
+        "type": "string"
+      }
+    },
+    "required": [
+      "secret",
+      "otpauth_uri",
+      "qr_svg"
+    ],
+    "title": "TOTPSetupResponse",
+    "type": "object"
+  },
+  "TOTPStatusResponse": {
+    "properties": {
+      "enabled": {
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "pending": {
+        "title": "Pending",
+        "type": "boolean"
+      },
+      "recovery_codes_remaining": {
+        "title": "Recovery Codes Remaining",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enabled",
+      "pending",
+      "recovery_codes_remaining"
+    ],
+    "title": "TOTPStatusResponse",
+    "type": "object"
+  },
+  "TOTPVerifyRequest": {
+    "properties": {
+      "challenge_token": {
+        "title": "Challenge Token",
+        "type": "string"
+      },
+      "code": {
+        "title": "Code",
+        "type": "string"
+      }
+    },
+    "required": [
+      "challenge_token",
+      "code"
+    ],
+    "title": "TOTPVerifyRequest",
+    "type": "object"
+  },
   "TeamActivityResponse": {
     "description": "Response for activity log.",
     "properties": {

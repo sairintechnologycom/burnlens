@@ -1256,6 +1256,58 @@ async def init_db():
             ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ
         """)
 
+        # TOTP second factor (per-user, opt-in).
+        #
+        # These live on `users`, not on a workspace-scoped table: a second
+        # factor belongs to the human, and one human can be a member of several
+        # workspaces. Enrolling once must protect every workspace they can
+        # reach, and disabling 2FA in one workspace must not weaken another.
+        #
+        #   totp_secret_encrypted — encrypt_pii() ciphertext, never plaintext.
+        #     A read-only DB breach that yields base32 secrets is a silent,
+        #     permanent 2FA bypass for every enrolled user.
+        #   totp_confirmed_at     — NULL while enrollment is pending. A secret
+        #     exists from the moment setup starts, so "has a secret" is NOT the
+        #     same question as "2FA is on"; only this column may gate login.
+        #   totp_last_step        — highest RFC 6238 step already consumed.
+        #     The replay defence: a code is valid for its whole step, so
+        #     without this a captured code works again until it rolls.
+        #   totp_failed_attempts / totp_locked_until — brute-force throttle.
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_encrypted TEXT
+        """)
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_confirmed_at TIMESTAMPTZ
+        """)
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT
+        """)
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_failed_attempts INTEGER NOT NULL DEFAULT 0
+        """)
+        await conn.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_locked_until TIMESTAMPTZ
+        """)
+
+        # Single-use recovery codes. Stored as SHA-256 hashes (the codes are
+        # high-entropy random strings, not passwords — see totp.py), one row per
+        # code so consuming one is an UPDATE of `used_at` rather than a rewrite
+        # of a JSON blob, which would race between two concurrent logins.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS totp_recovery_codes (
+                id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                code_hash  TEXT        NOT NULL,
+                used_at    TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (user_id, code_hash)
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_totp_recovery_unused
+            ON totp_recovery_codes(user_id) WHERE used_at IS NULL
+        """)
+
         # Phase 12: alert rules — configurable per-workspace budget threshold rules.
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS alert_rules (
