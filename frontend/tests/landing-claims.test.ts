@@ -23,7 +23,7 @@ describe("landing dogfood claims", () => {
 
   it("no longer quotes the retired pre-recost numbers", () => {
     const sources = read("src", "app", "page.tsx") + read("..", "README.md");
-    for (const retired of ["$5.03", "$8.93", "81 merged PRs"]) {
+    for (const retired of ["$5.03", "$8.93", "$6.98", "81 merged PRs", "97 merged PRs"]) {
       expect(sources).not.toContain(retired);
     }
   });
