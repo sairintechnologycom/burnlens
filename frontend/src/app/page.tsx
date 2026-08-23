@@ -735,6 +735,8 @@ export default function LandingPage() {
           <div className="lp-footer-legal">
             <a href="/scan">Scan coding-agent spend</a>
             <span>·</span>
+            <a href="/llm-pricing">LLM API pricing</a>
+            <span>·</span>
             <a href="/docs">Docs</a>
             <span>·</span>
             <a href="/demo">Live demo</a>

@@ -2436,6 +2436,25 @@ img, svg { display: block; }
 .lp-compare-table td.partial { color: var(--amber); }
 .lp-compare-table td.no { color: rgba(255,255,255,0.2); }
 
+/* ── /llm-pricing table ───────────────────────────────────────── */
+.pricing-table {
+  width: 100%; border-collapse: collapse;
+  font-size: var(--fs-13); color: var(--l-text);
+  font-variant-numeric: tabular-nums;
+}
+.pricing-table th {
+  text-align: left; padding: 10px 12px; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  color: var(--l-muted); font-weight: 500;
+  font-family: var(--font-mono), monospace; font-size: 11px;
+}
+.pricing-table td {
+  padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--muted2); white-space: nowrap;
+}
+.pricing-table td:first-child { color: var(--l-text); }
+.pricing-table td:last-child { white-space: normal; font-size: 12px; }
+
 /* ── Support Chat Widget ──────────────────────────────────────── */
 .support-chat-trigger {
   position: fixed;
