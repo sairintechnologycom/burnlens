@@ -10,8 +10,9 @@ Two endpoints:
 * ``POST /v1/outcomes`` — the caller's app reports business events. API-key
   auth, same as ``/v1/ingest``, because it is machine-to-machine from the same
   place the proxy runs.
-* ``GET /api/v1/outcomes/summary`` — the dashboard reads unit economics. JWT
-  auth, same as every other dashboard route.
+* ``GET /api/v1/outcomes/summary`` — reads unit economics. JWT auth like every
+  other dashboard route, or an API key, so the machine that posts outcomes can
+  read back the economics it produced without a browser session.
 
 **Allocation.** A request is charged to the first outcome of its workflow that
 lands at-or-after it, within a window (default 24h). So the spend between two
@@ -25,9 +26,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
-from .auth import get_workspace_by_api_key, require_role, verify_token, TokenPayload
+from .auth import get_workspace_by_api_key, require_role, verify_token
 from .database import execute_query
 from .models import (
     OutcomeIngestRequest,
@@ -44,6 +45,32 @@ router = APIRouter(tags=["outcomes"])
 # review cycle and short enough that yesterday's spend is not charged to today's
 # outcome.
 DEFAULT_WINDOW_SECONDS = 86_400
+
+
+async def resolve_workspace(
+    request: Request,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> str:
+    """Workspace id from either a dashboard JWT or an API key.
+
+    An API key is accepted on these reads because the caller that posts
+    outcomes is usually the one that wants the economics back, and it has no
+    browser session to carry a JWT. The key resolves to exactly one workspace
+    and these routes return only that workspace's aggregates.
+
+    JWT stays the first-class path: with no key present, the normal
+    ``verify_token`` + role check applies unchanged.
+    """
+    if x_api_key:
+        result = await get_workspace_by_api_key(x_api_key)
+        if not result:
+            logger.warning("Outcomes read with invalid API key")
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        return str(result[0])
+
+    token = await verify_token(request)
+    await require_role("viewer", token)
+    return str(token.workspace_id)
 
 
 @router.post("/v1/outcomes", response_model=OutcomeIngestResponse)
@@ -188,7 +215,7 @@ ORDER BY cost_total DESC
 
 @router.get("/api/v1/outcomes/summary", response_model=list[WorkflowEconomics])
 async def outcomes_summary(
-    token: TokenPayload = Depends(verify_token),
+    workspace_id: str = Depends(resolve_workspace),
     days: int = Query(30, ge=1, le=365, description="Days to look back"),
     window_seconds: int = Query(
         DEFAULT_WINDOW_SECONDS,
@@ -198,12 +225,8 @@ async def outcomes_summary(
     ),
 ):
     """Per-workflow unit economics: what an accepted outcome actually costs."""
-    await require_role("viewer", token)
-
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = await execute_query(
-        _SUMMARY_SQL, str(token.workspace_id), cutoff, float(window_seconds)
-    )
+    rows = await execute_query(_SUMMARY_SQL, workspace_id, cutoff, float(window_seconds))
 
     out: list[WorkflowEconomics] = []
     for r in rows:
@@ -299,7 +322,7 @@ ORDER BY spend_usd DESC
 
 @router.get("/api/v1/outcomes/concentration", response_model=list[ProviderConcentration])
 async def outcomes_concentration(
-    token: TokenPayload = Depends(verify_token),
+    workspace_id: str = Depends(resolve_workspace),
     days: int = Query(30, ge=1, le=365, description="Days to look back"),
     window_seconds: int = Query(
         DEFAULT_WINDOW_SECONDS,
@@ -309,12 +332,8 @@ async def outcomes_concentration(
     ),
 ):
     """Which providers the workspace's accepted outcomes actually depend on."""
-    await require_role("viewer", token)
-
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = await execute_query(
-        _CONCENTRATION_SQL, str(token.workspace_id), cutoff, float(window_seconds)
-    )
+    rows = await execute_query(_CONCENTRATION_SQL, workspace_id, cutoff, float(window_seconds))
 
     out: list[ProviderConcentration] = []
     for r in rows:

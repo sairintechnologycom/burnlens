@@ -487,3 +487,41 @@ async def test_postgres_concentration_counts_overlap_and_sole_dependency():
         assert by["anthropic"]["workflows"] == 2
     finally:
         await conn.close()
+
+
+# ------------------------------------------------ API-key auth on the read routes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path", ["/api/v1/outcomes/summary", "/api/v1/outcomes/concentration"]
+)
+async def test_read_routes_accept_api_key(outcomes_client, path):
+    """The machine that posts outcomes has no browser session, so it must be
+    able to read the economics back with the key it wrote with — scoped to that
+    key's workspace, never a wildcard."""
+    ws = str(uuid4())
+    with patch(
+        "burnlens_cloud.outcomes_api.get_workspace_by_api_key", return_value=(ws, "pro")
+    ), patch("burnlens_cloud.outcomes_api.execute_query", return_value=[]) as q:
+        resp = await outcomes_client.get(path, headers={"X-API-Key": "bl_live_ok"})
+
+    assert resp.status_code == 200
+    # The key's own workspace is what reaches the SQL — the isolation guarantee.
+    assert q.call_args.args[1] == ws
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path", ["/api/v1/outcomes/summary", "/api/v1/outcomes/concentration"]
+)
+async def test_read_routes_reject_bad_api_key(outcomes_client, path):
+    """A rejected key must 401 and never reach the query — falling through to
+    the JWT path would report a bad key as a permissions problem."""
+    with patch(
+        "burnlens_cloud.outcomes_api.get_workspace_by_api_key", return_value=None
+    ), patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        resp = await outcomes_client.get(path, headers={"X-API-Key": "bl_live_nope"})
+
+    assert resp.status_code == 401
+    q.assert_not_called()

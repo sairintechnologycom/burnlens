@@ -91,6 +91,13 @@ curl -X POST https://api.burnlens.app/v1/outcomes \
                     "status":"accepted","event_time":"2026-08-09T12:00:00Z"}]}'
 ```
 
+Read the economics back with the same key — no browser session needed:
+
+```bash
+curl https://api.burnlens.app/api/v1/outcomes/summary \
+  -H "X-API-Key: $BURNLENS_API_KEY"
+```
+
 Three things worth knowing about the number:
 
 - **`outcome_id` is yours and it is the idempotency key.** Re-posting the same one is ignored, so at-least-once delivery and importer re-runs can't inflate the count that the cost is divided by.
