@@ -19,8 +19,23 @@ import sitemap from "../src/app/sitemap";
 // database, and a test that silently cannot fail is worse than no test.
 const SCRIPT = join(__dirname, "..", "..", "scripts", "build_outcome_snapshot.py");
 
-/** The disclosure decision, restated where a reviewer of a frontend diff sees it. */
-const PUBLISHABLE = ["repo:burnlens"];
+/** The disclosure decision, restated where a reviewer of a frontend diff sees it.
+ *  Widened from repo:burnlens alone to every repository on 2026-08-23. */
+const PUBLISHABLE = [
+  "repo:deploymentlab",
+  "repo:manan",
+  "repo:zeroslateUI",
+  "repo:burnlens",
+  "repo:pkgsafe",
+  "repo:strata",
+  "repo:mediaOS",
+  "repo:sutra",
+  "repo:DermaLens",
+  "repo:ShubhLifafa",
+  "repo:SiteHQ",
+  "repo:Infracanvas",
+  "repo:interview_copilot",
+];
 
 const round = (v: number, digits: number) =>
   Number(Math.round(Number(`${v}e${digits}`)) + `e-${digits}`);
@@ -60,7 +75,11 @@ describe("cost-per-outcome snapshot", () => {
       if (w.accepted === 0) continue;
       const total =
         w.input_tokens + w.output_tokens + w.cache_read_tokens + w.cache_write_tokens;
-      expect(w.tokens_per_accepted).toBe(Math.round(total / w.accepted));
+      // Within half a token rather than an exact Math.round match: the
+      // generator is Python, whose round() breaks ties to even while JS rounds
+      // half up. One repo lands exactly on .5 and the two disagree by 1, which
+      // is a rounding convention, not a counting error.
+      expect(Math.abs(w.tokens_per_accepted! - total / w.accepted)).toBeLessThanOrEqual(0.5);
     }
   });
 
@@ -100,6 +119,51 @@ describe("cost-per-outcome snapshot", () => {
     // Published workflows are a subset of attributed spend, never more than it.
     const published = snapshot.workflows.reduce((n, w) => n + w.cost_usd, 0);
     expect(published).toBeLessThanOrEqual(attributed_cost_usd);
+  });
+
+  it("aggregates the published block over exactly the published rows", () => {
+    const p = snapshot.published;
+    expect(p.repos).toBe(snapshot.workflows.length);
+    expect(round(snapshot.workflows.reduce((n, w) => n + w.cost_usd, 0), 4)).toBe(
+      round(p.cost_usd, 4),
+    );
+    expect(snapshot.workflows.reduce((n, w) => n + w.accepted, 0)).toBe(p.accepted);
+    expect(snapshot.workflows.reduce((n, w) => n + w.requests, 0)).toBe(p.requests);
+  });
+
+  it("blends spend-weighted, not as a mean of the per-repo rates", () => {
+    // A mean of ratios would weight a 2-PR repo the same as a 104-PR one, and
+    // on this data it lands roughly 1.3x higher than the truth.
+    const p = snapshot.published;
+    if (p.accepted === 0) {
+      expect(p.cost_per_accepted_usd).toBeNull();
+      return;
+    }
+    expect(p.cost_per_accepted_usd).toBeCloseTo(p.cost_usd / p.accepted, 4);
+  });
+
+  it("takes cheapest and dearest from the rows that actually have a unit cost", () => {
+    const rates = snapshot.workflows
+      .map((w) => w.cost_per_accepted_usd)
+      .filter((v): v is number => v !== null);
+    const p = snapshot.published;
+    expect(p.repos_with_unit_cost).toBe(rates.length);
+    if (rates.length === 0) {
+      expect(p.cheapest_usd).toBeNull();
+      expect(p.dearest_usd).toBeNull();
+      return;
+    }
+    expect(p.cheapest_usd).toBe(Math.min(...rates));
+    expect(p.dearest_usd).toBe(Math.max(...rates));
+  });
+
+  it("distinguishes 'no merged PRs' from 'merged PRs outside the window'", () => {
+    // The page renders a different reason per row from this field. If it ever
+    // went negative the window filter and the all-time count would be counting
+    // different things.
+    for (const w of snapshot.workflows) {
+      expect(w.accepted_outside_window).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("is in the sitemap", () => {

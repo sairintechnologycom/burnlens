@@ -2,12 +2,158 @@
   "source": "burnlens dogfood database (local proxy + agent log scans)",
   "workflows": [
     {
+      "workflow_id": "repo:deploymentlab",
+      "window_start": "2026-07-17T15:04:43.952000+00:00",
+      "window_end": "2026-08-07T06:31:01.273000+00:00",
+      "requests": 9121,
+      "cost_usd": 1189.1294,
+      "accepted": 14,
+      "accepted_outside_window": 1,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": 84.9378,
+      "tokens_per_accepted": 154233411,
+      "input_tokens": 375719633,
+      "output_tokens": 4093529,
+      "cache_read_tokens": 1762392834,
+      "cache_write_tokens": 17061759,
+      "cache_read_share": 0.8243,
+      "models": [
+        {
+          "model": "claude-opus-5",
+          "requests": 2815,
+          "cost_usd": 415.0338
+        },
+        {
+          "model": "claude-opus-4-8",
+          "requests": 2457,
+          "cost_usd": 341.5382
+        },
+        {
+          "model": "claude-fable-5",
+          "requests": 1049,
+          "cost_usd": 268.0105
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "requests": 1212,
+          "cost_usd": 118.5897
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "requests": 783,
+          "cost_usd": 31.2299
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "requests": 805,
+          "cost_usd": 14.7272
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:manan",
+      "window_start": "2026-05-06T05:14:09.604000+00:00",
+      "window_end": "2026-08-15T12:11:14.431000+00:00",
+      "requests": 8536,
+      "cost_usd": 952.3714,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 393600799,
+      "output_tokens": 3797284,
+      "cache_read_tokens": 1490804086,
+      "cache_write_tokens": 18369280,
+      "cache_read_share": 0.7911,
+      "models": [
+        {
+          "model": "claude-opus-5",
+          "requests": 5058,
+          "cost_usd": 744.1862
+        },
+        {
+          "model": "gpt-5.5",
+          "requests": 1638,
+          "cost_usd": 121.6336
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "requests": 1821,
+          "cost_usd": 85.2377
+        },
+        {
+          "model": "claude-sonnet-5",
+          "requests": 1,
+          "cost_usd": 0.7687
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "requests": 17,
+          "cost_usd": 0.5224
+        },
+        {
+          "model": "gpt-5.4-mini",
+          "requests": 1,
+          "cost_usd": 0.0228
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:zeroslateUI",
+      "window_start": "2026-06-12T05:47:28.290000+00:00",
+      "window_end": "2026-08-01T05:58:49.124000+00:00",
+      "requests": 6133,
+      "cost_usd": 768.1898,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 277536649,
+      "output_tokens": 2789281,
+      "cache_read_tokens": 1142783408,
+      "cache_write_tokens": 9966845,
+      "cache_read_share": 0.8046,
+      "models": [
+        {
+          "model": "claude-opus-5",
+          "requests": 3237,
+          "cost_usd": 451.9895
+        },
+        {
+          "model": "gpt-5.5",
+          "requests": 2203,
+          "cost_usd": 211.5119
+        },
+        {
+          "model": "claude-opus-4-8",
+          "requests": 674,
+          "cost_usd": 100.3341
+        },
+        {
+          "model": "claude-fable-5",
+          "requests": 16,
+          "cost_usd": 4.2305
+        },
+        {
+          "model": "gpt-5.4-mini",
+          "requests": 3,
+          "cost_usd": 0.1239
+        }
+      ]
+    },
+    {
       "workflow_id": "repo:burnlens",
       "window_start": "2026-07-10T04:58:07.510000+00:00",
       "window_end": "2026-08-15T12:06:22.974000+00:00",
       "requests": 5251,
       "cost_usd": 710.8501,
       "accepted": 104,
+      "accepted_outside_window": 27,
       "rejected": 2,
       "failed": 0,
       "cost_per_accepted_usd": 6.8351,
@@ -49,8 +195,278 @@
           "cost_usd": 0.8892
         }
       ]
+    },
+    {
+      "workflow_id": "repo:pkgsafe",
+      "window_start": "2026-06-21T15:16:15.672000+00:00",
+      "window_end": "2026-07-13T09:30:25.253000+00:00",
+      "requests": 3200,
+      "cost_usd": 262.2682,
+      "accepted": 21,
+      "accepted_outside_window": 6,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": 12.489,
+      "tokens_per_accepted": 39670092,
+      "input_tokens": 422606674,
+      "output_tokens": 811497,
+      "cache_read_tokens": 409653760,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4922,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 1952,
+          "cost_usd": 181.2658
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "requests": 714,
+          "cost_usd": 74.2618
+        },
+        {
+          "model": "gpt-5.4-mini",
+          "requests": 534,
+          "cost_usd": 6.7406
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:strata",
+      "window_start": "2026-07-03T07:29:35.182000+00:00",
+      "window_end": "2026-07-24T01:25:08.560000+00:00",
+      "requests": 1859,
+      "cost_usd": 202.6541,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 192878935,
+      "output_tokens": 573312,
+      "cache_read_tokens": 215456848,
+      "cache_write_tokens": 487701,
+      "cache_read_share": 0.5276,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 1635,
+          "cost_usd": 157.8048
+        },
+        {
+          "model": "claude-fable-5",
+          "requests": 199,
+          "cost_usd": 44.5315
+        },
+        {
+          "model": "gpt-5.4-mini",
+          "requests": 25,
+          "cost_usd": 0.3177
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:mediaOS",
+      "window_start": "2026-08-06T15:44:55.296000+00:00",
+      "window_end": "2026-08-15T04:41:55.039000+00:00",
+      "requests": 3266,
+      "cost_usd": 137.3255,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 430631191,
+      "output_tokens": 672863,
+      "cache_read_tokens": 422034048,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.495,
+      "models": [
+        {
+          "model": "gpt-5.6-terra",
+          "requests": 3066,
+          "cost_usd": 133.8871
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "requests": 200,
+          "cost_usd": 3.4385
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:sutra",
+      "window_start": "2026-05-29T06:10:37.808000+00:00",
+      "window_end": "2026-07-17T12:38:03.284000+00:00",
+      "requests": 1738,
+      "cost_usd": 127.3602,
+      "accepted": 2,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": 63.6801,
+      "tokens_per_accepted": 181454218,
+      "input_tokens": 185025237,
+      "output_tokens": 412096,
+      "cache_read_tokens": 177471104,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4896,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 913,
+          "cost_usd": 84.0597
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "requests": 362,
+          "cost_usd": 28.1068
+        },
+        {
+          "model": "gpt-5.6-terra",
+          "requests": 463,
+          "cost_usd": 15.1937
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:DermaLens",
+      "window_start": "2026-05-21T12:08:09.576000+00:00",
+      "window_end": "2026-06-04T13:12:04.310000+00:00",
+      "requests": 927,
+      "cost_usd": 82.3258,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 108853813,
+      "output_tokens": 222731,
+      "cache_read_tokens": 104491648,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4898,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 927,
+          "cost_usd": 82.3258
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:ShubhLifafa",
+      "window_start": "2026-05-22T02:06:27.968000+00:00",
+      "window_end": "2026-06-13T01:25:14.930000+00:00",
+      "requests": 858,
+      "cost_usd": 76.5714,
+      "accepted": 0,
+      "accepted_outside_window": 31,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 102478996,
+      "output_tokens": 169243,
+      "cache_read_tokens": 98226432,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4894,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 858,
+          "cost_usd": 76.5714
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:SiteHQ",
+      "window_start": "2026-05-25T13:16:00.908000+00:00",
+      "window_end": "2026-06-02T16:03:58.485000+00:00",
+      "requests": 895,
+      "cost_usd": 64.0258,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 91848476,
+      "output_tokens": 158476,
+      "cache_read_tokens": 89101440,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4924,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 895,
+          "cost_usd": 64.0258
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:Infracanvas",
+      "window_start": "2026-05-24T11:09:12.696000+00:00",
+      "window_end": "2026-05-24T12:20:27.696000+00:00",
+      "requests": 168,
+      "cost_usd": 15.8284,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 24001563,
+      "output_tokens": 27971,
+      "cache_read_tokens": 23374848,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4934,
+      "models": [
+        {
+          "model": "gpt-5.5",
+          "requests": 168,
+          "cost_usd": 15.8284
+        }
+      ]
+    },
+    {
+      "workflow_id": "repo:interview_copilot",
+      "window_start": "2026-07-17T11:18:11.587000+00:00",
+      "window_end": "2026-07-17T11:18:25.677000+00:00",
+      "requests": 4,
+      "cost_usd": 0.0707,
+      "accepted": 0,
+      "accepted_outside_window": 0,
+      "rejected": 0,
+      "failed": 0,
+      "cost_per_accepted_usd": null,
+      "tokens_per_accepted": null,
+      "input_tokens": 90606,
+      "output_tokens": 429,
+      "cache_read_tokens": 73216,
+      "cache_write_tokens": 0,
+      "cache_read_share": 0.4469,
+      "models": [
+        {
+          "model": "gpt-5.6-terra",
+          "requests": 4,
+          "cost_usd": 0.0707
+        }
+      ]
     }
   ],
+  "published": {
+    "repos": 13,
+    "repos_with_unit_cost": 4,
+    "requests": 41956,
+    "cost_usd": 4588.9708,
+    "accepted": 141,
+    "cost_per_accepted_usd": 32.5459,
+    "cheapest_usd": 6.8351,
+    "dearest_usd": 84.9378
+  },
   "database": {
     "total_cost_usd": 11214.9253,
     "attributed_cost_usd": 4758.1038,
