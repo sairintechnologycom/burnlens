@@ -514,28 +514,47 @@ def recommendations_from_records(records: list[dict[str, Any]]) -> list[Any]:
         current_cost = sum(float(r.get("cost_usd") or 0) for r in bucket)
         avg_reasoning = sum(int(r.get("reasoning_tokens") or 0) for r in bucket) / count
 
+        # The overkill rule is about the short-output requests themselves, not
+        # about groups whose AVERAGE is short. Requiring the average kept a
+        # model used for a mix of trivial and heavy work permanently invisible,
+        # while the waste detector flagged every one of its short calls. Same
+        # correction as burnlens/analysis/recommender.py.
+        short = [r for r in bucket if int(r.get("output_tokens") or 0) < 200]
         matched_key = _match_overkill_model(model)
-        if matched_key is not None and avg_out < 200 and count > 20:
+        if matched_key is not None and len(short) > 20:
+            s_count = len(short)
+
+            def _avg(field: str, rows: list[dict[str, Any]] = short) -> float:
+                return sum(int(r.get(field) or 0) for r in rows) / len(rows)
+
+            s_in, s_out = _avg("input_tokens"), _avg("output_tokens")
+            s_cost = sum(float(r.get("cost_usd") or 0) for r in short)
             suggested = _CHEAPER_EQUIVALENT[matched_key]
-            projected = _project_cost(count, avg_in, avg_out, suggested)
+            projected = _project_cost(
+                s_count, s_in, s_out, suggested,
+                _avg("cache_read_tokens"), _avg("cache_write_tokens"),
+            )
             if projected is not None:
-                saving = current_cost - projected
-                pct = (saving / current_cost * 100) if current_cost > 0 else 0.0
+                # Deliberately NOT rebinding count/avg_in/avg_out/current_cost:
+                # the reasoning rule below reads those for the whole bucket.
+                saving = s_cost - projected
+                pct = (saving / s_cost * 100) if s_cost > 0 else 0.0
                 recs.append(
                     RecommendationItem(
                         current_model=model,
                         suggested_model=suggested,
                         feature_tag=feature_tag,
-                        request_count=count,
-                        avg_output_tokens=round(avg_out, 1),
-                        current_cost=round(current_cost, 6),
+                        request_count=s_count,
+                        avg_output_tokens=round(s_out, 1),
+                        current_cost=round(s_cost, 6),
                         projected_cost=round(projected, 6),
                         projected_saving=round(saving, 6),
                         saving_pct=round(pct, 1),
-                        confidence="high" if avg_out < 50 else "medium",
+                        confidence="high" if s_out < 50 else "medium",
                         reason=(
-                            f"Average output is only {avg_out:.0f} tokens across {count} requests "
-                            f"— {suggested} can handle short tasks at a fraction of the cost"
+                            f"{s_count} request(s) produced under 200 output tokens "
+                            f"(avg {s_out:.0f}) — {suggested} can handle short tasks "
+                            "at a fraction of the cost"
                         ),
                     )
                 )
@@ -547,7 +566,11 @@ def recommendations_from_records(records: list[dict[str, Any]]) -> list[Any]:
             and avg_reasoning > avg_out * 5
         ):
             suggested = "gpt-4o-mini"
-            projected = _project_cost(count, avg_in, avg_out, suggested)
+            projected = _project_cost(
+                count, avg_in, avg_out, suggested,
+                sum(int(r.get("cache_read_tokens") or 0) for r in bucket) / count,
+                sum(int(r.get("cache_write_tokens") or 0) for r in bucket) / count,
+            )
             if projected is not None:
                 saving = current_cost - projected
                 pct = (saving / current_cost * 100) if current_cost > 0 else 0.0
