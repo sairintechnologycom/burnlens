@@ -62,7 +62,7 @@ export function OutcomeCoveragePanel({ c }: { c: OutcomeCoverage }) {
             <span style={{ color: "var(--amber)" }}>⚠</span>{" "}
             <span style={{ color: "var(--text)" }}>${formatCost(c.cost_untagged_usd)}</span> of spend
             carries no <code>workflow_id</code> tag, so cost-per-outcome is computed
-            without it. <Link href="/docs">Tagging guide</Link>
+            without it. <Link href="/docs/evidence">Tagging guide</Link>
           </div>
         )}
 

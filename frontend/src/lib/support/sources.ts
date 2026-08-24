@@ -32,6 +32,16 @@ export const SUPPORT_SOURCES: SupportSource[] = [
     baseUrl: "https://burnlens.app/faq",
   },
   {
+    path: "frontend/support-knowledge/evidence.md",
+    source: "support-knowledge/evidence.md",
+    baseUrl: "https://burnlens.app/docs/evidence",
+  },
+  {
+    path: "frontend/support-knowledge/limitations.md",
+    source: "support-knowledge/limitations.md",
+    baseUrl: "https://burnlens.app/docs/limitations",
+  },
+  {
     path: "frontend/support-knowledge/troubleshooting.md",
     source: "support-knowledge/troubleshooting.md",
     baseUrl: "https://burnlens.app/troubleshooting",
