@@ -48,9 +48,14 @@ export default function DocsScanPage() {
           produces a real number immediately rather than after a week of collection.
         </p>
         <Code>{`burnlens scan          # every agent it can find
-burnlens top           # live view of what is being spent
 burnlens repos         # top repos by cost
-burnlens prs           # top PRs by cost`}</Code>
+burnlens prs           # top PRs by cost
+burnlens report -d 30  # spend by model, plus waste alerts`}</Code>
+        <p>
+          <code>burnlens top</code> is deliberately not in that list. It is a live viewer for
+          traffic arriving through the proxy right now, scoped to today, and it refreshes until
+          interrupted — so after a retroactive scan it shows an empty table and never exits.
+        </p>
       </section>
 
       <section id="sources">
