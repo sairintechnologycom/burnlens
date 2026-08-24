@@ -175,3 +175,30 @@ class TestEmptyDatabase:
     async def test_empty_db_returns_no_recommendations(self, initialized_db: str):
         recs = await analyse_model_fit(initialized_db, days=30)
         assert recs == []
+
+
+# ---------------------------------------------------------------------------
+# A recommendation that costs money is not a recommendation
+# ---------------------------------------------------------------------------
+
+
+class TestNoNegativeSavingRecommendations:
+    @pytest.mark.asyncio
+    async def test_dearer_suggestion_is_not_recommended(self, initialized_db: str):
+        """gpt-5.6-luna is $1/$6 per M; the gpt-5.6 family's mapped equivalent
+        gpt-5.6-terra is $2.5/$15. Prefix-matching the family produced a real
+        "switch to save -$343.99 (-1840.7%)" on live data, summed into the
+        headline total. Anything that does not save must not be emitted."""
+        # cost_usd must be what luna actually charges for this shape, or the
+        # comparison is against a fabricated number: 500 in @ $1/M + 30 out
+        # @ $6/M = $0.00068. Terra bills the same shape at $0.0017.
+        await _seed(initialized_db, [
+            {"model": "gpt-5.6-luna", "input_tokens": 500, "output_tokens": 30,
+             "cost_usd": 0.00068, "tags": {"feature": "classify"}}
+            for _ in range(25)
+        ])
+
+        recs = await analyse_model_fit(initialized_db, days=30)
+
+        assert all(r.projected_saving > 0 for r in recs)
+        assert not [r for r in recs if r.suggested_model == "gpt-5.6-terra"]

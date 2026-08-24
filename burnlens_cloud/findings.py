@@ -610,6 +610,13 @@ def recommendations_from_records(records: list[dict[str, Any]]) -> list[Any]:
             )
         )
 
+    # Same guard as burnlens/analysis/recommender.py, and for the same reason:
+    # a "cheaper equivalent" reached by prefix-matching a model family can be
+    # dearer than the variant in hand (gpt-5.6-luna $1/$6 per M matched the
+    # gpt-5.6 family and was told to move to gpt-5.6-terra $2.5/$15). Advice
+    # that costs money must not be emitted, let alone summed into a total.
+    recs = [r for r in recs if r.projected_saving > 0]
+
     recs.sort(key=lambda r: r.projected_saving, reverse=True)
     return recs
 
