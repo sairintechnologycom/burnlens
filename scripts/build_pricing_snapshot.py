@@ -18,6 +18,11 @@ OUT = ROOT / "frontend" / "src" / "data" / "llm-pricing.json"
 
 
 def build() -> dict:
+    # The cache convention is a registry property, not a pricing_data one, and
+    # hand-writing it in TypeScript is exactly the bug that shipped once already
+    # (OpenAI cache reads double-counted). Ship the derived list with the rates.
+    from burnlens.providers.registry import inclusive_prompt_token_providers
+
     providers = []
     for path in sorted(SRC.glob("*.json")):
         data = json.loads(path.read_text())
@@ -32,6 +37,7 @@ def build() -> dict:
         })
     return {
         "source": "burnlens/cost/pricing_data",
+        "inclusive_prompt_tokens": list(inclusive_prompt_token_providers()),
         "model_count": sum(len(p["models"]) for p in providers),
         "providers": providers,
     }

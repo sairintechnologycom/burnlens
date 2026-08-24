@@ -1,14 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import pricing from "@/data/llm-pricing.json";
+import Calculator from "./Calculator";
 
 const COUNT = pricing.model_count;
 const PROVIDER_COUNT = pricing.providers.length;
 
 export const metadata: Metadata = {
-  title: "LLM API Pricing — Every Model, Every Provider (2026)",
+  title: "LLM API Pricing + Cost Calculator — Every Model, Every Provider (2026)",
   description:
-    `Input, output and prompt-cache rates per million tokens for ${COUNT} models across OpenAI, Anthropic, Google, Bedrock, Groq, Mistral, Together, xAI and DeepSeek. The same table BurnLens bills from.`,
+    `Input, output and prompt-cache rates per million tokens for ${COUNT} models across OpenAI, Anthropic, Google, Bedrock, Groq, Mistral, Together, xAI and DeepSeek, plus a cache-aware cost calculator. The same table BurnLens bills from.`,
   alternates: { canonical: "/llm-pricing" },
   openGraph: {
     title: "LLM API Pricing — Every Model, Every Provider",
@@ -131,6 +132,8 @@ export default function LlmPricing() {
             magnitude.
           </p>
         </section>
+
+        <Calculator />
 
         {providers.map((p) => (
           <section key={p.provider} id={p.provider}>
