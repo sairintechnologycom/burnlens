@@ -22,6 +22,8 @@ const PUBLIC_ROUTES = [
   '/docs/scan',
   '/docs/proxy',
   '/docs/budgets',
+  '/docs/evidence',
+  '/docs/limitations',
   '/docs/cli',
   '/security',
   '/privacy',

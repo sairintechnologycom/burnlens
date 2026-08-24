@@ -16,6 +16,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/docs/scan`, lastModified: now, changeFrequency: "monthly", priority: 0.85 },
     { url: `${BASE}/docs/proxy`, lastModified: now, changeFrequency: "monthly", priority: 0.85 },
     { url: `${BASE}/docs/budgets`, lastModified: now, changeFrequency: "monthly", priority: 0.85 },
+    { url: `${BASE}/docs/evidence`, lastModified: now, changeFrequency: "monthly", priority: 0.85 },
+    { url: `${BASE}/docs/limitations`, lastModified: now, changeFrequency: "monthly", priority: 0.85 },
     { url: `${BASE}/docs/cli`, lastModified: now, changeFrequency: "monthly", priority: 0.85 },
     { url: `${BASE}/compare/burnlens-vs-helicone`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${BASE}/compare/burnlens-vs-litellm`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },

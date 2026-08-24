@@ -43,6 +43,16 @@ export const DOCS_PAGES: { href: string; title: string; blurb: string }[] = [
     blurb: "Daily key caps, team and customer budgets, virtual keys, downgrade routing.",
   },
   {
+    href: "/docs/evidence",
+    title: "Cost evidence",
+    blurb: "Cost Confidence, Outcome Coverage and Verified Savings — how much of a number BurnLens can prove.",
+  },
+  {
+    href: "/docs/limitations",
+    title: "Known limitations",
+    blurb: "Where each figure stops being authoritative, stated plainly.",
+  },
+  {
     href: "/docs/cli",
     title: "CLI reference",
     blurb: "Every burnlens command, and where the config file and database live.",
