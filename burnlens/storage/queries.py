@@ -889,15 +889,35 @@ async def get_asset_spend_history(
 async def get_requests_for_analysis(
     db_path: str,
     since: str | None = None,
-    limit: int = 1000,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return recent requests with all fields needed for waste analysis."""
+    """Return requests with all fields needed for waste analysis.
+
+    ``limit=None`` means every matching row. The default used to be 1000, which
+    silently turned "waste in the last 365 days" into "waste in the most recent
+    1000 requests" — on a 158k-row database that reported $28 of avoidable
+    spend where the real figure was two orders of magnitude larger, with
+    nothing in the output saying so. A detector total that quietly covers 0.6%
+    of the data is worse than no total.
+
+    Callers that genuinely want a recent slice (dashboard panels) pass `limit`
+    explicitly.
+
+    ponytail: unbounded fetch, materialised in memory. 158k rows is seconds and
+    a few hundred MB; if a database ever outgrows that, stream it in chunks and
+    fold the detector results rather than reinstating a silent cap.
+    """
     if since:
         where = "WHERE timestamp >= ?"
         params: tuple = (since,)
     else:
         where = ""
         params = ()
+
+    limit_sql = ""
+    if limit is not None:
+        limit_sql = "LIMIT ?"
+        params = params + (limit,)
 
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
@@ -913,9 +933,9 @@ async def get_requests_for_analysis(
             FROM requests
             {where}
             ORDER BY timestamp DESC
-            LIMIT ?
+            {limit_sql}
             """,
-            params + (limit,),
+            params,
         )
         rows = await cursor.fetchall()
 

@@ -382,6 +382,16 @@ async def test_requests_for_analysis_limit(initialized_db: str):
     assert len(rows) == 3
 
 
+async def test_requests_for_analysis_is_unbounded_by_default(initialized_db: str):
+    """No default cap. A silent 1000-row ceiling turned "waste over 365 days"
+    into "waste over the most recent 1000 requests" and reported the result as
+    a total, understating a 158k-row database by two orders of magnitude."""
+    for _ in range(1005):
+        await insert_request(initialized_db, _record())
+    rows = await get_requests_for_analysis(initialized_db)
+    assert len(rows) == 1005
+
+
 async def test_requests_for_analysis_since(initialized_db: str):
     yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
 
