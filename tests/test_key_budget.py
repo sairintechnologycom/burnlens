@@ -1,7 +1,6 @@
 """CODE-2: per-API-key daily cap enforcement (slice 4)."""
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -22,6 +21,8 @@ from burnlens.key_budget import (
 from burnlens.keys import register_key
 from burnlens.proxy.interceptor import handle_request
 from burnlens.proxy.providers import get_provider_for_path
+
+from .conftest import settle_background_tasks
 from burnlens.storage.database import (
     get_all_keys_today_spend,
     get_spend_by_key_label_this_month,
@@ -62,8 +63,12 @@ def _openai_payload(input_tokens: int = 10, output_tokens: int = 5) -> dict:
 
 
 async def _flush() -> None:
-    for _ in range(10):
-        await asyncio.sleep(0.02)
+    """Drain the interceptor's fire-and-forget logging tasks.
+
+    Was ten fixed 0.02s sleeps, which raced under CI load — the spend-cache
+    invalidation assertions flaked while passing locally every time.
+    """
+    await settle_background_tasks()
 
 
 @pytest.fixture(autouse=True)
