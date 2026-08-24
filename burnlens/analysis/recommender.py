@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import aiosqlite
 
+from burnlens.cost.calculator import TokenUsage, calculate_cost, is_model_priced
 from burnlens.cost.pricing import get_model_pricing
 
 logger = logging.getLogger(__name__)
@@ -33,22 +34,63 @@ class ModelRecommendation:
 # Model downgrade mapping
 # ---------------------------------------------------------------------------
 
+# Keys are matched exactly first, then as a prefix (longest key wins), so a
+# family key covers every member and dated snapshot of that family without an
+# entry per model. That is the point: models ship continuously here — pricing
+# is even date-scheduled — and a map keyed on individual model names goes stale
+# silently. It did: with only the six entries this held before, `recommend`
+# reported "your model usage looks efficient!" on a database where `analyze`
+# found $3,528 of model overkill, because the two biggest wasters
+# (claude-opus-4-6 at $568, claude-opus-4-7 at $504) matched nothing.
+#
+# Targets are the cheap tier of the same vendor, not the next rung down. This
+# rule only fires on requests averaging under 200 output tokens — classification,
+# extraction, routing — and for that shape the small model is the right answer.
+#
+# The codex line stays inside its own product line: a general-purpose small
+# model is not a like-for-like substitute for coding-agent traffic, so
+# gpt-5.2-codex is pointed at gpt-5.1-codex-mini rather than gpt-5-mini. The
+# rest of that line is already at $1.25/$10, where the swap saves nothing and
+# the positive-saving guard drops it.
 _CHEAPER_EQUIVALENT: dict[str, str] = {
+    # OpenAI
     "gpt-4o": "gpt-4o-mini",
+    "gpt-4-turbo": "gpt-4o-mini",
     "gpt-5.2": "gpt-5-mini",
-    "gpt-5.6": "gpt-5.6-terra",
-    "claude-sonnet-5": "claude-haiku-4-5",
+    # Longer key, so it wins over "gpt-5.2" for the codex variant.
+    "gpt-5.2-codex": "gpt-5.1-codex-mini",
+    "gpt-5.4": "gpt-5.4-mini",
+    "gpt-5.5": "gpt-5.6-luna",
+    # Cheapest member of the 5.6 family. Terra ($2.5/$15) was the old target
+    # and is itself a downgrade candidate, so pointing at it left money behind.
+    "gpt-5.6": "gpt-5.6-luna",
+    # Anthropic — family prefixes, so opus-4-5 through opus-5 and every dated
+    # sonnet snapshot are all covered.
+    "claude-opus": "claude-haiku-4-5",
+    "claude-sonnet": "claude-haiku-4-5",
+    "claude-fable": "claude-haiku-4-5",
+    "claude-mythos": "claude-haiku-4-5",
+    # Google
     "gemini-1.5-pro": "gemini-1.5-flash",
     "gemini-3.1-pro-preview": "gemini-3.1-flash-lite",
 }
 
-_OVERKILL_MODELS = set(_CHEAPER_EQUIVALENT.keys())
+# Longest first: "gpt-4-turbo" must win over "gpt-4o" would-be prefixes, and a
+# model with its own entry must never be captured by a shorter family key.
+_OVERKILL_MODELS = sorted(_CHEAPER_EQUIVALENT, key=len, reverse=True)
 _REASONING_MODELS = {"o1", "o3", "o1-mini", "gpt-5.6"}
+
+def _provider_of(model: str) -> str:
+    return (
+        "anthropic" if model.startswith("claude-")
+        else "google" if model.startswith("gemini-")
+        else "openai"
+    )
+
 
 def _get_pricing(model: str) -> dict[str, float] | None:
     """Look up projection pricing from the provider's bundled price table."""
-    provider = "anthropic" if model.startswith("claude-") else "google" if model.startswith("gemini-") else "openai"
-    pricing = get_model_pricing(provider, model)
+    pricing = get_model_pricing(_provider_of(model), model)
     if pricing is None:
         return None
     return {"input": pricing["input_per_million"], "output": pricing["output_per_million"]}
@@ -59,14 +101,34 @@ def _project_cost(
     avg_input_tokens: float,
     avg_output_tokens: float,
     model: str,
+    avg_cache_read_tokens: float = 0.0,
+    avg_cache_write_tokens: float = 0.0,
 ) -> float | None:
-    """Project total cost for a model over the given request volume."""
-    pricing = _get_pricing(model)
-    if pricing is None:
+    """Project total cost for ``model`` over the given request volume.
+
+    Delegates to ``calculate_cost`` instead of multiplying rates here, because
+    the two cached-prompt conventions cannot be hand-written safely: OpenAI and
+    Google fold cache reads INTO input_tokens, Anthropic reports them disjoint.
+
+    Ignoring cache tokens is not a small inaccuracy on agent traffic — it is the
+    whole prompt. Claude Code's short-output requests record `input_tokens` of
+    6 against 121,099 cache-read tokens, so the old rate multiplication
+    projected the cheaper model at ~nothing and reported savings of 98.6% and
+    99.7%. Carrying the cache tokens over assumes the target model caches the
+    same way, which is the closest honest assumption available.
+    """
+    provider = _provider_of(model)
+    if not is_model_priced(provider, model):
         return None
-    return (
-        request_count * avg_input_tokens / 1_000_000 * pricing["input"]
-        + request_count * avg_output_tokens / 1_000_000 * pricing["output"]
+    return calculate_cost(
+        provider,
+        model,
+        TokenUsage(
+            input_tokens=round(avg_input_tokens * request_count),
+            output_tokens=round(avg_output_tokens * request_count),
+            cache_read_tokens=round(avg_cache_read_tokens * request_count),
+            cache_write_tokens=round(avg_cache_write_tokens * request_count),
+        ),
     )
 
 
@@ -126,11 +188,14 @@ async def _check_model_overkill(
                 model,
                 COALESCE(json_extract(tags, '$.feature'), '(untagged)') AS feature_tag,
                 COUNT(*) AS request_count,
-                AVG(input_tokens)  AS avg_input_tokens,
-                AVG(output_tokens) AS avg_output_tokens,
-                SUM(cost_usd)      AS total_cost
+                AVG(input_tokens)       AS avg_input_tokens,
+                AVG(output_tokens)      AS avg_output_tokens,
+                AVG(cache_read_tokens)  AS avg_cache_read_tokens,
+                AVG(cache_write_tokens) AS avg_cache_write_tokens,
+                SUM(cost_usd)           AS total_cost
             FROM requests
             WHERE timestamp >= ?
+              AND output_tokens < 200
             GROUP BY model, feature_tag
             """,
             (since,),
@@ -144,16 +209,26 @@ async def _check_model_overkill(
         if matched_key is None:
             continue
 
+        # The SQL already restricts to short-output requests, so this group IS
+        # the overkill subset. It used to aggregate every request and require
+        # the GROUP's average to be under 200, which meant a model used for a
+        # mix of trivial and heavy work never qualified — claude-opus-4-7
+        # averages 573 output tokens overall, so its 4,000-odd short-output
+        # calls were invisible here while the waste detector flagged every one.
         avg_out = float(row["avg_output_tokens"] or 0)
         count = int(row["request_count"])
-        if avg_out >= 200 or count <= 20:
+        if count <= 20:
             continue
 
         suggested = _CHEAPER_EQUIVALENT[matched_key]
         avg_in = float(row["avg_input_tokens"] or 0)
         current_cost = float(row["total_cost"] or 0)
 
-        projected = _project_cost(count, avg_in, avg_out, suggested)
+        projected = _project_cost(
+            count, avg_in, avg_out, suggested,
+            float(row["avg_cache_read_tokens"] or 0),
+            float(row["avg_cache_write_tokens"] or 0),
+        )
         if projected is None:
             continue
 
@@ -173,8 +248,9 @@ async def _check_model_overkill(
             saving_pct=round(pct, 1),
             confidence=confidence,
             reason=(
-                f"Average output is only {avg_out:.0f} tokens across {count} requests "
-                f"— {suggested} can handle short tasks at a fraction of the cost"
+                f"{count} request(s) produced under 200 output tokens "
+                f"(avg {avg_out:.0f}) — {suggested} can handle short tasks at a "
+                "fraction of the cost"
             ),
         ))
 
@@ -182,10 +258,16 @@ async def _check_model_overkill(
 
 
 def _match_overkill_model(model: str) -> str | None:
-    """Return the overkill key that matches ``model``, or None."""
+    """Return the overkill key that matches ``model``, or None.
+
+    Keys are tried longest-first so the most specific one wins. A model that is
+    already the family's downgrade target matches nothing: gpt-5.6-luna is a
+    prefix match on "gpt-5.6", and without this it was told to switch to
+    itself's dearer sibling (see the saving guard in analyse_model_fit).
+    """
     for key in _OVERKILL_MODELS:
         if model == key or model.startswith(key):
-            return key
+            return None if _CHEAPER_EQUIVALENT[key] == model else key
     return None
 
 
@@ -204,10 +286,12 @@ async def _check_reasoning_overkill(
                 model,
                 COALESCE(json_extract(tags, '$.feature'), '(untagged)') AS feature_tag,
                 COUNT(*) AS request_count,
-                AVG(input_tokens)     AS avg_input_tokens,
-                AVG(output_tokens)    AS avg_output_tokens,
-                AVG(reasoning_tokens) AS avg_reasoning_tokens,
-                SUM(cost_usd)         AS total_cost
+                AVG(input_tokens)       AS avg_input_tokens,
+                AVG(output_tokens)      AS avg_output_tokens,
+                AVG(reasoning_tokens)   AS avg_reasoning_tokens,
+                AVG(cache_read_tokens)  AS avg_cache_read_tokens,
+                AVG(cache_write_tokens) AS avg_cache_write_tokens,
+                SUM(cost_usd)           AS total_cost
             FROM requests
             WHERE timestamp >= ?
             GROUP BY model, feature_tag
@@ -235,7 +319,11 @@ async def _check_reasoning_overkill(
         avg_in = float(row["avg_input_tokens"] or 0)
         current_cost = float(row["total_cost"] or 0)
 
-        projected = _project_cost(count, avg_in, avg_out, suggested)
+        projected = _project_cost(
+            count, avg_in, avg_out, suggested,
+            float(row["avg_cache_read_tokens"] or 0),
+            float(row["avg_cache_write_tokens"] or 0),
+        )
         if projected is None:
             continue
 

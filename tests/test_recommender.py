@@ -26,6 +26,7 @@ async def _seed(db: str, records: list[dict]) -> None:
             input_tokens=r.get("input_tokens", 500),
             output_tokens=r.get("output_tokens", 100),
             reasoning_tokens=r.get("reasoning_tokens", 0),
+            cache_read_tokens=r.get("cache_read_tokens", 0),
             cost_usd=r.get("cost_usd", 0.01),
             tags=r.get("tags", {}),
         )
@@ -202,3 +203,59 @@ class TestNoNegativeSavingRecommendations:
 
         assert all(r.projected_saving > 0 for r in recs)
         assert not [r for r in recs if r.suggested_model == "gpt-5.6-terra"]
+
+
+# ---------------------------------------------------------------------------
+# Short-output subset, and cached prompts in the projection
+# ---------------------------------------------------------------------------
+
+
+class TestShortOutputSubset:
+    @pytest.mark.asyncio
+    async def test_mixed_traffic_still_flags_its_short_calls(self, initialized_db: str):
+        """A model used for BOTH trivial and heavy work must still be flagged
+        for the trivial half. Requiring the group's average to be under 200
+        made claude-opus-4-7 (573 avg output overall) invisible to this rule
+        while the waste detector flagged 2,772 of its short calls."""
+        await _seed(initialized_db, [
+            {"model": "claude-opus-4-7", "input_tokens": 500, "output_tokens": 40,
+             "cost_usd": 0.0035, "tags": {"feature": "classify"}}
+            for _ in range(30)
+        ] + [
+            # Heavy calls in the same group, enough to drag the average over 200.
+            {"model": "claude-opus-4-7", "input_tokens": 500, "output_tokens": 4000,
+             "cost_usd": 0.1025, "tags": {"feature": "classify"}}
+            for _ in range(30)
+        ])
+
+        recs = await analyse_model_fit(initialized_db, days=30)
+        overkill = [r for r in recs if r.current_model == "claude-opus-4-7"]
+
+        assert len(overkill) == 1
+        # Only the short calls are costed, never the heavy ones.
+        assert overkill[0].request_count == 30
+        assert overkill[0].avg_output_tokens == 40
+
+
+class TestCachedPromptsInProjection:
+    @pytest.mark.asyncio
+    async def test_anthropic_cache_tokens_are_not_free(self, initialized_db: str):
+        """Anthropic reports cache reads DISJOINT from input_tokens, so agent
+        rows carry input_tokens≈6 against ~121k cached tokens. Projecting off
+        input_tokens alone priced the target model at nearly nothing and
+        reported savings of 98.6%. The cached prompt must be carried over."""
+        await _seed(initialized_db, [
+            {"model": "claude-opus-4-7", "input_tokens": 6, "output_tokens": 40,
+             "cache_read_tokens": 120_000, "cost_usd": 0.061,
+             "tags": {"feature": "agent"}}
+            for _ in range(30)
+        ])
+
+        recs = await analyse_model_fit(initialized_db, days=30)
+        rec = [r for r in recs if r.current_model == "claude-opus-4-7"][0]
+
+        # haiku-4-5 cache reads are $0.10/M: 30 × 120k × $0.10/M = $0.36, plus
+        # output. A projection that ignored the cached prompt lands near $0.006
+        # and would claim ~99% savings.
+        assert rec.projected_cost > 0.3
+        assert rec.saving_pct < 90
