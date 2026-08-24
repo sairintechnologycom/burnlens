@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { apiFetch, AuthError } from "@/lib/api";
+import type { ProviderReconciliation } from "@/lib/contracts";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useToast } from "@/lib/contexts/ToastContext";
 import { useBilling } from "@/lib/contexts/BillingContext";
@@ -16,6 +17,146 @@ import PlanPickerModal from "@/components/PlanPickerModal";
 import UsageCard from "@/components/UsageCard";
 import ApiKeysCard from "@/components/ApiKeysCard";
 import TwoFactorCard from "@/components/TwoFactorCard";
+
+// Providers with a cost API on the backend (`PROVIDERS` in reconciliation.py).
+// Hardcoded rather than fetched: the list changes about once a year, and the
+// route 400s with the supported set if this ever drifts.
+const RECONCILABLE_PROVIDERS = [
+  { key: "anthropic", label: "Anthropic", hint: "Admin API key (sk-ant-admin…) or an OAuth token. Read-only cost report access." },
+  { key: "openai", label: "OpenAI", hint: "Organization key with api.usage.read. Read-only." },
+] as const;
+
+/** Store a provider's billing key so BurnLens can compare its own number with the bill.
+ *
+ * Without this, `/api/v1/reconciliation` returns nothing, every provider shows as
+ * `no_billing_key` in Cost Confidence, and `reconciled_spend_pct` reads 0% — with
+ * no way to change that from inside the product. The backend route has existed
+ * since the economics-graph work; nothing called it.
+ */
+function ReconciliationSection({
+  session,
+  logout,
+  showToast,
+}: {
+  session: { token: string } | null;
+  logout: () => void;
+  showToast: (msg: string, kind: "success" | "error") => void;
+}) {
+  const [status, setStatus] = useState<ProviderReconciliation[]>([]);
+  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState("");
+  // Inline, per provider, not a toast: a rejected billing key is a blocking
+  // failure and the reason ("expired", "no organization") is the entire content.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const refresh = useCallback(async () => {
+    if (!session) return;
+    try {
+      setStatus((await apiFetch("/api/v1/reconciliation", session.token)) as ProviderReconciliation[]);
+    } catch {
+      // A failed read leaves the connected/not-connected labels blank rather
+      // than blocking the form — the form is what the user came here for.
+    }
+  }, [session]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const connected = new Set(status.map((s) => s.provider));
+
+  const connect = async (provider: string) => {
+    if (!session) return;
+    const api_key = (keys[provider] || "").trim();
+    if (!api_key) return;
+    setBusy(provider);
+    setErrors((e) => ({ ...e, [provider]: "" }));
+    try {
+      await apiFetch(`/settings/reconciliation/${provider}`, session.token, {
+        method: "PUT",
+        body: JSON.stringify({ api_key }),
+      });
+      setKeys((k) => ({ ...k, [provider]: "" }));
+      showToast(`${provider} billing key stored`, "success");
+      await refresh();
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      // The backend proves the key against the provider before storing, so this
+      // message is the provider's own refusal, not a generic failure.
+      else setErrors((e) => ({ ...e, [provider]: err.message }));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const disconnect = async (provider: string) => {
+    if (!session) return;
+    setBusy(provider);
+    try {
+      await apiFetch(`/settings/reconciliation/${provider}`, session.token, { method: "DELETE" });
+      showToast(`${provider} billing key removed`, "success");
+      await refresh();
+    } catch (err: any) {
+      if (err instanceof AuthError) logout();
+      else setErrors((e) => ({ ...e, [provider]: err.message }));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  return (
+    <div id="reconciliation" className="card" style={{ margin: 16, marginBottom: 0 }}>
+      <div className="section-header">
+        <span className="section-header-title">Cost reconciliation</span>
+      </div>
+      <div style={{ padding: 18 }}>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16, lineHeight: 1.6 }}>
+          A read-only billing key lets BurnLens compare its own number against what the
+          provider actually charged, once a day. Until one is stored, spend for that
+          provider counts as calculated rather than verified. Keys are encrypted at rest
+          and never returned by any endpoint.
+        </div>
+
+        {RECONCILABLE_PROVIDERS.map(({ key, label, hint }) => {
+          const isConnected = connected.has(key);
+          return (
+            <div key={key} style={{ marginBottom: 18 }}>
+              <label className="form-label">
+                {label}
+                {isConnected && (
+                  <span style={{ color: "var(--green)", marginLeft: 8, fontSize: 12 }}>connected</span>
+                )}
+              </label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  placeholder={isConnected ? "Replace stored key" : "Paste billing key"}
+                  value={keys[key] || ""}
+                  onChange={(e) => setKeys((k) => ({ ...k, [key]: e.target.value }))}
+                  aria-label={`${label} billing key`}
+                  style={{ flex: "1 1 280px", minWidth: 0 }}
+                />
+                <button onClick={() => connect(key)} disabled={busy === key || !(keys[key] || "").trim()}>
+                  {busy === key ? "Checking…" : isConnected ? "Replace" : "Connect"}
+                </button>
+                {isConnected && (
+                  <button onClick={() => disconnect(key)} disabled={busy === key} className="btn-secondary">
+                    Remove
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 6 }}>{hint}</div>
+              {errors[key] && (
+                <div style={{ fontSize: 13, color: "var(--red, #e5484d)", marginTop: 6 }}>
+                  {errors[key]}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function SettingsContent() {
   const { session, logout } = useAuth();
@@ -184,6 +325,8 @@ function SettingsContent() {
           </p>
         </div>
       </div>
+
+      <ReconciliationSection session={session} logout={logout} showToast={showToast} />
 
       {/* Alert Integrations */}
       <div className="card" style={{ margin: 16, marginBottom: 0 }}>
