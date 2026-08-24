@@ -32,7 +32,7 @@ const faqStructuredData = {
       name: "Which coding agents does BurnLens scan?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "BurnLens v1.2 reads local session logs for Claude Code (~/.claude/projects/), Cursor (local bubble DB), OpenAI Codex (SQLite session store), and Gemini CLI (~/.gemini/tmp/). Each reader parses the agent's native format, deduplicates turns, and routes cost through the BurnLens pricing engine.",
+        text: "BurnLens reads local session logs for Claude Code (~/.claude/projects/), Cursor (local bubble DB), OpenAI Codex (SQLite session store), and Gemini CLI (~/.gemini/tmp/). Each reader parses the agent's native format, deduplicates turns, and routes cost through the BurnLens pricing engine.",
       },
     },
     {
@@ -106,7 +106,7 @@ export default function ScanLandingPage() {
             marginBottom: 8,
           }}
         >
-          burnlens scan · v1.6
+          burnlens scan · no API key · no signup
         </p>
         <h1>See what your AI coding agents actually cost</h1>
         <p className="legal-updated">
@@ -143,20 +143,28 @@ export default function ScanLandingPage() {
             }}
           >
             <code>{`$ burnlens scan
-Scanning Claude Code   ~/.claude/projects/           312 sessions · 14,287 turns · $48.21
-Scanning Cursor        local bubble db                89 sessions ·  3,104 turns · $12.84
-Scanning Codex         session sqlite                703 sessions · 88,219 turns · $0.00 *
-Scanning Gemini CLI    ~/.gemini/tmp/                 64 sessions ·  5,806 turns · $0.00 *
+Scanning Claude Code sessions...
+Found 141 session files across 5 projects.
+Parsed 37,377 assistant messages.
+Total Claude cost imported: $5,578.30
 
-Top repos by spend (last 7 days):
-  1. burnlens/                  $24.18    Claude Code, Cursor
-  2. internal-platform/         $11.02    Claude Code
-  3. ai-eval-harness/            $4.67    Cursor
+          Top projects by cost
+\u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513
+\u2503 Project       \u2503      Cost \u2503 Messages \u2503
+\u2521\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2529
+\u2502 payments-api  \u2502 $2,636.62 \u2502   16,405 \u2502
+\u2502 burnlens      \u2502 $1,063.03 \u2502    7,916 \u2502
+\u2502 web-console   \u2502   $962.94 \u2502    6,658 \u2502
+\u2502 infra-tooling \u2502   $736.59 \u2502    4,947 \u2502
+\u2502 docs-site     \u2502   $179.12 \u2502    1,451 \u2502
+\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518
 
-* missing pricing for some preview models — see burnlens/cost/pricing_data/`}</code>
+No Cursor DB found at ~/Library/Application Support/Cursor/... Skipping Cursor scan.
+No Codex sessions found at ~/.codex/sessions. Skipping Codex scan.
+No Gemini CLI sessions found at any known location. Skipping.`}</code>
           </pre>
           <p className="legal-updated" style={{ marginTop: 8 }}>
-            Illustrative output — the shape of what you get, not numbers from a real machine.
+            Real output from one developer&apos;s laptop, on a clean install with no config file. Repo names replaced; every number is what the scan actually printed.
           </p>
         </section>
 
@@ -188,13 +196,31 @@ Top repos by spend (last 7 days):
             eventName="Scan Install Copy"
             command={`pip install burnlens
 burnlens scan
-burnlens top    # live spend by model, session, repo`}
+burnlens repos    # which repo actually burned the money`}
           />
 
           <p>
-            No env vars to set, no proxy to start, no account to create. If you have Claude Code, Cursor, Codex, or
-            Gemini CLI installed and have used them recently, you&apos;ll see cost data in your terminal in under a
-            minute.
+            No env vars to set, no proxy to start, no account to create. The scan reads files and
+            writes to a local database; it never asks for an API key, because it never calls an API.
+          </p>
+          <p>
+            <strong>Then ask it the questions the provider bill cannot answer:</strong>
+          </p>
+          <ul>
+            <li><code>burnlens repos</code> — top repos by cost, with request counts and last-seen.</li>
+            <li><code>burnlens report --days 30</code> — spend by model over a window, plus waste alerts.</li>
+            <li><code>burnlens analyze</code> — the waste detectors, with a dollar figure per finding.</li>
+            <li><code>burnlens economics</code> — waste rate, error spend, and cost per outcome.</li>
+          </ul>
+          <p className="legal-updated">
+            <code>burnlens top</code> is a live viewer for proxy traffic happening right now — it
+            refreshes until you stop it and shows today only, so it is not the command to run after a
+            retroactive scan.
+          </p>
+          <p>
+            <strong>How long the first scan takes</strong> depends on how much history you have. A
+            light history finishes in seconds. The 141-session, 37,377-message machine above took a
+            few minutes on its first run. Re-runs are idempotent and only pick up what is new.
           </p>
         </section>
 
