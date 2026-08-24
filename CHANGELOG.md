@@ -6,6 +6,54 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [OSS `burnlens` v1.25.0] — 2026-08-24
+
+### Fixed
+- **`burnlens analyze` read at most 1000 requests, whatever window you asked
+  for.** `--days 365` on a 158k-row database sampled the most recent 1000 rows
+  and printed the result as a total: $28.49, where the real figure for that
+  window was $3,528.69. Nothing in the output said a cap had been applied. The
+  same silent cap bounded the detection scheduler and the weekly report.
+  Analysis now reads every matching row; callers that want a recent slice (the
+  dashboard panels) ask for one explicitly.
+- **`burnlens recommend` could recommend a more expensive model.** A model
+  variant was matched onto its family's downgrade target even when the variant
+  was already the cheaper one, producing "switch gpt-5.6-luna → gpt-5.6-terra,
+  projected saving -$343.99 (-1840.7%)" and summing that negative into the
+  headline total. Recommendations that do not save are no longer emitted.
+- **`burnlens recommend` was blind to the models most people are running.** Its
+  downgrade map held six entries, matched by exact name, and covered none of
+  the current Claude or GPT-5.x families — so a database whose largest waste
+  was Opus answering short prompts reported "your model usage looks efficient!"
+  Keys are now family prefixes matched longest-first, so new releases and dated
+  snapshots are covered without an entry each.
+- **The overkill rule required a model's *average* output to be short**, so a
+  model used for a mix of trivial and heavy work never qualified — even when
+  thousands of its individual calls were pure overkill and the waste detector
+  flagged every one. Both engines now aggregate over the short-output requests
+  themselves.
+- **Savings projections ignored cached prompts.** Anthropic reports cache reads
+  separately from `input_tokens`, so coding-agent rows carry `input_tokens` of
+  ~6 against ~120,000 cached tokens. Projecting from `input_tokens` alone
+  priced the suggested model at nearly nothing and claimed savings of 98–99%.
+  Projections now go through the same cost engine that prices real requests,
+  which already handles both cached-prompt conventions.
+- **`burnlens sync --now` reported "No un-synced records to push" in runs that
+  pushed outcomes.** Its count covered cost records only.
+
+## [`burnlens-cloud`] — 2026-08-24
+
+### Added
+- `GET /api/v1/outcomes/summary` and `/api/v1/outcomes/concentration` accept an
+  API key as well as a dashboard session, so the machine that posts outcomes
+  can read back the economics it produced without a browser. The key is scoped
+  to its own workspace; an invalid key is rejected outright rather than falling
+  through to the session path.
+
+### Fixed
+- The hosted recommendation engine shares the proxy's rules, and so shared all
+  three recommender defects above. Fixed in step with it.
+
 ## [OSS `burnlens` v1.24.0] — 2026-08-14
 
 ### Added
