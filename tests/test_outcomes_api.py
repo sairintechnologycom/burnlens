@@ -525,3 +525,107 @@ async def test_read_routes_reject_bad_api_key(outcomes_client, path):
 
     assert resp.status_code == 401
     q.assert_not_called()
+
+
+# ------------------------------------------- GET /api/v1/outcomes/coverage
+
+
+def _cov_row(workflow_id, total, attributed, accepted=0.0, rework=0.0):
+    return {
+        "workflow_id": workflow_id,
+        "cost_total": total,
+        "cost_attributed": attributed,
+        "cost_accepted": accepted,
+        "cost_rework": rework,
+    }
+
+
+@pytest.mark.asyncio
+async def test_coverage_requires_auth(outcomes_client):
+    resp = await outcomes_client.get("/api/v1/outcomes/coverage")
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_untagged_spend_is_separated_from_unattributed(
+    outcomes_client, valid_jwt_token
+):
+    # The distinction that makes the number actionable: $85 has no workflow tag
+    # at all (fix the caller), $5 is tagged but no outcome came back (post the
+    # outcome). /outcomes/summary cannot see the $85 — it filters those rows out.
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = [
+            _cov_row(None, 85.0, 0.0),
+            _cov_row("wf-a", 10.0, 10.0, accepted=10.0),
+            _cov_row("wf-b", 5.0, 0.0),
+        ]
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/coverage",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cost_untagged_usd"] == pytest.approx(85.0)
+    assert body["cost_unattributed_usd"] == pytest.approx(5.0)
+    assert body["cost_attributed_usd"] == pytest.approx(10.0)
+    # Dollar-weighted, not request-weighted: 10 of 100 dollars reached an outcome.
+    assert body["coverage_pct"] == pytest.approx(10.0)
+    # And the three tiers have to account for every dollar, or the panel lies.
+    assert (
+        body["cost_attributed_usd"]
+        + body["cost_unattributed_usd"]
+        + body["cost_untagged_usd"]
+        == pytest.approx(body["cost_total_usd"])
+    )
+
+
+@pytest.mark.asyncio
+async def test_coverage_is_100_when_every_dollar_lands_on_an_outcome(
+    outcomes_client, valid_jwt_token
+):
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = [_cov_row("wf-a", 12.0, 12.0, accepted=9.0, rework=3.0)]
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/coverage",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    body = resp.json()
+    assert body["coverage_pct"] == pytest.approx(100.0)
+    assert body["cost_untagged_usd"] == pytest.approx(0.0)
+    # Rework is covered spend, not a gap — we know what it bought: a failure.
+    assert body["cost_rework_usd"] == pytest.approx(3.0)
+
+
+@pytest.mark.asyncio
+async def test_empty_workspace_coverage_does_not_divide_by_zero(
+    outcomes_client, valid_jwt_token
+):
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = []
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/coverage",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["coverage_pct"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_coverage_passes_window_and_limits_the_breakdown(
+    outcomes_client, valid_jwt_token
+):
+    with patch("burnlens_cloud.outcomes_api.execute_query") as q:
+        q.return_value = [_cov_row(f"wf-{i}", 1.0, 1.0) for i in range(50)]
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/coverage?window_seconds=3600&limit=5",
+            headers={"Authorization": f"Bearer {valid_jwt_token}"},
+        )
+
+    assert q.call_args.args[3] == 3600.0
+    body = resp.json()
+    assert len(body["by_workflow"]) == 5
+    # The cap trims the breakdown only — the totals still cover every workflow.
+    assert body["cost_total_usd"] == pytest.approx(50.0)

@@ -31,6 +31,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from .auth import get_workspace_by_api_key, require_role, verify_token
 from .database import execute_query
 from .models import (
+    OutcomeCoverage,
+    OutcomeCoverageRow,
     OutcomeIngestRequest,
     OutcomeIngestResponse,
     ProviderConcentration,
@@ -355,3 +357,90 @@ async def outcomes_concentration(
             )
         )
     return out
+
+
+# --------------------------------------------------------------- outcome coverage
+
+# Same allocation rule as _SUMMARY_SQL, but deliberately NOT filtered to rows
+# carrying a workflow_id. Untagged spend is the number this endpoint exists to
+# report, and the summary query cannot see it by construction.
+_COVERAGE_SQL = """
+WITH alloc AS (
+    SELECT
+        r.tags->>'workflow_id' AS workflow_id,
+        r.cost_usd,
+        CASE WHEN r.tags->>'workflow_id' IS NULL THEN NULL ELSE (
+            SELECT o.status
+            FROM outcomes o
+            WHERE o.workspace_id = $1
+              AND o.workflow_id = r.tags->>'workflow_id'
+              AND o.event_time >= r.ts
+              AND o.event_time < r.ts + ($3 * interval '1 second')
+            ORDER BY o.event_time ASC
+            LIMIT 1
+        ) END AS status
+    FROM request_records r
+    WHERE r.workspace_id = $1 AND r.ts >= $2
+)
+SELECT
+    workflow_id,
+    COALESCE(SUM(cost_usd), 0) AS cost_total,
+    COALESCE(SUM(cost_usd) FILTER (WHERE status IS NOT NULL), 0) AS cost_attributed,
+    COALESCE(SUM(cost_usd) FILTER (WHERE status = 'accepted'), 0) AS cost_accepted,
+    COALESCE(SUM(cost_usd) FILTER (WHERE status IN ('rejected', 'failed')), 0) AS cost_rework
+FROM alloc
+GROUP BY workflow_id
+ORDER BY cost_total DESC
+"""
+
+
+@router.get("/api/v1/outcomes/coverage", response_model=OutcomeCoverage)
+async def outcomes_coverage(
+    workspace_id: str = Depends(resolve_workspace),
+    days: int = Query(30, ge=1, le=365, description="Days to look back"),
+    window_seconds: int = Query(
+        DEFAULT_WINDOW_SECONDS,
+        ge=1,
+        le=604_800,
+        description="How long after a request an outcome may still claim its cost",
+    ),
+    limit: int = Query(20, ge=1, le=200, description="Workflows in the breakdown"),
+):
+    """What share of spend reaches a recorded outcome — and what share never can."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = await execute_query(_COVERAGE_SQL, workspace_id, cutoff, float(window_seconds))
+
+    total = attributed = accepted = rework = untagged = 0.0
+    by_workflow: list[OutcomeCoverageRow] = []
+    for r in rows:
+        cost_total = float(r["cost_total"])
+        cost_attributed = float(r["cost_attributed"])
+        total += cost_total
+        attributed += cost_attributed
+        accepted += float(r["cost_accepted"])
+        rework += float(r["cost_rework"])
+        if r["workflow_id"] is None:
+            untagged += cost_total
+        by_workflow.append(
+            OutcomeCoverageRow(
+                workflow_id=r["workflow_id"],
+                cost_total_usd=round(cost_total, 6),
+                cost_attributed_usd=round(cost_attributed, 6),
+                coverage_pct=round(cost_attributed / cost_total * 100, 1) if cost_total else 0.0,
+            )
+        )
+
+    return OutcomeCoverage(
+        days=days,
+        window_seconds=window_seconds,
+        cost_total_usd=round(total, 6),
+        cost_attributed_usd=round(attributed, 6),
+        # Tagged with a workflow but nothing came back for it, as distinct from
+        # never tagged at all — one is a missing POST, the other a missing tag.
+        cost_unattributed_usd=round(total - attributed - untagged, 6),
+        cost_untagged_usd=round(untagged, 6),
+        cost_accepted_usd=round(accepted, 6),
+        cost_rework_usd=round(rework, 6),
+        coverage_pct=round(attributed / total * 100, 1) if total else 0.0,
+        by_workflow=by_workflow[:limit],
+    )

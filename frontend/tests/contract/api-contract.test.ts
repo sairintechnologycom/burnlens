@@ -29,6 +29,12 @@ import {
   TeamActivityResponseFields,
   CacheOverviewFields,
   CacheByModelRowFields,
+  CostConfidenceFields,
+  ConfidenceBucketFields,
+  CoverageGapFields,
+  OutcomeCoverageFields,
+  OutcomeCoverageRowFields,
+  SavingsRollupFields,
 } from "@/lib/contracts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -74,6 +80,12 @@ const CONTRACTS = [
   { endpoint: "/api/v1/team/activity (entries[])", schema: "ActivityLogEntry", fields: ActivityLogEntryFields },
   { endpoint: "/api/v1/usage/cache", schema: "CacheOverview", fields: CacheOverviewFields },
   { endpoint: "/api/v1/usage/cache (by_model[])", schema: "CacheByModelRow", fields: CacheByModelRowFields },
+  { endpoint: "/api/v1/cost-confidence", schema: "CostConfidence", fields: CostConfidenceFields },
+  { endpoint: "/api/v1/cost-confidence (buckets)", schema: "ConfidenceBucket", fields: ConfidenceBucketFields },
+  { endpoint: "/api/v1/cost-confidence (gaps[])", schema: "CoverageGap", fields: CoverageGapFields },
+  { endpoint: "/api/v1/outcomes/coverage", schema: "OutcomeCoverage", fields: OutcomeCoverageFields },
+  { endpoint: "/api/v1/outcomes/coverage (by_workflow[])", schema: "OutcomeCoverageRow", fields: OutcomeCoverageRowFields },
+  { endpoint: "/api/v1/findings/savings", schema: "SavingsRollup", fields: SavingsRollupFields },
 ] as const;
 
 // Resolve the OpenAPI type for a property, unwrapping the anyOf:[T, null] that

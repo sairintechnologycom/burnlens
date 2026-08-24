@@ -22,13 +22,19 @@ from decimal import Decimal
 from typing import Awaitable, Callable, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from .auth import require_role, verify_token, TokenPayload
 from .database import execute_query
 from .email import send_ops_alert
 from .encryption import get_encryption_manager
-from .models import ProviderReconciliation, ReconciliationCredentialRequest
+from .models import (
+    ConfidenceBucket,
+    CostConfidence,
+    CoverageGap,
+    ProviderReconciliation,
+    ReconciliationCredentialRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -359,3 +365,189 @@ async def reconciliation_status(
             )
         )
     return out
+
+
+# --------------------------------------------------------------- cost confidence
+
+# Confidence is a ratio, not a score. It is the share of REQUESTS BurnLens can
+# classify economically at all — everything except `unpriced`. No per-class
+# weights: the moment reconciled counts 1.0 and estimated counts 0.75, the
+# number stops being auditable and becomes a proprietary index nobody can check.
+# The four classes are reported separately so a reader can apply their own
+# judgement about how much a calculated dollar is worth next to a reconciled one.
+#
+# Request-weighted, because unpriced rows contribute $0 and a dollar-weighted
+# ratio would be blind to exactly the failure it exists to expose.
+CONFIDENCE_CLASSES = ("reconciled", "calculated", "estimated", "unpriced")
+
+# Why a group landed in its class. Recomputed from the row every time, never
+# stored: the inputs (pricing state, collection source, provider reconciliation
+# state) are all still on the row, so persisting a derived label would only
+# create something that can go stale.
+_REASONS = {
+    "reconciled": "provider_bill_agreed",
+    "calculated": "priced_from_pricing_table",
+    "estimated": "agent_self_reported_tokens",
+    "unpriced": "model_has_no_price",
+}
+
+_CONFIDENCE_SQL = """
+SELECT provider,
+       model,
+       (source LIKE 'scan\\_%') AS is_scan,
+       CASE
+         WHEN cost_usd > 0 THEN 'priced'
+         WHEN (input_tokens + output_tokens
+               + cache_read_tokens + cache_write_tokens) > 0 THEN 'unpriced'
+         ELSE 'no_usage'
+       END AS pricing_state,
+       COUNT(*) AS requests,
+       COALESCE(SUM(cost_usd), 0) AS cost
+FROM request_records
+WHERE workspace_id = $1 AND ts >= $2
+GROUP BY provider, model, is_scan, pricing_state
+"""
+
+
+def classify_row(
+    pricing_state: str, is_scan: bool, provider_status: Optional[str]
+) -> Optional[tuple[str, str]]:
+    """Which confidence class one aggregated group belongs to, and why.
+
+    None means "not a thing to be confident about" — no tokens, no cost.
+    Unpriced outranks everything: a reconciled provider can still be serving a
+    model we have no price for, and that hole should not be hidden by the badge.
+    """
+    if pricing_state == "no_usage":
+        return None
+    if pricing_state == "unpriced":
+        cls = "unpriced"
+    elif provider_status == "reconciled":
+        cls = "reconciled"
+    elif is_scan:
+        cls = "estimated"
+    else:
+        cls = "calculated"
+    return cls, _REASONS[cls]
+
+
+def build_confidence(rows, provider_status: dict, days: int) -> CostConfidence:
+    """Fold grouped spend rows plus per-provider reconciliation state into the report.
+
+    Pure so the classification and the arithmetic can be tested without a
+    database: `rows` are dict-likes from `_CONFIDENCE_SQL`, `provider_status`
+    maps provider -> "reconciled" | "drifted" | "unreconciled" (absent means no
+    billing key is stored at all).
+    """
+    cost = {k: 0.0 for k in CONFIDENCE_CLASSES}
+    reqs = {k: 0 for k in CONFIDENCE_CLASSES}
+    reasons: dict[str, int] = {}
+    unpriced_models: dict[tuple, int] = {}
+    spend_providers: set[str] = set()
+
+    for r in rows:
+        verdict = classify_row(
+            r["pricing_state"], bool(r["is_scan"]), provider_status.get(r["provider"])
+        )
+        if verdict is None:
+            continue
+        bucket, reason = verdict
+        n = int(r["requests"])
+        cost[bucket] += float(r["cost"])
+        reqs[bucket] += n
+        reasons[reason] = reasons.get(reason, 0) + n
+        spend_providers.add(r["provider"])
+        if bucket == "unpriced":
+            key = (r["provider"], r["model"])
+            unpriced_models[key] = unpriced_models.get(key, 0) + n
+
+    total_cost = sum(cost.values())
+    total_reqs = sum(reqs.values())
+
+    # Share of requests we can classify economically at all. Unpriced is the only
+    # class that fails that test — the other three are all a defensible number
+    # with a stated basis.
+    classified = total_reqs - reqs["unpriced"]
+    confidence = (classified / total_reqs * 100) if total_reqs else 0.0
+
+    # The dollar dimension, which the request ratio cannot see: one unpriced call
+    # can be worth more than 99,000 priced ones. Of the money we DO have a figure
+    # for, how much survived comparison with the provider's own bill.
+    reconciled_spend = (cost["reconciled"] / total_cost * 100) if total_cost else 0.0
+
+    def bucket(name: str) -> ConfidenceBucket:
+        return ConfidenceBucket(
+            cost_usd=round(cost[name], 6),
+            requests=reqs[name],
+            share_pct=round(cost[name] / total_cost * 100, 2) if total_cost else 0.0,
+        )
+
+    gaps: list[CoverageGap] = []
+    for (provider, model), n in sorted(unpriced_models.items(), key=lambda kv: -kv[1]):
+        gaps.append(
+            CoverageGap(
+                provider=provider,
+                model=model,
+                requests=n,
+                reason="unpriced",
+                detail=f"{model} has no price in the pricing table — these requests count as $0.",
+            )
+        )
+    for provider in sorted(spend_providers):
+        status = provider_status.get(provider)
+        if status == "reconciled":
+            continue
+        reason, detail = (
+            ("no_billing_key", "No billing key stored, so this provider's spend has never been compared with its bill.")
+            if status is None
+            else ("drifted", "The last comparison with this provider's bill was outside the drift threshold.")
+            if status == "drifted"
+            else ("unreconciled", "Billing key stored, but no comparison has run yet.")
+        )
+        gaps.append(CoverageGap(provider=provider, requests=0, reason=reason, detail=detail))
+
+    return CostConfidence(
+        days=days,
+        total_cost_usd=round(total_cost, 6),
+        total_requests=total_reqs,
+        confidence_pct=round(confidence, 1),
+        reconciled_spend_pct=round(reconciled_spend, 1),
+        reconciled=bucket("reconciled"),
+        calculated=bucket("calculated"),
+        estimated=bucket("estimated"),
+        unpriced=bucket("unpriced"),
+        reasons=reasons,
+        gaps=gaps,
+    )
+
+
+@router.get("/api/v1/cost-confidence", response_model=CostConfidence)
+async def cost_confidence(
+    token: TokenPayload = Depends(verify_token),
+    days: int = Query(30, ge=1, le=365, description="Days to look back"),
+) -> CostConfidence:
+    """How much of this workspace's spend figure is backed by evidence."""
+    await require_role("viewer", token)
+
+    # Same history window every other spend endpoint honours — otherwise the
+    # confidence figure describes a wider period than the total it sits under.
+    from .dashboard_api import clamp_days_by_plan
+
+    days = clamp_days_by_plan(days, token.plan)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = await execute_query(_CONFIDENCE_SQL, str(token.workspace_id), cutoff)
+
+    status_rows = await execute_query(_STATUS_SQL, str(token.workspace_id))
+    provider_status = {
+        r["provider"]: (
+            "unreconciled"
+            if r["day"] is None
+            else classify(
+                float(r["drift_pct"]) if r["drift_pct"] is not None else None,
+                float(r["burnlens_cost_usd"]),
+            )
+        )
+        for r in status_rows
+    }
+
+    return build_confidence(rows, provider_status, days)

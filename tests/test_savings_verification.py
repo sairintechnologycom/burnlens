@@ -1,4 +1,17 @@
-"""BL-E3: does a fix actually reduce spend, and can the check be fooled?"""
+"""BL-E3: does a fix actually reduce spend, and can the check be fooled?
+
+A verdict is one of five states, and the split between them is what makes a
+portfolio total honest:
+
+* ``pending`` — the measurement window has not elapsed yet.
+* ``no_traffic`` — nothing ran after the fix. Silence is not a saving.
+* ``inconclusive`` — too few requests after the fix to judge (below
+  ``MIN_VERIFY_REQUESTS``).
+* ``verified`` — cost per request fell.
+* ``missed`` — cost per request did not fall. **Not** a verified saving with a
+  negative number attached; summing "verified" while regressions sit inside it
+  labelled verified is how a savings figure stops being believable.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -97,11 +110,11 @@ async def _seed_and_resolve(
 @pytest.mark.asyncio
 async def test_a_real_fix_is_verified(db):
     """Cost per request halves → verified saving."""
-    fingerprint = await _seed_and_resolve(db, before_count=10, before_cost=1.00,
+    fingerprint = await _seed_and_resolve(db, before_count=40, before_cost=1.00,
                                           resolved_days_ago=8)
     now = datetime.now(timezone.utc)
-    for i in range(10):
-        await insert_request(db, _record(0.50, now - timedelta(days=7, hours=i)))
+    for i in range(40):
+        await insert_request(db, _record(0.50, now - timedelta(days=7, minutes=i)))
 
     verdict = await verify_savings(db, fingerprint)
 
@@ -116,21 +129,40 @@ async def test_a_real_fix_is_verified(db):
 async def test_a_traffic_drop_is_not_mistaken_for_a_saving(db):
     """The trap this whole design exists to avoid.
 
-    Same cost per request, but a tenth of the traffic. Total spend collapses;
+    Same cost per request, but a fraction of the traffic. Total spend collapses;
     the fix did nothing. A totals-based comparison would call this a 90% win.
+
+    One request is also too thin a sample to judge either way, so the verdict is
+    inconclusive rather than missed — and inconclusive is still not a saving,
+    which is the whole point.
     """
-    fingerprint = await _seed_and_resolve(db, before_count=10, before_cost=1.00,
+    fingerprint = await _seed_and_resolve(db, before_count=40, before_cost=1.00,
                                           resolved_days_ago=8)
     now = datetime.now(timezone.utc)
     await insert_request(db, _record(1.00, now - timedelta(days=7)))
 
     verdict = await verify_savings(db, fingerprint)
 
-    assert verdict.status == "verified"
+    assert verdict.status == "inconclusive"
     assert verdict.baseline_cost_per_request == pytest.approx(1.00)
     assert verdict.current_cost_per_request == pytest.approx(1.00)
     assert verdict.delta_per_request == pytest.approx(0.0)
     assert verdict.projected_monthly_savings_usd == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_an_unchanged_cost_per_request_is_missed_not_verified(db):
+    """Enough traffic to judge, and nothing was saved. That is a missed fix."""
+    fingerprint = await _seed_and_resolve(db, before_count=40, before_cost=1.00,
+                                          resolved_days_ago=8)
+    now = datetime.now(timezone.utc)
+    for i in range(40):
+        await insert_request(db, _record(1.00, now - timedelta(days=7, minutes=i)))
+
+    verdict = await verify_savings(db, fingerprint)
+
+    assert verdict.status == "missed"
+    assert verdict.delta_per_request == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio
@@ -147,16 +179,20 @@ async def test_silence_is_not_a_saving(db):
 
 @pytest.mark.asyncio
 async def test_a_regression_is_reported_as_such(db):
-    """Cost per request went UP after the 'fix'."""
-    fingerprint = await _seed_and_resolve(db, before_count=10, before_cost=1.00,
+    """Cost per request went UP after the 'fix'.
+
+    This must never carry the word "verified". A portfolio that sums verified
+    savings would otherwise be summing this regression into its own win column.
+    """
+    fingerprint = await _seed_and_resolve(db, before_count=40, before_cost=1.00,
                                           resolved_days_ago=8)
     now = datetime.now(timezone.utc)
-    for i in range(10):
-        await insert_request(db, _record(1.50, now - timedelta(days=7, hours=i)))
+    for i in range(40):
+        await insert_request(db, _record(1.50, now - timedelta(days=7, minutes=i)))
 
     verdict = await verify_savings(db, fingerprint)
 
-    assert verdict.status == "verified"
+    assert verdict.status == "missed"
     assert verdict.pct_change == pytest.approx(50.0)
     assert verdict.delta_per_request < 0
     assert verdict.projected_monthly_savings_usd < 0
@@ -177,21 +213,23 @@ async def test_recent_fix_is_pending_not_judged(db):
 @pytest.mark.asyncio
 async def test_reopened_finding_still_verifies_and_is_flagged(db):
     """A fix that did not hold is exactly the case worth reporting."""
-    fingerprint = await _seed_and_resolve(db, before_count=10, before_cost=1.00,
+    fingerprint = await _seed_and_resolve(db, before_count=40, before_cost=1.00,
                                           resolved_days_ago=8)
     now = datetime.now(timezone.utc)
-    for i in range(10):
-        await insert_request(db, _record(1.00, now - timedelta(days=7, hours=i)))
+    for i in range(40):
+        await insert_request(db, _record(1.00, now - timedelta(days=7, minutes=i)))
 
     # Detection finds the same waste again → reopens.
-    await sync_findings(db, ModelOverkillDetector().run(_analysis_rows(10, 1.00)))
+    await sync_findings(db, ModelOverkillDetector().run(_analysis_rows(40, 1.00)))
 
     stored = (await list_findings(db))[0]
     assert stored.status == "open"
 
     verdict = await verify_savings(db, fingerprint)
     assert verdict.reopened is True
-    assert verdict.status == "verified"
+    # The fix did not hold and cost per request never moved — missed, and the
+    # reopened flag says why.
+    assert verdict.status == "missed"
 
 
 @pytest.mark.asyncio

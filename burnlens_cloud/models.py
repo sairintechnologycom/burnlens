@@ -223,6 +223,45 @@ class WorkflowEconomics(BaseModel):
     business_value_accepted: Optional[float] = None
 
 
+class OutcomeCoverageRow(BaseModel):
+    """One workflow's share of spend that reaches a recorded outcome."""
+    workflow_id: Optional[str] = None
+    cost_total_usd: float
+    cost_attributed_usd: float
+    coverage_pct: float
+
+
+class OutcomeCoverage(BaseModel):
+    """How much spend can be connected to a business outcome at all.
+
+    Three tiers, and the first one is the point. `/api/v1/outcomes/summary`
+    only looks at requests carrying a `workflow_id` tag, so spend with no tag is
+    invisible to it — a workspace tagging 5% of its traffic sees a confident
+    cost-per-outcome built on 5% of the money. That spend is reported here as
+    ``cost_untagged_usd``.
+
+    * ``attributed`` — an outcome landed within the allocation window.
+    * ``unattributed`` — tagged with a workflow, but no outcome followed inside
+      the window. Recoverable: post the outcome.
+    * ``untagged`` — no ``workflow_id`` on the request. Structurally impossible
+      to attribute until the caller tags it.
+
+    Dollar-weighted, unlike cost confidence: the question here is what share of
+    the *money* bought something we can name, and a cheap request that produced
+    an outcome is not worth the same as an expensive one that did not.
+    """
+    days: int
+    window_seconds: int
+    cost_total_usd: float
+    cost_attributed_usd: float
+    cost_unattributed_usd: float
+    cost_untagged_usd: float
+    cost_accepted_usd: float
+    cost_rework_usd: float
+    coverage_pct: float
+    by_workflow: list[OutcomeCoverageRow]
+
+
 class ProviderConcentration(BaseModel):
     """How much of a workspace's outcomes depend on one provider.
 
@@ -265,6 +304,67 @@ class ProviderReconciliation(BaseModel):
     burnlens_cost_usd: Optional[float] = None
     drift_pct: Optional[float] = None
     computed_at: Optional[datetime] = None
+
+
+class ConfidenceBucket(BaseModel):
+    """One class of spend, and how much of the total it accounts for."""
+    cost_usd: float
+    requests: int
+    share_pct: float
+
+
+class CoverageGap(BaseModel):
+    """A named reason some spend is less than fully trustworthy."""
+    provider: str
+    model: Optional[str] = None
+    requests: int
+    reason: Literal["unpriced", "drifted", "unreconciled", "no_billing_key"]
+    detail: str
+
+
+class CostConfidence(BaseModel):
+    """How much of a spend figure BurnLens can actually stand behind.
+
+    Four classes, in descending order of evidence:
+
+    * ``reconciled`` — the provider's own bill agreed with us within the drift
+      threshold for the most recent comparison.
+    * ``calculated`` — priced from the pricing table, never checked against a
+      bill.
+    * ``estimated`` — reconstructed from a coding agent's local logs
+      (``burnlens scan``). Real token counts, but self-reported by the agent
+      rather than measured on the wire.
+    * ``unpriced`` — tokens were used and we produced $0, because the model has
+      no price. **These rows contribute nothing to the dollar total**, so the
+      dollar split cannot see them; that is exactly why ``confidence_pct`` is
+      counted by requests and not by dollars.
+
+    ``confidence_pct`` is a plain ratio — the share of requests that fall in any
+    class except ``unpriced`` — not a weighted score. A weighted index would not
+    be auditable, and the four class figures are published separately so a reader
+    can weigh a calculated dollar against a reconciled one themselves.
+
+    ``reconciled_spend_pct`` adds the dimension the request ratio cannot see: one
+    unpriced call can be worth more than 99,000 priced ones, so of the money we
+    do have a figure for, this is the share the provider's own bill confirmed.
+
+    Rows that used no tokens and cost nothing (errors, empty responses) are
+    excluded entirely — there is nothing about them to be confident in.
+    """
+    days: int
+    total_cost_usd: float
+    total_requests: int
+    confidence_pct: float
+    reconciled_spend_pct: float
+    reconciled: ConfidenceBucket
+    calculated: ConfidenceBucket
+    estimated: ConfidenceBucket
+    unpriced: ConfidenceBucket
+    # Machine-readable basis -> request count, e.g. {"agent_self_reported_tokens": 812}.
+    # Recomputed from each row, never stored: everything it is derived from is
+    # still on the row, so a persisted label could only go stale.
+    reasons: dict[str, int]
+    gaps: list[CoverageGap]
 
 
 class LoginRequest(BaseModel):
@@ -530,6 +630,30 @@ class SavingsVerdict(BaseModel):
     current_requests: Optional[int] = None
     days_remaining: Optional[float] = None
     reopened: bool = False
+
+
+class SavingsRollup(BaseModel):
+    """Projected savings versus savings that actually showed up.
+
+    Every figure is **monthly**, which is the only reason they can sit next to
+    each other. A finding's prediction (``baseline_waste_usd``) is measured over
+    its baseline window — 7 days by default — while a verdict's actual is already
+    extrapolated to 30. Adding the two raw would silently compare a week to a
+    month, so predictions are scaled by ``30 / baseline_window_days`` first.
+
+    ``realisation_pct`` is the credibility number: of what BurnLens predicted for
+    fixes that have since reached a verdict, how much was actually measured.
+    Missed fixes contribute their prediction to the denominator and nothing to
+    the numerator, which is exactly what makes the ratio worth reading.
+    """
+    open_projected_monthly_usd: float
+    resolved_predicted_monthly_usd: float
+    verified_monthly_usd: float
+    missed_predicted_monthly_usd: float
+    verifying_predicted_monthly_usd: float
+    inconclusive_predicted_monthly_usd: float
+    realisation_pct: Optional[float] = None
+    counts: dict[str, int]
 
 
 class EconomicsOverview(BaseModel):

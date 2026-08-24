@@ -445,10 +445,12 @@ async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any]
         verdict["status"] = "no_traffic"
         return verdict
 
+    from burnlens.analysis.economics import classify_savings
+
     baseline_per = float(finding.get("baseline_cost_usd") or 0.0) / finding["baseline_requests"]
     current_per = current_cost / current_requests
     delta = baseline_per - current_per
-    verdict["status"] = "verified"
+    verdict["status"] = classify_savings(delta, current_requests)
     verdict["baseline_cost_per_request"] = baseline_per
     verdict["current_cost_per_request"] = current_per
     verdict["delta_per_request"] = delta
@@ -771,3 +773,78 @@ def _rowcount(result: Any) -> int:
         except ValueError:
             return 0
     return 0
+
+
+# ------------------------------------------------------------- savings rollup
+
+# Verdict states that mean the fix has been judged. Only these two belong in the
+# realisation ratio: pending and inconclusive have not produced an answer yet,
+# and folding them in would move the number every time the clock ticks.
+_TERMINAL_VERDICTS = ("verified", "missed")
+
+
+def _to_monthly(waste_usd: float | None, window_days: int | None) -> float:
+    """Scale a prediction measured over its baseline window up to 30 days."""
+    days = int(window_days or BASELINE_WINDOW_DAYS)
+    return float(waste_usd or 0.0) * (30.0 / days) if days else 0.0
+
+
+async def savings_rollup(conn, workspace_id) -> dict[str, Any]:
+    """What was projected, what was acted on, and what actually landed."""
+    open_row = await conn.fetchrow(
+        """
+        SELECT COALESCE(SUM(estimated_waste_usd), 0) AS waste, COUNT(*) AS n
+          FROM waste_findings
+         WHERE workspace_id = $1 AND status IN ('open', 'acknowledged')
+        """,
+        workspace_id,
+    )
+
+    # The prediction for each resolved finding, as it stood at resolve time.
+    # `baseline_waste_usd` is snapshotted then; `estimated_waste_usd` keeps
+    # moving with every detection run, so it is the wrong side of the comparison.
+    predicted = {
+        r["fingerprint"]: _to_monthly(r["baseline_waste_usd"], r["baseline_window_days"])
+        for r in await conn.fetch(
+            """
+            SELECT fingerprint, baseline_waste_usd, baseline_window_days
+              FROM waste_findings
+             WHERE workspace_id = $1 AND baseline_requests IS NOT NULL
+            """,
+            workspace_id,
+        )
+    }
+
+    verdicts = await verify_all_resolved(conn, workspace_id)
+
+    totals = {k: 0.0 for k in ("verified", "missed", "pending", "inconclusive")}
+    counts: dict[str, int] = {}
+    verified_actual = 0.0
+
+    for v in verdicts:
+        status = v["status"]
+        counts[status] = counts.get(status, 0) + 1
+        if status in totals:
+            totals[status] += predicted.get(v["fingerprint"], 0.0)
+        if status == "verified":
+            # The measured figure, not the prediction — this is the only number
+            # here that came from traffic rather than from a detector.
+            verified_actual += float(v.get("projected_monthly_savings_usd") or 0.0)
+
+    judged_predicted = sum(totals[s] for s in _TERMINAL_VERDICTS)
+    counts["open"] = int((open_row or {}).get("n") or 0)
+
+    return {
+        "open_projected_monthly_usd": round(float((open_row or {}).get("waste") or 0), 6),
+        "resolved_predicted_monthly_usd": round(sum(predicted.values()), 6),
+        "verified_monthly_usd": round(verified_actual, 6),
+        "missed_predicted_monthly_usd": round(totals["missed"], 6),
+        "verifying_predicted_monthly_usd": round(totals["pending"], 6),
+        "inconclusive_predicted_monthly_usd": round(totals["inconclusive"], 6),
+        # None, not 0, when nothing has been judged: a ratio over an empty
+        # denominator is undefined, and 0% would read as "everything failed".
+        "realisation_pct": (
+            round(verified_actual / judged_predicted * 100, 1) if judged_predicted else None
+        ),
+        "counts": counts,
+    }

@@ -347,7 +347,7 @@ async def verify_savings(
 
     Returns None if the fingerprint is unknown.
     """
-    from burnlens.analysis.economics import get_subject_spend
+    from burnlens.analysis.economics import classify_savings, get_subject_spend
 
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
@@ -408,10 +408,10 @@ async def verify_savings(
     baseline_per_request = (finding.baseline_cost_usd or 0.0) / finding.baseline_requests
     current_per_request = current_cost / current_requests
 
-    verdict.status = "verified"
     verdict.baseline_cost_per_request = baseline_per_request
     verdict.current_cost_per_request = current_per_request
     verdict.delta_per_request = baseline_per_request - current_per_request
+    verdict.status = classify_savings(verdict.delta_per_request, current_requests)
     verdict.pct_change = (
         ((current_per_request - baseline_per_request) / baseline_per_request * 100)
         if baseline_per_request

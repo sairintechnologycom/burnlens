@@ -246,6 +246,138 @@ export const ProviderReconciliationFields: Record<keyof ProviderReconciliation, 
   computed_at: true,
 };
 
+// --- /api/v1/outcomes/coverage  ->  OutcomeCoverage ---
+// What share of spend reaches a recorded outcome. Dollar-weighted, unlike cost
+// confidence: the question is what share of the MONEY bought something we can
+// name. `cost_untagged_usd` is the number /outcomes/summary structurally cannot
+// see — it only reads requests that carry a workflow_id tag.
+export interface OutcomeCoverageRow {
+  workflow_id: string | null;
+  cost_total_usd: number;
+  cost_attributed_usd: number;
+  coverage_pct: number;
+}
+export const OutcomeCoverageRowFields: Record<keyof OutcomeCoverageRow, true> = {
+  workflow_id: true,
+  cost_total_usd: true,
+  cost_attributed_usd: true,
+  coverage_pct: true,
+};
+
+export interface OutcomeCoverage {
+  days: number;
+  window_seconds: number;
+  cost_total_usd: number;
+  cost_attributed_usd: number;
+  cost_unattributed_usd: number;
+  cost_untagged_usd: number;
+  cost_accepted_usd: number;
+  cost_rework_usd: number;
+  coverage_pct: number;
+  by_workflow: OutcomeCoverageRow[];
+}
+export const OutcomeCoverageFields: Record<keyof OutcomeCoverage, true> = {
+  days: true,
+  window_seconds: true,
+  cost_total_usd: true,
+  cost_attributed_usd: true,
+  cost_unattributed_usd: true,
+  cost_untagged_usd: true,
+  cost_accepted_usd: true,
+  cost_rework_usd: true,
+  coverage_pct: true,
+  by_workflow: true,
+};
+
+// --- /api/v1/findings/savings  ->  SavingsRollup ---
+// Projected savings versus savings that actually showed up. Every figure is
+// MONTHLY — a finding's prediction is measured over its 7-day baseline window
+// and scaled by 30/window before it can sit next to a verdict's 30-day actual.
+// `realisation_pct` is null, never 0, when nothing has been judged.
+export interface SavingsRollup {
+  open_projected_monthly_usd: number;
+  resolved_predicted_monthly_usd: number;
+  verified_monthly_usd: number;
+  missed_predicted_monthly_usd: number;
+  verifying_predicted_monthly_usd: number;
+  inconclusive_predicted_monthly_usd: number;
+  realisation_pct: number | null;
+  counts: Record<string, number>;
+}
+export const SavingsRollupFields: Record<keyof SavingsRollup, true> = {
+  open_projected_monthly_usd: true,
+  resolved_predicted_monthly_usd: true,
+  verified_monthly_usd: true,
+  missed_predicted_monthly_usd: true,
+  verifying_predicted_monthly_usd: true,
+  inconclusive_predicted_monthly_usd: true,
+  realisation_pct: true,
+  counts: true,
+};
+
+// --- /api/v1/cost-confidence  ->  CostConfidence ---
+// How much of the spend figure is backed by evidence. `confidence_pct` is
+// weighted by REQUESTS, not dollars, because unpriced rows contribute $0 — a
+// dollar-weighted score reports 100% on a workspace whose priciest model has no
+// price at all.
+export interface ConfidenceBucket {
+  cost_usd: number;
+  requests: number;
+  share_pct: number;
+}
+export const ConfidenceBucketFields: Record<keyof ConfidenceBucket, true> = {
+  cost_usd: true,
+  requests: true,
+  share_pct: true,
+};
+
+export interface CoverageGap {
+  provider: string;
+  model: string | null;
+  requests: number;
+  reason: "unpriced" | "drifted" | "unreconciled" | "no_billing_key";
+  detail: string;
+}
+export const CoverageGapFields: Record<keyof CoverageGap, true> = {
+  provider: true,
+  model: true,
+  requests: true,
+  reason: true,
+  detail: true,
+};
+
+export interface CostConfidence {
+  days: number;
+  total_cost_usd: number;
+  total_requests: number;
+  // Share of REQUESTS in any class except `unpriced`. A plain ratio, never a
+  // weighted score — the four class figures are published so a reader can weigh
+  // them themselves.
+  confidence_pct: number;
+  // The dollar dimension the request ratio cannot see: one unpriced call can be
+  // worth more than 99,000 priced ones.
+  reconciled_spend_pct: number;
+  reconciled: ConfidenceBucket;
+  calculated: ConfidenceBucket;
+  estimated: ConfidenceBucket;
+  unpriced: ConfidenceBucket;
+  reasons: Record<string, number>;
+  gaps: CoverageGap[];
+}
+export const CostConfidenceFields: Record<keyof CostConfidence, true> = {
+  days: true,
+  total_cost_usd: true,
+  total_requests: true,
+  confidence_pct: true,
+  reconciled_spend_pct: true,
+  reconciled: true,
+  calculated: true,
+  estimated: true,
+  unpriced: true,
+  reasons: true,
+  gaps: true,
+};
+
 // --- /api/v1/economics  ->  EconomicsOverview ---
 export interface TraceCoverage {
   request_count: number;

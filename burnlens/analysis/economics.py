@@ -83,6 +83,34 @@ class EconomicsOverview:
     trace_coverage: TraceCoverage = field(default_factory=TraceCoverage)
 
 
+# A verdict needs enough traffic after the fix to mean anything. Below this the
+# comparison is noise dressed as measurement, so it is reported as inconclusive
+# rather than folded into either the win or the loss column.
+# ponytail: one global floor; make it per-finding if a workload's natural volume
+# is genuinely lower than this and it never escapes "inconclusive".
+MIN_VERIFY_REQUESTS = 30
+
+
+def classify_savings(delta_per_request: float, current_requests: int) -> str:
+    """Did the fix work? Called by both the local and the cloud verifier.
+
+    The distinction that makes a portfolio total honest: a fix whose cost per
+    request did NOT fall is a **missed** projection, not a verified saving with a
+    negative number attached. Summing "verified" across findings while
+    regressions sit inside it labelled verified is how a savings figure stops
+    being believable.
+
+    Callers handle the two states that come before this one — ``pending`` (the
+    measurement window has not elapsed) and ``no_traffic`` (nothing ran after
+    the fix, and silence is not a saving).
+    """
+    if current_requests < MIN_VERIFY_REQUESTS:
+        return "inconclusive"
+    # Flat counts as missed: nothing was saved, and rounding noise around zero
+    # should not tip a finding into the win column.
+    return "verified" if delta_per_request > 0 else "missed"
+
+
 async def get_error_spend(db_path: str, since: str) -> tuple[float, int]:
     """Spend on requests the provider rejected (4xx/5xx).
 
