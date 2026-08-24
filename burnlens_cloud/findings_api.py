@@ -16,10 +16,17 @@ from .findings import (
     list_findings,
     refresh_findings,
     set_finding_status,
+    savings_rollup,
     verify_all_resolved,
     waste_alert_from_finding,
 )
-from .models import EconomicsOverview, FindingItem, FindingStatusBody, SavingsVerdict
+from .models import (
+    EconomicsOverview,
+    FindingItem,
+    FindingStatusBody,
+    SavingsRollup,
+    SavingsVerdict,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["findings"])
 
@@ -36,6 +43,15 @@ async def get_findings_verify(token: TokenPayload = Depends(verify_token)):
     pool = get_pool()
     async with pool.acquire() as conn:
         return await verify_all_resolved(conn, token.workspace_id)
+
+
+@router.get("/findings/savings", response_model=SavingsRollup)
+async def get_findings_savings(token: TokenPayload = Depends(verify_token)):
+    """Projected savings versus savings that actually showed up in traffic."""
+    await require_role("viewer", token)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        return await savings_rollup(conn, token.workspace_id)
 
 
 @router.get("/findings", response_model=list[FindingItem])

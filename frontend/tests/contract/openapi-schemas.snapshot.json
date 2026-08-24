@@ -808,6 +808,30 @@
     "title": "ComponentStatus",
     "type": "object"
   },
+  "ConfidenceBucket": {
+    "description": "One class of spend, and how much of the total it accounts for.",
+    "properties": {
+      "cost_usd": {
+        "title": "Cost Usd",
+        "type": "number"
+      },
+      "requests": {
+        "title": "Requests",
+        "type": "integer"
+      },
+      "share_pct": {
+        "title": "Share Pct",
+        "type": "number"
+      }
+    },
+    "required": [
+      "cost_usd",
+      "requests",
+      "share_pct"
+    ],
+    "title": "ConfidenceBucket",
+    "type": "object"
+  },
   "CostByModel": {
     "description": "Cost aggregated by model.",
     "properties": {
@@ -881,6 +905,72 @@
     "title": "CostByTag",
     "type": "object"
   },
+  "CostConfidence": {
+    "description": "How much of a spend figure BurnLens can actually stand behind.\n\nFour classes, in descending order of evidence:\n\n* ``reconciled`` \u2014 the provider's own bill agreed with us within the drift\n  threshold for the most recent comparison.\n* ``calculated`` \u2014 priced from the pricing table, never checked against a\n  bill.\n* ``estimated`` \u2014 reconstructed from a coding agent's local logs\n  (``burnlens scan``). Real token counts, but self-reported by the agent\n  rather than measured on the wire.\n* ``unpriced`` \u2014 tokens were used and we produced $0, because the model has\n  no price. **These rows contribute nothing to the dollar total**, so the\n  dollar split cannot see them; that is exactly why ``confidence_pct`` is\n  counted by requests and not by dollars.\n\n``confidence_pct`` is a plain ratio \u2014 the share of requests that fall in any\nclass except ``unpriced`` \u2014 not a weighted score. A weighted index would not\nbe auditable, and the four class figures are published separately so a reader\ncan weigh a calculated dollar against a reconciled one themselves.\n\n``reconciled_spend_pct`` adds the dimension the request ratio cannot see: one\nunpriced call can be worth more than 99,000 priced ones, so of the money we\ndo have a figure for, this is the share the provider's own bill confirmed.\n\nRows that used no tokens and cost nothing (errors, empty responses) are\nexcluded entirely \u2014 there is nothing about them to be confident in.",
+    "properties": {
+      "calculated": {
+        "$ref": "#/components/schemas/ConfidenceBucket"
+      },
+      "confidence_pct": {
+        "title": "Confidence Pct",
+        "type": "number"
+      },
+      "days": {
+        "title": "Days",
+        "type": "integer"
+      },
+      "estimated": {
+        "$ref": "#/components/schemas/ConfidenceBucket"
+      },
+      "gaps": {
+        "items": {
+          "$ref": "#/components/schemas/CoverageGap"
+        },
+        "title": "Gaps",
+        "type": "array"
+      },
+      "reasons": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "title": "Reasons",
+        "type": "object"
+      },
+      "reconciled": {
+        "$ref": "#/components/schemas/ConfidenceBucket"
+      },
+      "reconciled_spend_pct": {
+        "title": "Reconciled Spend Pct",
+        "type": "number"
+      },
+      "total_cost_usd": {
+        "title": "Total Cost Usd",
+        "type": "number"
+      },
+      "total_requests": {
+        "title": "Total Requests",
+        "type": "integer"
+      },
+      "unpriced": {
+        "$ref": "#/components/schemas/ConfidenceBucket"
+      }
+    },
+    "required": [
+      "days",
+      "total_cost_usd",
+      "total_requests",
+      "confidence_pct",
+      "reconciled_spend_pct",
+      "reconciled",
+      "calculated",
+      "estimated",
+      "unpriced",
+      "reasons",
+      "gaps"
+    ],
+    "title": "CostConfidence",
+    "type": "object"
+  },
   "CostTimeline": {
     "description": "Cost over time.",
     "properties": {
@@ -903,6 +993,52 @@
       "total_cost_usd"
     ],
     "title": "CostTimeline",
+    "type": "object"
+  },
+  "CoverageGap": {
+    "description": "A named reason some spend is less than fully trustworthy.",
+    "properties": {
+      "detail": {
+        "title": "Detail",
+        "type": "string"
+      },
+      "model": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Model"
+      },
+      "provider": {
+        "title": "Provider",
+        "type": "string"
+      },
+      "reason": {
+        "enum": [
+          "unpriced",
+          "drifted",
+          "unreconciled",
+          "no_billing_key"
+        ],
+        "title": "Reason",
+        "type": "string"
+      },
+      "requests": {
+        "title": "Requests",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "provider",
+      "requests",
+      "reason",
+      "detail"
+    ],
+    "title": "CoverageGap",
     "type": "object"
   },
   "EconomicsOverview": {
@@ -1503,6 +1639,103 @@
       "ok"
     ],
     "title": "OtelTestResponse",
+    "type": "object"
+  },
+  "OutcomeCoverage": {
+    "description": "How much spend can be connected to a business outcome at all.\n\nThree tiers, and the first one is the point. `/api/v1/outcomes/summary`\nonly looks at requests carrying a `workflow_id` tag, so spend with no tag is\ninvisible to it \u2014 a workspace tagging 5% of its traffic sees a confident\ncost-per-outcome built on 5% of the money. That spend is reported here as\n``cost_untagged_usd``.\n\n* ``attributed`` \u2014 an outcome landed within the allocation window.\n* ``unattributed`` \u2014 tagged with a workflow, but no outcome followed inside\n  the window. Recoverable: post the outcome.\n* ``untagged`` \u2014 no ``workflow_id`` on the request. Structurally impossible\n  to attribute until the caller tags it.\n\nDollar-weighted, unlike cost confidence: the question here is what share of\nthe *money* bought something we can name, and a cheap request that produced\nan outcome is not worth the same as an expensive one that did not.",
+    "properties": {
+      "by_workflow": {
+        "items": {
+          "$ref": "#/components/schemas/OutcomeCoverageRow"
+        },
+        "title": "By Workflow",
+        "type": "array"
+      },
+      "cost_accepted_usd": {
+        "title": "Cost Accepted Usd",
+        "type": "number"
+      },
+      "cost_attributed_usd": {
+        "title": "Cost Attributed Usd",
+        "type": "number"
+      },
+      "cost_rework_usd": {
+        "title": "Cost Rework Usd",
+        "type": "number"
+      },
+      "cost_total_usd": {
+        "title": "Cost Total Usd",
+        "type": "number"
+      },
+      "cost_unattributed_usd": {
+        "title": "Cost Unattributed Usd",
+        "type": "number"
+      },
+      "cost_untagged_usd": {
+        "title": "Cost Untagged Usd",
+        "type": "number"
+      },
+      "coverage_pct": {
+        "title": "Coverage Pct",
+        "type": "number"
+      },
+      "days": {
+        "title": "Days",
+        "type": "integer"
+      },
+      "window_seconds": {
+        "title": "Window Seconds",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "days",
+      "window_seconds",
+      "cost_total_usd",
+      "cost_attributed_usd",
+      "cost_unattributed_usd",
+      "cost_untagged_usd",
+      "cost_accepted_usd",
+      "cost_rework_usd",
+      "coverage_pct",
+      "by_workflow"
+    ],
+    "title": "OutcomeCoverage",
+    "type": "object"
+  },
+  "OutcomeCoverageRow": {
+    "description": "One workflow's share of spend that reaches a recorded outcome.",
+    "properties": {
+      "cost_attributed_usd": {
+        "title": "Cost Attributed Usd",
+        "type": "number"
+      },
+      "cost_total_usd": {
+        "title": "Cost Total Usd",
+        "type": "number"
+      },
+      "coverage_pct": {
+        "title": "Coverage Pct",
+        "type": "number"
+      },
+      "workflow_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Workflow Id"
+      }
+    },
+    "required": [
+      "cost_total_usd",
+      "cost_attributed_usd",
+      "coverage_pct"
+    ],
+    "title": "OutcomeCoverageRow",
     "type": "object"
   },
   "OutcomeIngestRequest": {
@@ -2442,6 +2675,64 @@
       "key_kind"
     ],
     "title": "RunSummary",
+    "type": "object"
+  },
+  "SavingsRollup": {
+    "description": "Projected savings versus savings that actually showed up.\n\nEvery figure is **monthly**, which is the only reason they can sit next to\neach other. A finding's prediction (``baseline_waste_usd``) is measured over\nits baseline window \u2014 7 days by default \u2014 while a verdict's actual is already\nextrapolated to 30. Adding the two raw would silently compare a week to a\nmonth, so predictions are scaled by ``30 / baseline_window_days`` first.\n\n``realisation_pct`` is the credibility number: of what BurnLens predicted for\nfixes that have since reached a verdict, how much was actually measured.\nMissed fixes contribute their prediction to the denominator and nothing to\nthe numerator, which is exactly what makes the ratio worth reading.",
+    "properties": {
+      "counts": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "title": "Counts",
+        "type": "object"
+      },
+      "inconclusive_predicted_monthly_usd": {
+        "title": "Inconclusive Predicted Monthly Usd",
+        "type": "number"
+      },
+      "missed_predicted_monthly_usd": {
+        "title": "Missed Predicted Monthly Usd",
+        "type": "number"
+      },
+      "open_projected_monthly_usd": {
+        "title": "Open Projected Monthly Usd",
+        "type": "number"
+      },
+      "realisation_pct": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Realisation Pct"
+      },
+      "resolved_predicted_monthly_usd": {
+        "title": "Resolved Predicted Monthly Usd",
+        "type": "number"
+      },
+      "verified_monthly_usd": {
+        "title": "Verified Monthly Usd",
+        "type": "number"
+      },
+      "verifying_predicted_monthly_usd": {
+        "title": "Verifying Predicted Monthly Usd",
+        "type": "number"
+      }
+    },
+    "required": [
+      "open_projected_monthly_usd",
+      "resolved_predicted_monthly_usd",
+      "verified_monthly_usd",
+      "missed_predicted_monthly_usd",
+      "verifying_predicted_monthly_usd",
+      "inconclusive_predicted_monthly_usd",
+      "counts"
+    ],
+    "title": "SavingsRollup",
     "type": "object"
   },
   "SavingsVerdict": {
