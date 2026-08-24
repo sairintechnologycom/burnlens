@@ -2459,6 +2459,31 @@ img, svg { display: block; }
 .pricing-table td:first-child { color: var(--l-text); }
 .pricing-table td:last-child { white-space: normal; font-size: 12px; }
 
+/* ── /llm-pricing calculator ──────────────────────────────────── */
+.lp-calc {
+  display: grid; gap: 16px; margin: 20px 0;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.lp-calc-field { display: block; }
+.lp-calc-model { grid-column: 1 / -1; }
+.lp-calc-hint {
+  display: block; margin-top: 6px;
+  font-size: 11px; color: var(--l-muted);
+}
+.lp-calc-out {
+  display: grid; gap: 16px; margin: 24px 0 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  border: 1px solid var(--border); border-radius: 6px; padding: 20px;
+}
+.lp-calc-total strong {
+  display: block; margin-top: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 24px; font-weight: 700; color: var(--l-text);
+  font-variant-numeric: tabular-nums;
+}
+.lp-calc-total strong.lp-calc-naive { color: var(--l-muted); text-decoration: line-through; }
+.lp-calc-notes { font-size: 13px; color: var(--l-muted); }
+
 /* ── Support Chat Widget ──────────────────────────────────────── */
 .support-chat-trigger {
   position: fixed;
