@@ -96,7 +96,7 @@ export const COMMANDS: { cmd: string; what: string; group: string }[] = [
   { group: "Look at spend", cmd: "export", what: "Export request data to CSV." },
   { group: "Find waste", cmd: "analyze", what: "Run waste detectors and print findings." },
   { group: "Find waste", cmd: "findings", what: "Persisted waste findings and their lifecycle." },
-  { group: "Find waste", cmd: "economics", what: "Top-line runtime economics: spend, waste rate, error spend, cost/outcome." },
+  { group: "Find waste", cmd: "economics", what: "Top-line runtime economics, then burnlens recommend for the switch." },
   { group: "Find waste", cmd: "outcome", what: "Record business outcomes to get cost per accepted outcome." },
   { group: "Find waste", cmd: "recommend", what: "Analyse usage patterns and suggest cheaper model alternatives." },
   { group: "Control spend", cmd: "budgets", what: "Show per-team budget status for the current month." },

@@ -165,6 +165,66 @@ def test_scan_reports_missing_gh_as_a_fact(tmp_path):
     assert "burnlens outcome derive" in result.output
 
 
+def test_economics_points_at_recommend(tmp_path):
+    """CONTROL is shipped; economics has to send you there, not rebuild it."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from burnlens.analysis.recommender import ModelRecommendation
+    from burnlens.config import BurnLensConfig
+    from burnlens.storage.database import init_db
+
+    db = str(tmp_path / "econ.db")
+    asyncio.run(init_db(db))
+    rec = ModelRecommendation(
+        current_model="gpt-4o",
+        suggested_model="gpt-4o-mini",
+        feature_tag="classify",
+        request_count=25,
+        avg_output_tokens=30.0,
+        current_cost=1.0,
+        projected_cost=0.2,
+        projected_saving=0.8,
+        saving_pct=80.0,
+        confidence="high",
+        reason="short output",
+    )
+    cfg = BurnLensConfig(db_path=db)
+    with patch("burnlens.cli.load_config", return_value=cfg), patch(
+        "burnlens.analysis.recommender.analyse_model_fit",
+        new_callable=AsyncMock,
+        return_value=[rec],
+    ) as mock_fit:
+        result = runner.invoke(app, ["economics"])
+    assert result.exit_code == 0, result.output
+    mock_fit.assert_awaited()
+    out = " ".join(result.output.split())
+    assert "burnlens recommend" in out
+    assert "$0.8000" in out
+    assert "burnlens recommend --apply" in out
+
+
+def test_economics_still_names_recommend_when_none(tmp_path):
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from burnlens.config import BurnLensConfig
+    from burnlens.storage.database import init_db
+
+    db = str(tmp_path / "econ-empty.db")
+    asyncio.run(init_db(db))
+    cfg = BurnLensConfig(db_path=db)
+    with patch("burnlens.cli.load_config", return_value=cfg), patch(
+        "burnlens.analysis.recommender.analyse_model_fit",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = runner.invoke(app, ["economics"])
+    assert result.exit_code == 0, result.output
+    assert "burnlens recommend" in result.output
+    assert "--apply" not in result.output
+
+
 def test_outcome_derive_fails_when_gh_is_missing(tmp_path):
     from unittest.mock import patch
 

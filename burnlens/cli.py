@@ -432,6 +432,25 @@ def analyze(
     asyncio.run(_run())
 
 
+async def _print_economics_recommendations(db_path: str, days: int) -> None:
+    """CONTROL step: the recommender is already shipped — name it, don't rebuild it."""
+    from burnlens.analysis.recommender import analyse_model_fit
+
+    recs = await analyse_model_fit(db_path, days=days)
+    if recs:
+        total = sum(r.projected_saving for r in recs)
+        console.print(
+            f"\n  [dim]Recommendations — {len(recs)} from "
+            f"[cyan]burnlens recommend[/cyan], {_fmt_cost(total)} projected. "
+            f"[cyan]burnlens recommend --apply[/cyan] prints the switch.[/dim]"
+        )
+    else:
+        console.print(
+            "\n  [dim]Recommendations — none in this window. "
+            "[cyan]burnlens recommend[/cyan] re-runs the same engine.[/dim]"
+        )
+
+
 @app.command()
 def economics(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
@@ -584,6 +603,8 @@ def economics(
                     "[cyan]burnlens findings verify[/cyan] for per-finding "
                     "verdicts.[/dim]"
                 )
+
+        await _print_economics_recommendations(cfg.db_path, days)
 
         console.print()
 

@@ -36,6 +36,9 @@ qualified with the package it covers.
   import it runs the same path as `burnlens outcome derive` on the current
   checkout. If `gh` is missing, that is printed as the reason rather than
   skipped. Dry-run does not derive. No new coding-agent scanners.
+- **`burnlens economics` points at `burnlens recommend`.** Projected savings
+  come from the existing recommender; the command is named rather than
+  rebuilt. `--apply` is how the switch is printed.
 
 ### Fixed
 - **Local dashboard `/waste` and cloud-compat `/waste-alerts` read every
