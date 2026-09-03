@@ -6,7 +6,7 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
-## [Unreleased]
+## [OSS `burnlens` v1.26.0] — 2026-09-03
 
 ### Changed
 - **Budget-aware model downgrade is off by default.** Observation must not
