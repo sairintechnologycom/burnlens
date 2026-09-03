@@ -9,6 +9,7 @@ import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type { RecommendationRow as Recommendation, SavingsRollup } from "@/lib/contracts";
 import { VerifiedSavingsPanel } from "./VerifiedSavingsView";
+import { EconomicsNav } from "@/components/EconomicsNav";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -64,6 +65,7 @@ function SavingsContent() {
 
   return (
     <div>
+      <EconomicsNav current="/savings" />
       <div className="stat-strip">
         <div className="stat-cell">
           <div className="stat-label">Recommendations</div>

@@ -45,12 +45,17 @@ const GROUPS: SidebarGroup[] = [
     ],
   },
   {
-    label: "Intelligence",
+    label: "Economics",
     items: [
-      { href: "/waste", label: "Waste alerts" },
-      { href: "/cache", label: "Caching" },
       { href: "/outcomes", label: "Outcomes" },
       { href: "/savings", label: "Savings" },
+      { href: "/waste", label: "Waste" },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { href: "/cache", label: "Caching" },
       { href: "/budgets", label: "Budgets" },
       { href: "/alerts", label: "Alerts" },
     ],

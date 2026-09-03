@@ -20,7 +20,7 @@ const NAV_LINKS = [
   { href: "/models", label: "Models" },
   { href: "/teams", label: "Teams" },
   { href: "/customers", label: "Customers" },
-  { href: "/waste", label: "Alerts" },
+  { href: "/waste", label: "Waste" },
   { href: "/settings", label: "Settings" },
 ];
 

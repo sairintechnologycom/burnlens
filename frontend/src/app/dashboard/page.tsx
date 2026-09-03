@@ -17,9 +17,13 @@ import type {
   EconomicsOverview,
   CostConfidence,
   OutcomeCoverage,
+  RecommendationRow,
+  SavingsRollup,
 } from "@/lib/contracts";
 import { CostConfidencePanel } from "./CostConfidenceView";
 import { OutcomeCoveragePanel } from "./OutcomeCoverageView";
+import { EconomicsLoopPanel } from "./EconomicsLoopView";
+import { EconomicsNav } from "@/components/EconomicsNav";
 
 function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -141,6 +145,8 @@ function DashboardContent() {
   const [economics, setEconomics] = useState<EconomicsOverview | null>(null);
   const [confidence, setConfidence] = useState<CostConfidence | null>(null);
   const [coverage, setCoverage] = useState<OutcomeCoverage | null>(null);
+  const [savings, setSavings] = useState<SavingsRollup | null>(null);
+  const [recs, setRecs] = useState<RecommendationRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [requestLimit, setRequestLimit] = useState(20);
@@ -150,7 +156,7 @@ function DashboardContent() {
     setLoading(true);
     setError("");
     try {
-      const [sum, ts, reqs, recon, econ, conf, cov] = await Promise.all([
+      const [sum, ts, reqs, recon, econ, conf, cov, sav, recList] = await Promise.all([
         apiFetch(`/api/v1/usage/summary?days=${days}`, session.token),
         apiFetch(`/api/v1/usage/timeseries?days=${days}&granularity=day`, session.token).catch(() => []),
         apiFetch(`/api/v1/requests?days=${days}&limit=${requestLimit}`, session.token).catch(() => []),
@@ -158,11 +164,15 @@ function DashboardContent() {
         apiFetch(`/api/v1/economics?days=${days}`, session.token).catch(() => null),
         apiFetch(`/api/v1/cost-confidence?days=${days}`, session.token).catch(() => null),
         apiFetch(`/api/v1/outcomes/coverage?days=${days}`, session.token).catch(() => null),
+        apiFetch("/api/v1/findings/savings", session.token).catch(() => null),
+        apiFetch("/api/v1/recommendations", session.token).catch(() => []),
       ]);
       setSummary(sum);
       setEconomics(econ as EconomicsOverview | null);
       setConfidence(conf as CostConfidence | null);
       setCoverage(cov as OutcomeCoverage | null);
+      setSavings(sav as SavingsRollup | null);
+      setRecs(Array.isArray(recList) ? (recList as RecommendationRow[]) : []);
 
       // Aggregate timeseries by date
       const byDate: Record<string, number> = {};
@@ -228,6 +238,7 @@ function DashboardContent() {
 
   return (
     <div>
+      <EconomicsNav current="/dashboard" />
       {/* Stat strip */}
       <div className="stat-strip cols-5">
         <div className="stat-cell">
@@ -277,6 +288,7 @@ function DashboardContent() {
 
       {confidence && <CostConfidencePanel c={confidence} />}
       {coverage && <OutcomeCoveragePanel c={coverage} />}
+      <EconomicsLoopPanel econ={economics} savings={savings} recs={recs} />
 
       {!hasData && (
         <div className="card" style={{ margin: 16, padding: 32 }}>

@@ -39,6 +39,9 @@ qualified with the package it covers.
 - **`burnlens economics` points at `burnlens recommend`.** Projected savings
   come from the existing recommender; the command is named rather than
   rebuilt. `--apply` is how the switch is printed.
+- **Cloud dashboard is one economics view.** Overview, `/outcomes`,
+  `/savings` and `/waste` share a nav; Overview tiles link to those pages.
+  The four engines are unchanged.
 
 ### Fixed
 - **Local dashboard `/waste` and cloud-compat `/waste-alerts` read every

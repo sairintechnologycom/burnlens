@@ -9,6 +9,7 @@ import { usePeriod } from "@/lib/contexts/PeriodContext";
 import type { ProviderConcentration, WorkflowEconomics } from "@/lib/contracts";
 import { OutcomesTable, formatPerAccepted, formatUsd } from "./OutcomesTable";
 import { ConcentrationTable } from "./ConcentrationTable";
+import { EconomicsNav } from "@/components/EconomicsNav";
 
 function KpiStrip({ rows }: { rows: WorkflowEconomics[] }) {
   const accepted = rows.reduce((s, r) => s + r.accepted_count, 0);
@@ -103,6 +104,7 @@ function OutcomesContent() {
 
   return (
     <div>
+      <EconomicsNav current="/outcomes" />
       {rows.length > 0 && <KpiStrip rows={rows} />}
       <div className="card" style={{ margin: 16 }}>
         <div className="section-header">

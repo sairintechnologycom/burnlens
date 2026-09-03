@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 import type { EconomicsOverview, FindingItem, SavingsVerdict } from "@/lib/contracts";
 import { FindingsList } from "./FindingsList";
+import { EconomicsNav } from "@/components/EconomicsNav";
 
 function formatUsd(n: number): string {
   return n.toLocaleString(undefined, {
@@ -136,6 +137,7 @@ function WasteContent() {
 
   return (
     <div>
+      <EconomicsNav current="/waste" />
       {econ && <KpiStrip econ={econ} />}
       <div className="card" style={{ margin: 16 }}>
         <div className="section-header">
