@@ -102,6 +102,34 @@ async def test_insert_and_retrieve(initialized_db: str):
     assert len(rows) == 1
     assert rows[0]["model"] == "gpt-4o"
     assert rows[0]["provider"] == "openai"
+    assert rows[0]["pricing_class"] == "calculated"
+
+
+@pytest.mark.asyncio
+async def test_insert_persists_estimated_and_unpriced(initialized_db: str):
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="anthropic",
+            model="claude-opus-5",
+            request_path="/v1/messages",
+            source="scan_claude",
+            cost_usd=0.10,
+        ),
+    )
+    await insert_request(
+        initialized_db,
+        RequestRecord(
+            provider="openai",
+            model="zzz-not-a-real-model-v0",
+            request_path="/v1/chat/completions",
+            source="proxy",
+            cost_usd=0.0,
+        ),
+    )
+    rows = {r["model"]: r for r in await get_recent_requests(initialized_db, limit=10)}
+    assert rows["claude-opus-5"]["pricing_class"] == "estimated"
+    assert rows["zzz-not-a-real-model-v0"]["pricing_class"] == "unpriced"
 
 
 async def test_insert_returns_incrementing_ids(initialized_db: str):
@@ -390,6 +418,20 @@ async def test_requests_for_analysis_is_unbounded_by_default(initialized_db: str
         await insert_request(initialized_db, _record())
     rows = await get_requests_for_analysis(initialized_db)
     assert len(rows) == 1005
+
+
+def test_dashboard_waste_routes_do_not_pass_a_silent_1000_cap():
+    """The CLI was unbounded; the dashboard still called the old default."""
+    import inspect
+
+    from burnlens.dashboard import cloud_compat, routes
+
+    waste_src = inspect.getsource(routes.waste)
+    alerts_src = inspect.getsource(cloud_compat.waste_alerts)
+    assert "limit=1000" not in waste_src
+    assert "limit=1000" not in alerts_src
+    assert "get_requests_for_analysis(db)" in waste_src
+    assert "get_requests_for_analysis(db)" in alerts_src
 
 
 async def test_requests_for_analysis_since(initialized_db: str):

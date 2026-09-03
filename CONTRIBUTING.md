@@ -18,7 +18,7 @@ BurnLens is a transparent proxy in the request path of production applications. 
 1. **Local-first.** `burnlens start`, the proxy, SQLite storage, and the dashboard must work offline with no cloud account.
 2. **Fail open.** If cost calculation, logging, or config fails, log a warning and forward the request anyway. Never break the user's app.
 3. **Streaming passthrough.** Never buffer SSE responses — forward each chunk immediately.
-4. **Transparent.** Never modify request or response bodies.
+4. **Transparent.** Never modify request or response bodies. Exception: budget-aware model downgrade rewrites `model` in the upstream body, and only when `routing.budget_downgrade` is explicitly `true` (YAML or cloud `routing_overrides`). It is off by default; a budget alone must not change the model.
 5. **Lightweight.** The proxy keeps a minimal dependency footprint; new runtime dependencies need a strong justification.
 
 ## Adding a provider

@@ -193,3 +193,23 @@ async def test_export_cost_formatted_as_decimal_not_scientific(
         cost_str = data[0]["cost_usd"]
         assert "e" not in cost_str.lower(), f"cost {cost_str!r} used scientific notation"
         assert cost_str == "0.00005120"
+
+
+@pytest.mark.asyncio
+async def test_export_unpriced_cost_is_unknown_not_zero(
+    initialized_db: str, tmp_path: Path
+) -> None:
+    """Unpriced sentinel 0 must not present as a measured $0.00."""
+    await insert_request(
+        initialized_db,
+        _record(provider="openai", model="zzz-not-a-real-model-v0", cost_usd=0.0),
+    )
+    rows = await get_requests_for_export(initialized_db, days=7)
+    out = tmp_path / "out.csv"
+    export_to_csv(rows, out)
+
+    with open(out) as f:
+        data = list(csv.DictReader(f))
+    assert data[0]["pricing_class"] == "unpriced"
+    assert data[0]["cost_usd"] == "unknown"
+    assert "0.00" not in data[0]["cost_usd"]

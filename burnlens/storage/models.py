@@ -134,6 +134,7 @@ class RequestRecord:
     branch: str | None = None
     commit_sha: str | None = None
     pricing_version: str | None = None
+    pricing_class: str | None = None
     ttft_ms: float | None = None
 
     @property

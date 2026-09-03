@@ -229,7 +229,7 @@ async def recent_requests(
 async def waste_alerts(request: Request) -> list[dict]:
     """Cloud-compatible waste alerts."""
     db = _db_path(request)
-    requests_data = await get_requests_for_analysis(db, limit=1000)
+    requests_data = await get_requests_for_analysis(db)
     findings = run_all_detectors(requests_data)
     return [
         {

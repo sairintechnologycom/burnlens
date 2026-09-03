@@ -33,4 +33,4 @@ Your Python user-site `bin` directory is not on PATH. Two fixes:
 
 ## Model downgrade is replacing my requested model
 
-That is a team or customer tag-level budget trigger. When a tag's spend crosses the configured threshold, BurnLens routes the request to a cheaper model instead of failing it. Disable downgrade in `burnlens.yaml` (`routing.disabled: true`) or raise the threshold if this is unwanted.
+That is a team or customer tag-level budget trigger, and only fires if you opted in. When `routing.budget_downgrade` is true and a tag's spend crosses the configured threshold, BurnLens routes the request to a cheaper model instead of failing it. Downgrade is off by default. There is no `routing.disabled` key — omit `budget_downgrade` or set it `false`, or raise the threshold if an explicit opt-in is unwanted.

@@ -6,6 +6,33 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Unreleased]
+
+### Changed
+- **Budget-aware model downgrade is off by default.** Observation must not
+  rewrite `model`. `routing.budget_downgrade` now defaults to `false`; YAML
+  that already sets `true` is unchanged, as is a cloud `routing_overrides`
+  push. There is no `routing.disabled` key — that flag was documented but
+  never parsed. Opt in explicitly, or take the 429.
+
+### Added
+- **`pricing_class` on every request.** `unpriced` / `calculated` /
+  `estimated` (scan) is persisted at insert and classified at read for rows
+  written before the column existed. CSV export adds the column and writes
+  `unknown` in `cost_usd` for unpriced rows instead of a measured `$0.00`.
+- **`burnlens economics` prints local Cost Confidence and Outcome Coverage.**
+  Unpriced models are named; untagged vs unattributed spend is split. There
+  is no reconciled bucket locally — that still needs a billing key in Cloud.
+
+### Fixed
+- **Local dashboard `/waste` and cloud-compat `/waste-alerts` read every
+  matching row.** They used to pass the analysis query's old 1000-row cap
+  implicitly. `burnlens analyze` was already unbounded; the dashboard now
+  matches.
+- **`burnlens scan` discloses that history is priced at today's table**,
+  not session-date rates, and that Cost Confidence classifies scanned rows
+  as estimated. Unpriced imports are described as `$ unknown`, not `$0.00`.
+
 ## [OSS `burnlens` v1.25.0] — 2026-08-24
 
 ### Fixed

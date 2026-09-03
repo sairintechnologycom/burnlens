@@ -150,9 +150,14 @@ class BudgetPolicy:
 
 @dataclass
 class RoutingConfig:
-    """Budget-aware routing configuration."""
+    """Budget-aware routing configuration.
 
-    budget_downgrade: bool = True
+    Observation is the default. Rewriting ``model`` in the upstream body is an
+    explicit policy: ``budget_downgrade`` must be set true in YAML or pushed
+    via cloud ``routing_overrides``. A budget alone never changes the model.
+    """
+
+    budget_downgrade: bool = False
     downgrade_threshold_pct: float = 20.0
     downgrade_threshold_usd: float = 5.00
     log_downgrades: bool = True
@@ -429,7 +434,7 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
     routing_data = data.get("routing")
     if routing_data:
         routing = RoutingConfig(
-            budget_downgrade=bool(routing_data.get("budget_downgrade", True)),
+            budget_downgrade=bool(routing_data.get("budget_downgrade", False)),
             downgrade_threshold_pct=float(routing_data.get("downgrade_threshold_pct", 20.0)),
             downgrade_threshold_usd=float(routing_data.get("downgrade_threshold_usd", 5.00)),
             log_downgrades=bool(routing_data.get("log_downgrades", True)),

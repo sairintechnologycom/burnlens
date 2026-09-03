@@ -107,10 +107,19 @@ burnlens scan --dry-run                 # parse and print counts, insert nothing
           <code>burnlens outcome show</code> reports.
         </p>
         <p>
-          <strong>A model with no pricing entry contributes $0.</strong> The session is
-          still imported and the model name is logged so the gap is visible rather than
-          silent — run <code>burnlens pricing</code> if a number looks too low. Any total
-          derived from a scan is therefore a floor, not a ceiling.
+          <strong>A model with no pricing entry is imported as $ unknown, not
+          $0.</strong> The session is still imported and the model name is logged so
+          the gap is visible rather than silent — run <code>burnlens pricing</code>{" "}
+          if a number looks too low. Any total derived from a scan is therefore a
+          floor, not a ceiling. Storage still uses a sentinel 0 so sums do not
+          invent a price; CSV export and Cost Confidence print{" "}
+          <code>unknown</code> rather than <code>$0.00</code>.
+        </p>
+        <p>
+          <strong>Scan costs use today&apos;s bundled pricing table, not the
+          prices in effect when the session ran.</strong> A March session scanned in
+          August is costed at August rates. Cost Confidence classifies every
+          scanned row as <em>estimated</em> for that reason, among others.
         </p>
         <p>
           Scanned rows also carry no prompt segmentation, so the waste detectors that need

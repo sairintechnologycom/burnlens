@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS requests (
     branch              TEXT,
     commit_sha          TEXT,
     pricing_version     TEXT,
+    pricing_class       TEXT,
     ttft_ms             REAL,
     prompt_system_tokens INTEGER NOT NULL DEFAULT 0,
     prompt_user_tokens   INTEGER NOT NULL DEFAULT 0,
@@ -425,6 +426,8 @@ async def init_db(db_path: str) -> None:
     # Economics graph Phase A: per-request tool-call count
     await migrate_add_tool_calls(db_path)
 
+    await migrate_add_pricing_class(db_path)
+
     # Economics graph Phase B: business outcomes
     await migrate_create_outcomes_table(db_path)
     await migrate_create_waste_findings_table(db_path)
@@ -780,6 +783,21 @@ async def migrate_add_tool_calls(db_path: str) -> None:
             )
             await db.commit()
             logger.info("Migration: added tool_calls column to requests table")
+
+
+async def migrate_add_pricing_class(db_path: str) -> None:
+    """Persist whether a row was priced, estimated (scan), or unpriced.
+
+    Unpriced traffic still stores cost_usd=0.0 as a sentinel; this column is
+    what stops that sentinel being read as a measured zero. Idempotent.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "pricing_class" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN pricing_class TEXT")
+            await db.commit()
+            logger.info("Migration: added pricing_class column to requests table")
 
 
 async def migrate_add_ttft_column(db_path: str) -> None:
@@ -1574,10 +1592,14 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
     (``request_id IS NULL``) the partial index doesn't apply, so behavior
     is unchanged. Returns 0 if the row was ignored as a duplicate.
     """
+    from burnlens.cost.calculator import pricing_class_for
     from burnlens.storage.models import uuid7
 
     tags = record.tags or {}
     event_id = record.event_id or uuid7()
+    pricing_class = record.pricing_class or pricing_class_for(
+        record.provider, record.model, record.source
+    )
 
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
@@ -1595,12 +1617,13 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 event_id, trace_id, parent_span_id, workspace_id, org_id,
                 team, feature, customer_hash, app_id,
                 env, repo, branch, commit_sha, pricing_version,
+                pricing_class,
                 ttft_ms,
                 prompt_system_tokens, prompt_user_tokens,
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
                 tool_calls
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1642,6 +1665,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.branch,
                 record.commit_sha,
                 record.pricing_version,
+                pricing_class,
                 record.ttft_ms,
                 record.prompt_system_tokens,
                 record.prompt_user_tokens,

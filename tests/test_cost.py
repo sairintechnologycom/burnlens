@@ -569,3 +569,24 @@ class TestUnpricedTracking:
         drain_unpriced_models()
         calculate_cost("anthropic", "claude-opus-5", TokenUsage(input_tokens=1000))
         assert drain_unpriced_models() == []
+
+
+class TestPricingClass:
+    def test_proxy_priced_is_calculated(self):
+        from burnlens.cost.calculator import PRICING_CALCULATED, pricing_class_for
+
+        assert pricing_class_for("openai", "gpt-4o", "proxy") == PRICING_CALCULATED
+
+    def test_scan_priced_is_estimated(self):
+        from burnlens.cost.calculator import PRICING_ESTIMATED, pricing_class_for
+
+        assert pricing_class_for("anthropic", "claude-opus-5", "scan_claude") == (
+            PRICING_ESTIMATED
+        )
+
+    def test_unknown_model_is_unpriced_even_on_scan(self):
+        from burnlens.cost.calculator import PRICING_UNPRICED, pricing_class_for
+
+        assert pricing_class_for("openai", "zzz-not-a-real-model-v0", "scan_cursor") == (
+            PRICING_UNPRICED
+        )

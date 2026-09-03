@@ -12,9 +12,9 @@ If BurnLens has no price for a model, a request using it contributes nothing to 
 
 This is deliberate: inventing a price would put a fabricated number into a total that people make decisions from. But it means a spend figure can be understated by an unknown amount, and the amount is unknowable by definition.
 
-**How to see it:** Cost Confidence reports unpriced requests as their own class and names each affected model as a coverage gap. Its headline percentage is counted by requests rather than dollars precisely so unpriced traffic cannot hide inside a dollar figure. Where an unpriced bucket appears, BurnLens shows "$ unknown" rather than "$0.00".
+**How to see it:** Cost Confidence reports unpriced requests as their own class and names each affected model as a coverage gap. Its headline percentage is counted by requests rather than dollars precisely so unpriced traffic cannot hide inside a dollar figure. Where an unpriced bucket appears, BurnLens shows "$ unknown" rather than "$0.00". CSV export writes `unknown` in the cost column for the same rows. The SQLite `cost_usd` cell remains a sentinel 0 so sums do not invent a price.
 
-**Resolution:** report the model and it gets a price. The proxy can also be configured to refuse unpriced models outright rather than record them at $0.
+**Resolution:** report the model and it gets a price. The proxy can also be configured to refuse unpriced models outright rather than record them at the sentinel.
 
 ## Scanned agent runs carry no prompt-segment breakdown
 
@@ -29,6 +29,10 @@ This is correct behaviour, not missing data. Scaling a partial request body up t
 A scanned row's tokens come from what the agent wrote in its own log, not from a provider response observed on the wire. BurnLens classifies this spend as **estimated** rather than calculated for that reason, and says so in Cost Confidence.
 
 In practice these counts are accurate. But they are the agent's account of itself, and BurnLens does not present them as measurement.
+
+## Scan costs use today's prices, not session-date prices
+
+`burnlens scan` prices historical turns against the pricing table bundled in the installed BurnLens version. A session from March priced in August is costed at August rates. There is no event-time price lookup. Cost Confidence classifies every scanned row as **estimated** for this reason, among others. The scan command itself prints this disclosure after every run.
 
 ## Cost per outcome only sees tagged requests
 

@@ -14,6 +14,14 @@ log_level: info
 # See docs/BUDGET_ENFORCEMENT.md.
 block_unpriced_models: true
 
+# Budget-aware model downgrade is observation-only unless you opt in.
+# A budget alone never rewrites `model`. There is no routing.disabled key.
+# routing:
+#   budget_downgrade: false       # default
+#   downgrade_threshold_pct: 20
+#   downgrade_threshold_usd: 5.0
+#   log_downgrades: true
+
 # Provider admin keys for Shadow AI discovery via billing APIs
 # openai_admin_key: sk-admin-...
 # anthropic_admin_key: sk-ant-admin-...

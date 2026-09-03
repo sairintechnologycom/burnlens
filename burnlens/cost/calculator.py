@@ -89,6 +89,28 @@ def is_model_priced(provider: str, model: str) -> bool:
     return resolve_pricing(provider, model) is not None
 
 
+PRICING_UNPRICED = "unpriced"
+PRICING_CALCULATED = "calculated"
+PRICING_ESTIMATED = "estimated"
+
+
+def pricing_class_for(provider: str, model: str, source: str = "proxy") -> str:
+    """Class recorded on the request at write time.
+
+    ``unpriced`` — no table entry; ``cost_usd`` is a sentinel 0, not a measured
+    zero. ``estimated`` — priced, but rebuilt from a coding-agent log (scan).
+    ``calculated`` — priced from a live proxy response.
+
+    Reconciled-against-the-bill is a later overlay (cloud Cost Confidence) and
+    is never stored here.
+    """
+    if not is_model_priced(provider, model):
+        return PRICING_UNPRICED
+    if (source or "").startswith("scan_"):
+        return PRICING_ESTIMATED
+    return PRICING_CALCULATED
+
+
 # Every (provider, model) that priced as $0 because we had no entry for it.
 # Scans import silently at $0 otherwise — the claude-opus-5 gap cost real money
 # before anyone noticed. The proxy has `_reject_unpriced`; this is the read side.

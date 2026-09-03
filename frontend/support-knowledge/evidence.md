@@ -9,7 +9,7 @@ Every request is placed in one of four classes:
 - **Provider verified** — BurnLens compared its own figure against that provider's billing API for the most recent day and the two agreed inside the drift threshold.
 - **Pricing calculated** — priced from the pricing table. Correct as far as the table goes, but never checked against a bill.
 - **Estimated** — rebuilt from a coding agent's local logs by `burnlens scan`. The token counts are real, but the agent reported them about itself; nothing measured them on the wire.
-- **Unpriced** — tokens were used and BurnLens has no price for the model, so the request contributes $0.
+- **Unpriced** — tokens were used and BurnLens has no price for the model. The request is stored with a sentinel `cost_usd` of 0 so totals do not invent a price; Cost Confidence and CSV export show `$ unknown`, not `$0.00`.
 
 The headline percentage is the share of **requests** in any class except unpriced.
 

@@ -534,14 +534,16 @@ export default function LandingPage() {
             <div className="lp-usecase-card">
               <h3>Automatic model routing: degrade gracefully</h3>
               <p>
-                When a budget you set drops below 20% remaining (or $5), BurnLens routes
+                Opt in with <code>routing.budget_downgrade: true</code>. Then, when a
+                budget you set drops below 20% remaining (or $5), BurnLens routes
                 requests to a cheaper model instead of hard-blocking with 429. Your app stays
                 live — it just gets more cost-efficient.
               </p>
               <p style={{ marginTop: 12, fontSize: "var(--fs-12)" }}>
-                On by default, and only ever active once you have set a budget. Every
-                downgrade is logged; set <code>routing.budget_downgrade: false</code> to
-                always receive the model you asked for.
+                Off by default. A budget alone never changes the model. Every
+                downgrade is logged; omit the flag or set{" "}
+                <code>routing.budget_downgrade: false</code> to always receive the
+                model you asked for.
               </p>
             </div>
           </div>

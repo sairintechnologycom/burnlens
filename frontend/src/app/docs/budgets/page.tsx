@@ -146,21 +146,21 @@ burnlens vkey revoke --label growth-team`}</Code>
         <h2>Budget-aware model downgrade</h2>
         <p>
           Instead of hard-blocking, BurnLens can route a request to a cheaper model as a
-          budget runs low. <strong>This is on by default</strong>, and it only ever
-          activates once a budget exists — with no budget configured, nothing is
-          downgraded.
+          budget runs low. <strong>This is off by default</strong> — observation does
+          not rewrite <code>model</code>. It only ever activates once a budget exists{" "}
+          <em>and</em> you set <code>budget_downgrade: true</code>.
         </p>
         <Code>{`routing:
-  budget_downgrade: true        # default
+  budget_downgrade: false       # default — set true to opt in
   downgrade_threshold_pct: 20   # under 20% of the budget remaining
   downgrade_threshold_usd: 5.0  # ...or under $5 remaining
   log_downgrades: true          # default`}</Code>
         <p>
           The percentage check runs first, so when both would trigger the reason is
           recorded as <code>budget_pct</code>. Every downgrade is logged and{" "}
-          <code>burnlens routing</code> shows the activity. Set{" "}
-          <code>budget_downgrade: false</code> to always receive the model you asked for
-          and take the 429 instead.
+          <code>burnlens routing</code> shows the activity. Leave{" "}
+          <code>budget_downgrade</code> false (or omit it) to always receive the model
+          you asked for and take the 429 instead.
         </p>
       </section>
 

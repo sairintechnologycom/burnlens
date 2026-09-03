@@ -343,3 +343,34 @@ async def test_downgrade_reason_stored_in_db(tmp_path):
     assert row["routed_model"] == "gpt-4o-mini"
     assert row["budget_remaining_usd"] == pytest.approx(4.50, abs=0.001)
     assert row["budget_remaining_pct"] == pytest.approx(9.0, abs=0.001)
+
+
+@pytest.mark.asyncio
+async def test_default_config_does_not_downgrade():
+    """A budget without an explicit opt-in must not rewrite the model."""
+    cfg = BurnLensConfig(
+        alerts=AlertsConfig(budgets=TeamBudgetsConfig(teams={"eng": 100.0})),
+    )
+    assert cfg.routing.budget_downgrade is False
+    with patch(TEAM_SPEND_PATCH, new_callable=AsyncMock, return_value={"eng": 99.0}):
+        d = await decide_route("gpt-4o", "eng", None, cfg, ":memory:")
+    assert d.downgraded is False
+    assert d.reason == "disabled"
+
+
+def test_yaml_omits_budget_downgrade_defaults_false(tmp_path):
+    from burnlens.config import load_config
+
+    config_file = tmp_path / "burnlens.yaml"
+    config_file.write_text("port: 8420\n")
+    cfg = load_config(str(config_file))
+    assert cfg.routing.budget_downgrade is False
+
+
+def test_yaml_explicit_true_is_preserved(tmp_path):
+    from burnlens.config import load_config
+
+    config_file = tmp_path / "burnlens.yaml"
+    config_file.write_text("routing:\n  budget_downgrade: true\n")
+    cfg = load_config(str(config_file))
+    assert cfg.routing.budget_downgrade is True

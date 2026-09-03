@@ -397,7 +397,7 @@ async def run_detail(
 async def waste(request: Request) -> list:
     """Waste findings from all detectors."""
     db = _db_path(request)
-    requests_data = await get_requests_for_analysis(db, limit=1000)
+    requests_data = await get_requests_for_analysis(db)
     findings = run_all_detectors(requests_data)
     return [
         {

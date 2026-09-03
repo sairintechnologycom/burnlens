@@ -81,6 +81,50 @@ class EconomicsOverview:
     # rate below has been clamped. Surfacing it beats quietly printing >100%.
     waste_estimate_clamped: bool = False
     trace_coverage: TraceCoverage = field(default_factory=TraceCoverage)
+    cost_confidence: LocalCostConfidence | None = None
+    outcome_coverage: LocalOutcomeCoverage | None = None
+
+
+@dataclass
+class LocalCostConfidence:
+    """Share of requests BurnLens can classify economically (not unpriced).
+
+    Counted by requests, not dollars: unpriced rows contribute $0, so a
+    dollar-weighted ratio would hide the exact failure this exists to expose.
+    Local OSS has no billing keys, so there is never a reconciled bucket here.
+    """
+
+    total_requests: int = 0
+    calculated_requests: int = 0
+    estimated_requests: int = 0
+    unpriced_requests: int = 0
+    unpriced_models: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def confidence_pct(self) -> float:
+        if not self.total_requests:
+            return 0.0
+        return 100.0 * (self.total_requests - self.unpriced_requests) / self.total_requests
+
+
+@dataclass
+class LocalOutcomeCoverage:
+    """How much of the window's spend can be connected to an outcome.
+
+    Dollar-weighted. Untagged spend cannot be attributed until the caller
+    sets workflow_id; unattributed spend is tagged but no outcome followed.
+    """
+
+    cost_total_usd: float = 0.0
+    cost_attributed_usd: float = 0.0
+    cost_unattributed_usd: float = 0.0
+    cost_untagged_usd: float = 0.0
+
+    @property
+    def coverage_pct(self) -> float:
+        if not self.cost_total_usd:
+            return 0.0
+        return 100.0 * self.cost_attributed_usd / self.cost_total_usd
 
 
 # A verdict needs enough traffic after the fix to mean anything. Below this the
@@ -166,6 +210,96 @@ async def get_trace_coverage(db_path: str, since: str) -> TraceCoverage:
     )
 
 
+async def get_local_cost_confidence(db_path: str, since: str) -> LocalCostConfidence:
+    """Classify every request in the window. Unpriced never counts as priced.
+
+    Rows written before ``pricing_class`` existed are classified at read time
+    from the live price table and ``source``, same rules as insert.
+    """
+    from burnlens.cost.calculator import (
+        PRICING_ESTIMATED,
+        PRICING_UNPRICED,
+        pricing_class_for,
+    )
+
+    calculated = estimated = unpriced = 0
+    models: set[tuple[str, str]] = set()
+    total = 0
+
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            cursor = await db.execute(
+                """
+                SELECT provider, model, source, pricing_class, COUNT(*) AS n
+                  FROM requests
+                 WHERE timestamp >= ?
+                 GROUP BY provider, model, source, pricing_class
+                """,
+                (since,),
+            )
+        except aiosqlite.OperationalError:
+            return LocalCostConfidence()
+        rows = await cursor.fetchall()
+
+    for row in rows:
+        n = int(row["n"])
+        total += n
+        cls = row["pricing_class"] or pricing_class_for(
+            row["provider"], row["model"], row["source"] or "proxy"
+        )
+        if cls == PRICING_UNPRICED:
+            unpriced += n
+            models.add((row["provider"], row["model"]))
+        elif cls == PRICING_ESTIMATED:
+            estimated += n
+        else:
+            calculated += n
+
+    return LocalCostConfidence(
+        total_requests=total,
+        calculated_requests=calculated,
+        estimated_requests=estimated,
+        unpriced_requests=unpriced,
+        unpriced_models=sorted(models),
+    )
+
+
+async def get_outcome_coverage(db_path: str, since: str) -> LocalOutcomeCoverage:
+    """Dollar split: attributed / unattributed / untagged."""
+    from burnlens.storage.database import get_workflow_economics
+
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            SELECT
+                COALESCE(SUM(cost_usd), 0.0) AS total,
+                COALESCE(SUM(
+                    CASE WHEN json_extract(tags, '$.workflow_id') IS NULL
+                         THEN cost_usd ELSE 0 END
+                ), 0.0) AS untagged
+              FROM requests
+             WHERE timestamp >= ?
+            """,
+            (since,),
+        )
+        row = await cursor.fetchone()
+    total = float(row[0])
+    untagged = float(row[1])
+
+    workflows = await get_workflow_economics(db_path, since=since)
+    unattributed = sum(w.cost_unattributed_usd for w in workflows)
+    tagged = total - untagged
+    attributed = max(0.0, tagged - unattributed)
+
+    return LocalOutcomeCoverage(
+        cost_total_usd=total,
+        cost_attributed_usd=attributed,
+        cost_unattributed_usd=unattributed,
+        cost_untagged_usd=untagged,
+    )
+
+
 async def get_subject_spend(
     db_path: str,
     subject_type: str,
@@ -215,6 +349,8 @@ async def get_economics_overview(
     waste = await get_waste_summary(db_path)
     error_spend, error_count = await get_error_spend(db_path, since)
     trace_coverage = await get_trace_coverage(db_path, since)
+    cost_confidence = await get_local_cost_confidence(db_path, since)
+    outcome_coverage = await get_outcome_coverage(db_path, since)
 
     # Reuse the existing allocation engine. Aggregate cost-per-accepted is
     # total attributed spend over accepted outcomes — failures charged to
@@ -246,6 +382,8 @@ async def get_economics_overview(
         waste_by_detector=waste["by_detector"],
         waste_estimate_clamped=clamped,
         trace_coverage=trace_coverage,
+        cost_confidence=cost_confidence,
+        outcome_coverage=outcome_coverage,
     )
 
 
@@ -276,4 +414,34 @@ def overview_to_dict(overview: EconomicsOverview) -> dict[str, Any]:
             "traced_rate": round(overview.trace_coverage.traced_rate, 4),
             "columns_missing": overview.trace_coverage.columns_missing,
         },
+        "cost_confidence": (
+            {
+                "total_requests": overview.cost_confidence.total_requests,
+                "calculated_requests": overview.cost_confidence.calculated_requests,
+                "estimated_requests": overview.cost_confidence.estimated_requests,
+                "unpriced_requests": overview.cost_confidence.unpriced_requests,
+                "confidence_pct": round(overview.cost_confidence.confidence_pct, 2),
+                "unpriced_models": [
+                    {"provider": p, "model": m}
+                    for p, m in overview.cost_confidence.unpriced_models
+                ],
+            }
+            if overview.cost_confidence is not None
+            else None
+        ),
+        "outcome_coverage": (
+            {
+                "cost_total_usd": round(overview.outcome_coverage.cost_total_usd, 6),
+                "cost_attributed_usd": round(
+                    overview.outcome_coverage.cost_attributed_usd, 6
+                ),
+                "cost_unattributed_usd": round(
+                    overview.outcome_coverage.cost_unattributed_usd, 6
+                ),
+                "cost_untagged_usd": round(overview.outcome_coverage.cost_untagged_usd, 6),
+                "coverage_pct": round(overview.outcome_coverage.coverage_pct, 2),
+            }
+            if overview.outcome_coverage is not None
+            else None
+        ),
     }

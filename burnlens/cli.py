@@ -500,6 +500,37 @@ def economics(
                 "header automatically; nothing else changes without one.[/dim]"
             )
 
+        cc = overview.cost_confidence
+        if cc is not None and cc.total_requests:
+            priced = cc.total_requests - cc.unpriced_requests
+            console.print(
+                f"\n  [dim]Cost confidence — {priced} of {cc.total_requests} "
+                f"request(s) are priced ({cc.confidence_pct:.1f}%). "
+                f"{cc.calculated_requests} calculated, "
+                f"{cc.estimated_requests} estimated from scan, "
+                f"{cc.unpriced_requests} unpriced ($ unknown, not $0). "
+                f"Local OSS has no reconciled bucket.[/dim]"
+            )
+            for prov, model in cc.unpriced_models:
+                console.print(f"  [yellow]•[/yellow] {prov}/{model}")
+
+        oc = overview.outcome_coverage
+        if oc is not None and oc.cost_total_usd:
+            console.print(
+                f"\n  [dim]Outcome coverage — {_fmt_cost(oc.cost_attributed_usd)} of "
+                f"{_fmt_cost(oc.cost_total_usd)} attributed "
+                f"({oc.coverage_pct:.1f}%). "
+                f"{_fmt_cost(oc.cost_unattributed_usd)} tagged with no outcome, "
+                f"{_fmt_cost(oc.cost_untagged_usd)} untagged "
+                f"(no workflow_id).[/dim]"
+            )
+        elif oc is not None and cc is not None and cc.unpriced_requests:
+            console.print(
+                "\n  [dim]Outcome coverage — spend total is $ unknown because "
+                "priced cost is a sentinel 0 on unpriced rows. Tag workflow_id "
+                "after the models have prices.[/dim]"
+            )
+
         if overview.waste_estimate_clamped:
             console.print(
                 "\n  [yellow]Detector estimates overlap and exceeded total spend; "
@@ -1216,7 +1247,7 @@ async def _run_gemini_scan(
 
 
 def _warn_unpriced() -> None:
-    """Tell the user which models imported at $0 because we have no pricing.
+    """Tell the user which models imported unpriced, not as measured $0.
 
     Without this a missing pricing entry is invisible: the scan reports a
     total, the total is just wrong and low. Printed once per scan, after every
@@ -1229,14 +1260,24 @@ def _warn_unpriced() -> None:
         return
     console.print(
         f"\n[yellow]⚠ {len(unpriced)} model(s) had no pricing entry and were "
-        "imported at $0.00 — your real spend is higher than the total above."
-        "[/yellow]"
+        "imported as $ unknown — not a measured $0.00. Your real spend is "
+        "higher than the total above.[/yellow]"
     )
     for prov, model in unpriced:
         console.print(f"  [yellow]•[/yellow] {prov}/{model}")
     console.print(
         "[dim]Add them to pricing_data/<provider>.json, then re-run with "
-        "--dry-run to check. Already-imported $0 records are not recosted.[/dim]"
+        "--dry-run to check. Already-imported unpriced records are not "
+        "recosted.[/dim]"
+    )
+
+
+def _disclose_scan_pricing() -> None:
+    """Scanned history is costed at today's table, not session-date prices."""
+    console.print(
+        "\n[dim]Scan costs use today's bundled pricing table, not the prices "
+        "in effect when the session ran. Cost Confidence classifies scanned "
+        "rows as estimated.[/dim]"
     )
 
 
@@ -1324,6 +1365,7 @@ def scan(
                 )
 
         _warn_unpriced()
+        _disclose_scan_pricing()
 
     asyncio.run(_run())
 

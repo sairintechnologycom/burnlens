@@ -222,8 +222,10 @@ Distinct from capping. When a tag's spend crosses a configured routing
 threshold, `decide_route` (`interceptor.py:652`) rewrites the request to a
 cheaper model instead of rejecting it. The request still goes upstream and
 still costs money. The response records `routed_model`, `downgrade_reason`,
-and remaining budget. Disable with `routing.disabled: true` in
-`burnlens.yaml`.
+and remaining budget. Off by default (`routing.budget_downgrade: false`).
+There is no `routing.disabled` key — that flag is not parsed. Opt in with
+`routing.budget_downgrade: true` in `burnlens.yaml`, or push the same field
+via cloud `routing_overrides`.
 
 ---
 
