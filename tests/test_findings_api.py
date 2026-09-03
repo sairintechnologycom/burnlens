@@ -158,3 +158,26 @@ async def test_economics_endpoint_serves_the_kpis(client):
     assert body["total_spend_usd"] == pytest.approx(5.0)
     assert body["detected_waste_usd"] > 0
     assert 0 <= body["waste_rate"] <= 1
+    assert body["cost_confidence"]["total_requests"] == 20
+    assert body["cost_confidence"]["unpriced_requests"] == 0
+    assert body["outcome_coverage"]["cost_untagged_usd"] == pytest.approx(0.0)
+    assert body["outcome_coverage"]["cost_unattributed_usd"] == pytest.approx(5.0)
+
+
+@pytest.mark.asyncio
+async def test_summary_counts_unpriced_requests(client):
+    await insert_request(
+        client.db_path,
+        RequestRecord(
+            provider="openai",
+            model="zzz-not-a-real-model-v0",
+            request_path="/v1/chat/completions",
+            timestamp=datetime.now(timezone.utc),
+            cost_usd=0.0,
+        ),
+    )
+    resp = await client.get("/api/summary?period=30d")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["unpriced_requests"] == 1
+    assert body["total_requests"] == 21

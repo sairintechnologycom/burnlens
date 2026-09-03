@@ -23,6 +23,10 @@ qualified with the package it covers.
 - **`burnlens economics` prints local Cost Confidence and Outcome Coverage.**
   Unpriced models are named; untagged vs unattributed spend is split. There
   is no reconciled bucket locally — that still needs a billing key in Cloud.
+  Untagged spend points at `burnlens outcome derive`.
+- **Local dashboard shows Cost Confidence and Outcome Coverage** from
+  `/api/economics`. Total Spend names unpriced requests as `$ unknown`
+  rather than a complete `$0.00`. Recent-request rows do the same.
 
 ### Fixed
 - **Local dashboard `/waste` and cloud-compat `/waste-alerts` read every
@@ -32,6 +36,8 @@ qualified with the package it covers.
 - **`burnlens scan` discloses that history is priced at today's table**,
   not session-date rates, and that Cost Confidence classifies scanned rows
   as estimated. Unpriced imports are described as `$ unknown`, not `$0.00`.
+  After import it prints the local-first next step: `economics`, `repos`,
+  `outcome derive`.
 
 ## [OSS `burnlens` v1.25.0] — 2026-08-24
 

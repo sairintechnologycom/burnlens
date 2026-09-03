@@ -88,6 +88,10 @@ async def summary(
 
     cache_saved, cache_hits = await get_cache_savings(db, since=since)
 
+    from burnlens.analysis.economics import get_local_cost_confidence
+
+    cc = await get_local_cost_confidence(db, since or "1970-01-01T00:00:00")
+
     return {
         "total_cost_usd": round(total_cost, 6),
         "total_requests": total_requests,
@@ -98,6 +102,7 @@ async def summary(
         "cache_saved_usd": round(cache_saved, 6),
         "cache_hits": cache_hits,
         "period": period,
+        "unpriced_requests": cc.unpriced_requests,
     }
 
 

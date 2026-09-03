@@ -101,6 +101,15 @@ async function fetchSummary() {
 
   setText('kpi-cost', fmtCost(d.total_cost_usd));
   setText('kpi-cost-sub', period + ' period');
+  if (d.unpriced_requests) {
+    if (d.unpriced_requests === d.total_requests) {
+      setText('kpi-cost', '$ unknown');
+    }
+    setText(
+      'kpi-cost-sub',
+      period + ' priced total · ' + d.unpriced_requests + ' request(s) $ unknown'
+    );
+  }
 
   setText('kpi-requests', fmtNum(d.total_requests));
   setText('kpi-requests-sub', 'across ' + d.models_used + ' model' + (d.models_used !== 1 ? 's' : ''));
@@ -850,7 +859,10 @@ async function fetchRequests() {
 
     tr.appendChild(makeTd(fmtNum(row.input_tokens || 0)));
     tr.appendChild(makeTd(fmtNum(row.output_tokens || 0)));
-    tr.appendChild(makeTd(fmtCost(row.cost_usd || 0), 'td-cost'));
+    var costCell = (row.pricing_class === 'unpriced')
+      ? makeTd('unknown', 'td-cost')
+      : makeTd(fmtCost(row.cost_usd || 0), 'td-cost');
+    tr.appendChild(costCell);
     tr.appendChild(makeTd(fmtMs(row.duration_ms), 'td-muted'));
 
     tbody.appendChild(tr);
@@ -926,7 +938,135 @@ async function fetchAnomalies() {
   }
 }
 
-// -------------------------------------------------------- Refresh loop
+// -------------------------------------------------------- Evidence (confidence / coverage)
+
+function evidenceBar(segments) {
+  var bar = document.createElement('div');
+  bar.className = 'evidence-bar';
+  var total = 0;
+  for (var i = 0; i < segments.length; i++) total += segments[i].value;
+  if (!total) return bar;
+  for (var j = 0; j < segments.length; j++) {
+    var seg = segments[j];
+    if (!seg.value) continue;
+    var el = document.createElement('div');
+    el.className = 'evidence-seg';
+    el.style.width = (seg.value / total * 100) + '%';
+    el.style.background = seg.color;
+    el.title = seg.label;
+    bar.appendChild(el);
+  }
+  return bar;
+}
+
+function evidenceLegend(items) {
+  var wrap = document.createElement('div');
+  wrap.className = 'evidence-legend';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (!it.show) continue;
+    var item = document.createElement('div');
+    item.className = 'evidence-legend-item';
+    var swatch = document.createElement('span');
+    swatch.className = 'evidence-swatch';
+    swatch.style.background = it.color;
+    item.appendChild(swatch);
+    item.appendChild(document.createTextNode(it.label));
+    if (it.detail) {
+      var muted = document.createElement('div');
+      muted.className = 'muted';
+      muted.textContent = it.detail;
+      item.appendChild(muted);
+    }
+    wrap.appendChild(item);
+  }
+  return wrap;
+}
+
+async function fetchEconomics() {
+  var confPanel = $('confidence-panel');
+  var covPanel = $('coverage-panel');
+  if (!confPanel || !covPanel) return;
+
+  try {
+  var d = await apiFetch('/economics?period=' + currentPeriod());
+  var cc = d.cost_confidence;
+  var oc = d.outcome_coverage;
+
+  confPanel.replaceChildren();
+  if (!cc || !cc.total_requests) {
+    var emptyC = document.createElement('div');
+    emptyC.className = 'empty-state-ok';
+    emptyC.textContent = 'No requests in this period.';
+    confPanel.appendChild(emptyC);
+  } else {
+    setText('confidence-summary', cc.confidence_pct.toFixed(0) + '% of requests priced');
+    confPanel.appendChild(evidenceBar([
+      { value: cc.calculated_requests, color: '#38bdf8', label: 'Calculated' },
+      { value: cc.estimated_requests, color: '#facc15', label: 'Estimated (scan)' },
+      { value: cc.unpriced_requests, color: '#f87171', label: 'Unpriced' },
+    ]));
+    confPanel.appendChild(evidenceLegend([
+      { show: cc.calculated_requests, color: '#38bdf8', label: 'Calculated',
+        detail: cc.calculated_requests + ' req' },
+      { show: cc.estimated_requests, color: '#facc15', label: 'Estimated',
+        detail: cc.estimated_requests + ' req · scan logs' },
+      { show: cc.unpriced_requests, color: '#f87171', label: 'Unpriced',
+        detail: cc.unpriced_requests + ' req · $ unknown' },
+    ]));
+    if (cc.unpriced_models && cc.unpriced_models.length) {
+      var models = document.createElement('div');
+      models.className = 'evidence-models';
+      models.textContent = cc.unpriced_models.map(function(m) {
+        return m.provider + '/' + m.model;
+      }).join(' · ');
+      confPanel.appendChild(models);
+    }
+    var confNote = document.createElement('div');
+    confNote.className = 'evidence-note';
+    confNote.textContent = 'Counted by request, not dollars — unpriced rows store a sentinel 0. Local OSS has no reconciled bucket.';
+    confPanel.appendChild(confNote);
+  }
+
+  covPanel.replaceChildren();
+  if (!oc || !oc.cost_total_usd) {
+    var emptyO = document.createElement('div');
+    emptyO.className = 'empty-state-ok';
+    emptyO.textContent = cc && cc.unpriced_requests
+      ? 'Spend total is $ unknown until those models have prices.'
+      : 'No priced spend in this period.';
+    covPanel.appendChild(emptyO);
+  } else {
+    setText('coverage-summary', oc.coverage_pct.toFixed(0) + '% of spend attributed');
+    covPanel.appendChild(evidenceBar([
+      { value: oc.cost_attributed_usd, color: '#4ade80', label: 'Attributed' },
+      { value: oc.cost_unattributed_usd, color: '#facc15', label: 'Tagged, no outcome' },
+      { value: oc.cost_untagged_usd, color: '#f87171', label: 'Untagged' },
+    ]));
+    covPanel.appendChild(evidenceLegend([
+      { show: oc.cost_attributed_usd > 0, color: '#4ade80', label: 'Linked to an outcome',
+        detail: fmtCost(oc.cost_attributed_usd) },
+      { show: oc.cost_unattributed_usd > 0, color: '#facc15', label: 'Tagged, no outcome',
+        detail: fmtCost(oc.cost_unattributed_usd) },
+      { show: oc.cost_untagged_usd > 0, color: '#f87171', label: 'No workflow_id',
+        detail: fmtCost(oc.cost_untagged_usd) },
+    ]));
+    if (oc.cost_untagged_usd > 0) {
+      var covNote = document.createElement('div');
+      covNote.className = 'evidence-note';
+      covNote.textContent = 'Untagged spend is invisible to cost-per-outcome. After a scan, burnlens outcome derive turns merged PRs into outcomes.';
+      covPanel.appendChild(covNote);
+    }
+  }
+  } catch (err) {
+    confPanel.replaceChildren();
+    covPanel.replaceChildren();
+    var errorMsg = document.createElement('div');
+    errorMsg.className = 'loading-text';
+    errorMsg.textContent = 'Error loading evidence: ' + err.message;
+    confPanel.appendChild(errorMsg);
+  }
+}
 
 async function refresh() {
   await Promise.allSettled([
@@ -943,6 +1083,7 @@ async function refresh() {
     fetchTopPRs(),
     fetchRequests(),
     fetchAnomalies(),
+    fetchEconomics(),
   ]);
 }
 

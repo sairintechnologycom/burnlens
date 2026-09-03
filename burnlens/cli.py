@@ -524,6 +524,12 @@ def economics(
                 f"{_fmt_cost(oc.cost_untagged_usd)} untagged "
                 f"(no workflow_id).[/dim]"
             )
+            if oc.cost_untagged_usd:
+                console.print(
+                    "  [dim]Next — after a scan, [cyan]burnlens outcome derive[/cyan] "
+                    "then [cyan]burnlens outcome show[/cyan]. Or tag "
+                    "[cyan]workflow_id[/cyan] on live proxy traffic.[/dim]"
+                )
         elif oc is not None and cc is not None and cc.unpriced_requests:
             console.print(
                 "\n  [dim]Outcome coverage — spend total is $ unknown because "
@@ -1281,6 +1287,17 @@ def _disclose_scan_pricing() -> None:
     )
 
 
+def _print_scan_next() -> None:
+    """The local-first loop after import: measure, attribute, then cost/outcome."""
+    console.print(
+        "\n[dim]Next:[/dim]\n"
+        "  [cyan]burnlens economics[/cyan]         spend, confidence, coverage\n"
+        "  [cyan]burnlens repos[/cyan]              cost by repository\n"
+        "  [cyan]burnlens outcome derive[/cyan]     merged PRs → cost per accepted "
+        "(needs [cyan]gh[/cyan])"
+    )
+
+
 @app.command()
 def scan(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
@@ -1366,6 +1383,7 @@ def scan(
 
         _warn_unpriced()
         _disclose_scan_pricing()
+        _print_scan_next()
 
     asyncio.run(_run())
 

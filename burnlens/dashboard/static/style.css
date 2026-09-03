@@ -246,6 +246,46 @@ canvas {
   max-height: 220px;
 }
 
+/* ------------------------------------------------------- evidence panels */
+
+.evidence-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface2);
+  margin-top: 0.25rem;
+}
+.evidence-seg { height: 100%; }
+.evidence-legend {
+  display: flex;
+  gap: 1.15rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+}
+.evidence-legend-item { color: var(--text); }
+.evidence-legend-item .muted { color: var(--text-muted); font-size: 0.72rem; }
+.evidence-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.evidence-note {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.evidence-models {
+  margin-top: 0.5rem;
+  color: var(--yellow);
+  font-size: 0.78rem;
+}
+
 /* ---------------------------------------------------------------- Waste */
 
 .waste-card { }

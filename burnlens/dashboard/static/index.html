@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BurnLens — LLM Cost Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
 
@@ -71,6 +71,27 @@
       <div class="card-label">Downgrades Today</div>
       <div class="card-value" id="kpi-downgrades">—</div>
       <div class="card-sub" id="kpi-downgrades-sub"></div>
+    </div>
+  </section>
+
+  <section class="charts-grid" id="evidence-section">
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Cost confidence</h2>
+        <span class="chart-note" id="confidence-summary">share of requests that are priced, not $0 sentinels</span>
+      </div>
+      <div id="confidence-panel">
+        <div class="loading-text">Loading…</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2>Outcome coverage</h2>
+        <span class="chart-note" id="coverage-summary">share of spend linked to a recorded outcome</span>
+      </div>
+      <div id="coverage-panel">
+        <div class="loading-text">Loading…</div>
+      </div>
     </div>
   </section>
 
@@ -243,6 +264,6 @@
 
 </main>
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

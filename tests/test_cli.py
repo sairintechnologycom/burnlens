@@ -94,3 +94,21 @@ def test_sync_now_on_fresh_db(tmp_path):
 
     assert status.exit_code == 0, status.output
     assert "Un-synced: 0" in status.output
+
+
+def test_scan_prints_the_local_first_funnel(tmp_path):
+    """After import, the next commands have to be on screen or the loop dies."""
+    from unittest.mock import AsyncMock, patch
+
+    from burnlens.config import BurnLensConfig
+
+    cfg = BurnLensConfig(db_path=str(tmp_path / "scan.db"))
+    with patch("burnlens.cli.load_config", return_value=cfg), patch(
+        "burnlens.cli._run_claude_scan", new_callable=AsyncMock
+    ):
+        result = runner.invoke(app, ["scan", "--provider", "claude", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "today's bundled pricing table" in result.output
+    assert "burnlens economics" in result.output
+    assert "burnlens repos" in result.output
+    assert "burnlens outcome derive" in result.output
