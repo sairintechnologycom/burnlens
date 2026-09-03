@@ -66,6 +66,25 @@ def test_every_class_carries_a_machine_readable_reason():
     assert classify_row("unpriced", False, None)[1] == "model_has_no_price"
 
 
+def test_stored_unpriced_outranks_a_positive_cost():
+    # Local class is is_model_priced, not cost_usd. A sentinel 0 is not the
+    # only unpriced shape — and a priced model can land at $0 after rounding.
+    assert cls("priced", False, None, "unpriced") == "unpriced"
+
+
+def test_stored_calculated_is_not_unpriced_at_zero_cost():
+    assert cls("unpriced", False, None, "calculated") == "calculated"
+
+
+def test_stored_estimated_still_reconciles_when_the_bill_agrees():
+    assert cls("priced", True, "reconciled", "estimated") == "reconciled"
+
+
+def test_missing_class_still_infers_from_source_and_cost():
+    assert cls("priced", True, None, None) == "estimated"
+    assert cls("priced", False, None, None) == "calculated"
+
+
 # ----------------------------------------------------------------------- scoring
 
 

@@ -239,6 +239,7 @@ async def test_ingest_persists_run_key_columns(ingest_client):
     payload["trace_id"] = "0af7651916cd43dd8448eb211c80319c"
     payload["parent_span_id"] = "b7ad6b7169203331"
     payload["source"] = "scan_claude"
+    payload["pricing_class"] = "estimated"
 
     with patch(
         "burnlens_cloud.ingest.get_workspace_by_api_key",
@@ -272,6 +273,7 @@ async def test_ingest_persists_run_key_columns(ingest_client):
     assert by_name["trace_id"] == payload["trace_id"]
     assert by_name["parent_span_id"] == payload["parent_span_id"]
     assert by_name["source"] == "scan_claude"
+    assert by_name["pricing_class"] == "estimated"
     assert by_name["tags"] == {"feature": "chat", "team": "backend", "customer": "acme"}
 
 

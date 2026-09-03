@@ -380,10 +380,11 @@ async def reconciliation_status(
 # ratio would be blind to exactly the failure it exists to expose.
 CONFIDENCE_CLASSES = ("reconciled", "calculated", "estimated", "unpriced")
 
-# Why a group landed in its class. Recomputed from the row every time, never
-# stored: the inputs (pricing state, collection source, provider reconciliation
-# state) are all still on the row, so persisting a derived label would only
-# create something that can go stale.
+# Why a group landed in its class. Recomputed from the row every time for
+# rows that predate `pricing_class` (inferred from source + cost). When the
+# local class is on the row, that is the write-time verdict and we use it —
+# unpriced is `not is_model_priced`, not `cost_usd = 0`. Reconciled stays a
+# read-time overlay and is never stored.
 _REASONS = {
     "reconciled": "provider_bill_agreed",
     "calculated": "priced_from_pricing_table",
@@ -395,6 +396,7 @@ _CONFIDENCE_SQL = """
 SELECT provider,
        model,
        (source LIKE 'scan\\_%') AS is_scan,
+       pricing_class,
        CASE
          WHEN cost_usd > 0 THEN 'priced'
          WHEN (input_tokens + output_tokens
@@ -405,29 +407,42 @@ SELECT provider,
        COALESCE(SUM(cost_usd), 0) AS cost
 FROM request_records
 WHERE workspace_id = $1 AND ts >= $2
-GROUP BY provider, model, is_scan, pricing_state
+GROUP BY provider, model, is_scan, pricing_class, pricing_state
 """
 
 
 def classify_row(
-    pricing_state: str, is_scan: bool, provider_status: Optional[str]
+    pricing_state: str,
+    is_scan: bool,
+    provider_status: Optional[str],
+    pricing_class: Optional[str] = None,
 ) -> Optional[tuple[str, str]]:
     """Which confidence class one aggregated group belongs to, and why.
 
     None means "not a thing to be confident about" — no tokens, no cost.
     Unpriced outranks everything: a reconciled provider can still be serving a
     model we have no price for, and that hole should not be hidden by the badge.
+
+    ``pricing_class`` is the local write-time verdict when the row carried it.
+    Missing (older proxies, pre-column rows) falls back to source + cost.
     """
-    if pricing_state == "no_usage":
+    if pricing_class in ("unpriced", "calculated", "estimated"):
+        local = pricing_class
+    elif pricing_state == "no_usage":
         return None
-    if pricing_state == "unpriced":
+    elif pricing_state == "unpriced":
+        local = "unpriced"
+    elif is_scan:
+        local = "estimated"
+    else:
+        local = "calculated"
+
+    if local == "unpriced":
         cls = "unpriced"
     elif provider_status == "reconciled":
         cls = "reconciled"
-    elif is_scan:
-        cls = "estimated"
     else:
-        cls = "calculated"
+        cls = local
     return cls, _REASONS[cls]
 
 
@@ -447,7 +462,10 @@ def build_confidence(rows, provider_status: dict, days: int) -> CostConfidence:
 
     for r in rows:
         verdict = classify_row(
-            r["pricing_state"], bool(r["is_scan"]), provider_status.get(r["provider"])
+            r["pricing_state"],
+            bool(r["is_scan"]),
+            provider_status.get(r["provider"]),
+            r.get("pricing_class"),
         )
         if verdict is None:
             continue

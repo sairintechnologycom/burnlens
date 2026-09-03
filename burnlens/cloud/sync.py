@@ -87,6 +87,7 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "event_id",
     "request_id",
     "source",
+    "pricing_class",
 } | set(PROMPT_SEGMENT_FIELDS) | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
 
 
@@ -500,6 +501,15 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         except (json.JSONDecodeError, TypeError):
             tags = {}
 
+    from burnlens.cost.calculator import pricing_class_for
+
+    stored_class = row.get("pricing_class")
+    pricing_class = stored_class or pricing_class_for(
+        row.get("provider") or "",
+        row.get("model") or "",
+        row.get("source") or "proxy",
+    )
+
     return dict(
         timestamp=row.get("timestamp"),
         provider=row.get("provider"),
@@ -524,6 +534,11 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         # "proxy" vs scan_claude/scan_codex/...: which collector wrote the row.
         # Not prompt content and not identifying — it names the tool, not the work.
         source=row.get("source"),
+        # Local write-time class (unpriced / calculated / estimated). Cloud
+        # Cost Confidence overlays reconciled; it does not re-guess unpriced
+        # from cost_usd=0. Rows written before the column existed are classified
+        # here with the same rules as local read, so history still syncs a class.
+        pricing_class=pricing_class,
         # Flattened tags, derived from CLOUD_SYNCED_TAGS so a new synced tag
         # cannot be half-wired. The backend re-nests these into `tags`.
         **{f"tag_{name}": tags.get(name) for name in CLOUD_SYNCED_TAGS},

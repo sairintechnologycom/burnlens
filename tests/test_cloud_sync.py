@@ -331,13 +331,21 @@ def test_payload_survives_sanitize_allowlist():
         "trace_id": "0af7651916cd43dd8448eb211c80319c",
         "event_id": "evt-1",
         "request_id": "req-1",
+        "pricing_class": "calculated",
         "tags": "{}",
     }
     payload = _row_to_payload(row)
     assert set(payload) <= SYNC_ALLOWED_FIELDS
 
     sanitized = _sanitize_record(payload)
-    for field in ("cache_hit", "cache_saved_usd", "trace_id", "event_id", "request_id"):
+    for field in (
+        "cache_hit",
+        "cache_saved_usd",
+        "trace_id",
+        "event_id",
+        "request_id",
+        "pricing_class",
+    ):
         assert sanitized[field] == row[field]
 
 

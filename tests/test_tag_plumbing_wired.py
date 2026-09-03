@@ -167,6 +167,22 @@ def test_source_is_synced():
     assert sanitized["source"] == "scan_claude"
 
 
+def test_pricing_class_is_synced():
+    """Cloud Cost Confidence must not re-guess unpriced from cost_usd=0."""
+    sanitized = _sanitize_record(_row_to_payload(_row(pricing_class="estimated")))
+    assert sanitized["pricing_class"] == "estimated"
+
+
+def test_pricing_class_missing_on_old_local_schema_is_classified_on_the_wire():
+    """SELECT * on a pre-column DB has no key; classify with the same rules as read."""
+    assert _row_to_payload(_row())["pricing_class"] == "calculated"
+
+
+def test_stored_pricing_class_is_not_recomputed():
+    payload = _row_to_payload(_row(model="gpt-4o", pricing_class="unpriced"))
+    assert payload["pricing_class"] == "unpriced"
+
+
 def test_source_missing_on_old_local_schema_is_tolerated():
     """Rows come from `SELECT *`; a DB predating the column has no key at all."""
     assert _row_to_payload(_row())["source"] is None
@@ -185,6 +201,22 @@ def test_backend_lifts_flat_tags_into_nested_tags():
     for tag in CLOUD_SYNCED_TAGS:
         assert record.tags.get(tag) == f"{tag}-value"
     assert record.tool_calls == 2
+
+
+def test_backend_parses_pricing_class():
+    pytest.importorskip("burnlens_cloud.models", reason="cloud deps not installed")
+    from burnlens_cloud.models import RequestRecordBase
+
+    payload = _sanitize_record(_row_to_payload(_row(pricing_class="unpriced")))
+    assert RequestRecordBase(**payload).pricing_class == "unpriced"
+
+
+def test_backend_drops_an_unknown_pricing_class_rather_than_422():
+    pytest.importorskip("burnlens_cloud.models", reason="cloud deps not installed")
+    from burnlens_cloud.models import RequestRecordBase
+
+    payload = _sanitize_record(_row_to_payload(_row(pricing_class="mystery")))
+    assert RequestRecordBase(**payload).pricing_class is None
 
 
 def test_prompt_segments_survive_sanitize():

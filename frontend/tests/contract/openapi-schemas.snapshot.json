@@ -2153,6 +2153,17 @@
         ],
         "title": "Parent Span Id"
       },
+      "pricing_class": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Pricing Class"
+      },
       "prompt_history_tokens": {
         "default": 0,
         "title": "Prompt History Tokens",
@@ -2327,6 +2338,17 @@
           }
         ],
         "title": "Parent Span Id"
+      },
+      "pricing_class": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Pricing Class"
       },
       "prompt_history_tokens": {
         "default": 0,

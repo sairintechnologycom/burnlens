@@ -20,6 +20,10 @@ qualified with the package it covers.
   `estimated` (scan) is persisted at insert and classified at read for rows
   written before the column existed. CSV export adds the column and writes
   `unknown` in `cost_usd` for unpriced rows instead of a measured `$0.00`.
+- **`pricing_class` syncs to cloud.** The local write-time class is on the
+  ingest payload and stored on `request_records`. Cloud Cost Confidence uses
+  it when present and infers from source + cost for older rows. Reconciled
+  stays a read-time overlay.
 - **`burnlens economics` prints local Cost Confidence and Outcome Coverage.**
   Unpriced models are named; untagged vs unattributed spend is split. There
   is no reconciled bucket locally — that still needs a billing key in Cloud.

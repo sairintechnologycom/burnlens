@@ -479,6 +479,23 @@ async def init_db():
             END $$;
         """)
 
+        # Local write-time pricing class (unpriced / calculated / estimated).
+        # Nullable: rows ingested before this column, and older proxies that
+        # do not send it, have no value. Cost Confidence infers from source
+        # and cost_usd when this is null rather than inventing a class.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records'
+                      AND column_name = 'pricing_class'
+                ) THEN
+                    ALTER TABLE request_records ADD COLUMN pricing_class TEXT;
+                END IF;
+            END $$;
+        """)
+
         # Scoped to the workspace, not global. A uuid7 will not collide by
         # accident, but a global unique index would let any tenant suppress
         # another tenant's write by replaying its event_id -- dedup must not be

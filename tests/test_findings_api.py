@@ -200,3 +200,18 @@ async def test_summary_counts_unpriced_requests(client):
     body = resp.json()
     assert body["unpriced_requests"] == 1
     assert body["total_requests"] == 21
+
+
+def test_local_dashboard_html_has_the_evidence_panels():
+    """The three figures have to be in the page the browser loads, not only the API."""
+    from pathlib import Path
+
+    html = (
+        Path(__file__).resolve().parents[1]
+        / "burnlens"
+        / "dashboard"
+        / "static"
+        / "index.html"
+    ).read_text()
+    for panel_id in ("confidence-panel", "coverage-panel", "savings-panel"):
+        assert f'id="{panel_id}"' in html

@@ -98,6 +98,10 @@ class RequestRecordBase(BaseModel):
     # coding-agent log ingestion. Without it the cloud cannot tell agent runs
     # from proxied application traffic.
     source: Optional[str] = None
+    # Local write-time class: unpriced / calculated / estimated. Reconciled is
+    # a cloud overlay and is never sent. Optional so older proxies keep
+    # ingesting; Cost Confidence infers from source + cost when this is null.
+    pricing_class: Optional[str] = None
     # BL-F1b prompt-segment token counts (OSS proxy >= 1.24.0). Integer counts
     # scaled to sum to input_tokens -- prompt shape, never prompt content.
     # OversizedToolSchema / LowRAGEfficiency / HistoryBloat are inert without
@@ -129,6 +133,15 @@ class RequestRecordBase(BaseModel):
         if nested:
             data = {**data, "tags": nested}
         return data
+
+    @field_validator("pricing_class")
+    @classmethod
+    def _known_pricing_class(cls, v: Optional[str]) -> Optional[str]:
+        # Fail-open: a bad label must not 422 a whole ingest batch. Cost
+        # Confidence will infer from source + cost, same as a missing field.
+        if v in (None, "", "unpriced", "calculated", "estimated"):
+            return v or None
+        return None
 
 
 class RequestRecordCreate(RequestRecordBase):
