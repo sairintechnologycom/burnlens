@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
-  { prompt: false, text: "Successfully installed burnlens-1.24.0", delay: 800 },
+  { prompt: false, text: "Successfully installed burnlens-1.26.0", delay: 800 },
   { prompt: true,  text: "burnlens scan", delay: 1400 },
   { prompt: false, text: "Scanning Claude Code   312 sessions \u00b7 $48.21", delay: 2000, highlight: true },
   { prompt: false, text: "Scanning Cursor         89 sessions \u00b7 $12.84", delay: 2500 },
@@ -394,7 +394,20 @@ export default function LandingPage() {
         <div className="lp-editorial" id="how">
           <h2>How it works</h2>
           <div className="lp-ed-section">
-            <div className="lp-ed-label">01 · Drop-in proxy</div>
+            <div className="lp-ed-label">01 · Scan what you already have</div>
+            <div className="lp-ed-content">
+              <h3>One command. No proxy. No account.</h3>
+              <p>
+                <code>burnlens scan</code> reads local session logs from Claude Code,
+                Cursor, Codex, and Gemini CLI. Cost per repo, per model — instantly.
+                If <code>gh</code> is installed, it also derives cost per merged PR
+                from your GitHub history.
+              </p>
+            </div>
+          </div>
+
+          <div className="lp-ed-section">
+            <div className="lp-ed-label">02 · Drop-in proxy</div>
             <div className="lp-ed-content">
               <h3>Set one env var. Done.</h3>
               <p>
@@ -407,7 +420,7 @@ export default function LandingPage() {
           </div>
 
           <div className="lp-ed-section">
-            <div className="lp-ed-label">02 · Tag what matters</div>
+            <div className="lp-ed-label">03 · Tag what matters</div>
             <div className="lp-ed-content">
               <h3>Attribute any call to any dimension.</h3>
               <p>
@@ -422,7 +435,7 @@ export default function LandingPage() {
           </div>
 
           <div className="lp-ed-section">
-            <div className="lp-ed-label">03 · Cap before you call</div>
+            <div className="lp-ed-label">04 · Cap before you call</div>
             <div className="lp-ed-content">
               <h3>429 before the upstream request, not after the bill.</h3>
               <p>
@@ -446,7 +459,7 @@ export default function LandingPage() {
           </div>
 
           <div className="lp-ed-section">
-            <div className="lp-ed-label">04 · One dashboard</div>
+            <div className="lp-ed-label">05 · One dashboard</div>
             <div className="lp-ed-content">
               <h3>Every provider, unified.</h3>
               <p>
@@ -507,6 +520,20 @@ export default function LandingPage() {
         <section className="lp-usecases">
           <h2>Beyond the dashboard</h2>
           <div className="lp-usecases-grid">
+            <div className="lp-usecase-card">
+              <h3>Cost per outcome: know the price of a result</h3>
+              <p>
+                Record accepted and rejected outcomes for any workflow.
+                BurnLens divides total spend by accepted outcomes — failed attempts
+                are charged to the successes, because that&apos;s what one working result
+                actually costs.
+              </p>
+              <p style={{ marginTop: 12, fontSize: "var(--fs-12)" }}>
+                For coding agents, merged PRs are outcomes automatically —{" "}
+                <code>burnlens scan</code> derives them from GitHub via <code>gh</code>.
+                No instrumentation required.
+              </p>
+            </div>
             <div className="lp-usecase-card">
               <h3>Semantic cache: skip the call, save the cost</h3>
               <p>
