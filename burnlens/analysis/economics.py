@@ -83,6 +83,7 @@ class EconomicsOverview:
     trace_coverage: TraceCoverage = field(default_factory=TraceCoverage)
     cost_confidence: LocalCostConfidence | None = None
     outcome_coverage: LocalOutcomeCoverage | None = None
+    savings: dict[str, Any] | None = None
 
 
 @dataclass
@@ -342,7 +343,7 @@ async def get_economics_overview(
 ) -> EconomicsOverview:
     """Assemble the top-line KPIs for a window."""
     from burnlens.storage.database import get_workflow_economics
-    from burnlens.storage.findings import get_waste_summary
+    from burnlens.storage.findings import get_waste_summary, savings_rollup
     from burnlens.storage.queries import get_total_cost
 
     total_spend = await get_total_cost(db_path, since=since)
@@ -351,6 +352,7 @@ async def get_economics_overview(
     trace_coverage = await get_trace_coverage(db_path, since)
     cost_confidence = await get_local_cost_confidence(db_path, since)
     outcome_coverage = await get_outcome_coverage(db_path, since)
+    savings = await savings_rollup(db_path)
 
     # Reuse the existing allocation engine. Aggregate cost-per-accepted is
     # total attributed spend over accepted outcomes — failures charged to
@@ -384,6 +386,7 @@ async def get_economics_overview(
         trace_coverage=trace_coverage,
         cost_confidence=cost_confidence,
         outcome_coverage=outcome_coverage,
+        savings=savings,
     )
 
 
@@ -444,4 +447,5 @@ def overview_to_dict(overview: EconomicsOverview) -> dict[str, Any]:
             if overview.outcome_coverage is not None
             else None
         ),
+        "savings": overview.savings,
     }

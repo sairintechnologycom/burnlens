@@ -556,6 +556,35 @@ def economics(
                 "detectors, so these do not sum to detected waste.[/dim]"
             )
 
+        sav = overview.savings
+        if sav:
+            counts = sav.get("counts") or {}
+            judged = (counts.get("verified") or 0) + (counts.get("missed") or 0)
+            if judged or sav.get("open_projected_monthly_usd"):
+                real = sav.get("realisation_pct")
+                real_s = (
+                    f"{real:.0f}% realised"
+                    if real is not None
+                    else "nothing judged yet"
+                )
+                console.print(
+                    f"\n  [dim]Verified savings — "
+                    f"{_fmt_cost(sav['verified_monthly_usd'])}/mo verified, "
+                    f"{_fmt_cost(sav['missed_predicted_monthly_usd'])}/mo missed "
+                    f"({counts.get('missed', 0)} finding(s)), "
+                    f"{_fmt_cost(sav['verifying_predicted_monthly_usd'])}/mo still "
+                    f"verifying, "
+                    f"{_fmt_cost(sav['inconclusive_predicted_monthly_usd'])}/mo "
+                    f"inconclusive. {real_s}. Open projected "
+                    f"{_fmt_cost(sav['open_projected_monthly_usd'])}/mo not yet "
+                    f"acted on.[/dim]"
+                )
+                console.print(
+                    "  [dim]Projected is not verified. "
+                    "[cyan]burnlens findings verify[/cyan] for per-finding "
+                    "verdicts.[/dim]"
+                )
+
         console.print()
 
     asyncio.run(_run())

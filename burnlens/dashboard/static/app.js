@@ -1058,6 +1058,7 @@ async function fetchEconomics() {
       covPanel.appendChild(covNote);
     }
   }
+  renderSavings(d.savings);
   } catch (err) {
     confPanel.replaceChildren();
     covPanel.replaceChildren();
@@ -1065,7 +1066,71 @@ async function fetchEconomics() {
     errorMsg.className = 'loading-text';
     errorMsg.textContent = 'Error loading evidence: ' + err.message;
     confPanel.appendChild(errorMsg);
+    var savPanel = $('savings-panel');
+    if (savPanel) {
+      savPanel.replaceChildren();
+      var savErr = document.createElement('div');
+      savErr.className = 'loading-text';
+      savErr.textContent = 'Error loading savings: ' + err.message;
+      savPanel.appendChild(savErr);
+    }
   }
+}
+
+function renderSavings(sav) {
+  var panel = $('savings-panel');
+  if (!panel) return;
+  panel.replaceChildren();
+  if (!sav) {
+    var missing = document.createElement('div');
+    missing.className = 'empty-state-ok';
+    missing.textContent = 'Savings rollup unavailable.';
+    panel.appendChild(missing);
+    return;
+  }
+  var counts = sav.counts || {};
+  var judged = (counts.verified || 0) + (counts.missed || 0);
+  if (!judged && !(sav.open_projected_monthly_usd > 0)) {
+    var empty = document.createElement('div');
+    empty.className = 'empty-state-ok';
+    empty.textContent = 'No findings to verify yet. Run burnlens analyze --save, then mark one resolved.';
+    panel.appendChild(empty);
+    return;
+  }
+  var real = sav.realisation_pct;
+  setText(
+    'savings-summary',
+    real === null || real === undefined
+      ? 'nothing judged yet — projected is not verified'
+      : real.toFixed(0) + '% realised'
+  );
+  var rows = [
+    { label: 'Projected, not yet acted on', value: sav.open_projected_monthly_usd, color: '#64748b' },
+    { label: 'Predicted for fixes made', value: sav.resolved_predicted_monthly_usd, color: '#94a3b8' },
+    { label: 'Verified', value: sav.verified_monthly_usd, color: '#4ade80' },
+    { label: 'Missed', value: sav.missed_predicted_monthly_usd, color: '#f87171' },
+    { label: 'Still verifying', value: sav.verifying_predicted_monthly_usd, color: '#facc15' },
+    { label: 'Inconclusive', value: sav.inconclusive_predicted_monthly_usd, color: '#64748b' },
+  ];
+  for (var i = 0; i < rows.length; i++) {
+    if (!(rows[i].value > 0)) continue;
+    var row = document.createElement('div');
+    row.className = 'savings-row';
+    var lab = document.createElement('span');
+    lab.className = 'label';
+    lab.textContent = rows[i].label;
+    lab.style.color = rows[i].color;
+    var val = document.createElement('span');
+    val.className = 'value';
+    val.textContent = fmtCost(rows[i].value) + '/mo';
+    row.appendChild(lab);
+    row.appendChild(val);
+    panel.appendChild(row);
+  }
+  var note = document.createElement('div');
+  note.className = 'evidence-note';
+  note.textContent = 'Missed predictions count in the denominator and add nothing to verified. burnlens findings verify shows each finding.';
+  panel.appendChild(note);
 }
 
 async function refresh() {

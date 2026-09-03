@@ -286,6 +286,16 @@ canvas {
   font-size: 0.78rem;
 }
 
+#savings-section { margin-top: 0; }
+.savings-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  line-height: 2;
+}
+.savings-row .label { color: var(--text-muted); }
+.savings-row .value { color: var(--text); }
+
 /* ---------------------------------------------------------------- Waste */
 
 .waste-card { }

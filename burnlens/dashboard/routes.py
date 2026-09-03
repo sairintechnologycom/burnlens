@@ -338,6 +338,14 @@ async def findings_verify(request: Request) -> list:
     return [asdict(v) for v in await verify_all_resolved(_db_path(request))]
 
 
+@router.get("/findings/savings")
+async def findings_savings(request: Request) -> dict:
+    """Projected vs realised savings. Same contract as cloud /api/v1/findings/savings."""
+    from burnlens.storage.findings import savings_rollup
+
+    return await savings_rollup(_db_path(request))
+
+
 # ----------------------------------------------------------- /api/economics
 
 @router.get("/economics")

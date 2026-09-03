@@ -479,3 +479,78 @@ async def get_waste_summary(db_path: str) -> dict[str, Any]:
         "open_finding_count": row["open_count"],
         "by_detector": {r["detector"]: r["waste"] for r in by_detector},
     }
+
+
+# Verdict states that mean the fix has been judged. Only these two belong in the
+# realisation ratio: pending and inconclusive have not produced an answer yet.
+_TERMINAL_VERDICTS = ("verified", "missed")
+
+
+def _to_monthly(waste_usd: float | None, window_days: int | None) -> float:
+    """Scale a prediction measured over its baseline window up to 30 days."""
+    days = int(window_days or BASELINE_WINDOW_DAYS)
+    return float(waste_usd or 0.0) * (30.0 / days) if days else 0.0
+
+
+async def savings_rollup(db_path: str) -> dict[str, Any]:
+    """What was projected, what was acted on, and what actually landed.
+
+    Same contract as the cloud rollup: verified dollars are measured from
+    traffic; missed dollars are the *prediction* that did not materialise.
+    ``realisation_pct`` is None when nothing has been judged — 0% would read
+    as "everything failed".
+    """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT COALESCE(SUM(estimated_waste_usd), 0) AS waste, COUNT(*) AS n
+              FROM waste_findings
+             WHERE status IN ('open', 'acknowledged')
+            """
+        )
+        open_row = await cursor.fetchone()
+        cursor = await db.execute(
+            """
+            SELECT fingerprint, baseline_waste_usd, baseline_window_days
+              FROM waste_findings
+             WHERE baseline_requests IS NOT NULL
+            """
+        )
+        predicted_rows = await cursor.fetchall()
+
+    predicted = {
+        r["fingerprint"]: _to_monthly(r["baseline_waste_usd"], r["baseline_window_days"])
+        for r in predicted_rows
+    }
+    verdicts = await verify_all_resolved(db_path)
+
+    totals = {k: 0.0 for k in ("verified", "missed", "pending", "inconclusive")}
+    counts: dict[str, int] = {}
+    verified_actual = 0.0
+
+    for v in verdicts:
+        status = v.status
+        counts[status] = counts.get(status, 0) + 1
+        if status in totals:
+            totals[status] += predicted.get(v.fingerprint, 0.0)
+        if status == "verified":
+            verified_actual += float(v.projected_monthly_savings_usd or 0.0)
+
+    judged_predicted = sum(totals[s] for s in _TERMINAL_VERDICTS)
+    counts["open"] = int(open_row["n"] or 0)
+
+    return {
+        "open_projected_monthly_usd": round(float(open_row["waste"] or 0), 6),
+        "resolved_predicted_monthly_usd": round(sum(predicted.values()), 6),
+        "verified_monthly_usd": round(verified_actual, 6),
+        "missed_predicted_monthly_usd": round(totals["missed"], 6),
+        "verifying_predicted_monthly_usd": round(totals["pending"], 6),
+        "inconclusive_predicted_monthly_usd": round(totals["inconclusive"], 6),
+        "realisation_pct": (
+            round(verified_actual / judged_predicted * 100, 1)
+            if judged_predicted
+            else None
+        ),
+        "counts": counts,
+    }

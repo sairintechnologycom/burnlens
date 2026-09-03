@@ -27,6 +27,11 @@ qualified with the package it covers.
 - **Local dashboard shows Cost Confidence and Outcome Coverage** from
   `/api/economics`. Total Spend names unpriced requests as `$ unknown`
   rather than a complete `$0.00`. Recent-request rows do the same.
+- **Verified savings on the same local surface as spend.** `burnlens economics`,
+  `GET /api/economics`, `GET /api/findings/savings`, and the local dashboard
+  now show verified / missed / inconclusive / still-verifying using the
+  existing `classify_savings` engine. Missed predictions sit in the
+  denominator; they are not negative verified savings.
 
 ### Fixed
 - **Local dashboard `/waste` and cloud-compat `/waste-alerts` read every

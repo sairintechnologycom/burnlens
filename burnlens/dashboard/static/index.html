@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BurnLens — LLM Cost Tracker</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
 
@@ -92,6 +92,16 @@
       <div id="coverage-panel">
         <div class="loading-text">Loading…</div>
       </div>
+    </div>
+  </section>
+
+  <section class="chart-card" id="savings-section">
+    <div class="chart-header">
+      <h2>Verified savings</h2>
+      <span class="chart-note" id="savings-summary">projected is not verified</span>
+    </div>
+    <div id="savings-panel">
+      <div class="loading-text">Loading…</div>
     </div>
   </section>
 
@@ -264,6 +274,6 @@
 
 </main>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

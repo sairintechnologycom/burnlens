@@ -162,6 +162,25 @@ async def test_economics_endpoint_serves_the_kpis(client):
     assert body["cost_confidence"]["unpriced_requests"] == 0
     assert body["outcome_coverage"]["cost_untagged_usd"] == pytest.approx(0.0)
     assert body["outcome_coverage"]["cost_unattributed_usd"] == pytest.approx(5.0)
+    assert "savings" in body
+    assert "verified_monthly_usd" in body["savings"]
+
+
+@pytest.mark.asyncio
+async def test_findings_savings_endpoint_matches_the_cloud_contract(client):
+    resp = await client.get("/api/findings/savings")
+    assert resp.status_code == 200
+    body = resp.json()
+    for key in (
+        "open_projected_monthly_usd",
+        "verified_monthly_usd",
+        "missed_predicted_monthly_usd",
+        "inconclusive_predicted_monthly_usd",
+        "realisation_pct",
+        "counts",
+    ):
+        assert key in body
+    assert body["counts"]["open"] >= 1
 
 
 @pytest.mark.asyncio

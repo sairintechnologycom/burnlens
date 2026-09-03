@@ -22,6 +22,7 @@ from burnlens.analysis.waste import ModelOverkillDetector
 from burnlens.storage.database import init_db, insert_request
 from burnlens.storage.findings import (
     list_findings,
+    savings_rollup,
     set_finding_status,
     sync_findings,
     verify_savings,
@@ -252,3 +253,50 @@ async def test_resolving_captures_request_count_not_just_dollars(db):
 @pytest.mark.asyncio
 async def test_unknown_fingerprint_returns_none(db):
     assert await verify_savings(db, "nope") is None
+
+
+@pytest.mark.asyncio
+async def test_local_rollup_puts_a_missed_fix_in_the_denominator(db):
+    """Same contract as the cloud rollup: missed is not a negative verified."""
+    await _seed_and_resolve(db, before_count=40, before_cost=1.00, resolved_days_ago=8)
+    now = datetime.now(timezone.utc)
+    for i in range(40):
+        await insert_request(db, _record(1.50, now - timedelta(days=7, minutes=i)))
+
+    out = await savings_rollup(db)
+
+    assert out["verified_monthly_usd"] == pytest.approx(0.0)
+    assert out["missed_predicted_monthly_usd"] > 0
+    assert out["realisation_pct"] == pytest.approx(0.0)
+    assert out["counts"]["missed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_local_rollup_pending_stays_out_of_the_ratio(db):
+    await _seed_and_resolve(db, before_count=40, before_cost=1.00, resolved_days_ago=1)
+
+    out = await savings_rollup(db)
+
+    assert out["realisation_pct"] is None
+    assert out["counts"].get("pending") == 1
+    assert out["verifying_predicted_monthly_usd"] > 0
+    assert out["verified_monthly_usd"] == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_economics_overview_carries_the_savings_portfolio(db):
+    from burnlens.analysis.economics import get_economics_overview, overview_to_dict
+
+    await _seed_and_resolve(db, before_count=40, before_cost=1.00, resolved_days_ago=8)
+    now = datetime.now(timezone.utc)
+    for i in range(40):
+        await insert_request(db, _record(0.50, now - timedelta(days=7, minutes=i)))
+
+    overview = await get_economics_overview(
+        db, since=(now - timedelta(days=30)).isoformat()
+    )
+    assert overview.savings is not None
+    assert overview.savings["counts"]["verified"] == 1
+    assert overview.savings["verified_monthly_usd"] > 0
+    payload = overview_to_dict(overview)
+    assert payload["savings"]["counts"]["verified"] == 1
