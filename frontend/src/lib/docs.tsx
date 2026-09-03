@@ -83,7 +83,7 @@ export const PROVIDERS: { name: string; path: string; env: string | null }[] = [
 
 /** `burnlens --help`, verbatim, as of 2026-08-16. */
 export const COMMANDS: { cmd: string; what: string; group: string }[] = [
-  { group: "Collect", cmd: "scan", what: "Import coding-agent session costs from disk into the requests DB." },
+  { group: "Collect", cmd: "scan", what: "Import coding-agent session costs from disk, then derive merged-PR outcomes when gh is present." },
   { group: "Collect", cmd: "start", what: "Start the BurnLens proxy server." },
   { group: "Collect", cmd: "run", what: "Run a child command with auto-tagged git context." },
   { group: "Look at spend", cmd: "top", what: "Live API traffic viewer with auto-refresh." },

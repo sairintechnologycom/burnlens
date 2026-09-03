@@ -20,9 +20,11 @@ import pytest
 
 from burnlens.outcomes import (
     DeriveError,
+    GH_MISSING_MESSAGE,
     _parse_ts,
     build_outcomes,
     derive_pr_outcomes,
+    gh_available,
 )
 from burnlens.scan._common import repo_workflow_id
 from burnlens.storage.database import (
@@ -188,16 +190,24 @@ def test_parse_ts_returns_none_on_junk(raw):
 
 
 async def test_missing_gh_gives_an_actionable_error(initialized_db, tmp_path):
-    # A real repo, so the failure under test is the missing gh and not the
-    # earlier not-a-git-repo check.
-    with patch("burnlens.outcomes.shutil.which", return_value=None), \
-         patch("burnlens.outcomes._local_repo_name", return_value="proj"):
+    # gh is checked before git, so the failure under test is the missing binary
+    # even in a directory that is not a checkout.
+    with patch("burnlens.outcomes.shutil.which", return_value=None):
         with pytest.raises(DeriveError, match="cli.github.com"):
             await derive_pr_outcomes(initialized_db, repo_path=str(tmp_path))
+    assert "cli.github.com" in GH_MISSING_MESSAGE
+
+
+def test_gh_available_is_presence_only():
+    with patch("burnlens.outcomes.shutil.which", return_value=None):
+        assert gh_available() is False
+    with patch("burnlens.outcomes.shutil.which", return_value="/usr/bin/gh"):
+        assert gh_available() is True
 
 
 async def test_non_git_directory_is_reported(initialized_db, tmp_path):
-    with patch("burnlens.outcomes._local_repo_name", return_value=None):
+    with patch("burnlens.outcomes.shutil.which", return_value="/usr/bin/gh"), \
+         patch("burnlens.outcomes._local_repo_name", return_value=None):
         with pytest.raises(DeriveError, match="not inside a git repository"):
             await derive_pr_outcomes(initialized_db, repo_path=str(tmp_path))
 

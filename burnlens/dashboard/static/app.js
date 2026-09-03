@@ -1054,7 +1054,7 @@ async function fetchEconomics() {
     if (oc.cost_untagged_usd > 0) {
       var covNote = document.createElement('div');
       covNote.className = 'evidence-note';
-      covNote.textContent = 'Untagged spend is invisible to cost-per-outcome. After a scan, burnlens outcome derive turns merged PRs into outcomes.';
+      covNote.textContent = 'Untagged spend is invisible to cost-per-outcome. burnlens scan derives merged PRs when gh is installed; otherwise it prints that gh is missing.';
       covPanel.appendChild(covNote);
     }
   }

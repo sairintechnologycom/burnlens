@@ -100,8 +100,12 @@ export default function DocsCliPage() {
         <Code>{`pip install burnlens
 burnlens scan
 burnlens repos`}</Code>
-        <p>Cost per merged PR on a repository, using the <code>gh</code> CLI to resolve outcomes:</p>
-        <Code>{`burnlens outcome derive     # merged PRs -> outcomes
+        <p>
+          Cost per merged PR: <code>burnlens scan</code> derives outcomes for the current
+          checkout when <code>gh</code> is installed, or prints that it is missing.
+          Re-run derive later, or from another checkout:
+        </p>
+        <Code>{`burnlens outcome derive     # merged PRs -> outcomes (needs gh)
 burnlens outcome show       # cost per accepted outcome`}</Code>
         <p>
           Both are idempotent and safe on a schedule: outcome ids are derived

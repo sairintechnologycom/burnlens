@@ -31,7 +31,7 @@ export default function DocsScanPage() {
     <>
       <h1>Scanning coding-agent logs</h1>
       <p className="legal-updated">
-        Verified against <code>burnlens scan --help</code> on 2026-08-16. For the shorter
+        Verified against <code>burnlens scan --help</code> on 2026-09-03. For the shorter
         pitch rather than the reference, see <Link href="/scan">the scan overview</Link>.
       </p>
 
@@ -43,7 +43,11 @@ export default function DocsScanPage() {
           engine, and writes the result to <code>~/.burnlens/burnlens.db</code>.
         </p>
         <p>
-          There is no proxy, no code change, no signup, and no network call. It is
+          There is no proxy, no code change, and no signup. Importing session logs is
+          local. After import, scan derives merged-PR outcomes for the current checkout
+          through the GitHub CLI (<code>gh</code>) — the same path as{" "}
+          <code>burnlens outcome derive</code>. If <code>gh</code> is missing, that is
+          printed rather than skipped. <code>--dry-run</code> does not derive. It is
           retroactive — the first run prices history that already happened, which is why it
           produces a real number immediately rather than after a week of collection.
         </p>
@@ -132,8 +136,9 @@ burnlens scan --dry-run                 # parse and print counts, insert nothing
       <section id="next">
         <h2>Next</h2>
         <p>
-          Turn merged PRs into a cost-per-accepted-outcome number with{" "}
-          <code>burnlens outcome derive</code> and <code>burnlens outcome show</code> — see
+          After a scan that could reach <code>gh</code>,{" "}
+          <code>burnlens outcome show</code> is the cost-per-merged-PR number. Re-run
+          derive from another checkout with <code>burnlens outcome derive</code> — see
           the <Link href="/docs/cli">CLI reference</Link>. To meter production API traffic
           rather than agent sessions, see <Link href="/docs/proxy">the proxy</Link>.
         </p>

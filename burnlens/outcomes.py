@@ -35,9 +35,19 @@ logger = logging.getLogger(__name__)
 # gh can be slow on large repos; the CLI surfaces this rather than hanging.
 _GH_TIMEOUT_SECONDS = 60
 
+GH_MISSING_MESSAGE = (
+    "the GitHub CLI (gh) is not installed. Install it from https://cli.github.com "
+    "and run `gh auth login`."
+)
+
 
 class DeriveError(RuntimeError):
     """Raised when outcomes cannot be derived, with a message worth showing."""
+
+
+def gh_available() -> bool:
+    """True when the GitHub CLI is on PATH. Presence only — not authenticated."""
+    return shutil.which("gh") is not None
 
 
 @dataclass
@@ -60,11 +70,8 @@ def _run_gh(repo_path: str, *args: str) -> str:
     Raises DeriveError with an actionable message rather than leaking a
     CalledProcessError — this runs from a CLI a human is watching.
     """
-    if not shutil.which("gh"):
-        raise DeriveError(
-            "the GitHub CLI (gh) is not installed. Install it from https://cli.github.com "
-            "and run `gh auth login`."
-        )
+    if not gh_available():
+        raise DeriveError(GH_MISSING_MESSAGE)
     try:
         result = subprocess.run(
             ["gh", *args],
@@ -202,6 +209,11 @@ async def derive_pr_outcomes(
     and the table dedups on them, so this is safe on a cron.
     """
     from burnlens.storage.database import init_db, insert_outcome
+
+    # gh first: the coding-agent loop's failure mode is "gh is missing", not
+    # a later git or parse error that makes the user hunt for the real cause.
+    if not gh_available():
+        raise DeriveError(GH_MISSING_MESSAGE)
 
     resolved = str(Path(repo_path).expanduser().resolve())
     repo = _local_repo_name(resolved)

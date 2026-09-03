@@ -105,10 +105,75 @@ def test_scan_prints_the_local_first_funnel(tmp_path):
     cfg = BurnLensConfig(db_path=str(tmp_path / "scan.db"))
     with patch("burnlens.cli.load_config", return_value=cfg), patch(
         "burnlens.cli._run_claude_scan", new_callable=AsyncMock
-    ):
+    ), patch(
+        "burnlens.cli._run_scan_derive", new_callable=AsyncMock
+    ) as mock_derive:
         result = runner.invoke(app, ["scan", "--provider", "claude", "--dry-run"])
     assert result.exit_code == 0, result.output
     assert "today's bundled pricing table" in result.output
     assert "burnlens economics" in result.output
     assert "burnlens repos" in result.output
     assert "burnlens outcome derive" in result.output
+    mock_derive.assert_not_called()
+
+
+def test_scan_derives_outcomes_when_gh_is_present(tmp_path):
+    """The coding-agent loop: scan import is followed by derive, not a hunt."""
+    from unittest.mock import AsyncMock, patch
+
+    from burnlens.config import BurnLensConfig
+    from burnlens.outcomes import DeriveResult
+
+    cfg = BurnLensConfig(db_path=str(tmp_path / "scan.db"))
+    derived = DeriveResult(
+        repo="proj",
+        workflow_id="repo:proj",
+        inserted=3,
+        accepted=2,
+        rejected=1,
+    )
+    with patch("burnlens.cli.load_config", return_value=cfg), patch(
+        "burnlens.cli._run_claude_scan", new_callable=AsyncMock
+    ), patch(
+        "burnlens.outcomes.derive_pr_outcomes",
+        new_callable=AsyncMock,
+        return_value=derived,
+    ) as mock_derive:
+        result = runner.invoke(app, ["scan", "--provider", "claude"])
+    assert result.exit_code == 0, result.output
+    mock_derive.assert_awaited_once()
+    assert "Derived" in result.output
+    assert "3 new outcome" in result.output
+    assert "burnlens outcome show" in result.output
+    assert "burnlens outcome derive" not in result.output
+
+
+def test_scan_reports_missing_gh_as_a_fact(tmp_path):
+    """A missing gh is the error, not a silent skip and not a new scanner."""
+    from unittest.mock import AsyncMock, patch
+
+    from burnlens.config import BurnLensConfig
+
+    cfg = BurnLensConfig(db_path=str(tmp_path / "scan.db"))
+    with patch("burnlens.cli.load_config", return_value=cfg), patch(
+        "burnlens.cli._run_claude_scan", new_callable=AsyncMock
+    ), patch("burnlens.outcomes.shutil.which", return_value=None):
+        result = runner.invoke(app, ["scan", "--provider", "claude"])
+    assert result.exit_code == 0, result.output
+    assert "Could not derive outcomes" in result.output
+    assert "cli.github.com" in result.output
+    assert "burnlens outcome derive" in result.output
+
+
+def test_outcome_derive_fails_when_gh_is_missing(tmp_path):
+    from unittest.mock import patch
+
+    from burnlens.config import BurnLensConfig
+
+    cfg = BurnLensConfig(db_path=str(tmp_path / "derive.db"))
+    with patch("burnlens.cli.load_config", return_value=cfg), patch(
+        "burnlens.outcomes.shutil.which", return_value=None
+    ):
+        result = runner.invoke(app, ["outcome", "derive", "--repo", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "cli.github.com" in result.output

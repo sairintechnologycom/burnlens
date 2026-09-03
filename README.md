@@ -111,14 +111,19 @@ A workflow with spend and no accepted outcomes reports no unit cost at all rathe
 For agent work you don't have to report anything. A merged pull request already *is* an accepted outcome, and a closed-unmerged one is a rejected outcome — so BurnLens reads them out of GitHub and joins them to the agent spend it scanned off disk:
 
 ```bash
-burnlens scan --provider claude     # agent session cost, from local logs
-burnlens outcome derive             # merged PRs -> outcomes, via the gh CLI
+burnlens scan --provider claude     # agent session cost, then merged PRs if `gh` is installed
 burnlens outcome show               # cost per merged PR
 ```
 
+`burnlens scan` imports local session logs, then derives outcomes for the
+current checkout through the GitHub CLI. If `gh` is not on PATH, scan still
+imports cost and prints that fact — it does not skip the step silently.
+`burnlens outcome derive` remains the command for a later re-run or a
+different checkout.
+
 Measured on this repository while building it, over the 2026-07-10 to 2026-08-15 telemetry window, on 2026-08-15: **104 merged PRs, 2 closed unmerged, $710.85 of agent spend — about $6.84 per accepted PR.** Failed attempts are charged to the successes, which is what one merged PR really costs. (A floor, not a ceiling — any model missing from the pricing tables is imported as $ unknown, so check `burnlens pricing` if a number looks low.)
 
-Both commands are idempotent and safe on a schedule: outcome ids are derived deterministically from the repo and PR number, so re-running only ever adds newly-closed PRs.
+Import and derive are both idempotent and safe on a schedule: outcome ids are derived deterministically from the repo and PR number, so re-running only ever adds newly-closed PRs.
 
 Cost is attributed per repository rather than per PR, because agent session logs record which repo a session ran in, not which branch. With several PRs in flight that is the honest reading of what one merged PR costs.
 

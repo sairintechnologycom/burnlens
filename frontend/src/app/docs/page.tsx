@@ -50,12 +50,14 @@ export default function DocsIndexPage() {
         <h3>1. Scan — what have my coding agents already spent?</h3>
         <p>
           Claude Code, Cursor, Codex and Gemini CLI all write session logs to disk.{" "}
-          <code>burnlens scan</code> reads them, prices every call, and stores the result.
-          It is retroactive: it works on history that already exists, with no proxy and no
+          <code>burnlens scan</code> reads them, prices every call, stores the result, and
+          then derives merged-PR outcomes when <code>gh</code> is installed. It is
+          retroactive: it works on history that already exists, with no proxy and no
           code change.
         </p>
         <Code>{`burnlens scan
-burnlens top`}</Code>
+burnlens repos
+burnlens outcome show`}</Code>
         <p>
           <Link href="/docs/scan">Full scanning documentation →</Link>
         </p>
@@ -78,9 +80,10 @@ export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai`}</Code>
       <section id="privacy">
         <h2>What leaves your machine</h2>
         <p>
-          Nothing, until you ask for it. Scanning and the proxy are entirely local: the
-          proxy forwards your request to the provider you were already calling, and the
-          scanner never makes a network call at all.
+          Nothing, until you ask for it. The proxy forwards your request to the provider
+          you were already calling. Session-log import is local. After import,{" "}
+          <code>burnlens scan</code> derives merged PRs through the GitHub CLI when{" "}
+          <code>gh</code> is on PATH; if it is not, that is printed rather than skipped.
         </p>
         <p>
           If you enable cloud sync, cost <em>metadata</em> is uploaded — model, token

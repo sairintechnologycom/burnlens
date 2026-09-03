@@ -32,6 +32,10 @@ qualified with the package it covers.
   now show verified / missed / inconclusive / still-verifying using the
   existing `classify_savings` engine. Missed predictions sit in the
   denominator; they are not negative verified savings.
+- **`burnlens scan` derives merged-PR outcomes when `gh` is present.** After
+  import it runs the same path as `burnlens outcome derive` on the current
+  checkout. If `gh` is missing, that is printed as the reason rather than
+  skipped. Dry-run does not derive. No new coding-agent scanners.
 
 ### Fixed
 - **Local dashboard `/waste` and cloud-compat `/waste-alerts` read every

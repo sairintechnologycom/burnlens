@@ -1316,15 +1316,58 @@ def _disclose_scan_pricing() -> None:
     )
 
 
-def _print_scan_next() -> None:
+def _print_scan_next(*, derived: bool = False) -> None:
     """The local-first loop after import: measure, attribute, then cost/outcome."""
+    next_outcome = (
+        "  [cyan]burnlens outcome show[/cyan]       cost per merged PR"
+        if derived
+        else (
+            "  [cyan]burnlens outcome derive[/cyan]     merged PRs → cost per accepted "
+            "(needs [cyan]gh[/cyan])"
+        )
+    )
     console.print(
         "\n[dim]Next:[/dim]\n"
         "  [cyan]burnlens economics[/cyan]         spend, confidence, coverage\n"
         "  [cyan]burnlens repos[/cyan]              cost by repository\n"
-        "  [cyan]burnlens outcome derive[/cyan]     merged PRs → cost per accepted "
-        "(needs [cyan]gh[/cyan])"
+        + next_outcome
     )
+
+
+def _print_derive_result(result: Any) -> None:
+    """Shared success copy for `outcome derive` and the post-scan derive step."""
+    console.print(
+        f"[green]Derived[/green] {result.inserted} new outcome(s) for "
+        f"[cyan]{result.workflow_id}[/cyan] "
+        f"({result.accepted} merged, {result.rejected} closed unmerged"
+        + (f", {result.duplicates} already recorded" if result.duplicates else "")
+        + ")"
+    )
+    if result.skipped_open:
+        console.print(
+            f"[dim]{result.skipped_open} pull request(s) skipped — still open "
+            "or undated, so they have no outcome yet.[/dim]"
+        )
+
+
+async def _run_scan_derive(db_path: str) -> bool:
+    """Derive merged-PR outcomes for the current checkout after a scan.
+
+    Returns True when outcomes were written. A missing ``gh`` is reported as
+    that fact — the step does not skip silently, and it does not invent a
+    scanner to replace GitHub.
+    """
+    from burnlens.outcomes import DeriveError, derive_pr_outcomes
+
+    console.print("\n[cyan]Deriving outcomes from merged PRs...[/cyan]")
+    try:
+        result = await derive_pr_outcomes(db_path, repo_path=".")
+    except DeriveError as exc:
+        console.print(f"[red]Could not derive outcomes:[/red] {exc}")
+        return False
+
+    _print_derive_result(result)
+    return True
 
 
 @app.command()
@@ -1359,8 +1402,11 @@ def scan(
       codex   — reads ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
       gemini  — reads ~/.gemini/tmp/<project>/chats/session-*.{json,jsonl}
 
-    Re-runs are idempotent: already-imported records are silently skipped via
-    the partial unique index on (source, request_id).
+    After import, derives merged-PR outcomes for the current checkout when the
+    GitHub CLI (gh) is on PATH — the same path as `burnlens outcome derive`.
+    If gh is missing, that is printed rather than skipped. Dry-run does not
+    derive (no writes). Re-runs are idempotent: already-imported records are
+    silently skipped via the partial unique index on (source, request_id).
     """
     raw = (provider or "all").strip().lower()
     if raw in ("", "all"):
@@ -1412,7 +1458,10 @@ def scan(
 
         _warn_unpriced()
         _disclose_scan_pricing()
-        _print_scan_next()
+        derived = False
+        if not dry_run:
+            derived = await _run_scan_derive(cfg.db_path)
+        _print_scan_next(derived=derived)
 
     asyncio.run(_run())
 
@@ -2436,9 +2485,11 @@ def outcome_derive(
 ) -> None:
     """Derive outcomes from merged pull requests — no instrumentation needed.
 
-    A merged PR is an accepted outcome, a closed-unmerged one is rejected. Run
-    this after `burnlens scan` and `burnlens outcome show` reports what a merged
-    PR actually costs in agent spend.
+    A merged PR is an accepted outcome, a closed-unmerged one is rejected.
+    `burnlens scan` already runs this for the current checkout when `gh` is
+    present (and prints that it is missing when it is not). Use this command
+    to re-run, or to derive from a different `--repo`. Then `burnlens outcome
+    show` reports what a merged PR actually costs in agent spend.
 
     Idempotent: outcome ids are deterministic, so re-running only adds PRs
     closed since last time. Safe on a schedule.
@@ -2456,18 +2507,7 @@ def outcome_derive(
             console.print(f"[red]Could not derive outcomes:[/red] {exc}")
             raise typer.Exit(code=1)
 
-        console.print(
-            f"[green]Derived[/green] {result.inserted} new outcome(s) for "
-            f"[cyan]{result.workflow_id}[/cyan] "
-            f"({result.accepted} merged, {result.rejected} closed unmerged"
-            + (f", {result.duplicates} already recorded" if result.duplicates else "")
-            + ")"
-        )
-        if result.skipped_open:
-            console.print(
-                f"[dim]{result.skipped_open} pull request(s) skipped — still open "
-                "or undated, so they have no outcome yet.[/dim]"
-            )
+        _print_derive_result(result)
         console.print("Run [cyan]burnlens outcome show[/cyan] to see cost per merged PR.")
 
     asyncio.run(_run())
