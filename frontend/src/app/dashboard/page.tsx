@@ -22,17 +22,9 @@ import type {
 } from "@/lib/contracts";
 import { CostConfidencePanel } from "./CostConfidenceView";
 import { OutcomeCoveragePanel } from "./OutcomeCoverageView";
+import { EconomicsHero } from "./EconomicsHero";
 import { EconomicsLoopPanel } from "./EconomicsLoopView";
 import { EconomicsNav } from "@/components/EconomicsNav";
-
-function formatCost(n: number): string {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Same formatter as /waste so the Overview Waste KPI and detected_waste_usd match.
-function formatWaste(n: number): string {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-}
 
 // Why a number can legitimately disagree with the bill. Shown on hover so drift
 // reads as a diagnosis, not a failure.
@@ -200,10 +192,7 @@ function DashboardContent() {
 
   useEffect(() => { document.title = "Overview | BurnLens"; }, []);
 
-  const totalCost = summary?.total_cost_usd ?? 0;
   const totalCalls = summary?.total_requests ?? 0;
-  const wasteAmount = economics?.detected_waste_usd ?? null;
-  const avgPerReq = totalCalls > 0 ? totalCost / totalCalls : 0;
 
   if (loading && !summary) {
     return (
@@ -239,43 +228,14 @@ function DashboardContent() {
   return (
     <div>
       <EconomicsNav current="/dashboard" />
-      {/* Stat strip */}
-      <div className="stat-strip cols-5">
-        <div className="stat-cell">
-          <div className="stat-label">Total spend</div>
-          <div className="stat-value">
-            {hasData ? `$${formatCost(summary?.total_cost_usd ?? 0)}` : <span style={{ color: "var(--dim)" }}>—</span>}
-          </div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Requests</div>
-          <div className="stat-value">
-            {hasData ? (summary?.total_requests ?? 0).toLocaleString() : <span style={{ color: "var(--dim)" }}>—</span>}
-          </div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Avg / req</div>
-          <div className="stat-value">
-            {hasData ? `$${formatCost(avgPerReq)}` : <span style={{ color: "var(--dim)" }}>—</span>}
-          </div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Waste</div>
-          <div className={`stat-value${wasteAmount != null && wasteAmount > 0 ? " amber" : ""}`}>
-            {wasteAmount == null ? (
-              <span style={{ color: "var(--dim)" }}>—</span>
-            ) : (
-              `$${formatWaste(wasteAmount)}`
-            )}
-          </div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-label">Cache saved</div>
-          <div className="stat-value" style={(summary?.cache_saved_usd ?? 0) > 0 ? { color: "var(--green)" } : undefined}>
-            {hasData ? `$${formatCost(summary?.cache_saved_usd ?? 0)}` : <span style={{ color: "var(--dim)" }}>—</span>}
-          </div>
-        </div>
-      </div>
+      <EconomicsHero
+        summary={summary}
+        econ={economics}
+        confidence={confidence}
+        coverage={coverage}
+        reconciliation={reconciliation}
+        savings={savings}
+      />
 
       {/* Trust badge: does our number match the provider's bill? */}
       {reconciliation.length > 0 && (

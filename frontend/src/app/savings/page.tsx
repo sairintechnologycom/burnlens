@@ -76,9 +76,16 @@ function SavingsContent() {
           <div className="stat-value" style={{ color: "var(--green)" }}>${formatCost(totalSaving)}</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-label">Verified</div>
+          <div className="stat-label">Verified Savings</div>
           <div className="stat-value" style={rollup && rollup.verified_monthly_usd > 0 ? { color: "var(--green)" } : undefined}>
-            {rollup ? `$${formatCost(rollup.verified_monthly_usd)}` : <span style={{ color: "var(--dim)" }}>—</span>}
+            {(() => {
+              if (!rollup) return <span style={{ color: "var(--dim)" }}>—</span>;
+              const judged = (rollup.counts.verified ?? 0) + (rollup.counts.missed ?? 0);
+              if (judged === 0 && rollup.verified_monthly_usd === 0) {
+                return <span style={{ color: "var(--dim)" }}>No verified changes yet</span>;
+              }
+              return `$${formatCost(rollup.verified_monthly_usd)}`;
+            })()}
           </div>
         </div>
       </div>

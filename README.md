@@ -131,7 +131,7 @@ Cost is attributed per repository rather than per PR, because agent session logs
 
 ## Use Cases
 
-**Coding agents.** Cursor, Claude Code, Cline, Windsurf — attribute cost per PR, repo, or developer. Set a hard daily cap per API key so one runaway agent can't blow the team's monthly budget overnight.
+**Coding agents.** Cursor, Claude Code, Codex, Gemini CLI — cost per repo and developer from local logs. Merged PRs become accepted outcomes when `gh` is present (repo-level, because session logs do not record the branch). Per-PR tags apply to live proxy traffic via `burnlens run`. Set a hard daily cap per API key so one runaway agent can't blow the team's monthly budget overnight.
 
 **Customer-facing AI.** Tag each request with a customer ID. See which customers drive the most cost, alert on thresholds, and optionally route to cheaper models.
 
@@ -220,10 +220,10 @@ burnlens run -- python app.py   # auto-tag a process with repo / dev / pr / bran
 burnlens key register <name>    # label an API key + set a daily cap
 burnlens key list               # list registered keys with caps
 burnlens keys                   # today's spend per registered key
-burnlens scan claude            # import Claude Code session costs from disk
-burnlens scan cursor            # import Cursor IDE session costs from disk
-burnlens scan codex             # import OpenAI Codex session costs from disk
-burnlens scan gemini            # import Gemini CLI session costs from disk
+burnlens scan --provider claude # import Claude Code session costs from disk
+burnlens scan --provider cursor # import Cursor IDE session costs from disk
+burnlens scan --provider codex  # import OpenAI Codex session costs from disk
+burnlens scan --provider gemini # import Gemini CLI session costs from disk
 ```
 
 ---

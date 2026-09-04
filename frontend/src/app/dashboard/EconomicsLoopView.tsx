@@ -50,15 +50,20 @@ export function EconomicsLoopPanel({
     },
     {
       href: "/savings",
-      label: "Savings",
-      value: savings
-        ? `$${formatFine(savings.verified_monthly_usd)}`
-        : "—",
+      label: "Verified Savings",
+      value: (() => {
+        if (!savings) return "—";
+        const judged = (savings.counts.verified ?? 0) + (savings.counts.missed ?? 0);
+        if (judged === 0 && savings.verified_monthly_usd === 0) {
+          return "No verified changes yet";
+        }
+        return `$${formatFine(savings.verified_monthly_usd)}`;
+      })(),
       hint:
         recCount > 0
           ? `${recCount} recommendation${recCount === 1 ? "" : "s"}, $${formatFine(projected)} projected`
           : savings?.realisation_pct == null
-            ? "verified vs projected"
+            ? "projected is not verified"
             : `${savings.realisation_pct.toFixed(0)}% realised`,
     },
     {

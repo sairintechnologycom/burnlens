@@ -7,7 +7,7 @@ test.describe('Landing Page', () => {
     // Check for main heading
     const heading = page.locator('h1');
     await expect(heading).toBeVisible();
-    await expect(heading).toContainText(/See exactly what your/i);
+    await expect(heading).toContainText(/Know what AI costs/i);
   });
 
   test('should show pricing section', async ({ page }) => {
@@ -23,14 +23,11 @@ test.describe('Landing Page', () => {
     await expect(page.getByText('Enterprise', { exact: true })).toBeVisible();
   });
 
-  test('should navigate to setup when clicking Get Started', async ({ page }) => {
+  test('should navigate to setup when creating a workspace', async ({ page }) => {
     await page.goto('/');
 
-    // Find primary CTA "Get Started" in the hero/install section
-    const getStarted = page.getByRole('link', { name: /Get Started/i }).first();
-    await getStarted.click();
+    await page.getByRole('link', { name: /Create workspace/i }).first().click();
 
-    // Should be on /setup
     await expect(page).toHaveURL(/\/setup/);
   });
 });
@@ -57,7 +54,7 @@ test.describe('Landing Page — Mobile nav', () => {
     await expect(page.locator('.lp-mobile-drawer')).toBeHidden();
   });
 
-  test('mobile drawer Get Started navigates to /setup', async ({ page }) => {
+  test('mobile drawer Create workspace navigates to /setup', async ({ page }) => {
     await page.goto('/');
     await page.locator('.lp-mobile-menu-btn').click();
     await page.locator('.lp-mobile-drawer .lp-mobile-cta').click();

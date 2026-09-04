@@ -32,7 +32,7 @@ const faqStructuredData = {
       name: "Which coding agents does BurnLens scan?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "BurnLens reads local session logs for Claude Code (~/.claude/projects/), Cursor (local bubble DB), OpenAI Codex (SQLite session store), and Gemini CLI (~/.gemini/tmp/). Each reader parses the agent's native format, deduplicates turns, and routes cost through the BurnLens pricing engine.",
+        text: "BurnLens reads local session logs for Claude Code (~/.claude/projects/), Cursor (local bubble DB), OpenAI Codex (~/.codex/sessions JSONL), and Gemini CLI (~/.gemini/tmp/). Each reader parses the agent's native format, deduplicates turns, and routes cost through the BurnLens pricing engine.",
       },
     },
     {
@@ -56,7 +56,7 @@ const faqStructuredData = {
       name: "What if a model isn't in the BurnLens pricing data?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "The session is still imported with a $0 cost and the model name is logged so you can spot gaps. Pricing data lives in burnlens/cost/pricing_data/*.json — adding a missing model is a one-line PR.",
+        text: "The session is still imported as $ unknown — not a measured $0.00 — and the model name is logged so you can spot gaps. Pricing data lives in burnlens/cost/pricing_data/*.json — adding a missing model is a one-line PR.",
       },
     },
   ],
@@ -75,7 +75,7 @@ const AGENTS = [
   },
   {
     name: "OpenAI Codex",
-    path: "Codex CLI SQLite session DB",
+    path: "~/.codex/sessions JSONL",
     detail: "Handles the event_msg wrapper and turn_context model fields. Tested against 700+ sessions / 88K events.",
   },
   {
@@ -236,8 +236,9 @@ burnlens repos    # which repo actually burned the money`}
 
         <section>
           <h2>FAQ</h2>
-          <p><strong>What if a model isn&apos;t priced yet?</strong> The session is still imported with cost = $0 and
-          the model name is recorded so you can spot the gap. Adding a missing model is a one-line edit in{" "}
+          <p><strong>What if a model isn&apos;t priced yet?</strong> The session is still imported as{" "}
+          <code>$ unknown</code> — not a measured <code>$0.00</code> — and the model name is recorded so you can
+          spot the gap. Adding a missing model is a one-line edit in{" "}
           <code>burnlens/cost/pricing_data/*.json</code>.</p>
 
           <p><strong>Does scanning interfere with the agent?</strong> No. burnlens scan only reads. It never writes to

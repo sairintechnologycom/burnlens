@@ -1337,6 +1337,56 @@ def _disclose_scan_pricing() -> None:
     )
 
 
+async def _print_scan_result(db_path: str) -> None:
+    """Compact local economics after import — shipped read models only."""
+    from burnlens.analysis.economics import get_economics_overview
+    from burnlens.storage.queries import get_cost_by_repo
+
+    try:
+        overview = await get_economics_overview(db_path, since=_since_iso(30))
+        repos = await get_cost_by_repo(db_path, days=30, limit=5)
+    except Exception as exc:
+        console.print(f"[dim]Could not summarize local economics: {exc}[/dim]")
+        return
+
+    console.print("\n[bold]Scan complete[/bold]")
+    table = Table(show_header=False)
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    table.add_row("AI spend (30d)", _fmt_cost(overview.total_spend_usd))
+    table.add_row(
+        "Accepted outcomes",
+        (
+            str(overview.accepted_count)
+            if overview.accepted_count
+            else "[dim]no outcome data yet[/dim]"
+        ),
+    )
+    table.add_row(
+        "Cost / accepted",
+        (
+            _fmt_cost(overview.cost_per_accepted_usd)
+            if overview.cost_per_accepted_usd is not None
+            else "[dim]not enough outcome data[/dim]"
+        ),
+    )
+    cc = overview.cost_confidence
+    if cc is not None and cc.total_requests:
+        priced = cc.total_requests - cc.unpriced_requests
+        table.add_row("Cost confidence", f"{cc.confidence_pct:.1f}%")
+        table.add_row(
+            "Pricing coverage",
+            f"{priced} of {cc.total_requests} priced",
+        )
+    oc = overview.outcome_coverage
+    if oc is not None and oc.cost_total_usd:
+        table.add_row("Outcome coverage", f"{oc.coverage_pct:.1f}%")
+    console.print(table)
+
+    if repos:
+        _print_grouped_table(repos, group_label="repositories", group_key="repo")
+
+
 def _print_scan_next(*, derived: bool = False) -> None:
     """The local-first loop after import: measure, attribute, then cost/outcome."""
     next_outcome = (
@@ -1482,6 +1532,7 @@ def scan(
         derived = False
         if not dry_run:
             derived = await _run_scan_derive(cfg.db_path)
+            await _print_scan_result(cfg.db_path)
         _print_scan_next(derived=derived)
 
     asyncio.run(_run())

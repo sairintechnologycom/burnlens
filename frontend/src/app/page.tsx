@@ -11,7 +11,7 @@ const TERMINAL_LINES = [
   { prompt: true,  text: "burnlens scan", delay: 1400 },
   { prompt: false, text: "Scanning Claude Code   312 sessions \u00b7 $48.21", delay: 2000, highlight: true },
   { prompt: false, text: "Scanning Cursor         89 sessions \u00b7 $12.84", delay: 2500 },
-  { prompt: true,  text: "burnlens top", delay: 3100 },
+  { prompt: true,  text: "burnlens repos", delay: 3100 },
   { prompt: false, text: "burnlens/   $24.18   Claude Code, Cursor", delay: 3700, highlight: true },
 ];
 
@@ -163,22 +163,22 @@ function MiniDashboard() {
       {/* Stats */}
       <div className="dash-stats">
         <div className="dash-stat">
-          <div className="dash-stat-label">Total spend</div>
+          <div className="dash-stat-label">AI Spend</div>
           <div className="dash-stat-value cyan">$26.44</div>
-          <div className="dash-stat-delta down">&darr; 12% vs prev</div>
+          <div className="dash-stat-delta">illustrative fixture</div>
         </div>
         <div className="dash-stat">
-          <div className="dash-stat-label">Requests</div>
-          <div className="dash-stat-value">7,659</div>
+          <div className="dash-stat-label">Accepted outcomes</div>
+          <div className="dash-stat-value">12</div>
         </div>
         <div className="dash-stat">
-          <div className="dash-stat-label">Avg / req</div>
-          <div className="dash-stat-value">$0.0035</div>
+          <div className="dash-stat-label">Cost / accepted</div>
+          <div className="dash-stat-value">$2.20</div>
         </div>
         <div className="dash-stat">
-          <div className="dash-stat-label">Waste detected</div>
-          <div className="dash-stat-value amber">$4.12</div>
-          <div className="dash-stat-delta">15.6% of spend</div>
+          <div className="dash-stat-label">Cost Confidence</div>
+          <div className="dash-stat-value">96%</div>
+          <div className="dash-stat-delta">Outcome Coverage 81%</div>
         </div>
       </div>
 
@@ -289,10 +289,11 @@ export default function LandingPage() {
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                See what your AI actually costs — then <span className="acc">cap it</span> before the call
+                Know what AI costs — and what that money <span className="acc">produced</span>
               </h1>
               <p className="lp-subline">
-                Two ways in, no account. Scan local coding-agent logs, or put a local proxy in front of your APIs. Prompt bodies go to your provider — never to BurnLens Cloud.
+                Cost per accepted outcome, Cost Confidence, Outcome Coverage, and verified savings.
+                Local-first: prompt bodies go to your provider, never to BurnLens Cloud. Runtime-changing policies stay off until you enable them.
               </p>
               <div className="lp-doors">
                 <Link href="/scan" className="lp-door">
@@ -475,11 +476,13 @@ export default function LandingPage() {
           <h2>Built for every AI use case</h2>
           <div className="lp-usecases-grid">
             <div className="lp-usecase-card">
-              <h3>Coding agents: per-PR, per-dev attribution</h3>
+              <h3>Coding agents: per-repo, per-dev attribution</h3>
               <p>
-                Claude Code, Cursor, Codex, Gemini CLI — see cost per repo, developer,
-                or PR. Hard daily caps per API key stop one runaway agent from
-                burning the team&apos;s monthly budget overnight.
+                Claude Code, Cursor, Codex, Gemini CLI — cost per repo and developer
+                from local logs. Merged PRs are accepted outcomes when{" "}
+                <code>gh</code> is present, at repo grain, not per branch. Hard daily
+                caps per API key stop one runaway agent from burning the team&apos;s
+                monthly budget overnight.
               </p>
               <p style={{ marginTop: 12, fontSize: "var(--fs-12)" }}>
                 <a
@@ -541,6 +544,10 @@ export default function LandingPage() {
                 embedding search. Identical or near-identical queries are served from
                 cache — the upstream API call never happens and you pay nothing.
               </p>
+              <p style={{ marginTop: 12, fontSize: "var(--fs-12)" }}>
+                Off by default. Observation never caches. Enable with{" "}
+                <code>cache.enabled: true</code> in <code>burnlens.yaml</code>.
+              </p>
             </div>
             <div className="lp-usecase-card">
               <h3>Model recommendations: find the cheaper path</h3>
@@ -559,7 +566,7 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="lp-usecase-card">
-              <h3>Automatic model routing: degrade gracefully</h3>
+              <h3>Opt-in model routing: degrade gracefully</h3>
               <p>
                 Opt in with <code>routing.budget_downgrade: true</code>. Then, when a
                 budget you set drops below 20% remaining (or $5), BurnLens routes
@@ -734,7 +741,7 @@ export default function LandingPage() {
             </div>
             <div className="lp-install-line">
               <span className="lp-install-prompt">$</span>
-              <span>burnlens top</span>
+              <span>burnlens repos</span>
             </div>
             <div className="lp-install-line">
               <span className="lp-install-prompt">#</span>

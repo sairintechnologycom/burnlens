@@ -17,6 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGES = [
+    ROOT / "frontend" / "src" / "app" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "scan" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "docs" / "scan" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "docs" / "page.tsx",

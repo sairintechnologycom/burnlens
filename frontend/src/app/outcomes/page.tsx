@@ -113,8 +113,8 @@ function OutcomesContent() {
         </div>
         {rows.length === 0 ? (
           <EmptyState
-            title="No workflow economics yet"
-            description="This page divides spend tagged with a workflow_id by accepted results. Failed and rejected attempts are charged to the successes. Scan-derived spend shows as repo:<name> after you derive merged PRs."
+            title="No outcome data yet"
+            description="Tag a production workflow or derive merged PR outcomes from your coding-agent history to calculate cost per accepted outcome. Failed and rejected attempts are charged to the successes. Scan-derived spend shows as repo:<name> after you derive merged PRs."
             code={"burnlens outcome derive\nburnlens outcome show"}
           />
         ) : (

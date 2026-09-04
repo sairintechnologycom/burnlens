@@ -3,11 +3,11 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "BurnLens vs LiteLLM — Simpler LLM Cost Tracking Alternative (2026)",
-  description: "LiteLLM is a full gateway with YAML config. BurnLens is a transparent FinOps proxy: one env var, zero payload rewrites, and hard-cap budgets per API key.",
+  description: "LiteLLM is a full gateway with YAML config. BurnLens is a local-first FinOps proxy: one env var, observation-mode passthrough, and hard-cap budgets per API key.",
   alternates: { canonical: "/compare/burnlens-vs-litellm" },
   openGraph: {
     title: "BurnLens vs LiteLLM — Simpler LLM Cost Tracking Alternative",
-    description: "LiteLLM rewrites requests through a gateway. BurnLens is a transparent proxy with zero payload modification and hard-cap budgets.",
+    description: "LiteLLM rewrites requests through a gateway. BurnLens observes by default; runtime-changing economic policies are explicit, configurable, and auditable.",
     url: "https://burnlens.app/compare/burnlens-vs-litellm",
     siteName: "BurnLens",
     type: "article",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "BurnLens vs LiteLLM — Simpler Alternative",
-    description: "Transparent proxy, zero payload rewrites, hard-cap budgets per API key.",
+    description: "Observation-mode proxy, explicit economic policies, hard-cap budgets per API key.",
   },
 };
 
@@ -28,7 +28,7 @@ const faqStructuredData = {
       name: "What is the difference between BurnLens and LiteLLM?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "LiteLLM is a unified LLM gateway that rewrites requests into a single OpenAI-compatible format. BurnLens is a transparent FinOps proxy that forwards requests unmodified and only logs cost. Different design philosophies: LiteLLM normalizes; BurnLens observes.",
+        text: "LiteLLM is a unified LLM gateway that rewrites requests into a single OpenAI-compatible format. BurnLens is a FinOps proxy that observes by default: it forwards provider requests transparently and logs cost. Runtime-changing economic policies (budget-aware model downgrade, semantic cache) are explicit, configurable, and auditable. Different design philosophies: LiteLLM normalizes; BurnLens observes unless you opt in.",
       },
     },
     {
@@ -52,7 +52,7 @@ const faqStructuredData = {
       name: "Which has lower proxy overhead, BurnLens or LiteLLM?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "BurnLens targets under 20ms overhead because it does not deserialize or rewrite request bodies — it forwards bytes and logs the usage block from the response. LiteLLM's normalization layer adds more processing on every call.",
+        text: "BurnLens targets under 20ms overhead in observation mode because it forwards the request and logs the usage block from the response rather than normalizing every provider into one API. LiteLLM's normalization layer adds more processing on every call. Enabling routing.budget_downgrade rewrites only the model field.",
       },
     },
   ],
@@ -70,7 +70,7 @@ export default function CompareLiteLLM() {
 
       <main className="legal-content">
         <h1>BurnLens vs LiteLLM</h1>
-        <p className="legal-updated">A simpler LLM cost tracking alternative · Updated May 2026</p>
+        <p className="legal-updated">A simpler LLM cost tracking alternative · Updated September 2026</p>
 
         <section>
           <h2>TL;DR</h2>
@@ -78,8 +78,9 @@ export default function CompareLiteLLM() {
             LiteLLM and BurnLens both sit between your app and AI providers, but they solve different problems.
             <strong> LiteLLM is a gateway</strong> — it normalizes every provider into one OpenAI-compatible API,
             with YAML config, model routing, and request rewriting.
-            <strong> BurnLens is a FinOps proxy</strong> — it forwards your requests unmodified and only watches
-            cost. If you already use the OpenAI, Anthropic, and Google SDKs directly and just want to see and cap
+            <strong> BurnLens is a FinOps proxy</strong> — in observation mode it forwards provider requests
+            transparently and only watches cost. Runtime-changing policies are explicit and off by default.
+            If you already use the OpenAI, Anthropic, and Google SDKs directly and just want to see and cap
             spend, BurnLens is the simpler choice.
           </p>
         </section>
@@ -93,10 +94,10 @@ export default function CompareLiteLLM() {
             <tbody>
               <tr><td>Primary purpose</td><td>Cost tracking + budgets</td><td>Provider normalization gateway</td></tr>
               <tr><td>Config required</td><td>None — one env var</td><td>YAML / Python config</td></tr>
-              <tr><td>Payload modification</td><td>None — transparent passthrough</td><td>Rewrites requests into OpenAI format</td></tr>
+              <tr><td>Payload modification</td><td>None in observation mode. Explicit <code>routing.budget_downgrade</code> can change the model field (off by default)</td><td>Rewrites requests into OpenAI format</td></tr>
               <tr><td>Proxy overhead target</td><td>&lt; 20ms</td><td>~40-100ms with router</td></tr>
               <tr><td>Hard caps before upstream call</td><td>Yes — HTTP 429 at limit</td><td>Hosted tier only</td></tr>
-              <tr><td>Multi-provider</td><td>OpenAI, Anthropic, Google (Azure / Bedrock / Groq / Mistral / Together on v0.2 / v0.3 roadmap)</td><td>100+ providers</td></tr>
+              <tr><td>Multi-provider</td><td>OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, AWS Bedrock</td><td>100+ providers</td></tr>
               <tr><td>Streaming passthrough (SSE chunks unbuffered)</td><td>Yes</td><td>Yes, with re-serialization</td></tr>
               <tr><td>Local SQLite, no external DB</td><td>Yes</td><td>Requires Postgres for spend tracking</td></tr>
               <tr><td>Per-customer attribution via headers</td><td>Yes — <code>X-BurnLens-Tag-*</code></td><td>Yes — virtual keys</td></tr>
@@ -111,9 +112,10 @@ export default function CompareLiteLLM() {
           the Anthropic SDK for Claude. You don&apos;t want to rewrite call sites to a unified <code>completion()</code>
           function. BurnLens lets you keep your existing code and just observe cost.</p>
 
-          <p><strong>2. Latency matters.</strong> BurnLens does not parse, normalize, or re-serialize request bodies.
-          It forwards bytes directly and reads the <code>usage</code> field from the response only. Measured overhead
-          stays under 20ms on the critical path.</p>
+          <p><strong>2. Latency matters.</strong> In observation mode BurnLens does not normalize or re-serialize
+          requests into a unified API. It forwards the provider request and reads the <code>usage</code> field
+          from the response. Measured overhead stays under 20ms on the critical path. An explicit
+          <code>routing.budget_downgrade</code> policy may rewrite the <code>model</code> field only.</p>
 
           <p><strong>3. You need hard caps without operational overhead.</strong> Set a daily dollar cap per API key
           in <code>burnlens.yaml</code> or via CLI. At 100% of cap, the proxy returns HTTP 429 <em>before</em> the

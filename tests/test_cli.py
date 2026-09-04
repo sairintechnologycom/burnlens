@@ -144,6 +144,10 @@ def test_scan_derives_outcomes_when_gh_is_present(tmp_path):
     mock_derive.assert_awaited_once()
     assert "Derived" in result.output
     assert "3 new outcome" in result.output
+    assert "Scan complete" in result.output
+    assert "AI spend" in result.output
+    assert "burnlens economics" in result.output
+    assert "burnlens repos" in result.output
     assert "burnlens outcome show" in result.output
     assert "burnlens outcome derive" not in result.output
 

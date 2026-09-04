@@ -146,9 +146,10 @@ burnlens vkey revoke --label growth-team`}</Code>
         <h2>Budget-aware model downgrade</h2>
         <p>
           Instead of hard-blocking, BurnLens can route a request to a cheaper model as a
-          budget runs low. <strong>This is off by default</strong> — observation does
-          not rewrite <code>model</code>. It only ever activates once a budget exists{" "}
-          <em>and</em> you set <code>budget_downgrade: true</code>.
+          budget runs low. <strong>This policy can change the model sent upstream.</strong>{" "}
+          It is off by default — observation does not rewrite <code>model</code>. It only
+          ever activates once a budget exists <em>and</em> you set{" "}
+          <code>budget_downgrade: true</code>.
         </p>
         <Code>{`routing:
   budget_downgrade: false       # default — set true to opt in
@@ -162,6 +163,52 @@ burnlens vkey revoke --label growth-team`}</Code>
           <code>budget_downgrade</code> false (or omit it) to always receive the model
           you asked for and take the 429 instead.
         </p>
+      </section>
+
+      <section id="policy-contract">
+        <h2>Runtime-changing policies</h2>
+        <p>
+          Observation, cost calculation, and attribution run by default. Anything that
+          changes what the provider receives, or skips the call, is an explicit policy.
+        </p>
+        <table className="lp-compare-table">
+          <thead>
+            <tr>
+              <th>Policy</th>
+              <th>Default</th>
+              <th>Trigger</th>
+              <th>Action</th>
+              <th>Audit</th>
+              <th>Rollback</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Hard cap (per API key)</td>
+              <td>Off until a cap is set</td>
+              <td>Key daily spend reaches 100%</td>
+              <td>HTTP 429 before upstream</td>
+              <td>Request log status 429</td>
+              <td>Raise or remove the key cap</td>
+            </tr>
+            <tr>
+              <td>Budget-aware model downgrade</td>
+              <td><code>routing.budget_downgrade: false</code></td>
+              <td>Remaining budget below 20% or $5</td>
+              <td>Rewrite <code>model</code> upstream</td>
+              <td><code>routed_model</code>, <code>downgrade_reason</code></td>
+              <td>Set the flag false or omit it</td>
+            </tr>
+            <tr>
+              <td>Semantic cache</td>
+              <td><code>cache.enabled: false</code></td>
+              <td>Exact or similar prompt, policy on</td>
+              <td>Serve locally; no upstream call</td>
+              <td>Cache hit / <code>cache_saved_usd</code></td>
+              <td>Set <code>cache.enabled: false</code></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section id="semantics">

@@ -39,7 +39,7 @@ const faqStructuredData = {
       name: "What does BurnLens send to the upstream AI provider?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Your original request, byte-for-byte, with BurnLens-specific headers stripped. Specifically, every header starting with X-BurnLens- (including tag headers like X-BurnLens-Tag-Feature) is removed before the request is forwarded to OpenAI, Anthropic, Google, or any other configured provider. Your auth header, body, and other headers pass through unchanged.",
+        text: "In observation mode (the default), BurnLens forwards your original request body unchanged and strips only headers starting with X-BurnLens- (including tag headers like X-BurnLens-Tag-Feature) before the call reaches OpenAI, Anthropic, Google, or any other configured provider. Your Authorization header passes through unchanged. Explicit economic policies such as routing.budget_downgrade can change the model field sent upstream; that rewrite is off by default, configurable, and audited.",
       },
     },
     {
@@ -124,7 +124,8 @@ export default function SecurityPage() {
           <p>
             BurnLens is a proxy that runs on <strong>your</strong> machine. Your AI SDK talks to{" "}
             <code>localhost:8420</code>; BurnLens forwards the call to your AI provider;
-            the response comes back unmodified. Cost calculation and logging happen locally, against
+            the response comes back unmodified. In observation mode the request body is also
+            forwarded unchanged. Cost calculation and logging happen locally, against
             a SQLite database at <code>~/.burnlens/burnlens.db</code>.
           </p>
           <p>
@@ -152,8 +153,8 @@ export default function SecurityPage() {
             </li>
             <li>
               Any data <code>burnlens scan</code> reads from your local coding-agent log
-              directories (<code>~/.claude/projects/</code>, Cursor bubble DB, Codex SQLite,{" "}
-              <code>~/.gemini/tmp/</code>)
+              directories (<code>~/.claude/projects/</code>, Cursor bubble DB, Codex JSONL under{" "}
+              <code>~/.codex/sessions/</code>, <code>~/.gemini/tmp/</code>)
             </li>
           </ul>
         </section>
@@ -165,7 +166,11 @@ export default function SecurityPage() {
             forwards the call upstream. That means tag headers like{" "}
             <code>X-BurnLens-Tag-Feature: checkout</code> are visible to your local BurnLens
             instance but never sent to OpenAI / Anthropic / Google. Your{" "}
-            <code>Authorization</code> header and request body pass through byte-for-byte.
+            <code>Authorization</code> header passes through unchanged. In observation
+            mode the request body is also unchanged. If you enable{" "}
+            <code>routing.budget_downgrade</code>, BurnLens may replace the{" "}
+            <code>model</code> field before forwarding; every rewrite is logged. A
+            budget alone never changes the model.
           </p>
           <p>
             Source:{" "}

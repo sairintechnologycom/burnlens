@@ -48,7 +48,7 @@ See the Key Rotation Runbook in the docs. The short version: create a new key in
 Two different mechanisms:
 
 - **Per-API-key daily caps** (in the local proxy): when a key hits 100% of its daily dollar limit, BurnLens returns `429` *before* forwarding the request to the upstream provider. The daily window resets at local midnight in your configured timezone.
-- **Per-team / per-customer budgets** (tag-level): when usage crosses configured thresholds, BurnLens automatically downgrades the requested model to a cheaper one (configurable). They do not 429.
+- **Per-team / per-customer budgets** (tag-level): when usage crosses configured thresholds *and* you set `routing.budget_downgrade: true`, BurnLens routes the request to a cheaper model. That rewrite is off by default; a budget alone never changes the model. They do not 429.
 
 ## Does BurnLens send my prompts to the cloud?
 

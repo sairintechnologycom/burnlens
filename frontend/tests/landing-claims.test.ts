@@ -27,4 +27,22 @@ describe("landing dogfood claims", () => {
       expect(sources).not.toContain(retired);
     }
   });
+
+  it("post-scan onboarding is burnlens repos, not burnlens top", () => {
+    const homepage = read("src", "app", "page.tsx");
+    expect(homepage).toContain('text: "burnlens repos"');
+    expect(homepage).not.toContain('text: "burnlens top"');
+    const install = homepage.slice(homepage.indexOf("Up in 3 commands"));
+    expect(install).toContain("burnlens repos");
+    expect(install).not.toContain("burnlens top");
+  });
+
+  it("attributes coding-agent scan cost per-repo, not per-PR", () => {
+    const homepage = read("src", "app", "page.tsx");
+    expect(homepage).toContain("per-repo, per-dev attribution");
+    expect(homepage).not.toContain("per-PR, per-dev attribution");
+    const readme = read("..", "README.md");
+    expect(readme).toContain("cost per repo and developer from local logs");
+    expect(readme).not.toContain("attribute cost per PR, repo, or developer");
+  });
 });
