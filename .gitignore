@@ -61,3 +61,7 @@ tests/_phase7_billing_test.env
 
 # Claude config migration backups (local only)
 .claude-config-backup-*/
+
+artifacts/
+output/
+.venv/
