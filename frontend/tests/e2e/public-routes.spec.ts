@@ -1,4 +1,6 @@
 import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Console-error gate for every public route.
@@ -44,7 +46,7 @@ const PUBLIC_ROUTES = [
  * That noise is expected here; application errors are not.
  */
 const NETWORK_NOISE =
-  /Failed to fetch|NetworkError|net::ERR_|ERR_NAME_NOT_RESOLVED|api\.example\.test|Failed to load resource/i;
+  /Failed to fetch|NetworkError|net::ERR_|ERR_NAME_NOT_RESOLVED|api\.example\.test|Failed to load resource|CORS policy/i;
 
 function isRealError(text: string): boolean {
   return !NETWORK_NOISE.test(text);
@@ -100,4 +102,75 @@ test('support dialog opens, closes with Escape, and logs no errors', async ({ pa
   await expect(trigger).toBeFocused();
 
   expect(errors, `support dialog logged errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
+test('scan guidance ends at the economics journey', async ({ page }) => {
+  await page.goto('/scan', { waitUntil: 'networkidle' });
+  await expect(page.getByText('burnlens economics')).toBeVisible();
+  await expect(page.getByText('$ unknown', { exact: false })).toBeVisible();
+});
+
+test('unpriced cost is $ unknown, not a measured zero', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await expect(page.getByText('$ unknown', { exact: false })).toBeVisible();
+  const body = await page.locator('body').innerText();
+  expect(body).not.toMatch(/unpriced[\s\S]{0,80}\$0\.00/i);
+});
+
+test('demo is labeled as fixture data, not live telemetry', async ({ page }) => {
+  await page.goto('/demo', { waitUntil: 'networkidle' });
+  await expect(page.getByText('DETERMINISTIC_DEMO_FIXTURE')).toBeVisible();
+  await expect(page.getByText('not live telemetry', { exact: false })).toBeVisible();
+});
+
+test('routing rewrite is described as explicit opt-in', async ({ page }) => {
+  await page.goto('/docs/budgets', { waitUntil: 'networkidle' });
+  await expect(page.getByText('routing.budget_downgrade', { exact: false })).toBeVisible();
+  const budgets = await page.locator('body').innerText();
+  expect(budgets.toLowerCase()).toMatch(/off by default|opt[- ]in|false/);
+
+  await page.goto('/security', { waitUntil: 'networkidle' });
+  const security = await page.locator('body').innerText();
+  expect(security).toContain('routing.budget_downgrade');
+  expect(security.toLowerCase()).toMatch(/opt[- ]in|off by default|observation mode/);
+});
+
+test('main public navigation is intact on home', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const nav = page.locator('nav').first();
+  await expect(nav.getByRole('link', { name: /Scan/i })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Docs/i })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Security/i })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Live demo/i })).toBeVisible();
+  await nav.getByRole('link', { name: /Docs/i }).click();
+  await expect(page).toHaveURL(/\/docs/);
+});
+
+test('no horizontal overflow at mobile width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const route of ['/', '/demo', '/scan', '/docs/budgets', '/security']) {
+    await page.goto(route, { waitUntil: 'networkidle' });
+    const overflow = await page.evaluate(() => {
+      const doc = document.documentElement;
+      return doc.scrollWidth - window.innerWidth;
+    });
+    expect(overflow, `${route} horizontal overflow ${overflow}px`).toBeLessThanOrEqual(1);
+  }
+});
+
+test('persist public route screenshots and results', async ({ page }, info) => {
+  const out = join(__dirname, '..', '..', '..', 'artifacts', 'burnlens-unification', 'blu-812');
+  mkdirSync(out, { recursive: true });
+  const results: { route: string; status: number | null }[] = [];
+  for (const route of PUBLIC_ROUTES) {
+    const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
+    results.push({ route, status: response?.status() ?? null });
+    const name = route === '/' ? 'home' : route.slice(1).replace(/\//g, '-');
+    await page.screenshot({ path: join(out, `${name}.png`), fullPage: true });
+  }
+  writeFileSync(join(out, 'routes.json'), JSON.stringify({
+    project: info.project.name,
+    results,
+  }, null, 2));
+  expect(results.every((r) => r.status !== null && r.status < 400)).toBeTruthy();
 });

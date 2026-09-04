@@ -3,3 +3,12 @@
 export function formatCost(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+/** Request-row money. Unpriced is not a measured zero. */
+export function formatRequestCostUsd(
+  costUsd: number | null | undefined,
+  pricingClass: string | null | undefined,
+): string {
+  if (pricingClass === "unpriced") return "$ unknown";
+  return `$${(costUsd ?? 0).toFixed(4)}`;
+}

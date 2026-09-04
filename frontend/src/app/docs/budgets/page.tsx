@@ -196,7 +196,7 @@ burnlens vkey revoke --label growth-team`}</Code>
               <td><code>routing.budget_downgrade: false</code></td>
               <td>Remaining budget below 20% or $5</td>
               <td>Rewrite <code>model</code> upstream</td>
-              <td><code>routed_model</code>, <code>downgrade_reason</code></td>
+              <td><code>requested_model</code>, <code>model</code> (effective), <code>routed_model</code>, <code>downgrade_reason</code></td>
               <td>Set the flag false or omit it</td>
             </tr>
             <tr>

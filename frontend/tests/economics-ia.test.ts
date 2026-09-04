@@ -208,7 +208,7 @@ describe("economics hero", () => {
     );
     expect(html).toContain("No outcome data yet");
     expect(html).toContain("Not enough outcome data");
-    expect(html).toContain("Not reconciled yet");
+    expect(html).toContain("Not reconciled / connect billing evidence");
     expect(html).toContain("No verified changes yet");
     expect(html).not.toContain("$0.00");
   });

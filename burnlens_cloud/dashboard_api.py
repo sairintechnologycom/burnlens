@@ -392,7 +392,8 @@ async def get_requests(
             input_tokens, output_tokens, reasoning_tokens,
             cache_read_tokens, cache_write_tokens,
             cost_usd, duration_ms, status_code, tags,
-            system_prompt_hash, received_at
+            system_prompt_hash, received_at,
+            pricing_class, requested_model, routed_model, downgrade_reason
         FROM request_records
         WHERE workspace_id = $1 AND ts >= $2
         ORDER BY ts DESC
@@ -421,6 +422,10 @@ async def get_requests(
             tags=row["tags"],
             system_prompt_hash=row["system_prompt_hash"],
             received_at=row["received_at"],
+            pricing_class=row["pricing_class"],
+            requested_model=row["requested_model"],
+            routed_model=row["routed_model"],
+            downgrade_reason=row["downgrade_reason"],
         )
         for row in result
     ]

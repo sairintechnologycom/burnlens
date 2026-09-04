@@ -7,6 +7,7 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import BarChart from "@/components/charts/BarChart";
 import { apiFetch, apiDownload, AuthError } from "@/lib/api";
+import { formatRequestCostUsd } from "@/lib/money";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 import type {
@@ -357,7 +358,7 @@ function DashboardContent() {
                     )}
                   </td>
                   <td style={{ color: (r.cost_usd ?? 0) > 0.01 ? "var(--amber)" : undefined }}>
-                    ${(r.cost_usd ?? 0).toFixed(4)}
+                    {formatRequestCostUsd(r.cost_usd, r.pricing_class)}
                   </td>
                   <td className={r.duration_ms ? latencyClass(r.duration_ms) : ""}>
                     {r.duration_ms ? `${r.duration_ms}` : "—"}

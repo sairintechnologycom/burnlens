@@ -29,6 +29,37 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _apply_model_provenance(
+    record: RequestRecord,
+    *,
+    requested_model: str,
+    effective_model: str,
+    decision: "RouteDecision | None",
+) -> None:
+    """Persist requested vs effective model without inventing history.
+
+    ``record.model`` is the effective/billed model. ``requested_model`` is
+    what the application asked for. When routing did not fire they are
+    equal. ``routed_model`` stays the effective model for backward
+    compatibility with existing routing queries.
+    """
+    record.requested_model = requested_model
+    if decision is not None:
+        record.routed_model = decision.routed_model
+        record.downgrade_reason = decision.reason if decision.downgraded else None
+        record.budget_remaining_usd = (
+            decision.budget_remaining_usd if decision.downgraded else None
+        )
+        record.budget_remaining_pct = (
+            decision.budget_remaining_pct if decision.downgraded else None
+        )
+    else:
+        record.routed_model = effective_model
+        record.downgrade_reason = None
+        record.budget_remaining_usd = None
+        record.budget_remaining_pct = None
+
 # ---------------------------------------------------------------------------
 # Customer spend cache (60-second TTL to avoid DB hit on every request)
 # ---------------------------------------------------------------------------
@@ -481,6 +512,7 @@ async def handle_request(
     # model name too. `model` is re-resolved after routing may have swapped it.
     body_json = _safe_json(body_bytes)
     model = provider.extract_model(body_json, upstream_path) or "unknown"
+    requested_model = model
 
     # A model with no pricing entry costs $0 to BurnLens, so its spend never
     # advances a counter and any cap over it enforces nothing. Where a budget
@@ -793,6 +825,7 @@ async def handle_request(
             body_bytes=body_bytes,
             provider=provider,
             model=model,
+            requested_model=requested_model,
             tags=tags,
             system_hash=system_hash,
             db_path=db_path,
@@ -815,6 +848,7 @@ async def handle_request(
             body_bytes=body_bytes,
             provider=provider,
             model=model,
+            requested_model=requested_model,
             tags=tags,
             system_hash=system_hash,
             db_path=db_path,
@@ -838,6 +872,7 @@ async def _handle_non_streaming(
     body_bytes: bytes,
     provider: Provider,
     model: str,
+    requested_model: str,
     tags: dict[str, str],
     system_hash: str | None,
     db_path: str,
@@ -997,17 +1032,13 @@ async def _handle_non_streaming(
         commit_sha=meta["commit_sha"],
         pricing_version=pricing_version,
     )
-    # Persist routing decision fields (per D-05)
-    if decision is not None:
-        record.routed_model = decision.routed_model
-        record.downgrade_reason = decision.reason if decision.downgraded else None
-        record.budget_remaining_usd = decision.budget_remaining_usd if decision.downgraded else None
-        record.budget_remaining_pct = decision.budget_remaining_pct if decision.downgraded else None
-    else:
-        record.routed_model = model  # same as model when no routing
-        record.downgrade_reason = None
-        record.budget_remaining_usd = None
-        record.budget_remaining_pct = None
+    # Persist requested vs effective model (BLU-815)
+    _apply_model_provenance(
+        record,
+        requested_model=requested_model,
+        effective_model=model,
+        decision=decision,
+    )
 
     # Emit OTEL span and metrics immediately
     try:
@@ -1064,6 +1095,7 @@ async def _handle_streaming(
     body_bytes: bytes,
     provider: Provider,
     model: str,
+    requested_model: str,
     tags: dict[str, str],
     system_hash: str | None,
     db_path: str,
@@ -1183,6 +1215,7 @@ async def _handle_streaming(
                     tool_calls=stream_tool_calls,
                     provider=provider,
                     model=model,
+                    requested_model=requested_model,
                     tags=tags,
                     system_hash=system_hash,
                     db_path=db_path,
@@ -1242,6 +1275,7 @@ async def _log_streaming_usage(
     reservation: dict[str, Any] | None = None,
     body_bytes: bytes | None = None,
     tool_calls: int = 0,
+    requested_model: str | None = None,
 ) -> None:
     """Parse usage from accumulated streaming chunks and log to SQLite."""
     usage = extract_usage_from_stream(provider.name, usage_chunks, provider)
@@ -1359,17 +1393,13 @@ async def _log_streaming_usage(
     except Exception as exc:
         logger.debug("OTEL telemetry emit failed: %s", exc)
 
-    # Persist routing decision fields (per D-05)
-    if decision is not None:
-        record.routed_model = decision.routed_model
-        record.downgrade_reason = decision.reason if decision.downgraded else None
-        record.budget_remaining_usd = decision.budget_remaining_usd if decision.downgraded else None
-        record.budget_remaining_pct = decision.budget_remaining_pct if decision.downgraded else None
-    else:
-        record.routed_model = model  # same as model when no routing
-        record.downgrade_reason = None
-        record.budget_remaining_usd = None
-        record.budget_remaining_pct = None
+    # Persist requested vs effective model (BLU-815)
+    _apply_model_provenance(
+        record,
+        requested_model=requested_model if requested_model is not None else model,
+        effective_model=model,
+        decision=decision,
+    )
     if wal is not None and worker is not None:
         async def _log_via_wal():
             try:

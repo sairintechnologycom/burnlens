@@ -17,7 +17,7 @@ const CONFIDENCE_CLASSES = [
   { key: "estimated", label: "Estimated", color: "var(--amber)",
     help: "Rebuilt from a coding agent's local logs. Token counts are the agent's own." },
   { key: "unpriced", label: "Unpriced", color: "var(--red, #e5484d)",
-    help: "Tokens were used and we have no price for the model, so these count as $0." },
+    help: "Tokens were used and we have no price for the model, so these count as $ unknown, not a measured $0." },
 ] as const;
 
 export function CostConfidencePanel({ c }: { c: CostConfidence }) {

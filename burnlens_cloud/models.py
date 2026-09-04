@@ -102,6 +102,11 @@ class RequestRecordBase(BaseModel):
     # a cloud overlay and is never sent. Optional so older proxies keep
     # ingesting; Cost Confidence infers from source + cost when this is null.
     pricing_class: Optional[str] = None
+    # Requested vs effective model. Optional so older proxies keep ingesting.
+    # Null on historic rows where the original was overwritten and is unknowable.
+    requested_model: Optional[str] = None
+    routed_model: Optional[str] = None
+    downgrade_reason: Optional[str] = None
     # BL-F1b prompt-segment token counts (OSS proxy >= 1.24.0). Integer counts
     # scaled to sum to input_tokens -- prompt shape, never prompt content.
     # OversizedToolSchema / LowRAGEfficiency / HistoryBloat are inert without

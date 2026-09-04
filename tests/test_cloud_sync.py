@@ -332,6 +332,9 @@ def test_payload_survives_sanitize_allowlist():
         "event_id": "evt-1",
         "request_id": "req-1",
         "pricing_class": "calculated",
+        "requested_model": "gpt-4o",
+        "routed_model": "gpt-4o",
+        "downgrade_reason": None,
         "tags": "{}",
     }
     payload = _row_to_payload(row)
@@ -345,6 +348,9 @@ def test_payload_survives_sanitize_allowlist():
         "event_id",
         "request_id",
         "pricing_class",
+        "requested_model",
+        "routed_model",
+        "downgrade_reason",
     ):
         assert sanitized[field] == row[field]
 

@@ -74,9 +74,10 @@ jobs:
     # was found on the live site during a platform review — no CI job had ever
     # opened a public page and looked at the console.
     #
-    # Deliberately runs only tests/e2e/public-routes.spec.ts. The rest of
-    # tests/e2e/ exercises authenticated flows that need a backend and is not
-    # gated here.
+    # Runs public-routes.spec.ts plus dashboard-certification.spec.ts.
+    # Dashboard cert uses the existing localStorage session hint and API
+    # fixtures (same architecture as phase11_auth); it does not need a live
+    # backend. Other e2e files that talk to a real API are not gated here.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -97,11 +98,9 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Run public-route smoke tests
+      - name: Production build, static server, public-route smoke
         working-directory: frontend
-        env:
-          PW_PROD: "1"
-        run: npx playwright test tests/e2e/public-routes.spec.ts --project=chromium --reporter=list
+        run: bash scripts/ci-public-routes.sh
 
   backend-pytest:
     runs-on: ubuntu-latest

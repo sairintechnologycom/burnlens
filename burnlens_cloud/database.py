@@ -496,6 +496,24 @@ async def init_db():
             END $$;
         """)
 
+        # Requested vs effective model. Nullable: historic rows stored only the
+        # billed model, and routed originals were overwritten, so they stay
+        # NULL rather than inventing a requested model.
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'request_records'
+                      AND column_name = 'requested_model'
+                ) THEN
+                    ALTER TABLE request_records ADD COLUMN requested_model TEXT;
+                    ALTER TABLE request_records ADD COLUMN routed_model TEXT;
+                    ALTER TABLE request_records ADD COLUMN downgrade_reason TEXT;
+                END IF;
+            END $$;
+        """)
+
         # Scoped to the workspace, not global. A uuid7 will not collide by
         # accident, but a global unique index would let any tenant suppress
         # another tenant's write by replaying its event_id -- dedup must not be

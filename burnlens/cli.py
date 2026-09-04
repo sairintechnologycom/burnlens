@@ -2452,9 +2452,10 @@ def routing(
 
         table = Table(title="[bold]Routing Downgrades[/bold]", expand=True)
         table.add_column("Timestamp", style="dim")
-        table.add_column("Original Model", style="cyan")
-        table.add_column("Routed Model", style="green")
+        table.add_column("Requested Model", style="cyan")
+        table.add_column("Effective Model", style="green")
         table.add_column("Reason")
+        table.add_column("Policy")
         table.add_column("Budget Left")
 
         for r in rows:
@@ -2463,11 +2464,17 @@ def routing(
             if r.get("budget_remaining_usd") is not None and r.get("budget_remaining_pct") is not None:
                 budget_left = f"{r['budget_remaining_pct']:.1f}% / ${r['budget_remaining_usd']:.2f}"
 
+            requested = r.get("requested_model") or "unknown (historic)"
+            effective = r.get("model") or r.get("routed_model") or "-"
+            reason = r.get("downgrade_reason") or "-"
+            policy = "routing.budget_downgrade" if reason not in ("-", None, "") else "-"
+
             table.add_row(
                 r["timestamp"][:19] if r["timestamp"] else "-",
-                r["model"] or "-",
-                r["routed_model"] or "-",
-                r["downgrade_reason"] or "-",
+                requested,
+                effective,
+                reason,
+                policy,
                 budget_left,
             )
 

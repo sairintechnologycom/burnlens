@@ -104,6 +104,7 @@ class RequestRecord:
     source: str = "proxy"
     request_id: str | None = None
     id: int | None = None
+    requested_model: str | None = None
     routed_model: str | None = None
     downgrade_reason: str | None = None
     budget_remaining_usd: float | None = None

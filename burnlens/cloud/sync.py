@@ -88,6 +88,9 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "request_id",
     "source",
     "pricing_class",
+    "requested_model",
+    "routed_model",
+    "downgrade_reason",
 } | set(PROMPT_SEGMENT_FIELDS) | {f"tag_{name}" for name in CLOUD_SYNCED_TAGS})
 
 
@@ -539,6 +542,9 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         # from cost_usd=0. Rows written before the column existed are classified
         # here with the same rules as local read, so history still syncs a class.
         pricing_class=pricing_class,
+        requested_model=row.get("requested_model"),
+        routed_model=row.get("routed_model"),
+        downgrade_reason=row.get("downgrade_reason"),
         # Flattened tags, derived from CLOUD_SYNCED_TAGS so a new synced tag
         # cannot be half-wired. The backend re-nests these into `tags`.
         **{f"tag_{name}": tags.get(name) for name in CLOUD_SYNCED_TAGS},

@@ -95,17 +95,44 @@ the reconciled amount; the overshoot is corrected on the next request.
 
 ## Specific questions
 
-### What happens at 50%, 80%, 100%?
+### What happens at 50%, 80%, 90%, 100%?
 
-Enforcement is binary at 100% — there is no throttling below the limit. The
-sub-limit thresholds are alerting and status only:
+These are **different controls**. They do not share one threshold model.
 
-- 50% and 80% fire Slack/email alerts.
-- `compute_keys_today` (`key_budget.py:182`) reports `OK` (<80%),
-  `WARNING` (80–99%), `CRITICAL` (>=100%), `NO_CAP` (no cap configured).
+| CONTROL | SCOPE | THRESHOLDS | ENFORCEMENT ACTION | ALERT ACTION | SOURCE OF TRUTH |
+|---|---|---|---|---|---|
+| Per-API-key daily cap | One registered key, local proxy | **100%** blocks; **50 / 80 / 100** alert | `429 daily_budget_exceeded` only at 100% (`enforce_daily_cap`, `key_budget.py`) | Slack/email/terminal at 50%, 80%, 100% (`KEY_BUDGET_THRESHOLDS` in `alerts/engine.py`) | `alerts.api_key_budgets` + `burnlens key register` |
+| Per-API-key status rollup | Same keys, display only | `<80` OK, `80–99` WARNING, `>=100` CRITICAL | None — status for `burnlens keys` / `/api/keys-today` | None | `compute_keys_today` (`key_budget.py`) |
+| Organization / period budget tracker | Local `budget.limit_usd` (workspace spend) | **80 / 90 / 100** | None — this tracker does not 429 | Slack/terminal via `BudgetTracker.check_thresholds` (`analysis/budget.py` `DEFAULT_THRESHOLDS`) | `burnlens.yaml` `budget` |
+| Cloud monthly request quota | Hosted workspace request cap | **80 / 100** | Plan lock is separate; quota emails are not a 429 | Email at 80% and 100% (`ingest.py` / `email.py`) | Cloud `workspaces.monthly_request_cap` |
+| Cloud alert rules | Hosted workspace, configurable | **80 / 100** only (`alert_rules.threshold_pct`) | None | Email / Slack / Teams (`alert_engine.py`) | `alert_rules` table |
+| Budget policies | Local `budget_policies` | **100% of `limit_usd`** | `429 budget_policy_exceeded` after reserve (`budget_engine.py`) | Not these percentage alerts | `burnlens.yaml` `budget_policies` |
+| Budget-aware model downgrade | Tagged team/customer spend | Configured `downgrade_threshold_pct` / `_usd` (defaults 20% remaining / $5) | Rewrites model; never blocks | Request log: `requested_model`, `model` (effective), `routed_model`, `downgrade_reason` | `routing.budget_downgrade` (off by default) |
 
-Model downgrade (below) is the one graduated response, and it is configured
-separately from the cap.
+Enforcement is binary at the cap — there is no throttling below the limit. Sub-limit percentages are alerting and status only, except model downgrade which is a separate opt-in rewrite.
+
+Do not read the key-cap **50% alert** as the organization tracker **80/90/100** — they fire on different spend, for different operators.
+
+### Budget-aware model downgrade
+
+Distinct from capping. When a tag's spend crosses a configured routing
+threshold **and** `routing.budget_downgrade` is true, `decide_route`
+(`interceptor.py`) rewrites the request to a cheaper model instead of
+rejecting it. The request still goes upstream and still costs money.
+
+Provenance on the request row:
+
+- `requested_model` — what the application asked for
+- `model` — the effective/billed model actually sent upstream
+- `routed_model` — same as `model` after a rewrite (kept for existing queries)
+- `downgrade_reason` — `budget_pct` or `budget_usd`
+
+When routing does not fire, `requested_model == model`. Historic rows written
+before this column existed, where a rewrite had already overwritten the
+original, keep `requested_model` NULL (`unknown (historic)` in the CLI). Off
+by default (`routing.budget_downgrade: false`). There is no `routing.disabled`
+key — that flag is not parsed. Opt in with `routing.budget_downgrade: true`
+in `burnlens.yaml`, or push the same field via cloud `routing_overrides`.
 
 ### Concurrent requests
 
@@ -215,17 +242,6 @@ Enforcement is entirely local. Caps read the local SQLite database and never
 consult BurnLens Cloud, so a cloud outage or an unconfigured workspace has no
 effect on whether requests are blocked. Cloud sync only ships already-recorded
 metadata.
-
-### Budget-aware model downgrade
-
-Distinct from capping. When a tag's spend crosses a configured routing
-threshold, `decide_route` (`interceptor.py:652`) rewrites the request to a
-cheaper model instead of rejecting it. The request still goes upstream and
-still costs money. The response records `routed_model`, `downgrade_reason`,
-and remaining budget. Off by default (`routing.budget_downgrade: false`).
-There is no `routing.disabled` key — that flag is not parsed. Opt in with
-`routing.budget_downgrade: true` in `burnlens.yaml`, or push the same field
-via cloud `routing_overrides`.
 
 ---
 

@@ -75,27 +75,36 @@ export default defineConfig({
    * The route-mocks in phase16_resend_banner.spec.ts use a host-agnostic
    * glob targeting the path suffix /auth/resend-verification, so they
    * intercept regardless of the base URL chosen here.
+   *
+   * PW_EXTERNAL_SERVER=1: CI already built the export, started the static
+   * server, and probed readiness. Playwright must not start a second
+   * server (or fold the production build into its webServer timeout).
+   *
+   * PW_PROD=1 without PW_EXTERNAL_SERVER: serve an already-built `out/`
+   * with the repo-native static exporter. The production build is a
+   * separate sensor — run `npm run build` first.
    */
-  webServer: {
-    // Port 3500 chosen because :3000 is often occupied by other dev servers on
-    // this machine (an unrelated Next.js project); the previous reuseExistingServer
-    // setting would silently reuse that server and every authenticated route 404'd.
-    // PW_PROD=1 runs the specs against a production build. Required for
-    // public-routes.spec.ts: minified React errors (e.g. the hydration #418
-    // reported from the live site) only appear in a prod bundle, and the dev
-    // overlay reports mismatches differently.
-    //
-    // next.config.ts sets output:"export", so there is no `next start` to run —
-    // the build emits static HTML to out/ and Vercel serves it with clean URLs.
-    // `serve` reproduces that (/demo -> out/demo.html); `next dev` would not.
-    command: process.env.PW_PROD
-      ? 'npm run build && npx --yes serve out -l 3500 --no-clipboard'
-      : 'npm run dev -- -p 3500',
-    url: 'http://127.0.0.1:3500',
-    reuseExistingServer: !process.env.CI,
-    timeout: process.env.PW_PROD ? 180_000 : 60_000,
-    env: {
-      NEXT_PUBLIC_API_URL: 'https://api.example.test',
-    },
-  },
+  webServer: process.env.PW_EXTERNAL_SERVER
+    ? undefined
+    : {
+        // Port 3500 chosen because :3000 is often occupied by other dev servers on
+        // this machine (an unrelated Next.js project); the previous reuseExistingServer
+        // setting would silently reuse that server and every authenticated route 404'd.
+        // PW_PROD=1 runs the specs against a production build. Required for
+        // public-routes.spec.ts: minified React errors (e.g. the hydration #418
+        // reported from the live site) only appear in a prod bundle, and the dev
+        // overlay reports mismatches differently.
+        //
+        // next.config.ts sets output:"export", so there is no `next start` to run —
+        // the build emits static HTML to out/ and Vercel serves it with clean URLs.
+        command: process.env.PW_PROD
+          ? 'node scripts/serve-static-export.mjs out 3500'
+          : 'npm run dev -- -p 3500',
+        url: 'http://127.0.0.1:3500',
+        reuseExistingServer: !process.env.CI,
+        timeout: process.env.PW_PROD ? 30_000 : 60_000,
+        env: {
+          NEXT_PUBLIC_API_URL: 'https://api.example.test',
+        },
+      },
 });

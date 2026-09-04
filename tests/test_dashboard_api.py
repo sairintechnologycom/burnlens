@@ -296,6 +296,10 @@ async def test_requests_endpoint(dash_client, valid_jwt_token):
                 "tags": {"team": "backend"},
                 "system_prompt_hash": "hash123",
                 "received_at": datetime.utcnow(),
+                "pricing_class": "calculated",
+                "requested_model": "gpt-4o",
+                "routed_model": "gpt-4o",
+                "downgrade_reason": None,
             }
         ]
 
@@ -308,6 +312,8 @@ async def test_requests_endpoint(dash_client, valid_jwt_token):
     data = response.json()
     assert len(data) == 1
     assert data[0]["model"] == "gpt-4o"
+    assert data[0]["pricing_class"] == "calculated"
+    assert data[0]["requested_model"] == "gpt-4o"
 
 
 @pytest.mark.asyncio

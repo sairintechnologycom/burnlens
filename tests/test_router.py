@@ -325,6 +325,7 @@ async def test_downgrade_reason_stored_in_db(tmp_path):
         duration_ms=80,
         downgrade_reason="budget_pct",
         routed_model="gpt-4o-mini",
+        requested_model="gpt-4o",
         budget_remaining_usd=4.50,
         budget_remaining_pct=9.0,
     )
@@ -333,7 +334,7 @@ async def test_downgrade_reason_stored_in_db(tmp_path):
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT downgrade_reason, routed_model, budget_remaining_usd, budget_remaining_pct "
+            "SELECT downgrade_reason, routed_model, requested_model, budget_remaining_usd, budget_remaining_pct "
             "FROM requests WHERE downgrade_reason IS NOT NULL LIMIT 1"
         )
         row = await cursor.fetchone()
@@ -341,6 +342,7 @@ async def test_downgrade_reason_stored_in_db(tmp_path):
     assert row is not None
     assert row["downgrade_reason"] == "budget_pct"
     assert row["routed_model"] == "gpt-4o-mini"
+    assert row["requested_model"] == "gpt-4o"
     assert row["budget_remaining_usd"] == pytest.approx(4.50, abs=0.001)
     assert row["budget_remaining_pct"] == pytest.approx(9.0, abs=0.001)
 

@@ -136,6 +136,13 @@ export interface RequestRow {
   duration_ms?: number;
   // tags shape is freeform; the contract test only checks key presence, not nested fields.
   tags?: { feature?: string; team?: string; [k: string]: unknown } | null;
+  // Write-time pricing class. Unpriced must not render as a measured $0.00.
+  pricing_class?: string | null;
+  // Requested vs effective model. Null on historic rows where the original
+  // was overwritten and is unknowable.
+  requested_model?: string | null;
+  routed_model?: string | null;
+  downgrade_reason?: string | null;
 }
 export const RequestRowFields: Record<keyof RequestRow, true> = {
   timestamp: true,
@@ -146,6 +153,10 @@ export const RequestRowFields: Record<keyof RequestRow, true> = {
   cost_usd: true,
   duration_ms: true,
   tags: true,
+  pricing_class: true,
+  requested_model: true,
+  routed_model: true,
+  downgrade_reason: true,
 };
 
 // --- /billing/summary  ->  BillingSummary (+ nested schemas) ---

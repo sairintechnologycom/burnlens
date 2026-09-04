@@ -111,10 +111,10 @@ export function EconomicsHero({
           <div className="stat-label">Provider Reconciliation</div>
           <div className="stat-value">
             {noBilling
-              ? dim("Not reconciled yet")
+              ? dim("Not reconciled / connect billing evidence")
               : confidence
                 ? `${confidence.reconciled_spend_pct.toFixed(0)}%`
-                : dim("Not reconciled yet")}
+                : dim("Not reconciled / connect billing evidence")}
           </div>
         </div>
         <div className="stat-cell">

@@ -29,6 +29,7 @@ from burnlens.storage.database import (
     migrate_add_cache_fields_to_requests,
     migrate_add_tool_calls,
     migrate_add_pricing_class,
+    migrate_add_requested_model,
 )
 from burnlens.storage.models import (
     GenAICostEvent,
@@ -264,6 +265,7 @@ async def test_database_migrations_and_insert(tmp_db):
     await migrate_add_cache_fields_to_requests(tmp_db)
     await migrate_add_tool_calls(tmp_db)
     await migrate_add_pricing_class(tmp_db)
+    await migrate_add_requested_model(tmp_db)
 
     # 3. Check schema columns
     async with aiosqlite.connect(tmp_db) as db:
@@ -276,6 +278,7 @@ async def test_database_migrations_and_insert(tmp_db):
         assert "customer_hash" in cols
         assert "pricing_version" in cols
         assert "pricing_class" in cols
+        assert "requested_model" in cols
 
     # 4. Insert RequestRecord
     record = RequestRecord(

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS requests (
     timestamp           TEXT    NOT NULL,
     provider            TEXT    NOT NULL,
     model               TEXT    NOT NULL,
+    requested_model     TEXT,
     request_path        TEXT    NOT NULL DEFAULT '',
     input_tokens        INTEGER NOT NULL DEFAULT 0,
     output_tokens       INTEGER NOT NULL DEFAULT 0,
@@ -427,6 +428,7 @@ async def init_db(db_path: str) -> None:
     await migrate_add_tool_calls(db_path)
 
     await migrate_add_pricing_class(db_path)
+    await migrate_add_requested_model(db_path)
 
     # Economics graph Phase B: business outcomes
     await migrate_create_outcomes_table(db_path)
@@ -798,6 +800,31 @@ async def migrate_add_pricing_class(db_path: str) -> None:
             await db.execute("ALTER TABLE requests ADD COLUMN pricing_class TEXT")
             await db.commit()
             logger.info("Migration: added pricing_class column to requests table")
+
+
+async def migrate_add_requested_model(db_path: str) -> None:
+    """Additive requested vs effective model provenance.
+
+    ``model`` remains the effective/billed model (backward compatible).
+    ``requested_model`` is what the application asked for.
+
+    Historic routed rows stored the effective model in both ``model`` and
+    ``routed_model``, so the original is unknowable. Those keep
+    ``requested_model`` NULL rather than inventing one.
+
+    Rows with no downgrade evidence are backfilled to ``model``. Idempotent.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "requested_model" not in columns:
+            await db.execute("ALTER TABLE requests ADD COLUMN requested_model TEXT")
+            await db.execute(
+                "UPDATE requests SET requested_model = model "
+                "WHERE requested_model IS NULL AND downgrade_reason IS NULL"
+            )
+            await db.commit()
+            logger.info("Migration: added requested_model column to requests table")
 
 
 async def migrate_add_ttft_column(db_path: str) -> None:
@@ -1553,8 +1580,8 @@ async def get_routing_events(
 ) -> list[dict[str, Any]]:
     """Return downgrade events (rows where downgrade_reason IS NOT NULL), newest first, limit 200.
 
-    Columns returned: timestamp, model, routed_model, downgrade_reason,
-    budget_remaining_usd, budget_remaining_pct, tags.
+    Columns returned: timestamp, model, requested_model, routed_model,
+    downgrade_reason, budget_remaining_usd, budget_remaining_pct, tags.
 
     Args:
         db_path: Path to the SQLite database.
@@ -1574,7 +1601,7 @@ async def get_routing_events(
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         sql = (
-            "SELECT timestamp, model, routed_model, downgrade_reason, "
+            "SELECT timestamp, model, requested_model, routed_model, downgrade_reason, "
             "budget_remaining_usd, budget_remaining_pct, tags "
             "FROM requests WHERE " + where + " ORDER BY timestamp DESC LIMIT 200"
         )
@@ -1605,7 +1632,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
         cursor = await db.execute(
             """
             INSERT OR IGNORE INTO requests (
-                timestamp, provider, model, request_path,
+                timestamp, provider, model, requested_model, request_path,
                 input_tokens, output_tokens, reasoning_tokens,
                 cache_read_tokens, cache_write_tokens,
                 cost_usd, duration_ms, status_code,
@@ -1623,12 +1650,13 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
                 tool_calls
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
                 record.provider,
                 record.model,
+                record.requested_model,
                 record.request_path,
                 record.input_tokens,
                 record.output_tokens,

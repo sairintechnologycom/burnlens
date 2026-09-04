@@ -72,7 +72,8 @@ const faqStructuredData = {
 const SENT_FIELDS = [
   { field: "timestamp", purpose: "Order requests on the timeline" },
   { field: "provider", purpose: "openai / anthropic / google / etc." },
-  { field: "model", purpose: "Price lookup and per-model rollups" },
+  { field: "model", purpose: "Effective/billed model — price lookup and per-model rollups" },
+  { field: "requested_model / routed_model / downgrade_reason", purpose: "Requested vs effective model when routing.budget_downgrade rewrote the call" },
   { field: "input_tokens / output_tokens / reasoning_tokens", purpose: "Cost math" },
   { field: "cache_read_tokens / cache_write_tokens", purpose: "Cache efficiency rollups" },
   { field: "cost_usd", purpose: "Already-computed cost (you don't have to trust ours)" },
@@ -169,7 +170,8 @@ export default function SecurityPage() {
             <code>Authorization</code> header passes through unchanged. In observation
             mode the request body is also unchanged. If you enable{" "}
             <code>routing.budget_downgrade</code>, BurnLens may replace the{" "}
-            <code>model</code> field before forwarding; every rewrite is logged. A
+            <code>model</code> field before forwarding; the request log stores
+            the requested model, the effective model, and the reason. A
             budget alone never changes the model.
           </p>
           <p>
