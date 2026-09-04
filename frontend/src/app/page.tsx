@@ -315,7 +315,7 @@ export default function LandingPage() {
                 <strong>$6.84</strong> per accepted PR on this repository, measured 2026-08-15.{" "}
                 104 merged · 2 closed unmerged · $710.85 of agent spend, with the failed
                 attempts charged to the successes. A floor, not a ceiling — any model missing
-                from the pricing tables counts as $0. Cost is attributed per repo: agent logs
+                from the pricing tables counts as $ unknown. Cost is attributed per repo: agent logs
                 record which repo a session ran in, not which branch.{" "}
                 <a href="/cost-per-outcome">See the full method</a>.
               </p>

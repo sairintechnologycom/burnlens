@@ -37,6 +37,12 @@ describe("landing dogfood claims", () => {
     expect(install).not.toContain("burnlens top");
   });
 
+  it("treats unpriced models as $ unknown, not a measured $0", () => {
+    expect(read("src", "app", "page.tsx")).toContain("counts as $ unknown");
+    expect(read("src", "app", "page.tsx")).not.toContain("counts as $0");
+    expect(read("..", "README.md")).toContain("imported as $ unknown");
+  });
+
   it("attributes coding-agent scan cost per-repo, not per-PR", () => {
     const homepage = read("src", "app", "page.tsx");
     expect(homepage).toContain("per-repo, per-dev attribution");

@@ -179,3 +179,9 @@ def test_homepage_scan_attribution_is_per_repo_not_per_pr():
     text = HOMEPAGE.read_text()
     assert "per-repo, per-dev attribution" in text
     assert "per-PR, per-dev attribution" not in text
+
+
+def test_homepage_unpriced_is_unknown_not_zero():
+    text = HOMEPAGE.read_text()
+    assert "counts as $ unknown" in text
+    assert "counts as $0" not in text
