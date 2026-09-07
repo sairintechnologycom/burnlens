@@ -113,8 +113,8 @@ test('scan guidance ends at the economics journey', async ({ page }) => {
 
 test('unpriced cost is $ unknown, not a measured zero', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByText('$ unknown', { exact: false })).toBeVisible();
   const body = await page.locator('body').innerText();
+  expect(body).toContain('$ unknown');
   expect(body).not.toMatch(/unpriced[\s\S]{0,80}\$0\.00/i);
 });
 
