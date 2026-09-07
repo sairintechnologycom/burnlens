@@ -901,6 +901,8 @@ async def signup(request: SignupRequest, response: Response):
         await ensure_workspace_member(workspace_id, user_id, role="owner")
 
         logger.info(f"New workspace created: {workspace_id} with user {user_id}")
+        from .funnel import WORKSPACE_CREATED, emit as funnel_emit
+        funnel_emit(WORKSPACE_CREATED, workspace_id=workspace_id)
 
         # Phase 11: send welcome + verification emails (fail-open via background tasks).
         raw_verify_token = secrets.token_urlsafe(32)

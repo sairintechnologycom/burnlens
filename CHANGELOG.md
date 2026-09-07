@@ -6,6 +6,28 @@ This file documents both the OSS PyPI package (`burnlens`) and the
 internal cloud service (`burnlens-cloud`, deployed only). Each entry is
 qualified with the package it covers.
 
+## [Unreleased]
+
+### Changed
+- **Public product contract.** Homepage, `/scan`, `/demo`, `/for/agencies`,
+  docs, README, and CLI now derive from one claim set: `burnlens scan` first,
+  `burnlens repos` for repo economics, `$ unknown` for missing prices, 7-day
+  card-required Cloud trial at $29. Competitor ✓/✗ tables are gone; the
+  homepage states BurnLens's approach. Demo is labeled fixture/sample.
+- **Homepage hierarchy.** Hero is spend → accepted outcomes → cost per
+  accepted PR, then scan-free vs team economics. Proxy, cache, routing, and
+  providers sit lower.
+- **Scan-to-cloud bridge.** After a successful local scan, next steps include
+  `burnlens cloud connect` (alias of `login`). Empty cloud workspaces prompt
+  scan-then-connect, not proxy-first.
+
+### Added
+- **`/for/agencies`.** Project-economics landing for the agency ICP.
+- **Cloud funnel events** (`landing_view` → `subscription_started`) on
+  observable browser and billing transitions. Local `burnlens scan` is not
+  tracked. `first_sync` is reserved; activation is `economics_visible` on the
+  dashboard once spend exists.
+
 ## [OSS `burnlens` v1.26.0] — 2026-09-03
 
 ### Changed

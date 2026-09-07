@@ -523,6 +523,11 @@ async def _handle_subscription_activated(data: dict) -> None:
         "Workspace %s activated on %s (status=%s customer=%s sub=%s)",
         workspace_id, plan, status, customer_id, subscription_id,
     )
+    from .funnel import SUBSCRIPTION_STARTED, TRIAL_STARTED, emit as funnel_emit
+    if (status or "").lower() in ("trialing", "trial"):
+        funnel_emit(TRIAL_STARTED, workspace_id=workspace_id)
+    else:
+        funnel_emit(SUBSCRIPTION_STARTED, workspace_id=workspace_id)
 
     # Phase 9 QUOTA-01: seed the workspace_usage_cycles row for the new paid period
     # so the next /v1/ingest finds a ready row. ON CONFLICT handles the case where

@@ -28,9 +28,9 @@ const manrope = localFont({
   display: "swap",
 });
 
-const SITE_TITLE = "BurnLens — See what your AI spent. Cap the next call.";
+const SITE_TITLE = "BurnLens — Know what AI costs, and what that money produced.";
 const SITE_DESCRIPTION =
-  "Scan Claude Code, Cursor, Codex, and Gemini CLI logs in one command, or hard-cap production APIs with a local proxy. 429 at the limit, not a surprise bill. Prompt bodies go to your provider, never to BurnLens Cloud.";
+  "See AI coding-agent and production-LLM economics by repository, customer, feature and outcome. Start locally — prompt bodies never go to BurnLens Cloud. 7-day Cloud trial, card required, $29/month.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://burnlens.app"),
@@ -92,7 +92,7 @@ const structuredData = [
     operatingSystem: "macOS, Linux, Windows",
     url: "https://burnlens.app",
     description:
-      "Open-source LLM FinOps — scan local coding-agent logs or hard-cap production APIs with a local proxy. Prompt bodies go only to your provider.",
+      "Open-source AI economics — scan local coding-agent logs, then share spend, outcomes, and confidence in a workspace. Prompt bodies go only to your provider.",
     offers: [
       { "@type": "Offer", name: "Open source proxy", price: "0", priceCurrency: "USD" },
       { "@type": "Offer", name: "Cloud", price: "29", priceCurrency: "USD" },

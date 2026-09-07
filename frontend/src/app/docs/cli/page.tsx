@@ -4,7 +4,7 @@ import { Code, COMMANDS } from "@/lib/docs";
 
 const TITLE = "CLI reference — BurnLens Docs";
 const DESCRIPTION =
-  "Every burnlens command: scan, start, top, report, analyze, economics, outcome, budgets, key, vkey, routing, recommend, pricing, export, login, sync, doctor, wal. Plus where the config file and database live.";
+  "Every burnlens command: scan, repos, cloud connect, start, top, report, analyze, economics, outcome, budgets, key, vkey, routing, recommend, pricing, export, login, sync, doctor, wal. Plus where the config file and database live.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -100,6 +100,11 @@ export default function DocsCliPage() {
         <Code>{`pip install burnlens
 burnlens scan
 burnlens repos`}</Code>
+        <p>
+          Need the same economics across developers? Create a workspace, then:
+        </p>
+        <Code>{`burnlens cloud connect
+burnlens sync --now`}</Code>
         <p>
           Cost per merged PR: <code>burnlens scan</code> derives outcomes for the current
           checkout when <code>gh</code> is installed, or prints that it is missing.

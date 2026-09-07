@@ -4,6 +4,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { FUNNEL, trackEvent } from "@/lib/analytics";
+import { PRODUCT_CONTRACT as C } from "@/lib/productContract";
 
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
@@ -24,76 +26,46 @@ const MOCK_MODELS = [
 
 const MOCK_DAILY = [0.8, 1.2, 2.1, 1.6, 3.4, 2.8, 4.1, 3.2, 2.9, 3.8, 4.6, 3.1, 5.2, 4.8];
 
-const HEATBAR_ROWS = [
-  { model: "gpt-5.6-sol",     value: 342, pct: 100, tier: "hot"   },
-  { model: "claude-sonnet-5", value: 218, pct: 64,  tier: "warm"  },
-  { model: "gpt-5-mini",      value: 94,  pct: 27,  tier: "mid"   },
-  { model: "haiku-4.5",       value: 41,  pct: 12,  tier: "muted" },
-  { model: "gemini-3.1",      value: 22,  pct: 6,   tier: "muted" },
-] as const;
-
-function HeatBars() {
+function EconomicsSnapshot() {
+  const d = C.dogfood;
   return (
     <div
-      className="lp-heatbars"
+      className="lp-econ-card"
       role="img"
-      aria-label="Example dashboard: gpt-5.6-sol burning $342 of the $1,000 daily cap, total $717 used."
+      aria-label={`${d.spend_usd} dollars of AI spend, ${d.accepted_prs} accepted PRs, ${d.cost_per_accepted_usd} per accepted PR. Measured ${d.measured}. Unpriced models count as ${C.missing_pricing}.`}
     >
-      <div className="lp-heatbars-head">
-        <span>Spend by model</span>
-        <span className="lp-heatbars-period">past 24h</span>
+      <div className="lp-econ-kicker">
+        <span>This repository</span>
+        <span>measured {d.measured}</span>
       </div>
-      <div className="lp-heatbars-rows">
-        {HEATBAR_ROWS.map((r, i) => (
-          <div
-            key={r.model}
-            className={`lp-heatbars-row tier-${r.tier}`}
-            style={{ animationDelay: `${i * 70 + 200}ms` }}
-          >
-            <span className="lp-heatbars-model">{r.model}</span>
-            <div className="lp-heatbars-track">
-              <div
-                className="lp-heatbars-fill"
-                style={{
-                  ["--lp-fill" as never]: `${r.pct}%`,
-                  animationDelay: `${i * 70 + 280}ms`,
-                }}
-              />
-            </div>
-            <span className="lp-heatbars-value">${r.value}</span>
-          </div>
-        ))}
-        <div className="lp-heatbars-row tier-faded" style={{ animationDelay: "660ms" }}>
-          <span className="lp-heatbars-model">tail of 18</span>
-          <div className="lp-heatbars-track">
-            <div
-              className="lp-heatbars-fill"
-              style={{
-                ["--lp-fill" as never]: "3%",
-                animationDelay: "740ms",
-              }}
-            />
-          </div>
-          <span className="lp-heatbars-value">$11</span>
+      <div className="lp-econ-hero-metrics">
+        <div>
+          <div className="lp-econ-value">${d.spend_usd.toFixed(2)}</div>
+          <div className="lp-econ-label">AI spend</div>
+        </div>
+        <div>
+          <div className="lp-econ-value">{d.accepted_prs}</div>
+          <div className="lp-econ-label">accepted PRs</div>
+        </div>
+        <div>
+          <div className="lp-econ-value">${d.cost_per_accepted_usd.toFixed(2)}</div>
+          <div className="lp-econ-label">/ accepted PR</div>
         </div>
       </div>
-      <div className="lp-heatbars-divider" />
-      <div className="lp-heatbars-total">
-        <div className="lp-heatbars-total-head">
-          <span className="lp-heatbars-total-label">Daily cap</span>
-          <span className="lp-heatbars-total-value">
-            <span className="lp-heatbars-total-num">$717</span>
-            <span className="lp-heatbars-total-cap"> / $1,000</span>
-          </span>
+      <dl className="lp-econ-meta">
+        <div>
+          <dt>Attribution</dt>
+          <dd>repository</dd>
         </div>
-        <div className="lp-heatbars-progress">
-          <div className="lp-heatbars-progress-fill" />
+        <div>
+          <dt>Cost confidence</dt>
+          <dd>Estimated (scan)</dd>
         </div>
-        <div className="lp-heatbars-total-foot">
-          <span>$283 left</span>
-          <span className="lp-heatbars-total-burn">burning at $30/hr · 9h to cap</span>
+        <div>
+          <dt>Unpriced</dt>
+          <dd>{C.missing_pricing}</dd>
         </div>
-      </div>
+      </dl>
     </div>
   );
 }
@@ -154,7 +126,7 @@ function MiniDashboard() {
           <span className="dash-topbar-link">Alerts</span>
         </div>
         <div className="dash-topbar-right">
-          <span className="dash-live"><span className="dash-live-dot" />LIVE</span>
+          <span className="dash-live"><span className="dash-live-dot" />SAMPLE</span>
           <span className="dash-period active">7d</span>
           <span className="dash-period">30d</span>
         </div>
@@ -222,6 +194,10 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [annual, setAnnual] = useState(false);
 
+  useEffect(() => {
+    trackEvent(FUNNEL.LANDING_VIEW);
+  }, []);
+
   return (
     <>
       <div className="lp">
@@ -241,10 +217,11 @@ export default function LandingPage() {
           <div className="lp-nav-right">
             <a href="#how">How it works</a>
             <Link href="/scan">Scan</Link>
+            <Link href="/for/agencies">Agencies</Link>
             <a href="#pricing">Pricing</a>
             <Link href="/security">Security</Link>
             <Link href="/docs">Docs</Link>
-            <Link href="/demo" className="outline">Live demo</Link>
+            <Link href="/demo" className="outline">Sample demo</Link>
             <Link href="/setup">Log in</Link>
             <Link href="/setup?intent=register" className="primary">Create workspace</Link>
           </div>
@@ -274,59 +251,47 @@ export default function LandingPage() {
             <div className="lp-mobile-drawer">
               <a href="#how" onClick={() => setMenuOpen(false)}>How it works</a>
               <Link href="/scan" onClick={() => setMenuOpen(false)}>Scan</Link>
+              <Link href="/for/agencies" onClick={() => setMenuOpen(false)}>Agencies</Link>
               <a href="#pricing" onClick={() => setMenuOpen(false)}>Pricing</a>
               <Link href="/security" onClick={() => setMenuOpen(false)}>Security</Link>
               <Link href="/docs" onClick={() => setMenuOpen(false)}>Docs</Link>
-              <Link href="/demo" onClick={() => setMenuOpen(false)}>Live demo</Link>
+              <Link href="/demo" onClick={() => setMenuOpen(false)}>Sample demo</Link>
               <Link href="/setup" onClick={() => setMenuOpen(false)}>Log in</Link>
               <Link href="/setup?intent=register" className="lp-mobile-cta" onClick={() => setMenuOpen(false)}>Create workspace</Link>
             </div>
           </>
         )}
 
-        {/* HERO: two doors — scan (first number) vs proxy (hard cap) */}
+        {/* HERO: economics first — scan locally, then team persistence */}
         <section className="lp-hero">
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                Know what AI costs — and what that money <span className="acc">produced</span>
+                Know what your AI costs — and what that money <span className="acc">produced</span>
               </h1>
               <p className="lp-subline">
-                Cost per accepted outcome, Cost Confidence, Outcome Coverage, and verified savings.
-                Local-first: prompt bodies go to your provider, never to BurnLens Cloud. Runtime-changing policies stay off until you enable them.
+                See AI coding-agent and production-LLM economics by repository, customer,
+                feature and outcome. Start locally without sending prompts or code to BurnLens.
               </p>
-              <div className="lp-doors">
-                <Link href="/scan" className="lp-door">
-                  <span className="lp-door-kicker">Coding agents</span>
-                  <span className="lp-door-title">Scan local logs</span>
-                  <p className="lp-door-body">
-                    One command. No proxy. Claude Code, Cursor, Codex, Gemini CLI.
-                  </p>
+              <div className="lp-hero-cta">
+                <Link href="/scan" className="lp-hero-btn primary">
+                  Scan my AI usage — free
                 </Link>
-                <a href="#how" className="lp-door">
-                  <span className="lp-door-kicker">Production APIs</span>
-                  <span className="lp-door-title">Hard-cap with a 429</span>
-                  <p className="lp-door-body">
-                    Local proxy. Point <code>OPENAI_BASE_URL</code> at :8420. Google needs <code>patch_google()</code>.
-                  </p>
-                </a>
+                <Link href="/setup?intent=register" className="lp-hero-btn secondary">
+                  Review team economics
+                </Link>
               </div>
               <p className="lp-proof">
-                <strong>$6.84</strong> per accepted PR on this repository, measured 2026-08-15.{" "}
-                104 merged · 2 closed unmerged · $710.85 of agent spend, with the failed
+                <strong>${C.dogfood.cost_per_accepted_usd.toFixed(2)}</strong> per accepted PR on this repository, measured 2026-08-15.{" "}
+                {C.dogfood.accepted_prs} merged · {C.dogfood.closed_unmerged} closed unmerged · ${C.dogfood.spend_usd.toFixed(2)} of agent spend, with the failed
                 attempts charged to the successes. A floor, not a ceiling — any model missing
                 from the pricing tables counts as $ unknown. Cost is attributed per repo: agent logs
                 record which repo a session ran in, not which branch.{" "}
                 <a href="/cost-per-outcome">See the full method</a>.
               </p>
-              <div className="lp-provider-strip lp-provider-strip-left">
-                {["OpenAI", "Anthropic", "Google", "Groq", "Mistral", "Together", "xAI", "DeepSeek", "Azure OpenAI", "AWS Bedrock"].map((p) => (
-                  <span key={p} className="lp-provider-chip">{p}</span>
-                ))}
-              </div>
             </div>
             <div className="lp-hero-right">
-              <HeatBars />
+              <EconomicsSnapshot />
             </div>
           </div>
         </section>
@@ -354,7 +319,7 @@ export default function LandingPage() {
                 fontFamily: "var(--font-mono), monospace",
                 fontSize: 11, color: "var(--l-muted)", letterSpacing: "0.06em"
               }}>
-                localhost:8420/ui — after scan, no account required
+                Local dashboard after scan — no account. Run <code>burnlens repos</code>.
               </p>
             </div>
           </>
@@ -583,52 +548,84 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* WHY BURNLENS */}
+        {/* WHY BURNLENS — approach, not competitor scorecards */}
         <section className="lp-compare">
-          <h2>Why BurnLens</h2>
+          <h2>What BurnLens actually does</h2>
           <div className="lp-compare-wrap">
             <table className="lp-compare-table">
               <thead>
                 <tr>
-                  <th></th>
-                  <th>BurnLens</th>
-                  <th>Helicone / Langfuse</th>
-                  <th>Vantage / CloudZero</th>
+                  <th>Capability</th>
+                  <th>BurnLens approach</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Open source</td>
-                  <td className="yes">✓</td>
-                  <td className="partial">Partial</td>
-                  <td className="no">✗</td>
+                  <td>Coding-agent observation</td>
+                  <td>Local log scanning — Claude Code, Cursor, Codex, Gemini CLI</td>
                 </tr>
                 <tr>
-                  <td>Local-first (prompt bodies never pass through the vendor)</td>
-                  <td className="yes">✓</td>
-                  <td className="no">✗</td>
-                  <td className="no">✗</td>
+                  <td>Prompt handling</td>
+                  <td>Prompt bodies are never uploaded to BurnLens Cloud</td>
                 </tr>
                 <tr>
-                  <td>Hard caps before API call</td>
-                  <td className="yes">✓</td>
-                  <td className="no">✗</td>
-                  <td className="no">✗</td>
+                  <td>Economics</td>
+                  <td>Spend + accepted outcomes (merged PR where GitHub data exists)</td>
                 </tr>
                 <tr>
-                  <td>Per-customer attribution</td>
-                  <td className="yes">✓</td>
-                  <td className="yes">✓</td>
-                  <td className="no">✗</td>
+                  <td>Missing pricing</td>
+                  <td>Explicit $ unknown, never a silent $0</td>
                 </tr>
                 <tr>
-                  <td>Multi-cloud (Azure / AWS / GCP)</td>
-                  <td className="partial">Partial</td>
-                  <td className="partial">Partial</td>
-                  <td className="yes">✓</td>
+                  <td>Runtime enforcement</td>
+                  <td>Optional local proxy; hard cap returns 429 before upstream</td>
+                </tr>
+                <tr>
+                  <td>Budget model changes</td>
+                  <td>Explicit opt-in. Cache and routing stay off by default</td>
+                </tr>
+                <tr>
+                  <td>Savings</td>
+                  <td>Projected and verified reported separately</td>
+                </tr>
+                <tr>
+                  <td>Self-hosting</td>
+                  <td>Open-source deployment available</td>
                 </tr>
               </tbody>
             </table>
+          </div>
+          <p className="lp-proof" style={{ marginTop: 20, maxWidth: "62ch" }}>
+            Dedicated comparisons come later and are sourced. Until then we describe
+            BurnLens, not other products.{" "}
+            <Link href="/docs/evidence">Methodology and evidence →</Link>
+          </p>
+        </section>
+
+        <section className="lp-usecases">
+          <h2>Free locally. Cloud when the team needs persistence.</h2>
+          <div className="lp-usecases-grid">
+            <div className="lp-usecase-card">
+              <h3>Free — one developer, one machine</h3>
+              <p>
+                <code>burnlens scan</code> then <code>burnlens repos</code>. Cost per
+                repository, confidence, and accepted outcomes stay on disk. Prompts never leave.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <h3>Cloud — persistent project economics</h3>
+              <p>
+                Sync cost metadata (never prompt bodies) to a workspace. Recurring review
+                across developers. Self-service: {C.cloud_trial.cta.toLowerCase()}, card required, {C.cloud_trial.price_monthly}/month.
+              </p>
+            </div>
+            <div className="lp-usecase-card">
+              <h3>Teams — shared reporting and controls</h3>
+              <p>
+                Owner plus engineering share history, permissions, and budgets.
+                Agencies: see <Link href="/for/agencies">project economics by client</Link>.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -772,13 +769,15 @@ export default function LandingPage() {
           <div className="lp-footer-legal">
             <a href="/scan">Scan coding-agent spend</a>
             <span>·</span>
+            <a href="/for/agencies">For agencies</a>
+            <span>·</span>
             <a href="/llm-pricing">LLM API pricing</a>
             <span>·</span>
             <a href="/cost-per-outcome">Cost per merged PR</a>
             <span>·</span>
             <a href="/docs">Docs</a>
             <span>·</span>
-            <a href="/demo">Live demo</a>
+            <a href="/demo">Sample demo</a>
             <span>·</span>
             <a href="/faq">FAQ</a>
             <span>·</span>

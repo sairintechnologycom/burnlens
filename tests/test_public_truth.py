@@ -1,17 +1,21 @@
-"""Public pages must match the live CLI, registry, and policy defaults.
+"""Public pages must match the live CLI, registry, and product contract.
 
-Mutation E: replacing the post-scan command ``repos`` with ``top`` on public
-onboarding must fail. ``burnlens top`` remains a valid live-proxy viewer; it
-is not the next step after ``burnlens scan``.
+The contract file is the source of truth. A page that contradicts it is a
+bug, including silent ``$0`` for unpriced models and ``burnlens top`` as the
+post-scan command.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+CONTRACT = json.loads(
+    (ROOT / "frontend" / "src" / "lib" / "product-contract.json").read_text()
+)
 
 HOMEPAGE = ROOT / "frontend" / "src" / "app" / "page.tsx"
 SCAN_ONBOARDING = [
@@ -20,6 +24,12 @@ SCAN_ONBOARDING = [
     ROOT / "frontend" / "src" / "app" / "docs" / "scan" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "docs" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "docs" / "cli" / "page.tsx",
+]
+PUBLIC_SURFACES = SCAN_ONBOARDING + [
+    ROOT / "frontend" / "src" / "app" / "demo" / "page.tsx",
+    ROOT / "frontend" / "src" / "app" / "for" / "agencies" / "page.tsx",
+    ROOT / "README.md",
+    ROOT / "docs" / "PUBLIC_PRODUCT_CONTRACT.md",
 ]
 
 PROVIDER_DISPLAY = {
@@ -52,6 +62,17 @@ ABSOLUTE_PAYLOAD_CLAIMS = (
     "request body pass through byte-for-byte",
     "body, and other headers pass through unchanged",
 )
+
+_DEAD_SCAN_SYNTAX = re.compile(r"burnlens scan (claude|cursor|codex|gemini)\b")
+_CURRENT_DOCS = [
+    ROOT / "README.md",
+    HOMEPAGE,
+    ROOT / "frontend" / "src" / "app" / "scan" / "page.tsx",
+    ROOT / "frontend" / "src" / "app" / "security" / "page.tsx",
+    ROOT / "frontend" / "src" / "app" / "docs" / "scan" / "page.tsx",
+    ROOT / "frontend" / "src" / "app" / "docs" / "cli" / "page.tsx",
+    ROOT / "frontend" / "src" / "app" / "docs" / "page.tsx",
+]
 
 
 def test_homepage_scan_funnel_is_repos_not_top():
@@ -132,18 +153,6 @@ def test_homepage_states_cache_and_routing_are_opt_in():
     assert "Automatic model routing" not in text
 
 
-_DEAD_SCAN_SYNTAX = re.compile(r"burnlens scan (claude|cursor|codex|gemini)\b")
-_CURRENT_DOCS = [
-    ROOT / "README.md",
-    HOMEPAGE,
-    ROOT / "frontend" / "src" / "app" / "scan" / "page.tsx",
-    ROOT / "frontend" / "src" / "app" / "security" / "page.tsx",
-    ROOT / "frontend" / "src" / "app" / "docs" / "scan" / "page.tsx",
-    ROOT / "frontend" / "src" / "app" / "docs" / "cli" / "page.tsx",
-    ROOT / "frontend" / "src" / "app" / "docs" / "page.tsx",
-]
-
-
 def test_current_docs_use_scan_provider_flag():
     """Live CLI is ``burnlens scan --provider claude``, not positional."""
     hits: list[str] = []
@@ -156,7 +165,7 @@ def test_current_docs_use_scan_provider_flag():
 
 def test_scan_page_unpriced_is_unknown_not_zero():
     text = (ROOT / "frontend" / "src" / "app" / "scan" / "page.tsx").read_text()
-    assert "$ unknown" in text
+    assert CONTRACT["missing_pricing"] in text
     assert "imported with a $0" not in text
     assert "imported with cost = $0" not in text
     assert "cost = $0" not in text
@@ -183,5 +192,70 @@ def test_homepage_scan_attribution_is_per_repo_not_per_pr():
 
 def test_homepage_unpriced_is_unknown_not_zero():
     text = HOMEPAGE.read_text()
-    assert "counts as $ unknown" in text
+    assert CONTRACT["missing_pricing"] in text
     assert "counts as $0" not in text
+
+
+def test_contract_self_service_trial_is_seven_days_not_fourteen():
+    trial = CONTRACT["cloud_trial"]
+    assert trial["days"] == 7
+    assert trial["card_required"] is True
+    assert trial["price_monthly"] == "$29"
+    assert CONTRACT["agency_pilot"]["public_sku"] is False
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        HOMEPAGE,
+        ROOT / "frontend" / "src" / "app" / "scan" / "page.tsx",
+        ROOT / "frontend" / "src" / "app" / "for" / "agencies" / "page.tsx",
+        ROOT / "frontend" / "src" / "components" / "PlanPickerModal.tsx",
+    ],
+    ids=lambda p: str(p.relative_to(ROOT)),
+)
+def test_public_pricing_does_not_advertise_fourteen_day_self_service(page: Path):
+    text = page.read_text()
+    assert "14-day free trial" not in text.lower()
+    assert "14-day card" not in text.lower()
+    assert "14-day trial" not in text.lower()
+
+
+def test_homepage_and_agencies_use_seven_day_cloud_trial():
+    for page in (
+        HOMEPAGE,
+        ROOT / "frontend" / "src" / "app" / "for" / "agencies" / "page.tsx",
+    ):
+        text = page.read_text()
+        assert "7-day" in text
+        assert "$29" in text
+
+
+def test_demo_is_labeled_fixture():
+    text = (ROOT / "frontend" / "src" / "app" / "demo" / "page.tsx").read_text()
+    assert "DETERMINISTIC_DEMO_FIXTURE" in text
+    assert "not live telemetry" in text
+    assert "LIVE DEMO" not in text
+
+
+def test_homepage_does_not_checkmark_competitors():
+    """Competitor ✓/✗ tables are a trust hazard. State BurnLens's approach."""
+    text = HOMEPAGE.read_text()
+    assert "Helicone / Langfuse" not in text
+    assert "Vantage / CloudZero" not in text
+
+
+def test_cli_scan_next_names_cloud_connect():
+    text = (ROOT / "burnlens" / "cli.py").read_text()
+    assert "burnlens cloud connect" in text
+    assert "burnlens sync --now" in text
+    assert "burnlens repos" in text
+
+
+@pytest.mark.parametrize("page", PUBLIC_SURFACES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_public_surfaces_never_say_unpriced_is_measured_zero(page: Path):
+    if not page.exists():
+        pytest.skip(f"{page} not present")
+    text = page.read_text()
+    assert "imported with cost = $0" not in text
+    assert "cost = $0" not in text

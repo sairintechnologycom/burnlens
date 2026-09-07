@@ -46,11 +46,11 @@ Classification key:
 | Dashboard (auth) | SHIPPED | `frontend/src/app/dashboard/page.tsx` + EconomicsNav | `/dashboard` `/outcomes` `/savings` `/waste` | cloud APIs | `frontend/tests/economics-ia.test.ts` | authenticated app |
 | Local dashboard | SHIPPED | `burnlens/dashboard/` + `static/app.js` | `localhost:8420/ui` | local SQLite | dashboard tests | scan empty-state copy |
 | Settings | SHIPPED | `frontend/src/app/settings/page.tsx` | settings + billing keys | workspace | e2e settings | `/settings` |
-| Demo | CONTRADICTORY | `frontend/src/app/demo/page.tsx` | `/demo` | none (seeded fiction) | none for economics story | labeled LIVE DEMO; cost-tracker narrative |
-| Marketing homepage | CONTRADICTORY | `frontend/src/app/page.tsx` | `/` | n/a | `landing-claims.test.ts` (dates only) | scan→`top`; MiniDashboard is spend-only |
+| Demo | SHIPPED | `frontend/src/app/demo/page.tsx` | `/demo` | none (seeded fiction) | `demo-economics.test.ts` | labeled DETERMINISTIC_DEMO_FIXTURE |
+| Marketing homepage | SHIPPED | `frontend/src/app/page.tsx` | `/` | n/a | `product-contract.test.ts`, `test_public_truth.py` | scan→repos; economics snapshot |
 | Documentation | SHIPPED | `/docs`, `/docs/scan`, `/docs/evidence`, `/docs/limitations`, `/docs/budgets` | docs routes | n/a | `frontend/tests/docs-routes.test.ts` | accurate scan funnel |
-| Comparison pages | CONTRADICTORY | `/compare/burnlens-vs-*` | public | n/a | none vs registry | LiteLLM provider list stale; absolute passthrough |
-| Security claims | CONTRADICTORY | `frontend/src/app/security/page.tsx` | `/security` | n/a | none vs policy | byte-for-byte / unmodified without policy exception |
+| Comparison pages | PARTIAL | `/compare/burnlens-vs-*` | public | n/a | none vs registry | homepage no longer scorecards competitors; dedicated pages remain sourced later |
+| Security claims | SHIPPED | `frontend/src/app/security/page.tsx` | `/security` | n/a | `test_public_truth.py` | observation vs policy exception |
 | SEO / data pages | SHIPPED | `/llm-pricing`, `/cost-per-outcome`, `/scan` | public | pricing JSON / dogfood | `llm-pricing.test.ts`, `cost-per-outcome.test.ts` | original data, not thin SEO |
 | Tests | SHIPPED | `tests/`, `frontend/tests/` | pytest, vitest, playwright | n/a | self | invariant tests exist for economics |
 | CI/CD | SHIPPED | `.github/workflows/*`, `azure-pipelines.yml` | GitHub Actions + Azure | n/a | workflows | dual remote: Azure origin; GHA follows GitHub |
@@ -99,14 +99,17 @@ No P0 invariant FAIL. ECON-001 is PARTIAL (request-row $0), not a presentation o
 
 ## Public contradictions requiring BLU-100
 
-1. **Homepage post-scan command is `burnlens top`.** Terminal animation and "Up in 3 commands" (`frontend/src/app/page.tsx`). CLI `_print_scan_next` and `/scan` / `/docs/scan` correctly say `burnlens repos`. `burnlens top` is a live proxy viewer, not the scan funnel.
-2. **`/compare/burnlens-vs-litellm`** claims "None — transparent passthrough", "zero payload rewrites", and lists only OpenAI/Anthropic/Google as shipped with Azure/Bedrock/Groq/Mistral/Together on a v0.2/v0.3 roadmap. Registry has 10 providers. Downgrade can rewrite `model` when opted in.
-3. **`/security`** FAQ and body claim byte-for-byte / unchanged body with no policy exception. `CONTRIBUTING.md` and `docs/BUDGET_ENFORCEMENT.md` already document the exception.
-4. **FAQ** "automatically downgrades" for team/customer budgets without saying the flag is off by default (`frontend/support-knowledge/faq.md`).
-5. **Homepage semantic cache card** describes serving from cache without saying `cache.enabled` defaults false.
-6. **`/demo`** is a fictional Acme cost dashboard labeled "LIVE DEMO". Out of scope for BLU-100 claim cleanup; owned by BLU-300.
+Resolved by the public product contract (`docs/PUBLIC_PRODUCT_CONTRACT.md`,
+`tests/test_public_truth.py`):
 
-`tests/test_documented_cli_commands.py` only checks that named commands exist, and does not include the homepage. It would not catch scan→top.
+1. Homepage post-scan command is `burnlens repos`, not `top`.
+2. Unpriced models are `$ unknown` on `/`, `/scan`, CLI, and Cost Confidence.
+3. Self-service trial is 7-day card-required Cloud at $29 everywhere; 14-day
+   agency evaluation is not a public SKU.
+4. Demo is labeled fixture/sample, not LIVE DEMO.
+5. Homepage comparison is BurnLens's approach, not competitor ✓/✗.
+
+Dedicated `/compare/*` pages remain for later sourced write-ups.
 
 ---
 

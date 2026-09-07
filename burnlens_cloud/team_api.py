@@ -426,6 +426,8 @@ async def invite_member(
         logger.info(
             f"Created invitation {invitation_id} for {request.email} to workspace {token.workspace_id}"
         )
+        from .funnel import TEAMMATE_INVITED, emit as funnel_emit
+        funnel_emit(TEAMMATE_INVITED, workspace_id=str(token.workspace_id))
     except Exception as e:
         logger.error(f"Failed to create invitation: {e}")
         raise HTTPException(status_code=500, detail="Failed to create invitation")

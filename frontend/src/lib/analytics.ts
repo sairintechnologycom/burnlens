@@ -14,6 +14,29 @@ declare global {
   }
 }
 
+/**
+ * Cloud conversion funnel. Observable browser/workspace transitions only.
+ * A purely local `burnlens scan` is never sent here.
+ *
+ * Activation metric: workspace reached first useful shared economics view
+ * (`economics_visible`), not downloads or local scans.
+ */
+export const FUNNEL = {
+  LANDING_VIEW: "landing_view",
+  SCAN_DOCS_VIEW: "scan_docs_view",
+  AGENCY_LANDING_VIEW: "agency_landing_view",
+  INSTALL_COPY: "install_copy",
+  CLOUD_CONNECT_STARTED: "cloud_connect_started",
+  WORKSPACE_CREATED: "workspace_created",
+  FIRST_SYNC: "first_sync",
+  ECONOMICS_VISIBLE: "economics_visible",
+  TEAMMATE_INVITED: "teammate_invited",
+  SECOND_ACTIVE_DAY: "second_active_day",
+  TRIAL_STARTED: "trial_started",
+  SUBSCRIPTION_STARTED: "subscription_started",
+  RENEWED: "renewed",
+} as const;
+
 export function trackEvent(
   name: string,
   props?: Record<string, string | number | boolean>,

@@ -51,6 +51,13 @@ outcome_app = typer.Typer(
 )
 app.add_typer(outcome_app, name="outcome")
 
+cloud_app = typer.Typer(
+    name="cloud",
+    help="Connect local economics to a BurnLens Cloud workspace.",
+    add_completion=False,
+)
+app.add_typer(cloud_app, name="cloud")
+
 
 @wal_app.command("doctor")
 def wal_doctor(
@@ -1353,7 +1360,19 @@ async def _print_scan_result(db_path: str) -> None:
     table = Table(show_header=False)
     table.add_column("Metric")
     table.add_column("Value", justify="right")
-    table.add_row("AI spend (30d)", _fmt_cost(overview.total_spend_usd))
+    cc = overview.cost_confidence
+    table.add_row(
+        "AI spend (30d)",
+        (
+            "$ unknown"
+            if (
+                cc is not None
+                and cc.unpriced_requests
+                and overview.total_spend_usd == 0
+            )
+            else _fmt_cost(overview.total_spend_usd)
+        ),
+    )
     table.add_row(
         "Accepted outcomes",
         (
@@ -1370,7 +1389,6 @@ async def _print_scan_result(db_path: str) -> None:
             else "[dim]not enough outcome data[/dim]"
         ),
     )
-    cc = overview.cost_confidence
     if cc is not None and cc.total_requests:
         priced = cc.total_requests - cc.unpriced_requests
         table.add_row("Cost confidence", f"{cc.confidence_pct:.1f}%")
@@ -1378,6 +1396,8 @@ async def _print_scan_result(db_path: str) -> None:
             "Pricing coverage",
             f"{priced} of {cc.total_requests} priced",
         )
+        if cc.unpriced_requests:
+            table.add_row("Unpriced", "$ unknown")
     oc = overview.outcome_coverage
     if oc is not None and oc.cost_total_usd:
         table.add_row("Outcome coverage", f"{oc.coverage_pct:.1f}%")
@@ -1388,7 +1408,7 @@ async def _print_scan_result(db_path: str) -> None:
 
 
 def _print_scan_next(*, derived: bool = False) -> None:
-    """The local-first loop after import: measure, attribute, then cost/outcome."""
+    """The local-first loop after import: measure, then optional team persistence."""
     next_outcome = (
         "  [cyan]burnlens outcome show[/cyan]       cost per merged PR"
         if derived
@@ -1402,6 +1422,10 @@ def _print_scan_next(*, derived: bool = False) -> None:
         "  [cyan]burnlens economics[/cyan]         spend, confidence, coverage\n"
         "  [cyan]burnlens repos[/cyan]              cost by repository\n"
         + next_outcome
+        + "\n\n[dim]Need team-wide economics across developers?[/dim]\n"
+        "  Create a workspace: [cyan]https://burnlens.app/setup?intent=register[/cyan]\n"
+        "  then [cyan]burnlens cloud connect[/cyan]\n"
+        "  then [cyan]burnlens sync --now[/cyan]        push cost metadata (never prompts)"
     )
 
 
@@ -1881,6 +1905,27 @@ def recommend(
     asyncio.run(_run())
 
 
+@cloud_app.command("connect")
+def cloud_connect(
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (bl_live_...)"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Connect local cost metadata to a BurnLens Cloud workspace.
+
+    Prompt bodies are never uploaded. Create a workspace at
+    https://burnlens.app/setup?intent=register if you do not have a key yet.
+    """
+    console.print("[bold]Connect local economics to a team workspace[/bold]")
+    console.print(
+        "[dim]Prompt bodies never leave this machine — only cost metadata and tags.[/dim]"
+    )
+    console.print(
+        "No API key yet? Create a workspace: "
+        "[cyan]https://burnlens.app/setup?intent=register[/cyan]\n"
+    )
+    login(api_key=api_key, config=config)
+
+
 @app.command()
 def login(
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (bl_live_...)"),
@@ -1927,6 +1972,7 @@ def login(
     console.print(f"Config written to [cyan]{config_path}[/cyan]")
     console.print()
     console.print("[dim]Prompt content never leaves your machine — only anonymised cost data is synced.[/dim]")
+    console.print("Next: [cyan]burnlens sync --now[/cyan] to push unsynced cost metadata.")
     console.print()
 
 

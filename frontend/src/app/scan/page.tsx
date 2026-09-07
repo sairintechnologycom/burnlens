@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { CopyCommand } from "@/components/CopyCommand";
+import { FunnelPageview } from "@/components/FunnelPageview";
+import { FUNNEL } from "@/lib/analytics";
 
 export const metadata: Metadata = {
   title: "Scan your AI coding agent spend — Claude Code, Cursor, Codex, Gemini CLI · BurnLens",
@@ -88,6 +90,7 @@ const AGENTS = [
 export default function ScanLandingPage() {
   return (
     <div className="legal-page">
+      <FunnelPageview event={FUNNEL.SCAN_DOCS_VIEW} />
       <script type="application/ld+json">{JSON.stringify(faqStructuredData)}</script>
 
       <nav className="legal-nav">
@@ -193,7 +196,7 @@ No Gemini CLI sessions found at any known location. Skipping.`}</code>
         <section>
           <h2>Try it in three commands</h2>
           <CopyCommand
-            eventName="Scan Install Copy"
+            eventName="install_copy"
             command={`pip install burnlens
 burnlens scan
 burnlens repos    # which repo actually burned the money`}
@@ -213,9 +216,9 @@ burnlens repos    # which repo actually burned the money`}
             <li><code>burnlens economics</code> — waste rate, error spend, and cost per outcome.</li>
           </ul>
           <p className="legal-updated">
-            <code>burnlens top</code> is a live viewer for proxy traffic happening right now — it
-            refreshes until you stop it and shows today only, so it is not the command to run after a
-            retroactive scan.
+            Need team-wide economics across developers? After a local scan:{" "}
+            <code>burnlens cloud connect</code> then <code>burnlens sync --now</code>.
+            Prompt bodies stay on the laptop.
           </p>
           <p>
             <strong>How long the first scan takes</strong> depends on how much history you have. A

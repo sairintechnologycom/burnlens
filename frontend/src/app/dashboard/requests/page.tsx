@@ -7,6 +7,7 @@ import Shell from "@/components/Shell";
 import { apiFetch, AuthError } from "@/lib/api";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
+import { formatRequestCostUsd } from "@/lib/money";
 import type { RequestRow } from "@/lib/contracts";
 
 function latencyClass(ms: number): string {
@@ -68,7 +69,15 @@ function RequestsContent() {
         <div className="stat-cell">
           <div className="stat-label">Total cost</div>
           <div className="stat-value cyan">
-            ${requests.reduce((s, r) => s + (r.cost_usd ?? 0), 0).toFixed(4)}
+            {(() => {
+              const unpriced = requests.some((r) => r.pricing_class === "unpriced");
+              const priced = requests
+                .filter((r) => r.pricing_class !== "unpriced")
+                .reduce((s, r) => s + (r.cost_usd ?? 0), 0);
+              if (!unpriced) return `$${priced.toFixed(4)}`;
+              if (priced === 0) return "$ unknown";
+              return `$${priced.toFixed(4)} + $ unknown`;
+            })()}
           </div>
         </div>
       </div>
@@ -122,7 +131,7 @@ function RequestsContent() {
                   <td>{r.input_tokens?.toLocaleString() ?? "—"}</td>
                   <td>{r.output_tokens?.toLocaleString() ?? "—"}</td>
                   <td style={{ color: (r.cost_usd ?? 0) > 0.01 ? "var(--amber)" : undefined }}>
-                    ${(r.cost_usd ?? 0).toFixed(4)}
+                    {formatRequestCostUsd(r.cost_usd, r.pricing_class)}
                   </td>
                   <td className={r.duration_ms ? latencyClass(r.duration_ms) : ""}>
                     {r.duration_ms ? `${r.duration_ms}ms` : "—"}

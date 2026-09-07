@@ -18,6 +18,7 @@ const PUBLIC_ROUTES = [
   '/',
   '/demo',
   '/scan',
+  '/for/agencies',
   '/llm-pricing',
   '/cost-per-outcome',
   '/docs',
@@ -141,7 +142,7 @@ test('main public navigation is intact on home', async ({ page }) => {
   await expect(nav.getByRole('link', { name: /Scan/i })).toBeVisible();
   await expect(nav.getByRole('link', { name: /Docs/i })).toBeVisible();
   await expect(nav.getByRole('link', { name: /Security/i })).toBeVisible();
-  await expect(nav.getByRole('link', { name: /Live demo/i })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Sample demo/i })).toBeVisible();
   await nav.getByRole('link', { name: /Docs/i }).click();
   await expect(page).toHaveURL(/\/docs/);
 });

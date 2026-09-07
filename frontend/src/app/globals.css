@@ -1399,7 +1399,7 @@ img, svg { display: block; }
   font-size: clamp(40px, 5.4vw, 76px);
   line-height: 1.04; letter-spacing: -0.03em;
   color: var(--l-text);
-  max-width: 14ch;
+  max-width: 18ch;
   margin: 0;
   opacity: 0; animation: lp-fade 0.5s ease 0.15s forwards;
 }
@@ -1520,10 +1520,102 @@ img, svg { display: block; }
   opacity: 0; animation: lp-fade 0.5s ease 0.45s forwards;
 }
 
-/* HeatBars — hand-coded burn-heatmap.
-   Right column visual anchor: rows ordered hot→cool so the spike sits on top
-   like the cap of a flame. Bars use saturated ember at the top, desaturating
-   downward (heat dissipation). */
+/* Economics snapshot — hero proof, not a spend heatmap. */
+.lp-econ-card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 22px 18px;
+  font-family: var(--font-mono), monospace;
+  color: var(--l-text);
+  box-shadow:
+    0 24px 60px oklch(0.72 0.20 45 / 0.10),
+    inset 0 1px 0 oklch(0.72 0.20 45 / 0.06);
+  opacity: 0;
+  animation: lp-heatbars-card 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+}
+.lp-econ-kicker {
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: var(--fs-10); letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--l-muted);
+  margin-bottom: 18px;
+}
+.lp-econ-hero-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.lp-econ-value {
+  font-size: clamp(18px, 2.2vw, 26px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--l-text);
+  line-height: 1.15;
+}
+.lp-econ-label {
+  margin-top: 4px;
+  font-size: var(--fs-10);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--l-muted);
+}
+.lp-econ-meta {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+}
+.lp-econ-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-12);
+}
+.lp-econ-meta dt {
+  color: var(--l-muted);
+  font-weight: 400;
+}
+.lp-econ-meta dd {
+  margin: 0;
+  color: var(--l-text);
+}
+
+.lp-ladder {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono), monospace;
+  font-size: var(--fs-13);
+}
+.lp-ladder li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto auto;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.lp-ladder li:last-child { border-bottom: none; }
+.lp-alloc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lp-alloc-bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--cyan);
+  min-width: 4px;
+}
+
+/* HeatBars — retained for other fixtures; hero now uses lp-econ-card. */
 .lp-heatbars {
   position: relative;
   width: 100%;

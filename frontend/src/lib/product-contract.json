@@ -1,0 +1,42 @@
+{
+  "first_command": "burnlens scan",
+  "repo_economics_command": "burnlens repos",
+  "cloud_connect_command": "burnlens cloud connect",
+  "missing_pricing": "$ unknown",
+  "scan_attribution": "repository",
+  "outcome_metric": "Cost per accepted outcome",
+  "coding_outcome": "Merged PR where GitHub data exists",
+  "prompt_content": "never uploaded to BurnLens Cloud",
+  "cache_default": "off",
+  "routing_default": "off",
+  "savings_projected": "Projected",
+  "savings_verified": "Verified",
+  "demo_label": "fixture",
+  "demo_not_live": "not live telemetry",
+  "cloud_trial": {
+    "days": 7,
+    "card_required": true,
+    "price_monthly": "$29",
+    "plan": "Cloud",
+    "cta": "Start 7-day free trial",
+    "disclaimer": "Card required. Cancel anytime before day 7 — no charge."
+  },
+  "agency_pilot": {
+    "days": 14,
+    "public_sku": false,
+    "note": "Qualified agency evaluation is guided and converts to normal Cloud/Teams. It is not a public SKU or a 14-day self-service trial."
+  },
+  "dogfood": {
+    "spend_usd": 710.85,
+    "accepted_prs": 104,
+    "closed_unmerged": 2,
+    "cost_per_accepted_usd": 6.84,
+    "measured": "2026-08-15",
+    "window": "2026-07-10 to 2026-08-15",
+    "grain": "repository"
+  },
+  "headline": "Know what your AI costs — and what that money produced.",
+  "subhead": "See AI coding-agent and production-LLM economics by repository, customer, feature and outcome. Start locally without sending prompts or code to BurnLens.",
+  "cta_scan": "Scan my AI usage — free",
+  "cta_team": "Review team economics"
+}

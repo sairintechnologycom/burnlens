@@ -212,4 +212,71 @@ describe("economics hero", () => {
     expect(html).toContain("No verified changes yet");
     expect(html).not.toContain("$0.00");
   });
+
+  it("renders unpriced-only spend as $ unknown, not $0.00", () => {
+    const html = renderToStaticMarkup(
+      createElement(EconomicsHero, {
+        summary: {
+          total_cost_usd: 0,
+          total_requests: 12,
+          avg_cost_per_request_usd: 0,
+          models_used: 1,
+          cache_saved_usd: 0,
+          cache_hits: 0,
+        },
+        econ: { ...ECON, accepted_count: 0, cost_per_accepted_usd: null },
+        confidence: {
+          days: 30,
+          total_cost_usd: 0,
+          total_requests: 12,
+          confidence_pct: 0,
+          reconciled_spend_pct: 0,
+          reconciled: { cost_usd: 0, requests: 0, share_pct: 0 },
+          calculated: { cost_usd: 0, requests: 0, share_pct: 0 },
+          estimated: { cost_usd: 0, requests: 0, share_pct: 0 },
+          unpriced: { cost_usd: 0, requests: 12, share_pct: 100 },
+          reasons: {},
+          gaps: [],
+        },
+        coverage: null,
+        reconciliation: [],
+        savings: null,
+      }),
+    );
+    expect(html).toContain("$ unknown");
+    expect(html).not.toContain("$0.00");
+  });
+
+  it("keeps a priced floor next to $ unknown when some models have no price", () => {
+    const html = renderToStaticMarkup(
+      createElement(EconomicsHero, {
+        summary: {
+          total_cost_usd: 81.42,
+          total_requests: 20,
+          avg_cost_per_request_usd: 4,
+          models_used: 2,
+          cache_saved_usd: 0,
+          cache_hits: 0,
+        },
+        econ: ECON,
+        confidence: {
+          days: 30,
+          total_cost_usd: 81.42,
+          total_requests: 20,
+          confidence_pct: 80,
+          reconciled_spend_pct: 0,
+          reconciled: { cost_usd: 0, requests: 0, share_pct: 0 },
+          calculated: { cost_usd: 81.42, requests: 16, share_pct: 80 },
+          estimated: { cost_usd: 0, requests: 0, share_pct: 0 },
+          unpriced: { cost_usd: 0, requests: 4, share_pct: 20 },
+          reasons: {},
+          gaps: [],
+        },
+        coverage: null,
+        reconciliation: [],
+        savings: null,
+      }),
+    );
+    expect(html).toContain("$81.42 + $ unknown");
+  });
 });

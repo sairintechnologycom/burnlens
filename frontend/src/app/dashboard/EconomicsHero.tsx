@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type {
   CostConfidence,
   EconomicsOverview,
@@ -10,6 +11,22 @@ import { formatCost } from "@/lib/money";
 
 function dim(text: string) {
   return <span style={{ color: "var(--dim)" }}>{text}</span>;
+}
+
+function spendDisplay(
+  summary: UsageSummary | null,
+  confidence: CostConfidence | null,
+): ReactNode {
+  const requests = summary?.total_requests ?? 0;
+  if (requests === 0) return dim("—");
+  const unpriced = confidence?.unpriced.requests ?? 0;
+  const pricedUsd = summary?.total_cost_usd ?? 0;
+  if (confidence == null) {
+    return pricedUsd === 0 ? dim("—") : `$${formatCost(pricedUsd)}`;
+  }
+  if (unpriced > 0 && pricedUsd === 0) return "$ unknown";
+  if (unpriced > 0) return `$${formatCost(pricedUsd)} + $ unknown`;
+  return `$${formatCost(pricedUsd)}`;
 }
 
 function hasNoBillingEvidence(
@@ -64,7 +81,7 @@ export function EconomicsHero({
         <div className="stat-cell">
           <div className="stat-label">AI Spend</div>
           <div className="stat-value">
-            {hasSpend ? `$${formatCost(summary?.total_cost_usd ?? 0)}` : dim("—")}
+            {spendDisplay(summary, confidence)}
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
             {hasSpend

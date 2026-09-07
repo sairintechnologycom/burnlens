@@ -6,7 +6,7 @@ import { useState, useEffect, Suspense, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BASE_URL, errorMessageFrom } from "@/lib/api";
-import { trackEvent } from "@/lib/analytics";
+import { FUNNEL, trackEvent } from "@/lib/analytics";
 
 function isLocalBackend(): boolean {
   try {
@@ -88,6 +88,12 @@ function SetupContent() {
       router.replace("/dashboard");
     }
   }, [router]);
+
+  useEffect(() => {
+    if (initialMode === "register") {
+      trackEvent(FUNNEL.CLOUD_CONNECT_STARTED);
+    }
+  }, [initialMode]);
 
   const handleLogin = useCallback(async () => {
     setLoading(true);
@@ -188,6 +194,7 @@ function SetupContent() {
       }
       const data = await resp.json();
       trackEvent("Signup Success");
+      trackEvent(FUNNEL.WORKSPACE_CREATED);
       storeSession(data);
       // Keep the one-time ingest credential in React memory only.  It must not
       // be persisted in localStorage/sessionStorage or placed in a URL.

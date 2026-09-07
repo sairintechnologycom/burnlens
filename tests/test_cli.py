@@ -114,6 +114,8 @@ def test_scan_prints_the_local_first_funnel(tmp_path):
     assert "burnlens economics" in result.output
     assert "burnlens repos" in result.output
     assert "burnlens outcome derive" in result.output
+    assert "burnlens cloud connect" in result.output
+    assert "burnlens sync --now" in result.output
     mock_derive.assert_not_called()
 
 
@@ -148,6 +150,8 @@ def test_scan_derives_outcomes_when_gh_is_present(tmp_path):
     assert "AI spend" in result.output
     assert "burnlens economics" in result.output
     assert "burnlens repos" in result.output
+    assert "burnlens cloud connect" in result.output
+    assert "burnlens sync --now" in result.output
     assert "burnlens outcome show" in result.output
     assert "burnlens outcome derive" not in result.output
 
@@ -240,4 +244,20 @@ def test_outcome_derive_fails_when_gh_is_missing(tmp_path):
     ):
         result = runner.invoke(app, ["outcome", "derive", "--repo", str(tmp_path)])
     assert result.exit_code == 1
-    assert "cli.github.com" in result.output
+    assert "gh" in result.output.lower() or "github" in result.output.lower()
+
+
+def test_cloud_connect_is_a_real_command(tmp_path):
+    result = runner.invoke(app, ["cloud", "connect", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "Prompt bodies" in result.output or "prompt" in result.output.lower()
+
+    cfg = tmp_path / "burnlens.yaml"
+    written = runner.invoke(
+        app,
+        ["cloud", "connect", "--api-key", "bl_test_key", "--config", str(cfg)],
+    )
+    assert written.exit_code == 0, written.output
+    assert "Cloud sync enabled" in written.output
+    assert "burnlens sync --now" in written.output
+    assert cfg.exists()

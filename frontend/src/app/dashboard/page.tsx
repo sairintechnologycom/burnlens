@@ -8,6 +8,7 @@ import Shell from "@/components/Shell";
 import BarChart from "@/components/charts/BarChart";
 import { apiFetch, apiDownload, AuthError } from "@/lib/api";
 import { formatRequestCostUsd } from "@/lib/money";
+import { FUNNEL, trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePeriod } from "@/lib/contexts/PeriodContext";
 import type {
@@ -193,6 +194,12 @@ function DashboardContent() {
 
   useEffect(() => { document.title = "Overview | BurnLens"; }, []);
 
+  useEffect(() => {
+    if ((summary?.total_requests ?? 0) > 0) {
+      trackEvent(FUNNEL.ECONOMICS_VISIBLE);
+    }
+  }, [summary?.total_requests]);
+
   const totalCalls = summary?.total_requests ?? 0;
 
   if (loading && !summary) {
@@ -255,26 +262,24 @@ function DashboardContent() {
         <div className="card" style={{ margin: 16, padding: 32 }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>
-              Connect this workspace
+              First shared economics
             </div>
             <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
-              Install the local proxy, log in with the ingest key from signup, and point your SDK at it.
-              Spend appears within ~60s of the first synced request.
+              Scan locally, then connect this workspace. Spend, accepted outcomes, and
+              cost confidence appear as soon as cost metadata syncs — prompt bodies stay
+              on the laptop.
             </div>
             <div className="empty-state-code" style={{ marginTop: 8, textAlign: "left" }}>
               <div><span className="empty-state-code-prompt">$</span> pip install burnlens</div>
-              <div><span className="empty-state-code-prompt">$</span> burnlens start</div>
-              <div><span className="empty-state-code-prompt">$</span> burnlens login --api-key bl_live_...</div>
-              <div><span className="empty-state-code-prompt">$</span> export OPENAI_BASE_URL=http://127.0.0.1:8420/proxy/openai</div>
+              <div><span className="empty-state-code-prompt">$</span> burnlens scan</div>
+              <div><span className="empty-state-code-prompt">$</span> burnlens cloud connect</div>
+              <div><span className="empty-state-code-prompt">$</span> burnlens sync --now</div>
             </div>
             <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
-              Using Claude Code, Cursor, Codex, or Gemini CLI? Run{" "}
-              <code>burnlens scan</code> instead — reads local logs, no proxy needed.{" "}
+              Production APIs: <code>burnlens start</code>, then point your SDK at{" "}
+              <code>:8420</code>. Google needs{" "}
+              <code>import burnlens.patch; burnlens.patch.patch_google()</code>.{" "}
               <Link href="/scan">Scan guide</Link>
-            </div>
-            <div style={{ fontSize: 13, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
-              Google needs one extra line —{" "}
-              <code>import burnlens.patch; burnlens.patch.patch_google()</code>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <a

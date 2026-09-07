@@ -9,8 +9,8 @@ Track every dollar by feature, team, and customer across OpenAI, Anthropic, Goog
 
 ```bash
 pip install burnlens
-burnlens start
-# Dashboard at http://127.0.0.1:8420/ui
+burnlens scan
+# cost by repository, then optional: burnlens cloud connect
 ```
 
 ---
@@ -168,13 +168,16 @@ against the provider pricing page — they change less often than text but do mo
 
 ## Why BurnLens
 
-| | BurnLens | Helicone / Langfuse | Vantage / CloudZero |
-|---|---|---|---|
-| Open source | ✓ | Partial | ✗ |
-| Local-first (prompt bodies never pass through the vendor) | ✓ | ✗ | ✗ |
-| Hard caps before API call | ✓ | ✗ | ✗ |
-| Per-customer attribution | ✓ | ✓ | ✗ |
-| Multi-cloud (Azure / AWS / GCP) | Partial | Partial | ✓ |
+| Capability | BurnLens approach |
+|---|---|
+| Coding-agent observation | Local log scanning |
+| Prompt handling | Prompt bodies are never uploaded to BurnLens Cloud |
+| Economics | Spend + accepted outcomes (merged PR where GitHub data exists) |
+| Missing pricing | Explicit `$ unknown`, never a silent `$0` |
+| Runtime enforcement | Optional local proxy; hard cap returns 429 before upstream |
+| Budget model changes | Explicit opt-in. Cache and routing stay off by default |
+| Savings | Projected and verified reported separately |
+| Self-hosting | Open-source deployment available |
 
 ---
 
@@ -224,6 +227,9 @@ burnlens scan --provider claude # import Claude Code session costs from disk
 burnlens scan --provider cursor # import Cursor IDE session costs from disk
 burnlens scan --provider codex  # import OpenAI Codex session costs from disk
 burnlens scan --provider gemini # import Gemini CLI session costs from disk
+burnlens repos                  # cost by repository
+burnlens cloud connect          # write cloud config (never prompts)
+burnlens sync --now             # push unsynced cost metadata
 ```
 
 ---

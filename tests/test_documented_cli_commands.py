@@ -22,6 +22,7 @@ PAGES = [
     ROOT / "frontend" / "src" / "app" / "docs" / "scan" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "docs" / "page.tsx",
     ROOT / "frontend" / "src" / "app" / "docs" / "cli" / "page.tsx",
+    ROOT / "frontend" / "src" / "app" / "for" / "agencies" / "page.tsx",
     ROOT / "README.md",
 ]
 
