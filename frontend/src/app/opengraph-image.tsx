@@ -82,7 +82,7 @@ export default function OpenGraphImage() {
               One command. Zero code changes. Every dollar tracked.
             </div>
             <div style={{ display: "flex" }}>
-              Open-source LLM FinOps for Anthropic, OpenAI &amp; Google AI.
+              Open-source AI economics for Anthropic, OpenAI &amp; Google AI.
             </div>
           </div>
         </div>

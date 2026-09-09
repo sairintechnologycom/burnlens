@@ -31,6 +31,7 @@ VALID_STATUSES = ("open", "acknowledged", "resolved", "accepted_risk")
 # must run before a fix can be judged. The same length on both sides so the
 # comparison is like-for-like.
 BASELINE_WINDOW_DAYS = 7
+VERIFICATION_COMPARISON_RULE = "same_subject_equal_windows"
 
 
 @dataclass
@@ -230,6 +231,10 @@ async def set_finding_status(
     fingerprint: str,
     status: str,
     baseline_window_days: int = BASELINE_WINDOW_DAYS,
+    cohort_key: str | None = None,
+    change_reference: str | None = None,
+    change_type: str | None = None,
+    change_url: str | None = None,
 ) -> bool:
     """Move a finding through its lifecycle. Returns False if it doesn't exist.
 
@@ -265,7 +270,7 @@ async def set_finding_status(
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT subject_type, subject_key, estimated_waste_usd "
+            "SELECT subject_type, subject_key, estimated_waste_usd, evidence "
             "FROM waste_findings WHERE fingerprint = ?",
             (fingerprint,),
         )
@@ -274,12 +279,54 @@ async def set_finding_status(
     if existing is None:
         return False
 
+    # Local resolutions get a stable change anchor when the caller does not
+    # provide one. The git helper is best-effort and never blocks this flow.
+    if not change_reference:
+        from burnlens.git_context import read_git_context
+
+        commit_sha = read_git_context().get("commit_sha")
+        if commit_sha:
+            change_reference = f"commit:{commit_sha}"
+            change_type = change_type or "commit"
+
     now = datetime.now(timezone.utc)
+    cohort_key = cohort_key or f"{existing['subject_type']}:{existing['subject_key']}"
+    cohort_parts = cohort_key.split(":", 1)
+    scope_type, scope_key = existing["subject_type"], existing["subject_key"]
+    if len(cohort_parts) == 2 and cohort_parts[0] in ("workflow", "model") and cohort_parts[1]:
+        scope_type, scope_key = cohort_parts
+    intervention_id = f"finding:{fingerprint}:{now.isoformat()}"
+    try:
+        evidence = json.loads(existing["evidence"] or "{}")
+    except (TypeError, ValueError):
+        evidence = {}
+    if not isinstance(evidence, dict):
+        evidence = {}
+    previous_verification = evidence.get("verification")
+    if isinstance(previous_verification, dict):
+        history = evidence.get("verification_history")
+        if not isinstance(history, list):
+            history = []
+        history.append(previous_verification)
+        evidence["verification_history"] = history
+    evidence["verification"] = {
+        "cohort_key": cohort_key,
+        "intervention_id": intervention_id,
+        "comparison_rule": VERIFICATION_COMPARISON_RULE,
+        "scope_type": scope_type,
+        "scope_key": scope_key,
+    }
+    if change_reference:
+        evidence["verification"]["change_reference"] = change_reference
+    if change_type:
+        evidence["verification"]["change_type"] = change_type
+    if change_url:
+        evidence["verification"]["change_url"] = change_url
     window_start = (now - timedelta(days=baseline_window_days)).isoformat()
     baseline_cost, baseline_requests = await get_subject_spend(
         db_path,
-        existing["subject_type"],
-        existing["subject_key"],
+        scope_type,
+        scope_key,
         since=window_start,
         until=now.isoformat(),
     )
@@ -293,7 +340,8 @@ async def set_finding_status(
                    baseline_waste_usd = estimated_waste_usd,
                    baseline_cost_usd = ?,
                    baseline_requests = ?,
-                   baseline_window_days = ?
+                   baseline_window_days = ?,
+                   evidence = ?
              WHERE fingerprint = ?
             """,
             (
@@ -301,6 +349,7 @@ async def set_finding_status(
                 baseline_cost,
                 baseline_requests,
                 baseline_window_days,
+                json.dumps(evidence, sort_keys=True),
                 fingerprint,
             ),
         )
@@ -338,6 +387,38 @@ class SavingsVerdict:
     current_requests: int | None = None
     days_remaining: float | None = None
     reopened: bool = False
+    # Workflow outcome evidence is optional. Cost-only or model-scoped findings
+    # remain observable, but cannot claim that accepted-work quality held.
+    outcome_quality: str = "unavailable"
+    baseline_acceptance_rate: float | None = None
+    current_acceptance_rate: float | None = None
+    quality_qualified: bool = False
+    cohort_key: str | None = None
+    intervention_id: str | None = None
+    change_reference: str | None = None
+    change_type: str | None = None
+    change_url: str | None = None
+    comparison_rule: str = VERIFICATION_COMPARISON_RULE
+
+
+async def _workflow_outcome_quality(
+    db_path: str, workflow_id: str, since: str, until: str
+) -> tuple[float | None, int, int]:
+    """Return (accepted rate, accepted count, total count) for a time window."""
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted
+              FROM outcomes
+             WHERE workflow_id = ? AND event_time >= ? AND event_time < ?
+            """,
+            (workflow_id, since, until),
+        )
+        row = await cursor.fetchone()
+    total = int(row[0] or 0)
+    accepted = int(row[1] or 0)
+    return ((accepted / total) if total else None, accepted, total)
 
 
 async def verify_savings(
@@ -371,6 +452,20 @@ async def verify_savings(
         # report both rather than picking one.
         reopened=finding.status == "open" and finding.resolved_at is not None,
     )
+    verification = finding.evidence.get("verification") if isinstance(finding.evidence, dict) else None
+    if isinstance(verification, dict):
+        verdict.cohort_key = verification.get("cohort_key")
+        verdict.intervention_id = verification.get("intervention_id")
+        verdict.change_reference = verification.get("change_reference")
+        verdict.change_type = verification.get("change_type")
+        verdict.change_url = verification.get("change_url")
+        if verification.get("scope_type") in ("workflow", "model") and verification.get("scope_key"):
+            verdict.cohort_key = verification.get("cohort_key")
+        verdict.comparison_rule = verification.get("comparison_rule", VERIFICATION_COMPARISON_RULE)
+    if verdict.cohort_key is None:
+        verdict.cohort_key = f"{finding.subject_type}:{finding.subject_key}"
+    if verdict.intervention_id is None and finding.resolved_at:
+        verdict.intervention_id = f"finding:{finding.fingerprint}:{finding.resolved_at}"
 
     if not finding.resolved_at or not finding.baseline_requests:
         # Either never resolved, or resolved with no traffic to compare
@@ -388,10 +483,14 @@ async def verify_savings(
         )
         return verdict
 
+    scope_type, scope_key = finding.subject_type, finding.subject_key
+    if isinstance(verification, dict) and verification.get("scope_type") in ("workflow", "model"):
+        scope_type = verification["scope_type"]
+        scope_key = verification["scope_key"]
     current_cost, current_requests = await get_subject_spend(
         db_path,
-        finding.subject_type,
-        finding.subject_key,
+        scope_type,
+        scope_key,
         since=resolved_at.isoformat(),
         until=(resolved_at + timedelta(days=window_days)).isoformat(),
     )
@@ -405,6 +504,27 @@ async def verify_savings(
         verdict.status = "no_traffic"
         return verdict
 
+    if scope_type == "workflow":
+        baseline_start = (resolved_at - timedelta(days=window_days)).isoformat()
+        baseline_rate, _baseline_accepted, baseline_total = await _workflow_outcome_quality(
+            db_path, scope_key, baseline_start, resolved_at.isoformat()
+        )
+        current_rate, _current_accepted, current_total = await _workflow_outcome_quality(
+            db_path,
+            scope_key,
+            resolved_at.isoformat(),
+            (resolved_at + timedelta(days=window_days)).isoformat(),
+        )
+        verdict.baseline_acceptance_rate = baseline_rate
+        verdict.current_acceptance_rate = current_rate
+        if baseline_total and current_total:
+            verdict.outcome_quality = (
+                "degraded" if (current_rate or 0.0) < (baseline_rate or 0.0) else "preserved"
+            )
+            verdict.quality_qualified = verdict.outcome_quality == "preserved"
+        else:
+            verdict.outcome_quality = "insufficient"
+
     baseline_per_request = (finding.baseline_cost_usd or 0.0) / finding.baseline_requests
     current_per_request = current_cost / current_requests
 
@@ -412,6 +532,11 @@ async def verify_savings(
     verdict.current_cost_per_request = current_per_request
     verdict.delta_per_request = baseline_per_request - current_per_request
     verdict.status = classify_savings(verdict.delta_per_request, current_requests)
+    if verdict.status == "verified" and verdict.outcome_quality == "degraded":
+        # A cheaper request that produces fewer accepted outcomes is not an
+        # economic win. Keep the measured delta for diagnosis, but exclude it
+        # from verified savings rollups.
+        verdict.status = "missed"
     verdict.pct_change = (
         ((current_per_request - baseline_per_request) / baseline_per_request * 100)
         if baseline_per_request

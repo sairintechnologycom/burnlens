@@ -113,8 +113,8 @@ Dedicated `/compare/*` pages remain for later sourced write-ups.
 
 ---
 
-## Economics IA (preview for BLU-200)
+## Economics IA (current; positioning and evidence qualification follow BL-ECON-01)
 
-Authenticated economics is already four pages, one model (`EconomicsNav`): Overview, Outcomes, Savings, Waste.
+Authenticated economics is already four pages, one model (`EconomicsNav`): Overview, Outcomes, Savings, Waste. The overview now leads with AI Spend, accepted outcomes, cost per accepted outcome, confidence, coverage, reconciliation and savings evidence. Current savings verification is explicitly a measured cost-per-request reduction; it does not yet qualify outcome quality or deduplicate overlapping interventions.
 
 Overview already loads confidence, coverage, economics, savings, recommendations. It does **not** yet use the five-question hero (AI Spend / Accepted / Cost per accepted / Confidence / Coverage / Verified). Labels still say "Total spend". Demo and homepage MiniDashboard remain spend-tracker narratives.

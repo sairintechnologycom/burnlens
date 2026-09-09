@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from burnlens.analysis.waste import ModelOverkillDetector
-from burnlens.storage.database import init_db, insert_request
+from burnlens.storage.database import init_db, insert_outcome, insert_request
 from burnlens.storage.findings import (
     list_findings,
     savings_rollup,
@@ -27,7 +27,7 @@ from burnlens.storage.findings import (
     sync_findings,
     verify_savings,
 )
-from burnlens.storage.models import RequestRecord
+from burnlens.storage.models import Outcome, RequestRecord
 
 
 def _record(cost_usd: float, when: datetime, workflow: str = "invoice-gen"):
@@ -124,6 +124,34 @@ async def test_a_real_fix_is_verified(db):
     assert verdict.current_cost_per_request == pytest.approx(0.50)
     assert verdict.pct_change == pytest.approx(-50.0)
     assert verdict.projected_monthly_savings_usd > 0
+
+
+@pytest.mark.asyncio
+async def test_cost_reduction_with_lower_acceptance_is_not_verified(db):
+    """Cheaper requests do not count when the workflow accepts less work."""
+    fingerprint = await _seed_and_resolve(db, before_count=40, before_cost=1.00,
+                                          resolved_days_ago=8)
+    now = datetime.now(timezone.utc)
+    # Baseline: 36/40 accepted. Follow-up: 20/40 accepted.
+    for i in range(40):
+        await insert_outcome(db, Outcome(
+            outcome_id=f"before-{i}", workflow_id="invoice-gen",
+            status="accepted" if i < 36 else "rejected",
+            event_time=now - timedelta(days=10, minutes=i),
+        ))
+        await insert_outcome(db, Outcome(
+            outcome_id=f"after-{i}", workflow_id="invoice-gen",
+            status="accepted" if i < 20 else "rejected",
+            event_time=now - timedelta(days=7, minutes=i),
+        ))
+        await insert_request(db, _record(0.50, now - timedelta(days=7, minutes=i)))
+
+    verdict = await verify_savings(db, fingerprint)
+
+    assert verdict.status == "missed"
+    assert verdict.outcome_quality == "degraded"
+    assert verdict.baseline_acceptance_rate == pytest.approx(0.9)
+    assert verdict.current_acceptance_rate == pytest.approx(0.5)
 
 
 @pytest.mark.asyncio
@@ -242,12 +270,66 @@ async def test_resolving_captures_request_count_not_just_dollars(db):
 
     findings = ModelOverkillDetector().run(_analysis_rows(6, 0.25))
     await sync_findings(db, findings)
-    await set_finding_status(db, findings[0].fingerprint, "resolved")
+    await set_finding_status(
+        db,
+        findings[0].fingerprint,
+        "resolved",
+        cohort_key="repo:payments",
+        change_reference="commit:abc123",
+        change_type="commit",
+        change_url="https://github.com/example/repo/commit/abc123",
+    )
 
     stored = (await list_findings(db, status="resolved"))[0]
     assert stored.baseline_requests == 6
     assert stored.baseline_cost_usd == pytest.approx(1.50)
     assert stored.baseline_window_days == 7
+    verification = stored.evidence["verification"]
+    assert verification["cohort_key"] == "repo:payments"
+    assert verification["intervention_id"].startswith("finding:")
+    assert verification["change_reference"] == "commit:abc123"
+    assert verification["change_type"] == "commit"
+    assert verification["change_url"].endswith("abc123")
+
+
+@pytest.mark.asyncio
+async def test_resolving_defaults_to_current_commit_when_change_is_missing(db, monkeypatch):
+    """Local resolutions retain a change anchor without manual metadata."""
+    from burnlens import git_context
+
+    monkeypatch.setattr(git_context, "read_git_context", lambda: {"commit_sha": "deadbeef"})
+    now = datetime.now(timezone.utc)
+    await insert_request(db, _record(0.25, now - timedelta(hours=1)))
+    findings = ModelOverkillDetector().run(_analysis_rows(1, 0.25))
+    await sync_findings(db, findings)
+
+    await set_finding_status(db, findings[0].fingerprint, "resolved")
+
+    stored = (await list_findings(db, status="resolved"))[0]
+    verification = stored.evidence["verification"]
+    assert verification["change_reference"] == "commit:deadbeef"
+    assert verification["change_type"] == "commit"
+
+
+@pytest.mark.asyncio
+async def test_reresolving_preserves_prior_verification_evidence(db):
+    now = datetime.now(timezone.utc)
+    await insert_request(db, _record(0.25, now - timedelta(hours=1)))
+    findings = ModelOverkillDetector().run(_analysis_rows(1, 0.25))
+    await sync_findings(db, findings)
+
+    await set_finding_status(
+        db, findings[0].fingerprint, "resolved",
+        change_reference="commit:first", change_type="commit",
+    )
+    await set_finding_status(
+        db, findings[0].fingerprint, "resolved",
+        change_reference="deploy:second", change_type="deployment",
+    )
+
+    stored = (await list_findings(db, status="resolved"))[0]
+    assert stored.evidence["verification"]["change_reference"] == "deploy:second"
+    assert stored.evidence["verification_history"][0]["change_reference"] == "commit:first"
 
 
 @pytest.mark.asyncio

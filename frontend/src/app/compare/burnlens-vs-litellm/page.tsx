@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "BurnLens vs LiteLLM — Simpler LLM Cost Tracking Alternative (2026)",
-  description: "LiteLLM is a full gateway with YAML config. BurnLens is a local-first FinOps proxy: one env var, observation-mode passthrough, and hard-cap budgets per API key.",
+  description: "LiteLLM is a full gateway with YAML config. BurnLens is a local-first AI economics control plane: one env var, observation-mode passthrough, and budget controls per API key.",
   alternates: { canonical: "/compare/burnlens-vs-litellm" },
   openGraph: {
     title: "BurnLens vs LiteLLM — Simpler LLM Cost Tracking Alternative",
@@ -28,7 +28,7 @@ const faqStructuredData = {
       name: "What is the difference between BurnLens and LiteLLM?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "LiteLLM is a unified LLM gateway that rewrites requests into a single OpenAI-compatible format. BurnLens is a FinOps proxy that observes by default: it forwards provider requests transparently and logs cost. Runtime-changing economic policies (budget-aware model downgrade, semantic cache) are explicit, configurable, and auditable. Different design philosophies: LiteLLM normalizes; BurnLens observes unless you opt in.",
+        text: "LiteLLM is a unified LLM gateway that rewrites requests into a single OpenAI-compatible format. BurnLens is an AI economics control plane that observes by default: it forwards provider requests transparently, attributes cost, and records economic evidence. Runtime-changing policies (budget-aware model downgrade, semantic cache) are explicit, configurable, and auditable. Different design philosophies: LiteLLM normalizes; BurnLens observes unless you opt in.",
       },
     },
     {
@@ -78,8 +78,9 @@ export default function CompareLiteLLM() {
             LiteLLM and BurnLens both sit between your app and AI providers, but they solve different problems.
             <strong> LiteLLM is a gateway</strong> — it normalizes every provider into one OpenAI-compatible API,
             with YAML config, model routing, and request rewriting.
-            <strong> BurnLens is a FinOps proxy</strong> — in observation mode it forwards provider requests
-            transparently and only watches cost. Runtime-changing policies are explicit and off by default.
+            <strong> BurnLens is an AI economics control plane</strong> — in observation mode it forwards provider
+            requests transparently, attributes cost, and records economic evidence. Runtime-changing policies are
+            explicit and off by default.
             If you already use the OpenAI, Anthropic, and Google SDKs directly and just want to see and cap
             spend, BurnLens is the simpler choice.
           </p>

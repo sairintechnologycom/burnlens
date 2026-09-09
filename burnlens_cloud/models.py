@@ -620,6 +620,10 @@ class FindingItem(BaseModel):
 class FindingStatusBody(BaseModel):
     """Lifecycle transition for POST /api/v1/findings/{fingerprint}/status."""
     status: str
+    cohort_key: Optional[str] = Field(None, min_length=1, max_length=200)
+    change_reference: Optional[str] = Field(None, min_length=1, max_length=500)
+    change_type: Optional[str] = Field(None, min_length=1, max_length=32)
+    change_url: Optional[str] = Field(None, min_length=1, max_length=1000)
 
 
 class TraceCoverage(BaseModel):
@@ -648,6 +652,16 @@ class SavingsVerdict(BaseModel):
     current_requests: Optional[int] = None
     days_remaining: Optional[float] = None
     reopened: bool = False
+    outcome_quality: Literal["preserved", "degraded", "insufficient", "unavailable"] = "unavailable"
+    baseline_acceptance_rate: Optional[float] = None
+    current_acceptance_rate: Optional[float] = None
+    quality_qualified: bool = False
+    cohort_key: Optional[str] = None
+    intervention_id: Optional[str] = None
+    change_reference: Optional[str] = None
+    change_type: Optional[str] = None
+    change_url: Optional[str] = None
+    comparison_rule: str = "same_subject_equal_windows"
 
 
 class SavingsRollup(BaseModel):

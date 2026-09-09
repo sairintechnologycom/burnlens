@@ -22,8 +22,8 @@ export function VerifiedSavingsPanel({ r }: { r: SavingsRollup }) {
       help: "Open findings. Nothing has been done about them, so nothing can have been realised." },
     { label: "Predicted for fixes made", value: r.resolved_predicted_monthly_usd, color: "var(--muted)",
       help: "What BurnLens predicted for findings that were resolved, scaled to a month." },
-    { label: "Verified", value: r.verified_monthly_usd, color: "var(--green)",
-      help: "Measured from traffic after the fix: cost per request actually fell." },
+    { label: "Observed cost reduction", value: r.verified_monthly_usd, color: "var(--green)",
+      help: "Cost per request fell during the measured follow-up window. Workflow acceptance is checked when outcome evidence exists." },
     { label: "Missed", value: r.missed_predicted_monthly_usd, color: "var(--red, #e5484d)",
       help: "The fix landed and cost per request did not fall. The prediction did not materialise." },
     { label: "Still verifying", value: r.verifying_predicted_monthly_usd, color: "var(--amber)",
@@ -35,7 +35,7 @@ export function VerifiedSavingsPanel({ r }: { r: SavingsRollup }) {
   return (
     <div className="card" style={{ margin: 16, marginBottom: 0 }}>
       <div className="section-header">
-        <span className="section-header-title">Verified savings</span>
+        <span className="section-header-title">Savings evidence</span>
         <span
           className="section-header-action"
           title="Of what was predicted for fixes that have since reached a verdict, how much was actually measured."
@@ -56,7 +56,8 @@ export function VerifiedSavingsPanel({ r }: { r: SavingsRollup }) {
         {judged === 0 && (
           <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10, lineHeight: 1.6 }}>
             No fix has reached a verdict yet. Resolve a finding and BurnLens measures
-            cost per request over the following week before claiming anything.
+            cost per request over the following week. This is observed cost reduction;
+            workflow acceptance is checked when outcome evidence exists; otherwise it remains unavailable.
           </div>
         )}
       </div>

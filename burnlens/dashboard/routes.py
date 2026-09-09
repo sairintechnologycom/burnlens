@@ -317,13 +317,33 @@ async def set_status(fingerprint: str, request: Request) -> dict:
 
     body = await request.json()
     status = body.get("status")
+    cohort_key = body.get("cohort_key")
+    change_reference = body.get("change_reference")
+    change_type = body.get("change_type")
+    change_url = body.get("change_url")
+    if cohort_key is not None and (not isinstance(cohort_key, str) or not cohort_key.strip()):
+        raise HTTPException(status_code=400, detail="cohort_key must be a non-empty string")
+    if change_reference is not None and (not isinstance(change_reference, str) or not change_reference.strip()):
+        raise HTTPException(status_code=400, detail="change_reference must be a non-empty string")
+    if change_type is not None and (not isinstance(change_type, str) or not change_type.strip()):
+        raise HTTPException(status_code=400, detail="change_type must be a non-empty string")
+    if change_url is not None and (not isinstance(change_url, str) or not change_url.strip()):
+        raise HTTPException(status_code=400, detail="change_url must be a non-empty string")
     if status not in VALID_STATUSES:
         raise HTTPException(
             status_code=400,
             detail=f"status must be one of: {', '.join(VALID_STATUSES)}",
         )
 
-    if not await set_finding_status(_db_path(request), fingerprint, status):
+    if not await set_finding_status(
+        _db_path(request),
+        fingerprint,
+        status,
+        cohort_key=cohort_key,
+        change_reference=change_reference,
+        change_type=change_type,
+        change_url=change_url,
+    ):
         raise HTTPException(status_code=404, detail="Finding not found")
     return {"id": fingerprint, "status": status}
 
@@ -796,4 +816,3 @@ async def anomalies(
         }
         for e in events
     ]
-

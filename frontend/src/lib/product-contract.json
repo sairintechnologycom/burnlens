@@ -10,7 +10,10 @@
   "cache_default": "off",
   "routing_default": "off",
   "savings_projected": "Projected",
-  "savings_verified": "Verified",
+  "savings_verified": "Observed cost reduction",
+  "category": "AI Economics Control Plane",
+  "plain_language": "Measure, explain and control the cost of AI agents and LLM applications.",
+  "savings_evidence": "Cost per request fell during the measured follow-up window; workflow acceptance is checked when outcome evidence exists and otherwise remains unavailable.",
   "demo_label": "fixture",
   "demo_not_live": "not live telemetry",
   "cloud_trial": {
@@ -36,7 +39,7 @@
     "grain": "repository"
   },
   "headline": "Know what your AI costs — and what that money produced.",
-  "subhead": "See AI coding-agent and production-LLM economics by repository, customer, feature and outcome. Start locally without sending prompts or code to BurnLens.",
+  "subhead": "BurnLens is the economic control plane for AI. Measure, explain and control spend by repository, team, customer, feature and outcome. Start locally without sending prompts or code to BurnLens Cloud.",
   "cta_scan": "Scan my AI usage — free",
   "cta_team": "Review team economics"
 }

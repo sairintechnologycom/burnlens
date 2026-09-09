@@ -37,6 +37,7 @@ describe("waste findings list", () => {
     expect(html).toContain("workflow: invoice-gen");
     expect(html).toContain("Acknowledge");
     expect(html).toContain("Mark fixed");
+    expect(html).toContain("Verification metadata (optional)");
     expect(html).toContain("Accept risk");
     expect(html).toContain("data-testid=\"finding-row\"");
     expect(html).not.toContain("useful + waste + error");
@@ -58,10 +59,19 @@ describe("waste findings list", () => {
       current_requests: 10,
       days_remaining: null,
       reopened: false,
+      outcome_quality: "unavailable",
+      baseline_acceptance_rate: null,
+      current_acceptance_rate: null,
+      quality_qualified: false,
+      cohort_key: null,
+      intervention_id: null,
+      change_reference: null,
+      comparison_rule: "same_subject_equal_windows",
     };
     const html = renderToStaticMarkup(
       createElement(FindingsList, { findings: [SAMPLE], verdicts: { [SAMPLE.id]: verdict } }),
     );
+    expect(html).toContain("Observed reduction");
     expect(html).toContain("Fix verified");
     expect(html).toContain("data-testid=\"finding-verdict\"");
     expect(verdictLine(verdict)).toContain("$1.00 → $0.50");

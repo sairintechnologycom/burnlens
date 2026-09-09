@@ -169,7 +169,7 @@ class FakeConn:
             rec["detection_count"] += 1
             return "UPDATE 1"
         if "SET status = 'resolved'" in sql:
-            ws, fp = self._ws(args[4]), args[5]
+            ws, fp = self._ws(args[5]), args[6]
             rec = self.findings[(ws, fp)]
             rec["status"] = "resolved"
             rec["resolved_at"] = args[0]
@@ -177,6 +177,7 @@ class FakeConn:
             rec["baseline_cost_usd"] = args[1]
             rec["baseline_requests"] = args[2]
             rec["baseline_window_days"] = args[3]
+            rec["evidence"] = args[4]
             return "UPDATE 1"
         if "SET status = $1" in sql:
             rec = self.findings.get((self._ws(args[1]), args[2]))
@@ -340,6 +341,32 @@ async def test_resolve_snapshots_baselines_from_seeded_traffic():
     assert rec["baseline_requests"] == 4
     assert rec["baseline_window_days"] == BASELINE_WINDOW_DAYS
     assert rec["resolved_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_reresolving_preserves_prior_verification_evidence():
+    ws = uuid4()
+    conn = FakeConn()
+    candidates = run_all_detectors(
+        [_overkill_request(tags={"workflow_id": "wf"}) for _ in range(3)]
+    )
+    await sync_findings(conn, ws, candidates)
+    fp = candidates[0].fingerprint
+    conn.requests = [
+        _overkill_request(workspace_id=ws, tags={"workflow_id": "wf"})
+        for _ in range(3)
+    ]
+
+    assert await set_finding_status(
+        conn, ws, fp, "resolved", change_reference="commit:first", change_type="commit"
+    )
+    assert await set_finding_status(
+        conn, ws, fp, "resolved", change_reference="deploy:second", change_type="deployment"
+    )
+
+    evidence = json.loads(conn.findings[(str(ws), fp)]["evidence"])
+    assert evidence["verification"]["change_reference"] == "deploy:second"
+    assert evidence["verification_history"][0]["change_reference"] == "commit:first"
 
 
 @pytest.mark.asyncio

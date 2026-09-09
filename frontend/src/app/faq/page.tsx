@@ -7,7 +7,7 @@ import { slugify, renderChunkText } from "@/lib/support/render";
 export const metadata: Metadata = {
   title: "FAQ — BurnLens",
   description:
-    "Frequently asked questions about installing, configuring, and operating BurnLens — the open-source LLM FinOps proxy.",
+    "Frequently asked questions about installing, configuring, and operating BurnLens — the open-source AI economics control plane.",
   alternates: { canonical: "/faq" },
   openGraph: {
     title: "FAQ — BurnLens",

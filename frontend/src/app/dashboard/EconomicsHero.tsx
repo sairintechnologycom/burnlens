@@ -139,6 +139,9 @@ export function EconomicsHero({
           <div className="stat-value">
             {verified == null ? dim("No verified changes yet") : verified}
           </div>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+            observed cost/request reduction
+          </div>
         </div>
       </div>
     </div>

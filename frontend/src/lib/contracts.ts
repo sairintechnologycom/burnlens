@@ -690,6 +690,16 @@ export interface SavingsVerdict {
   current_requests: number | null;
   days_remaining: number | null;
   reopened: boolean;
+  outcome_quality: "preserved" | "degraded" | "insufficient" | "unavailable";
+  baseline_acceptance_rate: number | null;
+  current_acceptance_rate: number | null;
+  quality_qualified: boolean;
+  cohort_key: string | null;
+  intervention_id: string | null;
+  change_reference: string | null;
+  change_type: string | null;
+  change_url: string | null;
+  comparison_rule: string;
 }
 export const SavingsVerdictFields: Record<keyof SavingsVerdict, true> = {
   fingerprint: true,
@@ -706,6 +716,16 @@ export const SavingsVerdictFields: Record<keyof SavingsVerdict, true> = {
   current_requests: true,
   days_remaining: true,
   reopened: true,
+  outcome_quality: true,
+  baseline_acceptance_rate: true,
+  current_acceptance_rate: true,
+  quality_qualified: true,
+  cohort_key: true,
+  intervention_id: true,
+  change_reference: true,
+  change_type: true,
+  change_url: true,
+  comparison_rule: true,
 };
 
 export const FindingItemFields: Record<keyof FindingItem, true> = {

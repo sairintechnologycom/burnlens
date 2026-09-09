@@ -269,9 +269,11 @@ export default function LandingPage() {
               <h1 className="lp-headline">
                 Know what your AI costs — and what that money <span className="acc">produced</span>
               </h1>
+              <p className="lp-eyebrow">AI Economics Control Plane</p>
               <p className="lp-subline">
-                See AI coding-agent and production-LLM economics by repository, customer,
-                feature and outcome. Start locally without sending prompts or code to BurnLens.
+                BurnLens measures, explains and controls the cost of AI agents and LLM applications
+                by repository, team, customer, feature and outcome. Start locally without sending
+                prompts or code to BurnLens Cloud.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/scan" className="lp-hero-btn primary">

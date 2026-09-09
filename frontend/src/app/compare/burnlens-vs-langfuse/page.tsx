@@ -28,7 +28,7 @@ const faqStructuredData = {
       name: "Is BurnLens a replacement for Langfuse?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Not entirely. Langfuse is a full LLM observability platform — tracing, evaluations, prompt management, and cost reporting. BurnLens is focused on FinOps: tracking and enforcing AI spend. Many teams use both; Langfuse for trace and quality, BurnLens for budget enforcement.",
+        text: "Not entirely. Langfuse is a full LLM observability platform — tracing, evaluations, prompt management, and cost reporting. BurnLens is an AI economics control plane focused on spend attribution, outcomes, and runtime controls. Many teams use both; Langfuse for trace and quality, BurnLens for economic control.",
       },
     },
     {
@@ -70,15 +70,16 @@ export default function CompareLangfuse() {
 
       <main className="legal-content">
         <h1>BurnLens vs Langfuse</h1>
-        <p className="legal-updated">Observability vs FinOps enforcement · Updated May 2026</p>
+        <p className="legal-updated">Observability vs AI economics control · Updated May 2026</p>
 
         <section>
           <h2>TL;DR</h2>
           <p>
             <strong>Langfuse</strong> is an LLM observability platform: tracing, prompt versioning, evaluations, and
             cost reporting at the observability layer.
-            <strong> BurnLens</strong> is a FinOps proxy: cost tracking and hard-cap budgets enforced at the
-            infrastructure layer. Langfuse tells you what you spent. BurnLens controls what you <em>can</em> spend.
+            <strong> BurnLens</strong> is an AI economics control plane: spend attribution, outcome economics and
+            runtime controls at the infrastructure layer. Langfuse tells you what happened inside the application;
+            BurnLens helps explain and control what the work cost.
             They are complements more than competitors.
           </p>
         </section>

@@ -204,7 +204,9 @@ burnlens repos    # which repo actually burned the money`}
 
           <p>
             No env vars to set, no proxy to start, no account to create. The scan reads files and
-            writes to a local database; it never asks for an API key, because it never calls an API.
+            writes to a local database and does not need an API key. Local log scanning makes no
+            network request; if you use automatic merged-PR outcome derivation, BurnLens can call
+            the GitHub CLI (<code>gh</code>) when it is installed and authenticated.
           </p>
           <p>
             <strong>Then ask it the questions the provider bill cannot answer:</strong>

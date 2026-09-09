@@ -8,6 +8,13 @@ const read = (...parts: string[]) =>
 const contract = JSON.parse(read("src", "lib", "product-contract.json"));
 
 describe("public product contract", () => {
+  it("uses the AI economics category and qualifies current savings evidence", () => {
+    expect(contract.category).toBe("AI Economics Control Plane");
+    expect(contract.plain_language).toContain("Measure, explain and control");
+    expect(contract.savings_evidence.toLowerCase()).toContain("cost per request");
+    expect(contract.savings_evidence).toContain("when outcome evidence exists");
+  });
+
   it("self-service trial is 7 days, card-required, $29 Cloud — not a 14-day SKU", () => {
     expect(contract.cloud_trial.days).toBe(7);
     expect(contract.cloud_trial.card_required).toBe(true);

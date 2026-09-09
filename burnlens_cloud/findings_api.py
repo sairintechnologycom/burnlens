@@ -91,7 +91,14 @@ async def post_finding_status(
     pool = get_pool()
     async with pool.acquire() as conn:
         updated = await set_finding_status(
-            conn, token.workspace_id, fingerprint, body.status
+            conn,
+            token.workspace_id,
+            fingerprint,
+            body.status,
+            cohort_key=body.cohort_key,
+            change_reference=body.change_reference,
+            change_type=body.change_type,
+            change_url=body.change_url,
         )
         if not updated:
             raise HTTPException(status_code=404, detail="Finding not found")

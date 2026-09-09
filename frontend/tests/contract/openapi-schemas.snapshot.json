@@ -1273,6 +1273,58 @@
   "FindingStatusBody": {
     "description": "Lifecycle transition for POST /api/v1/findings/{fingerprint}/status.",
     "properties": {
+      "change_reference": {
+        "anyOf": [
+          {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Change Reference"
+      },
+      "change_type": {
+        "anyOf": [
+          {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Change Type"
+      },
+      "change_url": {
+        "anyOf": [
+          {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Change Url"
+      },
+      "cohort_key": {
+        "anyOf": [
+          {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Cohort Key"
+      },
       "status": {
         "title": "Status",
         "type": "string"
@@ -2826,6 +2878,17 @@
   "SavingsVerdict": {
     "description": "Did the fix reduce cost per request? Totals are never compared (G12).",
     "properties": {
+      "baseline_acceptance_rate": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baseline Acceptance Rate"
+      },
       "baseline_cost_per_request": {
         "anyOf": [
           {
@@ -2847,6 +2910,66 @@
           }
         ],
         "title": "Baseline Requests"
+      },
+      "change_reference": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Change Reference"
+      },
+      "change_type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Change Type"
+      },
+      "change_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Change Url"
+      },
+      "cohort_key": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Cohort Key"
+      },
+      "comparison_rule": {
+        "default": "same_subject_equal_windows",
+        "title": "Comparison Rule",
+        "type": "string"
+      },
+      "current_acceptance_rate": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Current Acceptance Rate"
       },
       "current_cost_per_request": {
         "anyOf": [
@@ -2896,6 +3019,28 @@
         "title": "Fingerprint",
         "type": "string"
       },
+      "intervention_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Intervention Id"
+      },
+      "outcome_quality": {
+        "default": "unavailable",
+        "enum": [
+          "preserved",
+          "degraded",
+          "insufficient",
+          "unavailable"
+        ],
+        "title": "Outcome Quality",
+        "type": "string"
+      },
       "pct_change": {
         "anyOf": [
           {
@@ -2917,6 +3062,11 @@
           }
         ],
         "title": "Projected Monthly Savings Usd"
+      },
+      "quality_qualified": {
+        "default": false,
+        "title": "Quality Qualified",
+        "type": "boolean"
       },
       "reopened": {
         "default": false,

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 VALID_STATUSES = ("open", "acknowledged", "resolved", "accepted_risk")
 BASELINE_WINDOW_DAYS = 7
+VERIFICATION_COMPARISON_RULE = "same_subject_equal_windows"
 DETECTION_WINDOW_DAYS = 7
 STALE_AFTER = timedelta(hours=1)
 
@@ -316,6 +317,10 @@ async def set_finding_status(
     fingerprint: str,
     status: str,
     baseline_window_days: int = BASELINE_WINDOW_DAYS,
+    cohort_key: str | None = None,
+    change_reference: str | None = None,
+    change_type: str | None = None,
+    change_url: str | None = None,
 ) -> bool:
     """Move a finding through its lifecycle. Returns False if it doesn't exist."""
     if status not in VALID_STATUSES:
@@ -337,7 +342,7 @@ async def set_finding_status(
 
     existing = await conn.fetchrow(
         """
-        SELECT subject_type, subject_key, estimated_waste_usd
+        SELECT subject_type, subject_key, estimated_waste_usd, evidence
           FROM waste_findings
          WHERE workspace_id = $1 AND fingerprint = $2
         """,
@@ -348,12 +353,39 @@ async def set_finding_status(
         return False
 
     now = _now()
+    cohort_key = cohort_key or f"{existing['subject_type']}:{existing['subject_key']}"
+    cohort_parts = cohort_key.split(":", 1)
+    scope_type, scope_key = existing["subject_type"], existing["subject_key"]
+    if len(cohort_parts) == 2 and cohort_parts[0] in ("workflow", "model") and cohort_parts[1]:
+        scope_type, scope_key = cohort_parts
+    intervention_id = f"finding:{fingerprint}:{now.isoformat()}"
+    evidence = _parse_evidence(existing.get("evidence"))
+    previous_verification = evidence.get("verification")
+    if isinstance(previous_verification, dict):
+        history = evidence.get("verification_history")
+        if not isinstance(history, list):
+            history = []
+        history.append(previous_verification)
+        evidence["verification_history"] = history
+    evidence["verification"] = {
+        "cohort_key": cohort_key,
+        "intervention_id": intervention_id,
+        "comparison_rule": VERIFICATION_COMPARISON_RULE,
+        "scope_type": scope_type,
+        "scope_key": scope_key,
+    }
+    if change_reference:
+        evidence["verification"]["change_reference"] = change_reference
+    if change_type:
+        evidence["verification"]["change_type"] = change_type
+    if change_url:
+        evidence["verification"]["change_url"] = change_url
     window_start = now - timedelta(days=baseline_window_days)
     baseline_cost, baseline_requests = await get_subject_spend(
         conn,
         workspace_id,
-        existing["subject_type"],
-        existing["subject_key"],
+        scope_type,
+        scope_key,
         since=window_start,
         until=now,
     )
@@ -366,13 +398,15 @@ async def set_finding_status(
                baseline_waste_usd = estimated_waste_usd,
                baseline_cost_usd = $2,
                baseline_requests = $3,
-               baseline_window_days = $4
-         WHERE workspace_id = $5 AND fingerprint = $6
+               baseline_window_days = $4,
+               evidence = $5::jsonb
+         WHERE workspace_id = $6 AND fingerprint = $7
         """,
         now,
         baseline_cost,
         baseline_requests,
         baseline_window_days,
+        json.dumps(evidence, sort_keys=True),
         workspace_id,
         fingerprint,
     )
@@ -396,7 +430,41 @@ def _verdict_base(finding: dict[str, Any]) -> dict[str, Any]:
         "current_requests": None,
         "days_remaining": None,
         "reopened": finding.get("status") == "open" and resolved_at is not None,
+        "outcome_quality": "unavailable",
+        "baseline_acceptance_rate": None,
+        "current_acceptance_rate": None,
+        "quality_qualified": False,
+        "cohort_key": None,
+        "intervention_id": None,
+        "change_reference": None,
+        "change_type": None,
+        "change_url": None,
+        "comparison_rule": VERIFICATION_COMPARISON_RULE,
+        "scope_type": None,
+        "scope_key": None,
     }
+
+
+async def _workflow_outcome_quality(
+    conn, workspace_id, workflow_id: str, since: datetime, until: datetime
+) -> tuple[float | None, int]:
+    """Return accepted rate and total outcomes for one workflow window."""
+    row = await conn.fetchrow(
+        """
+        SELECT COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status = 'accepted') AS accepted
+          FROM outcomes
+         WHERE workspace_id = $1 AND workflow_id = $2
+           AND event_time >= $3 AND event_time < $4
+        """,
+        workspace_id,
+        workflow_id,
+        since,
+        until,
+    )
+    total = int((row or {}).get("total") or 0)
+    accepted = int((row or {}).get("accepted") or 0)
+    return ((accepted / total) if total else None, total)
 
 
 async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any] | None:
@@ -414,6 +482,21 @@ async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any]
 
     finding = dict(row)
     verdict = _verdict_base(finding)
+    verification = _parse_evidence(finding.get("evidence")).get("verification")
+    if isinstance(verification, dict):
+        verdict["cohort_key"] = verification.get("cohort_key")
+        verdict["intervention_id"] = verification.get("intervention_id")
+        verdict["change_reference"] = verification.get("change_reference")
+        verdict["change_type"] = verification.get("change_type")
+        verdict["change_url"] = verification.get("change_url")
+        verdict["scope_type"] = verification.get("scope_type")
+        verdict["scope_key"] = verification.get("scope_key")
+        verdict["comparison_rule"] = verification.get("comparison_rule", VERIFICATION_COMPARISON_RULE)
+    verdict["cohort_key"] = verdict["cohort_key"] or f"{finding['subject_type']}:{finding['subject_key']}"
+    verdict["intervention_id"] = verdict["intervention_id"] or (
+        f"finding:{finding['fingerprint']}:{finding['resolved_at']}"
+        if finding.get("resolved_at") else None
+    )
     if not finding.get("resolved_at") or not finding.get("baseline_requests"):
         return verdict
 
@@ -430,11 +513,14 @@ async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any]
         )
         return verdict
 
+    scope_type, scope_key = finding["subject_type"], finding["subject_key"]
+    if verdict["scope_type"] in ("workflow", "model") and verdict["scope_key"]:
+        scope_type, scope_key = verdict["scope_type"], verdict["scope_key"]
     current_cost, current_requests = await get_subject_spend(
         conn,
         workspace_id,
-        finding["subject_type"],
-        finding["subject_key"],
+        scope_type,
+        scope_key,
         since=resolved_at,
         until=resolved_at + timedelta(days=window_days),
     )
@@ -445,12 +531,39 @@ async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any]
         verdict["status"] = "no_traffic"
         return verdict
 
+    if scope_type == "workflow":
+        baseline_rate, baseline_total = await _workflow_outcome_quality(
+            conn,
+            workspace_id,
+            scope_key,
+            resolved_at - timedelta(days=window_days),
+            resolved_at,
+        )
+        current_rate, current_total = await _workflow_outcome_quality(
+            conn,
+            workspace_id,
+            scope_key,
+            resolved_at,
+            resolved_at + timedelta(days=window_days),
+        )
+        verdict["baseline_acceptance_rate"] = baseline_rate
+        verdict["current_acceptance_rate"] = current_rate
+        if baseline_total and current_total:
+            verdict["outcome_quality"] = (
+                "degraded" if (current_rate or 0.0) < (baseline_rate or 0.0) else "preserved"
+            )
+            verdict["quality_qualified"] = verdict["outcome_quality"] == "preserved"
+        else:
+            verdict["outcome_quality"] = "insufficient"
+
     from burnlens.analysis.economics import classify_savings
 
     baseline_per = float(finding.get("baseline_cost_usd") or 0.0) / finding["baseline_requests"]
     current_per = current_cost / current_requests
     delta = baseline_per - current_per
     verdict["status"] = classify_savings(delta, current_requests)
+    if verdict["status"] == "verified" and verdict["outcome_quality"] == "degraded":
+        verdict["status"] = "missed"
     verdict["baseline_cost_per_request"] = baseline_per
     verdict["current_cost_per_request"] = current_per
     verdict["delta_per_request"] = delta

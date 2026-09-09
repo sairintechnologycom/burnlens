@@ -1,6 +1,8 @@
-# BurnLens — The open-source FinOps proxy for AI spend
+# BurnLens — The open-source AI economics control plane
 
-Track every dollar by feature, team, and customer across OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock. Hard-cap budgets before the API call — not after the bill arrives.
+Measure, explain and control the cost of AI agents and LLM applications. Connect spend to repositories, teams, customers, features and outcomes across OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock.
+
+BurnLens is the economic control plane for AI: **Measure. Control. Prove.** Savings marked observed are reductions in cost per request during a measured follow-up window; outcome quality and invoice-level savings require additional evidence.
 
 [![PyPI](https://img.shields.io/pypi/v/burnlens?label=pypi&color=00e5c8)](https://pypi.org/project/burnlens)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)

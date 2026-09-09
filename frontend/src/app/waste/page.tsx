@@ -97,13 +97,22 @@ function WasteContent() {
     fetchData();
   }, [fetchData]);
 
-  const onStatus = async (fingerprint: string, status: string) => {
+  const onStatus = async (
+    fingerprint: string,
+    status: string,
+    metadata?: {
+      cohort_key?: string;
+      change_reference?: string;
+      change_type?: string;
+      change_url?: string;
+    },
+  ) => {
     if (!session) return;
     setPendingId(fingerprint);
     try {
       await apiFetch(`/api/v1/findings/${fingerprint}/status`, session.token, {
         method: "POST",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...metadata }),
       });
       await fetchData();
     } catch (err: unknown) {

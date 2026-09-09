@@ -4,9 +4,9 @@ import type { SupportIndex } from "@/lib/support/types";
 import { slugify, renderChunkText } from "@/lib/support/render";
 import DocsNav from "../DocsNav";
 
-const TITLE = "Cost evidence — Cost Confidence, Outcome Coverage, Verified Savings";
+const TITLE = "Cost evidence — Cost Confidence, Outcome Coverage, Savings Evidence";
 const DESCRIPTION =
-  "How BurnLens says how much of its own spend figure it can prove: which spend was verified against the provider's bill, which share reaches a recorded outcome, and which projected savings actually showed up in traffic.";
+  "How BurnLens says how much of its own spend figure it can prove: which spend was verified against the provider's bill, which share reaches a recorded outcome, and which projected savings showed up as a measured cost-per-request reduction.";
 
 export const metadata: Metadata = {
   title: TITLE,
