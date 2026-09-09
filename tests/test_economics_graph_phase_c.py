@@ -304,10 +304,11 @@ async def test_spend_after_the_last_merge_is_unattributed(initialized_db, tmp_pa
         tags={"workflow_id": workflow}, source="scan_claude", request_id="b",
     ))
 
-    row = (await get_workflow_economics(initialized_db, since=SINCE))[0]
-    assert row.cost_accepted_usd == pytest.approx(3.00)
-    assert row.cost_unattributed_usd == pytest.approx(2.00)
-    assert row.cost_per_accepted_usd == pytest.approx(5.00)
+    rows = await get_workflow_economics(initialized_db, since=SINCE)
+    by_type = {row.outcome_type: row for row in rows}
+    assert by_type["pull_request"].cost_accepted_usd == pytest.approx(3.00)
+    assert by_type["unattributed"].cost_unattributed_usd == pytest.approx(2.00)
+    assert by_type["pull_request"].cost_per_accepted_usd == pytest.approx(3.00)
 
 
 async def test_derived_and_reported_outcomes_coexist(initialized_db, tmp_path):
@@ -320,5 +321,6 @@ async def test_derived_and_reported_outcomes_coexist(initialized_db, tmp_path):
     result = await _derive_with_fake_gh(initialized_db, tmp_path, [_pr(1, minutes=2)])
 
     assert result.inserted == 1
-    row = (await get_workflow_economics(initialized_db, since=SINCE))[0]
-    assert row.accepted_count == 2
+    rows = await get_workflow_economics(initialized_db, since=SINCE)
+    assert sum(row.accepted_count for row in rows) == 2
+    assert {row.outcome_type for row in rows} == {"pull_request", "unspecified"}

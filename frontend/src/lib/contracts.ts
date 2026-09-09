@@ -452,6 +452,7 @@ export interface WorkflowEconomics {
 }
 export const WorkflowEconomicsFields: Record<keyof WorkflowEconomics, true> = {
   workflow_id: true,
+  outcome_type: true,
   accepted_count: true,
   rejected_count: true,
   failed_count: true,
