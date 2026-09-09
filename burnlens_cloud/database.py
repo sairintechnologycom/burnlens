@@ -558,6 +558,24 @@ async def init_db():
                 UNIQUE (workspace_id, outcome_id)
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS outcome_history (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                outcome_id TEXT NOT NULL,
+                prior_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                prior_event_time TIMESTAMPTZ,
+                new_event_time TIMESTAMPTZ NOT NULL,
+                reason TEXT NOT NULL,
+                source TEXT NOT NULL,
+                changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_outcome_history_workspace_outcome
+            ON outcome_history(workspace_id, outcome_id, changed_at)
+        """)
 
         # The allocation query seeks the first outcome at-or-after each request's
         # timestamp, per workflow — this index is what keeps that a seek.
@@ -1520,6 +1538,56 @@ async def execute_query(query: str, *args):
     """Execute a query and return results."""
     async with pool.acquire() as conn:
         return await conn.fetch(query, *args)
+
+
+async def correct_outcome(
+    workspace_id: str,
+    outcome_id: str,
+    status: str,
+    reason: str,
+    event_time=None,
+) -> bool:
+    """Correct one outcome and append its previous state atomically."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            current = await conn.fetchrow(
+                """
+                SELECT status, event_time FROM outcomes
+                WHERE workspace_id = $1 AND outcome_id = $2
+                FOR UPDATE
+                """,
+                workspace_id,
+                outcome_id,
+            )
+            if current is None:
+                return False
+            new_event_time = event_time or current["event_time"]
+            await conn.execute(
+                """
+                INSERT INTO outcome_history
+                    (workspace_id, outcome_id, prior_status, new_status,
+                     prior_event_time, new_event_time, reason, source)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, 'api')
+                """,
+                workspace_id,
+                outcome_id,
+                current["status"],
+                status,
+                current["event_time"],
+                new_event_time,
+                reason,
+            )
+            await conn.execute(
+                """
+                UPDATE outcomes SET status = $3, event_time = $4
+                WHERE workspace_id = $1 AND outcome_id = $2
+                """,
+                workspace_id,
+                outcome_id,
+                status,
+                new_event_time,
+            )
+            return True
 
 
 async def execute_insert(query: str, *args):

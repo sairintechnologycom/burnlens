@@ -29,12 +29,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 from .auth import get_workspace_by_api_key, require_role, verify_token
+from .database import correct_outcome as correct_cloud_outcome
 from .database import execute_query
 from .models import (
     OutcomeCoverage,
     OutcomeCoverageRow,
     OutcomeIngestRequest,
     OutcomeIngestResponse,
+    OutcomeCorrectionRequest,
+    OutcomeHistoryEntry,
     ProviderConcentration,
     WorkflowEconomics,
 )
@@ -85,7 +88,7 @@ async def ingest_outcomes(
     Re-posting an outcome_id already on file is counted in `duplicates` and
     changes nothing — including its status. That is deliberate: a replayed
     delivery must not be able to overwrite a newer status with a stale one. To
-    correct an outcome, post a new outcome_id.
+    correct an outcome, use the explicit correction endpoint.
     """
     api_key = request.api_key or x_api_key
     if not api_key:
@@ -147,6 +150,51 @@ async def ingest_outcomes(
         accepted=inserted,
         duplicates=len(request.outcomes) - inserted,
     )
+
+
+@router.patch("/v1/outcomes/{outcome_id}")
+async def correct_outcome(
+    outcome_id: str,
+    request: OutcomeCorrectionRequest,
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+):
+    """Correct one outcome without creating a second denominator row."""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    workspace_result = await get_workspace_by_api_key(x_api_key)
+    if not workspace_result:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    changed = await correct_cloud_outcome(
+        str(workspace_result[0]), outcome_id, request.status,
+        request.reason, request.event_time,
+    )
+    if not changed:
+        raise HTTPException(status_code=404, detail="Outcome not found")
+    return {"outcome_id": outcome_id, "status": request.status, "corrected": True}
+
+
+@router.get(
+    "/api/v1/outcomes/{outcome_id}/history",
+    response_model=list[OutcomeHistoryEntry],
+)
+async def outcome_history(
+    outcome_id: str,
+    workspace_id: str = Depends(resolve_workspace),
+):
+    """Return prior states and reasons for an outcome correction audit."""
+    rows = await execute_query(
+        """
+        SELECT outcome_id, prior_status, new_status, prior_event_time,
+               new_event_time, reason, source, changed_at
+        FROM outcome_history
+        WHERE workspace_id = $1 AND outcome_id = $2
+        ORDER BY changed_at ASC
+        """,
+        workspace_id,
+        outcome_id,
+    )
+    return [dict(row) for row in rows]
 
 
 # The allocation join. Each request finds the first outcome of its workflow at

@@ -61,7 +61,11 @@ class DeriveResult:
     rejected: int = 0
     skipped_open: int = 0
     inserted: int = 0
+    corrected: int = 0
     duplicates: int = 0
+    scope_since: str | None = None
+    scope_until: str | None = None
+    import_complete: bool = True
 
 
 def _run_gh(repo_path: str, *args: str) -> str:
@@ -100,7 +104,8 @@ def _parse_ts(raw: str | None) -> datetime | None:
     try:
         # gh emits RFC3339 with a trailing Z, which fromisoformat rejects
         # before 3.11.
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
@@ -117,22 +122,54 @@ def _local_repo_name(repo_path: str) -> str | None:
     return read_git_context(repo_path).get("repo")
 
 
-def fetch_pull_requests(repo_path: str, limit: int = 200) -> list[dict]:
-    """Return closed pull requests for the repo checked out at ``repo_path``."""
+def fetch_pull_requests(
+    repo_path: str,
+    limit: int | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> list[dict]:
+    """Return all closed PRs, optionally filtered to an event-time window."""
+    slug = _repo_slug(repo_path)
+    if not slug:
+        raise DeriveError("could not determine the GitHub repository from its origin")
     raw = _run_gh(
         repo_path,
-        "pr", "list",
-        "--state", "closed",
-        "--limit", str(limit),
-        "--json", "number,title,mergedAt,closedAt,url,author",
+        "api", "--paginate", "--slurp",
+        f"repos/{slug}/pulls?state=closed&per_page=100",
     )
     try:
-        data = json.loads(raw or "[]")
+        pages = json.loads(raw or "[]")
     except json.JSONDecodeError as exc:
         raise DeriveError(f"could not parse gh output: {exc}")
-    if not isinstance(data, list):
+    if not isinstance(pages, list):
         raise DeriveError("unexpected gh output shape")
-    return data
+    if pages and all(isinstance(page, list) for page in pages):
+        data = [item for page in pages for item in page]
+    else:
+        data = pages
+
+    normalised: list[dict] = []
+    for pr in data:
+        if not isinstance(pr, dict):
+            continue
+        merged_at = pr.get("mergedAt") or pr.get("merged_at")
+        closed_at = pr.get("closedAt") or pr.get("closed_at")
+        event_time = _parse_ts(merged_at) or _parse_ts(closed_at)
+        if since and (event_time is None or event_time < since):
+            continue
+        if until and (event_time is None or event_time >= until):
+            continue
+        normalised.append({
+            "number": pr.get("number"),
+            "title": pr.get("title") or "",
+            "mergedAt": merged_at,
+            "closedAt": closed_at,
+            "url": pr.get("url") or pr.get("html_url") or "",
+            "author": pr.get("author") or {
+                "login": (pr.get("user") or {}).get("login", "")
+            },
+        })
+    return normalised if limit is None else normalised[:max(0, limit)]
 
 
 def _repo_slug(repo_path: str) -> str | None:
@@ -140,7 +177,7 @@ def _repo_slug(repo_path: str) -> str | None:
     try:
         raw = _run_gh(repo_path, "repo", "view", "--json", "nameWithOwner")
         return json.loads(raw).get("nameWithOwner")
-    except (DeriveError, json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, AttributeError):
         return None
 
 
@@ -202,14 +239,16 @@ def build_outcomes(
 async def derive_pr_outcomes(
     db_path: str,
     repo_path: str = ".",
-    limit: int = 200,
+    limit: int | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
 ) -> DeriveResult:
     """Derive merged/closed PRs into the outcomes table. Idempotent.
 
     Re-running only ever adds newly-closed PRs: outcome ids are deterministic
     and the table dedups on them, so this is safe on a cron.
     """
-    from burnlens.storage.database import init_db, insert_outcome
+    from burnlens.storage.database import init_db, reconcile_derived_outcome
 
     # gh first: the coding-agent loop's failure mode is "gh is missing", not
     # a later git or parse error that makes the user hunt for the real cause.
@@ -221,10 +260,21 @@ async def derive_pr_outcomes(
     if not repo:
         raise DeriveError(f"{resolved} is not inside a git repository")
 
-    workflow_id = repo_workflow_id(repo)
-    result = DeriveResult(repo=repo, workflow_id=workflow_id)
+    from burnlens.git_context import read_git_context
 
-    pull_requests = fetch_pull_requests(resolved, limit=limit)
+    stable_repo = read_git_context(resolved).get("repo_id") or repo
+    workflow_id = repo_workflow_id(stable_repo)
+    result = DeriveResult(
+        repo=repo,
+        workflow_id=workflow_id,
+        scope_since=since.isoformat() if since else None,
+        scope_until=until.isoformat() if until else None,
+        import_complete=limit is None,
+    )
+
+    pull_requests = fetch_pull_requests(
+        resolved, limit=limit, since=since, until=until
+    )
     result.pull_requests_seen = len(pull_requests)
 
     outcomes, result.skipped_open = build_outcomes(
@@ -237,13 +287,16 @@ async def derive_pr_outcomes(
             result.accepted += 1
         else:
             result.rejected += 1
-        if await insert_outcome(db_path, outcome):
+        outcome_result = await reconcile_derived_outcome(db_path, outcome)
+        if outcome_result == "inserted":
             result.inserted += 1
+        elif outcome_result == "corrected":
+            result.corrected += 1
         else:
             result.duplicates += 1
 
     logger.info(
-        "Derived %d outcomes for %s (%d new, %d already recorded)",
-        len(outcomes), workflow_id, result.inserted, result.duplicates,
+        "Derived %d outcomes for %s (%d new, %d corrected, %d already recorded)",
+        len(outcomes), workflow_id, result.inserted, result.corrected, result.duplicates,
     )
     return result

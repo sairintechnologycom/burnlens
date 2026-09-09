@@ -235,6 +235,11 @@ async def set_finding_status(
     change_reference: str | None = None,
     change_type: str | None = None,
     change_url: str | None = None,
+    owner: str | None = None,
+    acceptance_criteria: str | None = None,
+    configuration_before: str | None = None,
+    configuration_after: str | None = None,
+    effective_at: datetime | None = None,
 ) -> bool:
     """Move a finding through its lifecycle. Returns False if it doesn't exist.
 
@@ -289,7 +294,9 @@ async def set_finding_status(
             change_reference = f"commit:{commit_sha}"
             change_type = change_type or "commit"
 
-    now = datetime.now(timezone.utc)
+    now = effective_at or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     cohort_key = cohort_key or f"{existing['subject_type']}:{existing['subject_key']}"
     cohort_parts = cohort_key.split(":", 1)
     scope_type, scope_key = existing["subject_type"], existing["subject_key"]
@@ -322,6 +329,15 @@ async def set_finding_status(
         evidence["verification"]["change_type"] = change_type
     if change_url:
         evidence["verification"]["change_url"] = change_url
+    for key, value in (
+        ("owner", owner),
+        ("acceptance_criteria", acceptance_criteria),
+        ("configuration_before", configuration_before),
+        ("configuration_after", configuration_after),
+    ):
+        if value:
+            evidence["verification"][key] = value
+    evidence["verification"]["effective_at"] = now.isoformat()
     window_start = (now - timedelta(days=baseline_window_days)).isoformat()
     baseline_cost, baseline_requests = await get_subject_spend(
         db_path,
@@ -398,6 +414,11 @@ class SavingsVerdict:
     change_reference: str | None = None
     change_type: str | None = None
     change_url: str | None = None
+    owner: str | None = None
+    acceptance_criteria: str | None = None
+    configuration_before: str | None = None
+    configuration_after: str | None = None
+    effective_at: str | None = None
     comparison_rule: str = VERIFICATION_COMPARISON_RULE
 
 
@@ -459,6 +480,11 @@ async def verify_savings(
         verdict.change_reference = verification.get("change_reference")
         verdict.change_type = verification.get("change_type")
         verdict.change_url = verification.get("change_url")
+        verdict.owner = verification.get("owner")
+        verdict.acceptance_criteria = verification.get("acceptance_criteria")
+        verdict.configuration_before = verification.get("configuration_before")
+        verdict.configuration_after = verification.get("configuration_after")
+        verdict.effective_at = verification.get("effective_at")
         if verification.get("scope_type") in ("workflow", "model") and verification.get("scope_key"):
             verdict.cohort_key = verification.get("cohort_key")
         verdict.comparison_rule = verification.get("comparison_rule", VERIFICATION_COMPARISON_RULE)

@@ -15,7 +15,11 @@ The two things worth guarding are the ones that make the number lie:
 """
 import pytest
 
-from burnlens_cloud.reconciliation import build_confidence, classify_row
+from burnlens_cloud.reconciliation import (
+    build_confidence,
+    build_period_provider_status,
+    classify_row,
+)
 
 
 def row(provider, model, state, is_scan, requests, cost):
@@ -160,6 +164,29 @@ def test_empty_workspace_does_not_divide_by_zero():
     assert c.confidence_pct == 0.0
     assert c.total_requests == 0
     assert c.calculated.share_pct == 0.0
+
+
+def test_period_status_requires_a_run_for_every_spend_date():
+    rows = [
+        {"provider": "openai", "day": "2026-08-01", "has_credential": True,
+         "reconciled_day": "2026-08-01", "burnlens_cost_usd": 1.0, "drift_pct": 0.0},
+        {"provider": "openai", "day": "2026-08-02", "has_credential": True,
+         "reconciled_day": None, "burnlens_cost_usd": None, "drift_pct": None},
+    ]
+    assert build_period_provider_status(rows) == {"openai": "unreconciled"}
+
+
+def test_period_status_preserves_missing_key_and_drift():
+    rows = [
+        {"provider": "anthropic", "day": "2026-08-01", "has_credential": False,
+         "reconciled_day": None, "burnlens_cost_usd": None, "drift_pct": None},
+        {"provider": "openai", "day": "2026-08-01", "has_credential": True,
+         "reconciled_day": "2026-08-01", "burnlens_cost_usd": 2.0, "drift_pct": 4.0},
+    ]
+    assert build_period_provider_status(rows) == {
+        "anthropic": None,
+        "openai": "drifted",
+    }
 
 
 # -------------------------------------------------------------------------- gaps

@@ -39,8 +39,8 @@ export const DOCS_PAGES: { href: string; title: string; blurb: string }[] = [
   },
   {
     href: "/docs/budgets",
-    title: "Budgets & hard caps",
-    blurb: "Daily key caps, team and customer budgets, virtual keys, downgrade routing.",
+    title: "Budgets & enforcement",
+    blurb: "Daily key caps, control scope, concurrency guarantees, virtual keys, downgrade routing.",
   },
   {
     href: "/docs/evidence",
@@ -97,10 +97,11 @@ export const COMMANDS: { cmd: string; what: string; group: string }[] = [
   { group: "Find waste", cmd: "analyze", what: "Run waste detectors and print findings." },
   { group: "Find waste", cmd: "findings", what: "Persisted waste findings and their lifecycle." },
   { group: "Find waste", cmd: "economics", what: "Top-line runtime economics, then burnlens recommend for the switch." },
-  { group: "Find waste", cmd: "outcome", what: "Record business outcomes to get cost per accepted outcome." },
+  { group: "Find waste", cmd: "outcome", what: "Record, correct, and inspect business outcomes and cost per accepted outcome." },
   { group: "Find waste", cmd: "recommend", what: "Analyse usage patterns and suggest cheaper model alternatives." },
   { group: "Control spend", cmd: "budgets", what: "Show per-team budget status for the current month." },
   { group: "Control spend", cmd: "customers", what: "Show per-customer spend and budget status for the current month." },
+  { group: "Control spend", cmd: "controls", what: "Show configured budget scopes, failure policy, concurrency guarantees, and known ceilings." },
   { group: "Control spend", cmd: "key", what: "Register API keys for per-key daily caps." },
   { group: "Control spend", cmd: "keys", what: "Show today's spend per API-key label against its daily cap." },
   { group: "Control spend", cmd: "vkey", what: "Issue virtual keys (gateway): per-team budget + model allowlist." },

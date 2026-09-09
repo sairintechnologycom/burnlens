@@ -607,7 +607,7 @@ async def handle_request(
                 # Fire-and-forget so we don't add latency to the proxy.
                 asyncio.create_task(touch_last_used(db_path, label))
         except Exception as exc:  # fail-open: never break the proxy
-            logger.debug("API key label lookup failed: %s", exc)
+            logger.warning("API key label lookup failed (fail-open): %s", exc)
 
     # --- CODE-2: per-API-key daily hard cap (BEFORE forwarding) ---
     if label and api_key_budgets is not None:
@@ -617,7 +617,7 @@ async def handle_request(
             from burnlens.key_budget import enforce_daily_cap
             breach = await enforce_daily_cap(label, db_path, api_key_budgets)
         except Exception as exc:  # fail-open
-            logger.debug("Daily cap check failed: %s", exc)
+            logger.warning("Daily cap check failed (fail-open): %s", exc)
             breach = None
         if breach is not None:
             spent_today, daily_limit, resets_at = breach
@@ -635,9 +635,13 @@ async def handle_request(
     if customer and customer_budgets:
         if unpriced and _customer_has_budget(customer, customer_budgets):
             return _reject_unpriced(provider.name, model, f"budget for customer {customer!r}")
-        allowed, spent, limit = await check_customer_budget(
-            customer, db_path, customer_budgets,
-        )
+        try:
+            allowed, spent, limit = await check_customer_budget(
+                customer, db_path, customer_budgets,
+            )
+        except Exception as exc:  # fail-open: never break the proxy
+            logger.warning("Customer budget check failed (fail-open): %s", exc)
+            allowed, spent, limit = True, 0.0, 0.0
         if not allowed:
             reject_body = json.dumps({
                 "error": "budget_exceeded",
@@ -811,7 +815,7 @@ async def handle_request(
                 }).encode()
                 return 429, {"content-type": "application/json"}, reject_body, None
         except Exception as exc:
-            logger.debug("Budget policy check failed (fail-open): %s", exc)
+            logger.warning("Budget policy check failed (fail-open): %s", exc)
 
     upstream_url = provider.resolve_upstream_url(upstream_path, clean_headers)
     start_ms = time.monotonic()
@@ -1744,4 +1748,3 @@ async def _save_to_cache_bg(
             )
     except Exception as exc:
         logger.debug("Background cache save failed (non-fatal): %s", exc)
-

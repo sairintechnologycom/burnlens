@@ -48,9 +48,9 @@ Without a read-only billing key for a provider, BurnLens has never compared its 
 
 The Anthropic Admin API is available only to Organization accounts. Individual accounts cannot obtain a cost-report key at all, so Anthropic spend on an individual account cannot be reconciled by any means.
 
-## Reconciliation compares one day, once a day
+## Reconciliation is daily and period-scoped
 
-The daily comparison covers the previous complete UTC day, not the current one, because provider billing lags and a same-day comparison reports drift that is only reporting delay. A drift figure therefore describes yesterday, not this moment.
+The daily job covers the previous complete UTC day, not the current one, because provider billing lags and a same-day comparison reports drift that is only reporting delay. The dashboard badge shows the latest completed day. Cost Confidence is stricter: for its selected UTC reporting window, a provider is marked verified only when every date containing that provider's spend has a matching daily comparison inside the drift threshold. A successful day therefore cannot certify an incomplete month.
 
 ## Savings verification measures a window, not a permanent state
 

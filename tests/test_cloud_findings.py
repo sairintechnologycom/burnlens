@@ -358,7 +358,9 @@ async def test_reresolving_preserves_prior_verification_evidence():
     ]
 
     assert await set_finding_status(
-        conn, ws, fp, "resolved", change_reference="commit:first", change_type="commit"
+        conn, ws, fp, "resolved", change_reference="commit:first", change_type="commit",
+        owner="platform", acceptance_criteria="accepted rate holds",
+        configuration_before="model:gpt-4o", configuration_after="model:gpt-4o-mini",
     )
     assert await set_finding_status(
         conn, ws, fp, "resolved", change_reference="deploy:second", change_type="deployment"
@@ -367,6 +369,8 @@ async def test_reresolving_preserves_prior_verification_evidence():
     evidence = json.loads(conn.findings[(str(ws), fp)]["evidence"])
     assert evidence["verification"]["change_reference"] == "deploy:second"
     assert evidence["verification_history"][0]["change_reference"] == "commit:first"
+    assert evidence["verification_history"][0]["owner"] == "platform"
+    assert evidence["verification_history"][0]["configuration_after"] == "model:gpt-4o-mini"
 
 
 @pytest.mark.asyncio

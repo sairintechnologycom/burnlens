@@ -144,7 +144,7 @@ X-BurnLens-Tag-Customer: acme-corp`}</Code>
         <h2>Next</h2>
         <p>
           Metering on its own does not stop anything. To make the proxy refuse a call that
-          would breach a limit, see <Link href="/docs/budgets">budgets and hard caps</Link>.
+          would breach a limit, see <Link href="/docs/budgets">budgets and enforcement</Link>.
         </p>
       </section>
     </>

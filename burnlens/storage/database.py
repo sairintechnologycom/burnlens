@@ -76,6 +76,26 @@ CREATE TABLE IF NOT EXISTS outcomes (
 );
 """
 
+_CREATE_OUTCOME_HISTORY_TABLE = """
+CREATE TABLE IF NOT EXISTS outcome_history (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    outcome_id      TEXT    NOT NULL,
+    prior_status    TEXT    NOT NULL,
+    new_status      TEXT    NOT NULL,
+    prior_event_time TEXT,
+    new_event_time  TEXT    NOT NULL,
+    reason          TEXT    NOT NULL,
+    source          TEXT    NOT NULL,
+    changed_at      TEXT    NOT NULL,
+    metadata        TEXT    NOT NULL DEFAULT '{}'
+);
+"""
+
+_CREATE_OUTCOME_HISTORY_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_outcome_history_outcome
+    ON outcome_history(outcome_id, changed_at);
+"""
+
 # BL-E1. Detectors stay pure and recompute from scratch every run; this table is
 # what survives between runs. `fingerprint` is the natural key — detector +
 # subject + detector version, never the dollar figure or the timestamps, so the
@@ -950,11 +970,13 @@ async def get_spend_by_customer_this_month(db_path: str) -> dict[str, float]:
 
 
 async def migrate_create_outcomes_table(db_path: str) -> None:
-    """Create the ``outcomes`` table + indexes. Safe to call repeatedly."""
+    """Create outcome tables + indexes. Safe to call repeatedly."""
     async with aiosqlite.connect(db_path) as db:
         await db.execute(_CREATE_OUTCOMES_TABLE)
+        await db.execute(_CREATE_OUTCOME_HISTORY_TABLE)
         await db.execute(_CREATE_OUTCOMES_WORKFLOW_INDEX)
         await db.execute(_CREATE_OUTCOMES_SYNCED_INDEX)
+        await db.execute(_CREATE_OUTCOME_HISTORY_INDEX)
         await db.commit()
 
 
@@ -1013,6 +1035,142 @@ async def insert_outcome(db_path: str, outcome: "Outcome") -> int:
         )
         await db.commit()
         return cursor.lastrowid if cursor.rowcount else 0
+
+
+async def reconcile_derived_outcome(
+    db_path: str, outcome: "Outcome", reason: str = "derived source refresh"
+) -> str:
+    """Insert a derived outcome or correct its current row with audit history.
+
+    Explicit API/CLI replays still use ``insert_outcome`` and remain no-ops.
+    Derived sources are different: GitHub can move a PR from rejected to
+    accepted after it reopens, so one current row is updated transactionally
+    and the prior state is retained in ``outcome_history``.
+    """
+    from datetime import datetime, timezone
+
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute(
+            "SELECT status, event_time, workflow_id, business_value, currency, source, metadata "
+            "FROM outcomes WHERE outcome_id = ?",
+            (outcome.outcome_id,),
+        )
+        current = await cursor.fetchone()
+        metadata = dict(outcome.metadata or {})
+        metadata.setdefault("outcome_type", outcome.outcome_type)
+        new_event_time = outcome.event_time.isoformat()
+        if current is None:
+            await db.execute(
+                """
+                INSERT INTO outcomes (
+                    outcome_id, workflow_id, status, business_value, currency,
+                    event_time, source, metadata, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    outcome.outcome_id, outcome.workflow_id, outcome.status,
+                    outcome.business_value, outcome.currency, new_event_time,
+                    outcome.source, json.dumps(metadata),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            await db.commit()
+            return "inserted"
+
+        # Never let a derived identifier overwrite a caller-owned outcome if a
+        # namespace collision is ever introduced.
+        changed = current[0] != outcome.status or current[1] != new_event_time
+        if current[5] != "derived" or not changed:
+            await db.commit()
+            return "duplicate"
+
+        await db.execute(
+            """
+            INSERT INTO outcome_history (
+                outcome_id, prior_status, new_status, prior_event_time,
+                new_event_time, reason, source, changed_at, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                outcome.outcome_id, current[0], outcome.status, current[1],
+                new_event_time, reason, outcome.source,
+                datetime.now(timezone.utc).isoformat(), json.dumps(metadata),
+            ),
+        )
+        await db.execute(
+            """
+            UPDATE outcomes
+            SET workflow_id = ?, status = ?, business_value = ?, currency = ?,
+                event_time = ?, source = ?, metadata = ?
+            WHERE outcome_id = ?
+            """,
+            (
+                outcome.workflow_id, outcome.status, outcome.business_value,
+                outcome.currency, new_event_time, outcome.source,
+                json.dumps(metadata), outcome.outcome_id,
+            ),
+        )
+        await db.commit()
+        return "corrected"
+
+
+async def correct_outcome(
+    db_path: str, outcome_id: str, status: str, reason: str,
+    event_time: str | None = None,
+) -> bool:
+    """Explicitly correct an existing outcome while retaining its prior state."""
+    from datetime import datetime, timezone
+
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("BEGIN IMMEDIATE")
+        cursor = await db.execute(
+            "SELECT status, event_time FROM outcomes WHERE outcome_id = ?",
+            (outcome_id,),
+        )
+        current = await cursor.fetchone()
+        if current is None:
+            await db.rollback()
+            return False
+
+        new_event_time = event_time or current[1]
+        await db.execute(
+            """
+            INSERT INTO outcome_history (
+                outcome_id, prior_status, new_status, prior_event_time,
+                new_event_time, reason, source, changed_at, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                outcome_id, current[0], status, current[1], new_event_time,
+                reason, "cli", datetime.now(timezone.utc).isoformat(), "{}",
+            ),
+        )
+        await db.execute(
+            """
+            UPDATE outcomes
+            SET status = ?, event_time = ?
+            WHERE outcome_id = ?
+            """,
+            (
+                status,
+                new_event_time,
+                outcome_id,
+            ),
+        )
+        await db.commit()
+        return True
+
+
+async def get_outcome_history(db_path: str, outcome_id: str) -> list[dict[str, Any]]:
+    """Return correction history in chronological order for an outcome."""
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM outcome_history WHERE outcome_id = ? ORDER BY changed_at",
+            (outcome_id,),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
 
 
 # Mirrors the Postgres allocation query in burnlens_cloud/outcomes_api.py: each

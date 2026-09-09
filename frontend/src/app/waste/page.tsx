@@ -105,6 +105,10 @@ function WasteContent() {
       change_reference?: string;
       change_type?: string;
       change_url?: string;
+      owner?: string;
+      acceptance_criteria?: string;
+      configuration_before?: string;
+      configuration_after?: string;
     },
   ) => {
     if (!session) return;

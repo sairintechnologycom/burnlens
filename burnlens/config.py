@@ -258,6 +258,154 @@ _FIELD_TYPES: dict[str, type] = {
 }
 
 
+def resolve_config_path(config_path: str | Path | None = None) -> Path | None:
+    """Return the config file selected by the normal BurnLens search order."""
+    import os
+
+    env_config = os.environ.get("BURNLENS_CONFIG_PATH")
+    if env_config:
+        config_path = env_config
+
+    if config_path is None:
+        for candidate in (
+            Path("burnlens.yaml"),
+            Path("burnlens.yml"),
+            Path.home() / ".burnlens" / "config.yaml",
+        ):
+            if candidate.exists():
+                return candidate
+        return None
+
+    path = Path(config_path)
+    return path if path.exists() else None
+
+
+def budget_control_status(
+    config: BurnLensConfig, config_path: str | Path | None = None
+) -> dict[str, Any]:
+    """Describe configured budget controls and their actual runtime guarantees."""
+    from datetime import datetime, timezone
+
+    alerts = config.alerts
+    key_caps = bool(alerts.api_key_budgets.keys) or (
+        alerts.api_key_budgets.default is not None
+        and alerts.api_key_budgets.default.daily_usd is not None
+    )
+    customer_caps = alerts.customer_budgets.default is not None or bool(
+        alerts.customer_budgets.customers
+    )
+    team_caps = alerts.budgets.global_usd is not None or bool(alerts.budgets.teams)
+    alert_limits = any(
+        value is not None
+        for value in (
+            alerts.budget_limit_usd,
+            alerts.per_request_limit_usd,
+            alerts.budget.daily_usd,
+            alerts.budget.weekly_usd,
+            alerts.budget.monthly_usd,
+        )
+    )
+
+    source = Path(config_path) if config_path else None
+    applied = None
+    if source is not None and source.exists():
+        applied = {
+            "path": str(source),
+            "modified_at": datetime.fromtimestamp(
+                source.stat().st_mtime, tz=timezone.utc
+            ).isoformat(),
+        }
+
+    controls = [
+        {
+            "name": "api_key_daily_cap",
+            "configured": key_caps,
+            "scope": "registered API-key labels",
+            "action": "block_with_429",
+            "measurement": "recorded_spend",
+            "concurrency_guarantee": "no_reservation; 30s spend cache",
+            "failure_policy": "fail_open",
+        },
+        {
+            "name": "customer_monthly_budget",
+            "configured": customer_caps,
+            "scope": "X-BurnLens-Tag-Customer",
+            "action": "block_with_429",
+            "measurement": "recorded_spend",
+            "concurrency_guarantee": "no_reservation; 60s spend cache",
+            "failure_policy": "fail_open",
+        },
+        {
+            "name": "team_or_global_budget",
+            "configured": team_caps or alerts.budget_limit_usd is not None,
+            "scope": "customer > team > global monthly priority",
+            "action": "route_or_alert; not a hard block by itself",
+            "measurement": "recorded_spend",
+            "concurrency_guarantee": "no reservation; 60s spend cache",
+            "failure_policy": "fail_open",
+        },
+        {
+            "name": "budget_policy",
+            "configured": bool(config.budget_policies),
+            "scope": [
+                {
+                    "name": policy.name,
+                    "scope": policy.scope,
+                    "target": policy.target,
+                    "period": policy.period,
+                    "limit_usd": policy.limit_usd,
+                }
+                for policy in config.budget_policies
+            ],
+            "action": "block_with_429",
+            "measurement": "estimated_reservation",
+            "concurrency_guarantee": "process-local reservation lock",
+            "failure_policy": "fail_open",
+        },
+        {
+            "name": "budget_aware_downgrade",
+            "configured": config.routing.budget_downgrade,
+            "scope": "customer, team, or global budget",
+            "action": "rewrite_model",
+            "measurement": "recorded_spend",
+            "concurrency_guarantee": "no reservation; 60s spend cache",
+            "failure_policy": "fail_open",
+        },
+        {
+            "name": "unpriced_model_guard",
+            "configured": config.block_unpriced_models,
+            "scope": "requests covered by a budget",
+            "action": "block_with_403" if config.block_unpriced_models else "allow_unenforced",
+            "measurement": "pricing_required",
+            "concurrency_guarantee": "not applicable",
+            "failure_policy": "fail_closed" if config.block_unpriced_models else "not_applicable",
+        },
+        {
+            "name": "budget_alert_tracker",
+            "configured": alert_limits,
+            "scope": "workspace spend",
+            "action": "alert_only",
+            "measurement": "recorded_spend",
+            "concurrency_guarantee": "observation only",
+            "failure_policy": "fail_open",
+        },
+    ]
+    return {
+        "config": {"source": applied},
+        "health": {
+            "status": "best_effort",
+            "strict_ceiling": False,
+            "failure_policy": "budget lookup failures fail open",
+            "known_limits": [
+                "concurrent daily-cap requests can overshoot",
+                "active streams are not interrupted",
+                "budget-policy reservations are process-local",
+            ],
+        },
+        "controls": controls,
+    }
+
+
 def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
     """Load config from YAML file, falling back to defaults for missing keys.
 
@@ -270,24 +418,8 @@ def load_config(config_path: str | Path | None = None) -> BurnLensConfig:
     - LOG_LEVEL: logging verbosity
     Admin keys can also be supplied via OPENAI_ADMIN_KEY and ANTHROPIC_ADMIN_KEY env vars.
     """
-    import os
-
-    env_config = os.environ.get("BURNLENS_CONFIG_PATH")
-    if env_config:
-        config_path = env_config
-
+    config_path = resolve_config_path(config_path)
     if config_path is None:
-        candidates = [
-            Path("burnlens.yaml"),
-            Path("burnlens.yml"),
-            Path.home() / ".burnlens" / "config.yaml",
-        ]
-        for candidate in candidates:
-            if candidate.exists():
-                config_path = candidate
-                break
-
-    if config_path is None or not Path(config_path).exists():
         cfg = BurnLensConfig()
         _apply_env_overrides(cfg)
         return cfg

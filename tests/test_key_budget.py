@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 import pytest
 
-from burnlens.config import ApiKeyBudgetsConfig, KeyBudgetEntry
+from burnlens.config import ApiKeyBudgetsConfig, CustomerBudgetsConfig, KeyBudgetEntry
 from burnlens.key_budget import (
     SpendCache,
     enforce_daily_cap,
@@ -548,6 +548,44 @@ async def test_interceptor_passes_when_under_cap(initialized_db: str) -> None:
 
     assert status == 200
     assert transport.captured is not None
+
+
+@pytest.mark.asyncio
+async def test_customer_budget_lookup_failure_is_fail_open(
+    initialized_db: str, caplog: Any
+) -> None:
+    import logging
+    from unittest.mock import patch
+
+    transport = _MockTransport(_openai_payload())
+    client = httpx.AsyncClient(transport=transport)
+    provider = get_provider_for_path("/proxy/openai/v1/chat/completions")
+    body = json.dumps({"model": "gpt-4o", "messages": []}).encode()
+
+    with caplog.at_level(logging.WARNING, logger="burnlens.proxy.interceptor"), patch(
+        "burnlens.proxy.interceptor.check_customer_budget",
+        side_effect=RuntimeError("database unavailable"),
+    ):
+        status, _, _, _ = await handle_request(
+            client=client,
+            provider=provider,
+            path="/proxy/openai/v1/chat/completions",
+            method="POST",
+            headers={
+                "content-type": "application/json",
+                "authorization": "Bearer sk-customer",
+                "x-burnlens-tag-customer": "acme",
+            },
+            body_bytes=body,
+            query_string="",
+            db_path=initialized_db,
+            customer_budgets=CustomerBudgetsConfig(customers={"acme": 100.0}),
+        )
+
+    await _flush()
+    assert status == 200
+    assert transport.captured is not None
+    assert "Customer budget check failed (fail-open)" in caplog.text
 
 
 @pytest.mark.asyncio

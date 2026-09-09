@@ -279,6 +279,10 @@ async def test_resolving_captures_request_count_not_just_dollars(db):
         change_reference="commit:abc123",
         change_type="commit",
         change_url="https://github.com/example/repo/commit/abc123",
+        owner="platform",
+        acceptance_criteria="accepted rate does not fall",
+        configuration_before="model:gpt-4o",
+        configuration_after="model:gpt-4o-mini",
     )
 
     stored = (await list_findings(db, status="resolved"))[0]
@@ -291,6 +295,11 @@ async def test_resolving_captures_request_count_not_just_dollars(db):
     assert verification["change_reference"] == "commit:abc123"
     assert verification["change_type"] == "commit"
     assert verification["change_url"].endswith("abc123")
+    assert verification["owner"] == "platform"
+    assert verification["acceptance_criteria"] == "accepted rate does not fall"
+    assert verification["configuration_before"] == "model:gpt-4o"
+    assert verification["configuration_after"] == "model:gpt-4o-mini"
+    assert verification["effective_at"]
 
 
 @pytest.mark.asyncio

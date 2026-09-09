@@ -334,6 +334,66 @@ WHERE c.workspace_id = $1
 ORDER BY c.provider
 """
 
+# Cost confidence covers a reporting window, not the provider's latest daily
+# run. Only dates with spend matter: an idle day needs no billing evidence, but
+# every date that contributes requests must have its own provider comparison.
+_PERIOD_STATUS_SQL = """
+WITH spend_days AS (
+    SELECT provider, (ts AT TIME ZONE 'UTC')::date AS day
+    FROM request_records
+    WHERE workspace_id = $1
+      AND ts >= $2
+      AND ts < $3
+      AND (
+          cost_usd > 0
+          OR input_tokens + output_tokens + cache_read_tokens + cache_write_tokens > 0
+      )
+    GROUP BY provider, (ts AT TIME ZONE 'UTC')::date
+)
+SELECT d.provider,
+       d.day,
+       c.workspace_id IS NOT NULL AS has_credential,
+       r.day AS reconciled_day,
+       r.provider_cost_usd,
+       r.burnlens_cost_usd,
+       r.drift_pct
+FROM spend_days d
+LEFT JOIN reconciliation_credentials c
+       ON c.workspace_id = $1 AND c.provider = d.provider
+LEFT JOIN reconciliation_runs r
+       ON r.workspace_id = $1
+      AND r.provider = d.provider
+      AND r.day = d.day
+ORDER BY d.provider, d.day
+"""
+
+
+def build_period_provider_status(rows) -> dict[str, Optional[str]]:
+    """Reconciliation state for each provider in one spend window."""
+    grouped: dict[str, list] = {}
+    for row in rows:
+        grouped.setdefault(row["provider"], []).append(row)
+
+    statuses: dict[str, Optional[str]] = {}
+    for provider, provider_rows in grouped.items():
+        if not all(bool(row["has_credential"]) for row in provider_rows):
+            # Keep None distinct from unreconciled: the coverage gap can say
+            # whether the owner has not connected billing at all.
+            statuses[provider] = None
+            continue
+        if any(row["reconciled_day"] is None for row in provider_rows):
+            statuses[provider] = "unreconciled"
+            continue
+        run_states = {
+            classify(
+                float(row["drift_pct"]) if row["drift_pct"] is not None else None,
+                float(row["burnlens_cost_usd"]),
+            )
+            for row in provider_rows
+        }
+        statuses[provider] = "drifted" if "drifted" in run_states else "reconciled"
+    return statuses
+
 
 @router.get("/api/v1/reconciliation", response_model=list[ProviderReconciliation])
 async def reconciliation_status(
@@ -384,7 +444,7 @@ CONFIDENCE_CLASSES = ("reconciled", "calculated", "estimated", "unpriced")
 # rows that predate `pricing_class` (inferred from source + cost). When the
 # local class is on the row, that is the write-time verdict and we use it —
 # unpriced is `not is_model_priced`, not `cost_usd = 0`. Reconciled stays a
-# read-time overlay and is never stored.
+# read-time, reporting-window overlay and is never stored.
 _REASONS = {
     "reconciled": "provider_bill_agreed",
     "calculated": "priced_from_pricing_table",
@@ -407,6 +467,7 @@ SELECT provider,
        COALESCE(SUM(cost_usd), 0) AS cost
 FROM request_records
 WHERE workspace_id = $1 AND ts >= $2
+  AND ts < $3
 GROUP BY provider, model, is_scan, pricing_class, pricing_state
 """
 
@@ -452,7 +513,7 @@ def build_confidence(rows, provider_status: dict, days: int) -> CostConfidence:
     Pure so the classification and the arithmetic can be tested without a
     database: `rows` are dict-likes from `_CONFIDENCE_SQL`, `provider_status`
     maps provider -> "reconciled" | "drifted" | "unreconciled" (absent means no
-    billing key is stored at all).
+    billing key is stored at all). The map is scoped to the same spend window.
     """
     cost = {k: 0.0 for k in CONFIDENCE_CLASSES}
     reqs = {k: 0 for k in CONFIDENCE_CLASSES}
@@ -552,20 +613,13 @@ async def cost_confidence(
     from .dashboard_api import clamp_days_by_plan
 
     days = clamp_days_by_plan(days, token.plan)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    rows = await execute_query(_CONFIDENCE_SQL, str(token.workspace_id), cutoff)
+    until = datetime.now(timezone.utc)
+    cutoff = until - timedelta(days=days)
+    rows = await execute_query(_CONFIDENCE_SQL, str(token.workspace_id), cutoff, until)
 
-    status_rows = await execute_query(_STATUS_SQL, str(token.workspace_id))
-    provider_status = {
-        r["provider"]: (
-            "unreconciled"
-            if r["day"] is None
-            else classify(
-                float(r["drift_pct"]) if r["drift_pct"] is not None else None,
-                float(r["burnlens_cost_usd"]),
-            )
-        )
-        for r in status_rows
-    }
+    status_rows = await execute_query(
+        _PERIOD_STATUS_SQL, str(token.workspace_id), cutoff, until
+    )
+    provider_status = build_period_provider_status(status_rows)
 
     return build_confidence(rows, provider_status, days)

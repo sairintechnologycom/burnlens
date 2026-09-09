@@ -27,6 +27,7 @@ from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import (
     _reset_dev_identity_cache,
     repo_workflow_id,
+    repository_identity,
     resolve_dev_identity,
 )
 from burnlens.storage.models import RequestRecord
@@ -148,6 +149,9 @@ def parse_session(session: ClaudeSession) -> Iterator[RequestRecord]:
         return
 
     dev = resolve_dev_identity(session.project_path)
+    display_repo, stable_repo = repository_identity(
+        session.project_path, session.project_basename
+    )
 
     with fh:
         for line_no, raw_line in enumerate(fh, start=1):
@@ -201,12 +205,12 @@ def parse_session(session: ClaudeSession) -> Iterator[RequestRecord]:
             ts = _parse_timestamp(entry.get("timestamp"))
 
             tags = {
-                "repo": session.project_basename,
+                "repo": display_repo or session.project_basename,
                 "dev": dev,
                 "session": session.session_id,
             }
             # Joins this session's cost to merged-PR outcomes for the same repo.
-            workflow_id = repo_workflow_id(session.project_basename)
+            workflow_id = repo_workflow_id(stable_repo)
             if workflow_id:
                 tags["workflow_id"] = workflow_id
 

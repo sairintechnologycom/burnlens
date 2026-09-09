@@ -41,6 +41,7 @@ from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import (
     _reset_dev_identity_cache,
     repo_workflow_id,
+    repository_identity,
     resolve_dev_identity,
 )
 from burnlens.storage.models import RequestRecord
@@ -172,6 +173,7 @@ def _record_from_gemini_message(
     turn_ordinal: int,
     dev: str,
     tag_repo: str | None,
+    stable_repo: str | None,
     warned_models: set[str],
 ) -> RequestRecord | None:
     """Build a RequestRecord from a single gemini-type message dict.
@@ -224,7 +226,7 @@ def _record_from_gemini_message(
     if tag_repo:
         tags["repo"] = tag_repo
         # Joins this session's cost to merged-PR outcomes for the same repo.
-        tags["workflow_id"] = repo_workflow_id(tag_repo)
+        tags["workflow_id"] = repo_workflow_id(stable_repo)
 
     return RequestRecord(
         provider="google",
@@ -268,15 +270,16 @@ def parse_session(
     cwd = session.cwd or os.getcwd()
     dev = resolve_dev_identity(cwd)
     tag_repo: str | None = cwd.rstrip("/").rsplit("/", 1)[-1] if cwd else None
+    display_repo, stable_repo = repository_identity(cwd, tag_repo)
     _warned = warned_models if warned_models is not None else set()
 
     is_jsonl = session.file_path.suffix == ".jsonl"
 
     with fh:
         if is_jsonl:
-            yield from _parse_jsonl(fh, session, dev, tag_repo, _warned)
+            yield from _parse_jsonl(fh, session, dev, display_repo, stable_repo, _warned)
         else:
-            yield from _parse_json(fh, session, dev, tag_repo, _warned)
+            yield from _parse_json(fh, session, dev, display_repo, stable_repo, _warned)
 
 
 def _parse_json(
@@ -284,6 +287,7 @@ def _parse_json(
     session: GeminiSession,
     dev: str,
     tag_repo: str | None,
+    stable_repo: str | None,
     warned_models: set[str],
 ) -> Iterator[RequestRecord]:
     """Parse older single-JSON-object session files."""
@@ -303,7 +307,7 @@ def _parse_json(
         if msg.get("type") != "gemini":
             continue
         record = _record_from_gemini_message(
-            msg, session, ordinal, dev, tag_repo, warned_models
+            msg, session, ordinal, dev, tag_repo, stable_repo, warned_models
         )
         if record is not None:
             yield record
@@ -314,6 +318,7 @@ def _parse_jsonl(
     session: GeminiSession,
     dev: str,
     tag_repo: str | None,
+    stable_repo: str | None,
     warned_models: set[str],
 ) -> Iterator[RequestRecord]:
     """Parse newer append-only JSONL session files."""
@@ -345,7 +350,7 @@ def _parse_jsonl(
             continue
 
         record = _record_from_gemini_message(
-            entry, session, ordinal, dev, tag_repo, warned_models
+            entry, session, ordinal, dev, tag_repo, stable_repo, warned_models
         )
         if record is not None:
             ordinal += 1

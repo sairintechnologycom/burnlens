@@ -91,7 +91,7 @@ async def decide_route(
     try:
         return await _decide_route_inner(model, tag_team, tag_customer, config, db_path)
     except Exception as exc:
-        logger.debug("Router error (fail-open): %s", exc)
+        logger.warning("Router error (fail-open): %s", exc)
         return RouteDecision(
             original_model=model,
             routed_model=model,

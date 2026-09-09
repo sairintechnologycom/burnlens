@@ -24,6 +24,7 @@ from burnlens.outcomes import (
     _parse_ts,
     build_outcomes,
     derive_pr_outcomes,
+    fetch_pull_requests,
     gh_available,
 )
 from burnlens.scan._common import repo_workflow_id
@@ -117,6 +118,39 @@ def test_claude_scanner_emits_joinable_workflow_tag(tmp_path):
 
     assert records, "scanner produced no records"
     assert records[0].tags["workflow_id"] == repo_workflow_id("burnlens")
+
+
+def test_claude_scanner_uses_origin_identity_for_join(tmp_path):
+    from burnlens.scan.claude_code import ClaudeSession, parse_session
+
+    session_file = tmp_path / "s1.jsonl"
+    session_file.write_text(json.dumps({
+        "type": "assistant",
+        "timestamp": T0.isoformat().replace("+00:00", "Z"),
+        "message": {
+            "id": "msg_1",
+            "model": "claude-sonnet-5",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        },
+    }) + "\n")
+    session = ClaudeSession(
+        session_id="s1",
+        project_path=str(tmp_path),
+        project_basename="api",
+        file_path=session_file,
+        modified_at=T0,
+    )
+
+    with patch(
+        "burnlens.scan.claude_code.resolve_dev_identity", return_value="dev@example.com"
+    ), patch(
+        "burnlens.scan.claude_code.repository_identity",
+        return_value=("api", "github.com/acme/api"),
+    ):
+        records = list(parse_session(session))
+
+    assert records[0].tags["repo"] == "api"
+    assert records[0].tags["workflow_id"] == repo_workflow_id("github.com/acme/api")
 
 
 # ----------------------------------------------------------- classification
@@ -233,8 +267,8 @@ async def _derive_with_fake_gh(db, tmp_path, prs, repo="proj"):
     import subprocess
 
     def fake_run(args, **kwargs):
-        if "pr" in args and "list" in args:
-            out = json.dumps(prs)
+        if "api" in args:
+            out = json.dumps([prs])
         else:  # repo view
             out = json.dumps({"nameWithOwner": f"acme/{repo}"})
         return subprocess.CompletedProcess(args=args, returncode=0, stdout=out, stderr="")
@@ -260,6 +294,50 @@ async def test_derive_is_idempotent(initialized_db, tmp_path):
 
     rows = await get_workflow_economics(initialized_db, since=SINCE)
     assert rows[0].accepted_count == 2, "re-derive double-counted"
+
+
+async def test_reopened_then_merged_pr_is_corrected_with_history(initialized_db, tmp_path):
+    first = await _derive_with_fake_gh(initialized_db, tmp_path, [_pr(8, merged=False)])
+    second = await _derive_with_fake_gh(initialized_db, tmp_path, [_pr(8, merged=True)])
+
+    assert first.inserted == 1
+    assert second.corrected == 1
+    assert second.duplicates == 0
+
+    from burnlens.storage.database import get_outcome_history
+
+    history = await get_outcome_history(initialized_db, "github:acme/proj#8")
+    assert [(row["prior_status"], row["new_status"]) for row in history] == [
+        ("rejected", "accepted")
+    ]
+    rows = await get_workflow_economics(initialized_db, since=SINCE)
+    assert sum(row.accepted_count for row in rows) == 1
+    assert sum(row.rejected_count for row in rows) == 0
+
+
+async def test_derive_imports_more_than_the_old_200_pr_limit(initialized_db, tmp_path):
+    prs = [_pr(number) for number in range(1, 202)]
+
+    result = await _derive_with_fake_gh(initialized_db, tmp_path, prs)
+
+    assert result.pull_requests_seen == 201
+    assert result.inserted == 201
+    assert result.import_complete is True
+
+
+def test_fetch_pull_requests_applies_event_time_bounds(tmp_path):
+    from unittest.mock import patch
+
+    prs = [_pr(1, minutes=0), _pr(2, minutes=10)]
+    since = T0 + timedelta(minutes=5)
+    with patch("burnlens.outcomes._repo_slug", return_value="acme/proj"), patch(
+        "burnlens.outcomes._run_gh", return_value=json.dumps([prs])
+    ) as run_gh:
+        rows = fetch_pull_requests(str(tmp_path), since=since)
+
+    assert [row["number"] for row in rows] == [2]
+    run_gh.assert_called_once()
+    assert "--paginate" in run_gh.call_args.args
 
 
 async def test_cost_per_merged_pr_end_to_end(initialized_db, tmp_path):

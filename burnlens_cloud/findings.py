@@ -321,6 +321,11 @@ async def set_finding_status(
     change_reference: str | None = None,
     change_type: str | None = None,
     change_url: str | None = None,
+    owner: str | None = None,
+    acceptance_criteria: str | None = None,
+    configuration_before: str | None = None,
+    configuration_after: str | None = None,
+    effective_at: datetime | None = None,
 ) -> bool:
     """Move a finding through its lifecycle. Returns False if it doesn't exist."""
     if status not in VALID_STATUSES:
@@ -352,7 +357,9 @@ async def set_finding_status(
     if existing is None:
         return False
 
-    now = _now()
+    now = effective_at or _now()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     cohort_key = cohort_key or f"{existing['subject_type']}:{existing['subject_key']}"
     cohort_parts = cohort_key.split(":", 1)
     scope_type, scope_key = existing["subject_type"], existing["subject_key"]
@@ -380,6 +387,15 @@ async def set_finding_status(
         evidence["verification"]["change_type"] = change_type
     if change_url:
         evidence["verification"]["change_url"] = change_url
+    for key, value in (
+        ("owner", owner),
+        ("acceptance_criteria", acceptance_criteria),
+        ("configuration_before", configuration_before),
+        ("configuration_after", configuration_after),
+    ):
+        if value:
+            evidence["verification"][key] = value
+    evidence["verification"]["effective_at"] = now.isoformat()
     window_start = now - timedelta(days=baseline_window_days)
     baseline_cost, baseline_requests = await get_subject_spend(
         conn,
@@ -439,6 +455,11 @@ def _verdict_base(finding: dict[str, Any]) -> dict[str, Any]:
         "change_reference": None,
         "change_type": None,
         "change_url": None,
+        "owner": None,
+        "acceptance_criteria": None,
+        "configuration_before": None,
+        "configuration_after": None,
+        "effective_at": None,
         "comparison_rule": VERIFICATION_COMPARISON_RULE,
         "scope_type": None,
         "scope_key": None,
@@ -489,6 +510,11 @@ async def verify_savings(conn, workspace_id, fingerprint: str) -> dict[str, Any]
         verdict["change_reference"] = verification.get("change_reference")
         verdict["change_type"] = verification.get("change_type")
         verdict["change_url"] = verification.get("change_url")
+        verdict["owner"] = verification.get("owner")
+        verdict["acceptance_criteria"] = verification.get("acceptance_criteria")
+        verdict["configuration_before"] = verification.get("configuration_before")
+        verdict["configuration_after"] = verification.get("configuration_after")
+        verdict["effective_at"] = verification.get("effective_at")
         verdict["scope_type"] = verification.get("scope_type")
         verdict["scope_key"] = verification.get("scope_key")
         verdict["comparison_rule"] = verification.get("comparison_rule", VERIFICATION_COMPARISON_RULE)

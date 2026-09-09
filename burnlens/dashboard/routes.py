@@ -322,6 +322,11 @@ async def set_status(fingerprint: str, request: Request) -> dict:
     change_reference = body.get("change_reference")
     change_type = body.get("change_type")
     change_url = body.get("change_url")
+    owner = body.get("owner")
+    acceptance_criteria = body.get("acceptance_criteria")
+    configuration_before = body.get("configuration_before")
+    configuration_after = body.get("configuration_after")
+    effective_at = body.get("effective_at")
     if cohort_key is not None and (not isinstance(cohort_key, str) or not cohort_key.strip()):
         raise HTTPException(status_code=400, detail="cohort_key must be a non-empty string")
     if change_reference is not None and (not isinstance(change_reference, str) or not change_reference.strip()):
@@ -330,6 +335,21 @@ async def set_status(fingerprint: str, request: Request) -> dict:
         raise HTTPException(status_code=400, detail="change_type must be a non-empty string")
     if change_url is not None and (not isinstance(change_url, str) or not change_url.strip()):
         raise HTTPException(status_code=400, detail="change_url must be a non-empty string")
+    for key, value in (
+        ("owner", owner),
+        ("acceptance_criteria", acceptance_criteria),
+        ("configuration_before", configuration_before),
+        ("configuration_after", configuration_after),
+    ):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise HTTPException(status_code=400, detail=f"{key} must be a non-empty string")
+    if effective_at is not None:
+        if not isinstance(effective_at, str) or not effective_at.strip():
+            raise HTTPException(status_code=400, detail="effective_at must be ISO-8601")
+        try:
+            effective_at = datetime.fromisoformat(effective_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="effective_at must be ISO-8601") from exc
     if status not in VALID_STATUSES:
         raise HTTPException(
             status_code=400,
@@ -344,6 +364,11 @@ async def set_status(fingerprint: str, request: Request) -> dict:
         change_reference=change_reference,
         change_type=change_type,
         change_url=change_url,
+        owner=owner,
+        acceptance_criteria=acceptance_criteria,
+        configuration_before=configuration_before,
+        configuration_after=configuration_after,
+        effective_at=effective_at,
     ):
         raise HTTPException(status_code=404, detail="Finding not found")
     return {"id": fingerprint, "status": status}

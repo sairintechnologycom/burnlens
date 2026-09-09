@@ -15,9 +15,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from burnlens.storage.database import (
+    correct_outcome,
+    get_outcome_history,
     get_workflow_economics,
     insert_outcome,
     insert_request,
+    reconcile_derived_outcome,
 )
 from burnlens.storage.models import Outcome, RequestRecord
 
@@ -196,6 +199,41 @@ async def test_duplicate_cannot_overwrite_status(initialized_db):
     row = await _one(initialized_db)
     assert row.accepted_count == 1
     assert row.failed_count == 0
+
+
+async def test_explicit_correction_keeps_one_count_and_records_history(initialized_db):
+    await _outcome(initialized_db, "ticket-1", 0, "rejected")
+
+    assert await correct_outcome(
+        initialized_db, "ticket-1", "accepted", "ticket was reopened and fixed"
+    )
+    row = await _one(initialized_db)
+    assert row.accepted_count == 1
+    assert row.rejected_count == 0
+    history = await get_outcome_history(initialized_db, "ticket-1")
+    assert [(h["prior_status"], h["new_status"]) for h in history] == [
+        ("rejected", "accepted")
+    ]
+
+
+async def test_derived_reopened_pr_is_corrected_not_double_counted(initialized_db):
+    from burnlens.storage.models import Outcome
+
+    base = Outcome(
+        outcome_id="github:acme/proj#1", workflow_id="repo:proj",
+        status="rejected", source="derived",
+    )
+    updated = Outcome(
+        outcome_id=base.outcome_id, workflow_id=base.workflow_id,
+        status="accepted", source="derived", event_time=base.event_time,
+    )
+    assert await reconcile_derived_outcome(initialized_db, base) == "inserted"
+    assert await reconcile_derived_outcome(initialized_db, updated) == "corrected"
+    history = await get_outcome_history(initialized_db, base.outcome_id)
+    assert len(history) == 1
+    row = await get_workflow_economics(initialized_db, since=SINCE)
+    assert sum(r.accepted_count for r in row) == 1
+    assert sum(r.rejected_count for r in row) == 0
 
 
 async def test_invalid_status_is_rejected_at_construction(initialized_db):

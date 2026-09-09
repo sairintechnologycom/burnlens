@@ -35,12 +35,12 @@ Update this table as implementation lands. Status means the gap itself, not whet
 | BL-ECON-01 | **Partial** | Dashboard, savings page, findings verdicts and product contract explain observed cost/request reduction; workflow acceptance degradation now prevents a verified verdict, while missing evidence remains unavailable. Added before/after acceptance-rate fields, a `quality_qualified` flag, persisted cohort/intervention IDs, optional change references, change type/URL evidence, explicit cohort scope for `workflow:<id>` or `model:<id>`, a visible `same_subject_equal_windows` comparison rule, and best-effort local Git commit capture when no change reference is supplied. | Ingest deployment/configuration systems as evidence and define comparability rules for cohorts that span multiple subjects. |
 | BL-ECON-02 | **Partial** | Overlap risk documented; repeated local and cloud resolutions now retain prior verification evidence in `verification_history`, and savings rollups credit an explicit `(change reference, cohort)` only once while exposing withheld shared predictions. | Add overlap detection when explicit intervention evidence is absent, then report gross, net and shared effects across mixed scopes. |
 | BL-ECON-03 | **Partial** | Outcomes now carry a declared type such as `pull_request` or `ticket`; local and cloud allocation group spend and accepted results by type, while unattributed spend is kept in its own unit row and mixed-unit headline cost is suppressed. | Add explicit run/outcome links and richer included/excluded spend explanations. |
-| BL-ECON-04 | **Open** | Existing reconciliation limitation documented. | Scope reconciliation evidence to provider and reporting dates. |
-| BL-ECON-05 | **Open** | Existing enforcement ceilings documented. | Add explicit control scope/health and tighten ceiling semantics if required. |
+| BL-ECON-04 | **Partial** | Cost Confidence now scopes reconciliation to each provider's spend dates in the selected UTC reporting window; missing dates remain unreconciled, while the daily dashboard badge still reports the latest run. | Add billing-account/scope identifiers when providers expose them, and reconcile additional billing sources when demanded. |
+| BL-ECON-05 | **Partial** | `burnlens controls` now exposes configured scope, action, failure policy, concurrency guarantee, and applied config source; fail-open budget failures are warning-visible. | Add shared atomic reservations and bounded call liability only if a strict financial ceiling is required. |
 | BL-ECON-06 | **Complete (copy pass)** | Homepage, README, demo metadata, scan copy, FAQ, contract, evidence docs, Open Graph copy, comparison pages and support index aligned to AI economics positioning. | Revisit copy only when product evidence or competitor facts change. |
-| BL-ECON-07 | **Open** | Current GitHub derivation limits documented. | Stable repository identity and complete, date-bounded PR imports. |
-| BL-ECON-08 | **Open** | Current idempotent outcome behavior documented. | Add auditable corrections/supersession for changed outcomes. |
-| BL-ECON-09 | **Open** | Recommendations, actions and verification paths mapped. | Link applied changes to cohorts, configuration evidence and quality checks. |
+| BL-ECON-07 | **Partial** | Scanners preserve local display names while joining on canonical origin identity; GitHub PR imports now use `gh api --paginate`, expose scope/completeness, and deduplicate. | Add authenticated workforce identity mapping and unattended GitHub App/webhook collection when team-wide ingestion is demanded. |
+| BL-ECON-08 | **Partial** | Explicit local/Cloud correction endpoints update one current outcome row, append prior/new status history, and derived GitHub imports reconcile reopened PRs without changing the denominator. | Add explicit run-to-outcome links and richer attribution/evidence detail. |
+| BL-ECON-09 | **Partial** | Finding resolution now accepts owner, acceptance criteria, before/after configuration or revision, explicit effective time, and existing commit/deployment evidence; the verification report returns those inputs alongside quality-qualified cost results. | Link recommendations and external deployment/evaluation evidence into a durable intervention record. |
 | BL-ECON-10 | **Open** | Existing organization foundations documented. | Add only customer-requested cost-center, chargeback, currency and federation work. |
 
 Last updated: 2026-09-09. This tracker is intentionally kept beside the gap review so implementation status and the evidence behind each recommendation change together.
@@ -115,19 +115,21 @@ The current comparison rule is deliberately narrow: `same_subject_equal_windows`
 
 ### BL-ECON-07 — P1: finish the coding-agent acquisition loop
 
-**Observed:** Automatic derivation runs for `repo_path="."`; the default import is the latest 200 closed PRs. Spend workflows use local repository basenames. Different repositories with the same folder name can collide; renamed checkouts can fragment identity. Developer attribution uses local git configuration or OS user, not authenticated workforce identity. No organization GitHub App/webhook ingestion path was found.
+**Observed:** Automatic derivation runs for `repo_path="."`; the prior default import was the latest 200 closed PRs. Spend workflows used local repository basenames. Different repositories with the same folder name could collide; renamed checkouts could fragment identity. Developer attribution uses local git configuration or OS user, not authenticated workforce identity. No organization GitHub App/webhook ingestion path was found.
 
 **Implement:** Introduce stable repository identity while preserving display names and migration mappings. Discover outcomes for scanned repositories with explicit scope/completeness reporting and date-bounded pagination. Keep `gh` for the local path; add a GitHub App only when unattended team collection is needed. Surface missing authentication, unsupported logs, pricing gaps and absent outcomes as actionable scan results. Map developer identities explicitly before cross-machine comparisons.
 
 **Acceptance:** Two `api` directories from different owners remain separate; 201+ closed PRs are not silently truncated; repeated scans deduplicate; running outside a checkout explains how to derive outcomes; the same shared repository joins consistently across developers.
 
-**Sources:** `burnlens/scan/_common.py:21`, `burnlens/git_context.py:67`, `burnlens/outcomes.py:120`, `burnlens/cli.py:1448`.
+**Sources:** `burnlens/scan/_common.py`, `burnlens/git_context.py`, `burnlens/outcomes.py`, `burnlens/cli.py`.
 
 ### BL-ECON-08 — P1: support outcome lifecycle and explainability
 
 **Observed:** Outcome identity is idempotent, but duplicate writes are ignored. A PR first imported closed-unmerged can later reopen and merge while retaining its earlier rejected record. Generic API events also cannot correct their earlier status through the insert path.
 
-**Implement:** Define an auditable correction/supersession mechanism, accepted-outcome policy, and evidence detail view. Separate observed merges from claims of defect-free or economically valuable code. Support explicit run links before building a visual graph; ordinary relational joins are sufficient.
+**Implemented:** `outcome correct` and `PATCH /v1/outcomes/{outcome_id}` update one current row and append prior/new status, event time, reason and source to history. `outcome history` and `GET /api/v1/outcomes/{outcome_id}/history` expose that audit trail. Derived GitHub outcomes reconcile status changes transactionally; ordinary ingest retries remain no-ops.
+
+**Acceptance:** A reopened-then-merged PR becomes one accepted outcome with history; corrected ticket outcomes do not double-count. Reported results still identify their source/status, allocation window and unattributed spend through the existing economics/coverage views.
 
 **Acceptance:** Reopened-then-merged PR becomes one accepted outcome with history; corrected ticket outcomes do not double-count; each reported result links to source/status, allocation method and excluded spend.
 
@@ -137,7 +139,9 @@ The current comparison rule is deliberately narrow: `same_subject_equal_windows`
 
 **Observed:** Recommendations, finding resolution and operational actions exist, but the inspected records do not form a durable intervention with owner, intended cohort, old/new configuration, actual effective time, acceptance criteria and linked verification. Resolving a finding is currently the baseline trigger; it is not proof the change was applied.
 
-**Implement:** Extend the existing finding/action flow with an intervention record and configuration/deployment evidence. Start with a manually recorded change linked to a commit/config revision. Add accepted outcomes, acceptance rate and workflow-normalized cost before/after. Consume external acceptance/evaluation signals rather than building a general evaluation platform. Display uncertainty and confounders; define quality tolerance in advance. Strong claims require suitable sample sizes and experimental evidence, not merely failure to find a significant difference.
+**Implemented:** Local CLI/dashboard and Cloud finding resolution now record owner, acceptance criteria, cohort, change reference/type/URL, before/after configuration or revision, and effective time. The existing baseline/verification report carries those inputs with accepted-outcome rates, workflow-normalized cost, uncertainty states and quality gating.
+
+**Remaining:** Link a recommendation and external deployment/evaluation evidence into a durable intervention record. Consume external acceptance/evaluation signals rather than building a general evaluation platform; strong claims still require suitable sample sizes and experimental evidence.
 
 **Acceptance:** A recommendation has one traceable applied change and measurement report; quality degradation blocks economic verification; insufficient evidence remains inconclusive; owner can export the calculation and inspect its inputs. Monthly extrapolation stays distinct from observed-period counterfactual savings and invoice-level changes.
 

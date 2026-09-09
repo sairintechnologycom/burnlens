@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 _DEV_IDENTITY_CACHE: dict[str, str] = {}
+_REPOSITORY_IDENTITY_CACHE: dict[str, tuple[str | None, str | None]] = {}
 
 # Prefix for repo-scoped workflows, so a derived workflow id can never collide
 # with a workflow name a user chose for their own application traffic.
@@ -31,6 +32,27 @@ def repo_workflow_id(repo: str | None) -> str | None:
     if not repo:
         return None
     return f"{_REPO_WORKFLOW_PREFIX}{repo}"
+
+
+def repository_identity(
+    project_path: str | None, fallback_repo: str | None = None
+) -> tuple[str | None, str | None]:
+    """Return ``(display_name, stable_identity)`` for a scanned checkout.
+
+    Existing rows keep using the local basename for display. New joins use the
+    origin remote when available, so two ``api`` checkouts do not collide.
+    """
+    from burnlens.git_context import read_git_context
+
+    cache_key = project_path or ""
+    if cache_key in _REPOSITORY_IDENTITY_CACHE:
+        return _REPOSITORY_IDENTITY_CACHE[cache_key]
+
+    context = read_git_context(project_path) if project_path else {}
+    display = context.get("repo") or fallback_repo
+    identity = display, context.get("repo_id") or display
+    _REPOSITORY_IDENTITY_CACHE[cache_key] = identity
+    return identity
 
 
 def _git_user_email(project_path: str) -> str | None:
@@ -71,3 +93,4 @@ def resolve_dev_identity(project_path: str) -> str:
 def _reset_dev_identity_cache() -> None:
     """Clear the per-run dev-identity cache. Used by scanners and tests."""
     _DEV_IDENTITY_CACHE.clear()
+    _REPOSITORY_IDENTITY_CACHE.clear()

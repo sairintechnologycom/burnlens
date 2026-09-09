@@ -14,6 +14,51 @@ def test_help():
     assert "burnlens" in result.output.lower()
 
 
+def test_controls_json_reports_scope_and_guarantees(tmp_path):
+    import json
+    from unittest.mock import patch
+
+    from burnlens.config import (
+        AlertsConfig,
+        ApiKeyBudgetsConfig,
+        BudgetPolicy,
+        BurnLensConfig,
+        CustomerBudgetsConfig,
+        KeyBudgetEntry,
+        RoutingConfig,
+        TeamBudgetsConfig,
+    )
+
+    config_file = tmp_path / "burnlens.yaml"
+    config_file.write_text("alerts: {}\n")
+    cfg = BurnLensConfig(
+        alerts=AlertsConfig(
+            api_key_budgets=ApiKeyBudgetsConfig(
+                keys={"prod": KeyBudgetEntry(daily_usd=50.0)}
+            ),
+            customer_budgets=CustomerBudgetsConfig(customers={"acme": 100.0}),
+            budgets=TeamBudgetsConfig(teams={"platform": 200.0}),
+        ),
+        budget_policies=[BudgetPolicy("org-monthly", "org", "*", 500.0, "monthly")],
+        routing=RoutingConfig(budget_downgrade=True),
+    )
+
+    with patch("burnlens.cli.load_config", return_value=cfg):
+        result = runner.invoke(app, ["controls", "--config", str(config_file), "--json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["health"]["strict_ceiling"] is False
+    assert payload["config"]["source"]["path"] == str(config_file)
+    controls = {control["name"]: control for control in payload["controls"]}
+    assert controls["api_key_daily_cap"]["configured"] is True
+    assert controls["api_key_daily_cap"]["concurrency_guarantee"] == (
+        "no_reservation; 30s spend cache"
+    )
+    assert controls["budget_policy"]["scope"][0]["target"] == "*"
+    assert controls["budget_aware_downgrade"]["configured"] is True
+
+
 def test_pricing_csv():
     from burnlens.cost.pricing import all_pricing
 

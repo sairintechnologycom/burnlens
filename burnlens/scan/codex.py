@@ -30,6 +30,7 @@ from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import (
     _reset_dev_identity_cache,
     repo_workflow_id,
+    repository_identity,
     resolve_dev_identity,
 )
 from burnlens.storage.models import RequestRecord
@@ -219,6 +220,7 @@ def parse_session(session: CodexSession) -> Iterator[RequestRecord]:
                 cwd = session_cwd or os.getcwd()
                 dev = resolve_dev_identity(cwd)
                 tag_repo: str | None = cwd.rstrip("/").rsplit("/", 1)[-1] if cwd else None
+                display_repo, stable_repo = repository_identity(cwd, tag_repo)
 
                 usage = TokenUsage(
                     input_tokens=in_tok,
@@ -231,10 +233,10 @@ def parse_session(session: CodexSession) -> Iterator[RequestRecord]:
                 ts = _parse_timestamp(entry.get("timestamp"))
 
                 tags: dict[str, str] = {"dev": dev, "session": session.session_id}
-                if tag_repo:
-                    tags["repo"] = tag_repo
+                if display_repo:
+                    tags["repo"] = display_repo
                     # Joins this session's cost to merged-PR outcomes for the repo.
-                    tags["workflow_id"] = repo_workflow_id(tag_repo)
+                    tags["workflow_id"] = repo_workflow_id(stable_repo)
 
                 yield RequestRecord(
                     provider="openai",

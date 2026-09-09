@@ -92,6 +92,10 @@ export function FindingsList({
       change_reference?: string;
       change_type?: string;
       change_url?: string;
+      owner?: string;
+      acceptance_criteria?: string;
+      configuration_before?: string;
+      configuration_after?: string;
     },
   ) => void;
   pendingId?: string | null;
@@ -101,6 +105,10 @@ export function FindingsList({
     change_reference: string;
     change_type: string;
     change_url: string;
+    owner: string;
+    acceptance_criteria: string;
+    configuration_before: string;
+    configuration_after: string;
   }>>({});
   if (findings.length === 0) {
     return (
@@ -203,6 +211,30 @@ export function FindingsList({
                   }))}
                 />
               </label>
+              <label>
+                Owner
+                <input className="input" placeholder="team or person" onChange={(e) => setMetadata((current) => ({
+                  ...current, [f.id]: { ...current[f.id], owner: e.target.value },
+                }))} />
+              </label>
+              <label>
+                Acceptance criteria
+                <input className="input" placeholder="quality and savings condition" onChange={(e) => setMetadata((current) => ({
+                  ...current, [f.id]: { ...current[f.id], acceptance_criteria: e.target.value },
+                }))} />
+              </label>
+              <label>
+                Configuration before
+                <input className="input" placeholder="old model or config revision" onChange={(e) => setMetadata((current) => ({
+                  ...current, [f.id]: { ...current[f.id], configuration_before: e.target.value },
+                }))} />
+              </label>
+              <label>
+                Configuration after
+                <input className="input" placeholder="applied model or config revision" onChange={(e) => setMetadata((current) => ({
+                  ...current, [f.id]: { ...current[f.id], configuration_after: e.target.value },
+                }))} />
+              </label>
             </div>
           </details>
           {Object.keys(f.evidence || {}).length > 0 && (
@@ -224,10 +256,14 @@ export function FindingsList({
                 onClick={() => {
                   const values = metadata[f.id];
                   onStatus?.(f.id, next, next === "resolved" ? {
-                    cohort_key: values?.cohort_key.trim() || undefined,
-                    change_reference: values?.change_reference.trim() || undefined,
-                    change_type: values?.change_type.trim() || undefined,
-                    change_url: values?.change_url.trim() || undefined,
+                    cohort_key: values?.cohort_key?.trim() || undefined,
+                    change_reference: values?.change_reference?.trim() || undefined,
+                    change_type: values?.change_type?.trim() || undefined,
+                    change_url: values?.change_url?.trim() || undefined,
+                    owner: values?.owner?.trim() || undefined,
+                    acceptance_criteria: values?.acceptance_criteria?.trim() || undefined,
+                    configuration_before: values?.configuration_before?.trim() || undefined,
+                    configuration_after: values?.configuration_after?.trim() || undefined,
                   } : undefined);
                 }}
               >

@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # Branch-name → PR-number patterns, evaluated in order. First match wins.
 _PR_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -51,6 +52,24 @@ def _parse_pr(branch: str) -> str | None:
     return None
 
 
+def _repo_identity(remote: str | None) -> str | None:
+    """Return a canonical remote identity while leaving display names local."""
+    if not remote:
+        return None
+    value = remote.strip()
+    if value.startswith("git@") and ":" in value:
+        host, path = value[4:].split(":", 1)
+    else:
+        parsed = urlsplit(value)
+        host, path = parsed.hostname, parsed.path
+    if not host or not path:
+        return None
+    path = path.strip("/").removesuffix(".git")
+    if not path:
+        return None
+    return f"{host.lower()}/{path.lower()}"
+
+
 def read_git_context(cwd: str | None = None) -> dict[str, str]:
     """Return ``{repo, branch, dev, pr, commit_sha}`` derived from the cwd's git state.
 
@@ -65,6 +84,11 @@ def read_git_context(cwd: str | None = None) -> dict[str, str]:
         return {}
 
     ctx: dict[str, str] = {"repo": Path(toplevel).name}
+
+    remote = _run_git(target, "config", "--get", "remote.origin.url")
+    repo_id = _repo_identity(remote)
+    if repo_id:
+        ctx["repo_id"] = repo_id
 
     branch = _run_git(target, "rev-parse", "--abbrev-ref", "HEAD")
     if branch and branch != "HEAD":
@@ -82,4 +106,3 @@ def read_git_context(cwd: str | None = None) -> dict[str, str]:
         ctx["commit_sha"] = sha
 
     return ctx
-

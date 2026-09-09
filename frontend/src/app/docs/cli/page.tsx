@@ -110,12 +110,18 @@ burnlens sync --now`}</Code>
           checkout when <code>gh</code> is installed, or prints that it is missing.
           Re-run derive later, or from another checkout:
         </p>
-        <Code>{`burnlens outcome derive     # merged PRs -> outcomes (needs gh)
-burnlens outcome show       # cost per accepted outcome`}</Code>
+        <Code>{`burnlens outcome derive                         # all closed PRs, paginated (needs gh)
+burnlens outcome derive --since 2026-01-01 --until 2026-02-01
+burnlens outcome show       # cost per accepted outcome
+burnlens outcome correct ticket-1 --status accepted --reason "reopened and fixed"
+burnlens outcome history ticket-1`}</Code>
         <p>
-          Both are idempotent and safe on a schedule: outcome ids are derived
-          deterministically from the repo and PR number, so re-running only adds
-          newly-closed PRs.
+          Derivation is idempotent and safe on a schedule: outcome ids are derived
+          deterministically from the canonical repository and PR number, so re-running
+          only adds newly-closed PRs. The command reports its date scope and whether the
+          import was complete; <code>--limit</code> is an explicit, incomplete subset.
+          A genuine status change is corrected in place, with the prior state retained
+          in outcome history rather than counted again.
         </p>
         <p>Meter and cap production traffic:</p>
         <Code>{`burnlens start
@@ -132,7 +138,7 @@ burnlens keys`}</Code>
           Flags and behaviour per area:{" "}
           <Link href="/docs/scan">scanning</Link>,{" "}
           <Link href="/docs/proxy">proxy and tagging</Link>,{" "}
-          <Link href="/docs/budgets">budgets and hard caps</Link>. Errors and their fixes
+          <Link href="/docs/budgets">budgets and enforcement</Link>. Errors and their fixes
           live in <Link href="/troubleshooting">troubleshooting</Link>.
         </p>
       </section>

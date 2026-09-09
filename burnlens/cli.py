@@ -15,7 +15,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from burnlens.config import load_config
+from burnlens.config import budget_control_status, load_config, resolve_config_path
 from burnlens.proxy.providers import build_env_exports
 
 app = typer.Typer(
@@ -833,6 +833,11 @@ def findings_status(
     new_status: str = typer.Argument(
         ..., help="open | acknowledged | resolved | accepted_risk"
     ),
+    owner: Optional[str] = typer.Option(None, "--owner", help="Person or team accountable for the change"),
+    acceptance_criteria: Optional[str] = typer.Option(None, "--acceptance-criteria", help="Pre-declared quality/savings check"),
+    configuration_before: Optional[str] = typer.Option(None, "--before-config", help="Previous config or revision"),
+    configuration_after: Optional[str] = typer.Option(None, "--after-config", help="Applied config or revision"),
+    effective_at: Optional[str] = typer.Option(None, "--effective-at", help="When the change took effect (ISO-8601)"),
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
     """Move a finding through its lifecycle."""
@@ -869,7 +874,23 @@ def findings_status(
             raise typer.Exit(1)
 
         target = matches[0]
-        await set_finding_status(cfg.db_path, target.fingerprint, new_status)
+        effective_dt = None
+        if effective_at:
+            try:
+                effective_dt = datetime.fromisoformat(effective_at.replace("Z", "+00:00"))
+            except ValueError:
+                console.print(f"[red]--effective-at is not valid ISO-8601: {effective_at}[/red]")
+                raise typer.Exit(1)
+            if effective_dt.tzinfo is None:
+                effective_dt = effective_dt.replace(tzinfo=timezone.utc)
+        await set_finding_status(
+            cfg.db_path, target.fingerprint, new_status,
+            owner=owner,
+            acceptance_criteria=acceptance_criteria,
+            configuration_before=configuration_before,
+            configuration_after=configuration_after,
+            effective_at=effective_dt,
+        )
 
         console.print(f"\n  {target.title} ({target.subject_type}:{target.subject_key})")
         console.print(f"  {target.status} → [bold]{new_status}[/bold]")
@@ -1435,8 +1456,16 @@ def _print_derive_result(result: Any) -> None:
         f"[green]Derived[/green] {result.inserted} new outcome(s) for "
         f"[cyan]{result.workflow_id}[/cyan] "
         f"({result.accepted} merged, {result.rejected} closed unmerged"
+        + (f", {result.corrected} corrected" if result.corrected else "")
         + (f", {result.duplicates} already recorded" if result.duplicates else "")
         + ")"
+    )
+    scope = ""
+    if result.scope_since or result.scope_until:
+        scope = f"; scope {result.scope_since or 'unbounded'} → {result.scope_until or 'now'}"
+    console.print(
+        f"[dim]Scanned {result.pull_requests_seen} closed PR(s); import "
+        f"{'complete' if result.import_complete else 'incomplete'}{scope}.[/dim]"
     )
     if result.skipped_open:
         console.print(
@@ -1445,7 +1474,9 @@ def _print_derive_result(result: Any) -> None:
         )
 
 
-async def _run_scan_derive(db_path: str) -> bool:
+async def _run_scan_derive(
+    db_path: str, since: datetime | None = None
+) -> bool:
     """Derive merged-PR outcomes for the current checkout after a scan.
 
     Returns True when outcomes were written. A missing ``gh`` is reported as
@@ -1456,7 +1487,7 @@ async def _run_scan_derive(db_path: str) -> bool:
 
     console.print("\n[cyan]Deriving outcomes from merged PRs...[/cyan]")
     try:
-        result = await derive_pr_outcomes(db_path, repo_path=".")
+        result = await derive_pr_outcomes(db_path, repo_path=".", since=since)
     except DeriveError as exc:
         console.print(f"[red]Could not derive outcomes:[/red] {exc}")
         return False
@@ -1555,7 +1586,7 @@ def scan(
         _disclose_scan_pricing()
         derived = False
         if not dry_run:
-            derived = await _run_scan_derive(cfg.db_path)
+            derived = await _run_scan_derive(cfg.db_path, since=since_dt)
             await _print_scan_result(cfg.db_path)
         _print_scan_next(derived=derived)
 
@@ -1585,6 +1616,47 @@ def run(
         team=team,
         customer=customer,
     )
+
+
+@app.command()
+def controls(
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable JSON output"),
+) -> None:
+    """Show configured budget controls and their enforcement guarantees."""
+    import json as json_mod
+
+    cfg = load_config(config)
+    status = budget_control_status(cfg, resolve_config_path(config))
+    if json_output:
+        typer.echo(json_mod.dumps(status, indent=2))
+        return
+
+    health = status["health"]
+    console.print(
+        f"[bold]Budget controls[/bold] — [yellow]{health['status']}[/yellow]"
+        f"; strict ceiling: [yellow]{health['strict_ceiling']}[/yellow]"
+    )
+    source = status["config"]["source"]
+    console.print(f"Config: {source['path'] if source else 'defaults / environment'}")
+
+    table = Table(expand=True)
+    table.add_column("Control", style="cyan")
+    table.add_column("Configured")
+    table.add_column("Scope")
+    table.add_column("Action")
+    table.add_column("Concurrency guarantee")
+    for control in status["controls"]:
+        scope = control["scope"] if isinstance(control["scope"], str) else "configured policies"
+        table.add_row(
+            control["name"],
+            "yes" if control["configured"] else "no",
+            scope,
+            control["action"],
+            control["concurrency_guarantee"],
+        )
+    console.print(table)
+    console.print("Known limits: " + "; ".join(health["known_limits"]))
 
 
 @app.command()
@@ -2604,10 +2676,83 @@ def outcome_record(
     asyncio.run(_run())
 
 
+@outcome_app.command("correct")
+def outcome_correct(
+    outcome_id: str = typer.Argument(..., help="Existing outcome id to correct"),
+    status: str = typer.Option(..., "--status", "-s", help="accepted | rejected | failed"),
+    reason: str = typer.Option(..., "--reason", help="Why the recorded outcome changed"),
+    at: Optional[str] = typer.Option(None, "--at", help="Corrected event time as ISO-8601"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+) -> None:
+    """Correct one outcome in place and retain its prior state in history."""
+    from burnlens.storage.database import correct_outcome, init_db
+    from burnlens.storage.models import OUTCOME_STATUSES
+
+    if status not in OUTCOME_STATUSES:
+        console.print(f"[red]--status must be one of: {', '.join(OUTCOME_STATUSES)}[/red]")
+        raise typer.Exit(code=1)
+    event_time = None
+    if at:
+        try:
+            event_time = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        except ValueError:
+            console.print(f"[red]--at is not valid ISO-8601: {at}[/red]")
+            raise typer.Exit(code=1)
+        if event_time.tzinfo is None:
+            event_time = event_time.replace(tzinfo=timezone.utc)
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        changed = await correct_outcome(
+            cfg.db_path, outcome_id, status, reason,
+            event_time.isoformat() if event_time else None,
+        )
+        if not changed:
+            console.print(f"[red]Outcome not found:[/red] {outcome_id}")
+            raise typer.Exit(code=1)
+        console.print(f"[green]Corrected[/green] outcome [cyan]{outcome_id}[/cyan] → {status}")
+
+    asyncio.run(_run())
+
+
+@outcome_app.command("history")
+def outcome_history(
+    outcome_id: str = typer.Argument(..., help="Outcome id"),
+    config: Optional[Path] = typer.Option(None, "--config", "-c"),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON"),
+) -> None:
+    """Show the auditable correction history for one outcome."""
+    import json as json_mod
+    from burnlens.storage.database import get_outcome_history, init_db
+
+    cfg = load_config(config)
+
+    async def _run() -> None:
+        await init_db(cfg.db_path)
+        rows = await get_outcome_history(cfg.db_path, outcome_id)
+        if json_output:
+            console.print(json_mod.dumps(rows, indent=2))
+            return
+        if not rows:
+            console.print(f"[dim]No corrections recorded for {outcome_id}.[/dim]")
+            return
+        for row in rows:
+            console.print(
+                f"{row['changed_at']}  {row['prior_status']} → {row['new_status']}  "
+                f"{row['reason']}"
+            )
+
+    asyncio.run(_run())
+
+
 @outcome_app.command("derive")
 def outcome_derive(
     repo_path: Path = typer.Option(Path("."), "--repo", "-r", help="Path to a git checkout"),
-    limit: int = typer.Option(200, "--limit", help="Most recent closed PRs to read"),
+    limit: Optional[int] = typer.Option(None, "--limit", help="Optional maximum closed PRs to import"),
+    since: Optional[str] = typer.Option(None, "--since", help="Only PR outcomes at/after this ISO date or instant"),
+    until: Optional[str] = typer.Option(None, "--until", help="Exclusive ISO date or instant upper bound"),
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
 ) -> None:
     """Derive outcomes from merged pull requests — no instrumentation needed.
@@ -2618,17 +2763,37 @@ def outcome_derive(
     to re-run, or to derive from a different `--repo`. Then `burnlens outcome
     show` reports what a merged PR actually costs in agent spend.
 
+    The importer paginates all closed PRs by default. Use ``--since`` and
+    ``--until`` for an event-time window, or ``--limit`` for an explicit subset.
     Idempotent: outcome ids are deterministic, so re-running only adds PRs
-    closed since last time. Safe on a schedule.
+    not already recorded. Safe on a schedule.
     """
     from burnlens.outcomes import DeriveError, derive_pr_outcomes
 
     cfg = load_config(config)
 
+    def _parse_bound(raw: str | None) -> datetime | None:
+        if not raw:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise typer.BadParameter("expected YYYY-MM-DD or ISO 8601 datetime") from exc
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+    since_dt = _parse_bound(since)
+    until_dt = _parse_bound(until)
+    if since_dt and until_dt and until_dt <= since_dt:
+        raise typer.BadParameter("--until must be after --since")
+
     async def _run() -> None:
         try:
             result = await derive_pr_outcomes(
-                cfg.db_path, repo_path=str(repo_path), limit=limit
+                cfg.db_path,
+                repo_path=str(repo_path),
+                limit=limit,
+                since=since_dt,
+                until=until_dt,
             )
         except DeriveError as exc:
             console.print(f"[red]Could not derive outcomes:[/red] {exc}")

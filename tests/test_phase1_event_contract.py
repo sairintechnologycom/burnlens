@@ -144,9 +144,10 @@ def test_pricing_version():
 def test_git_context_commit_sha():
     """Verify that read_git_context extracts commit SHA."""
     mock_run = MagicMock()
-    # Mock show-toplevel, HEAD branch, user email, rev-parse HEAD
+    # Mock show-toplevel, origin URL, HEAD branch, user email, rev-parse HEAD
     mock_run.side_effect = [
         MagicMock(returncode=0, stdout="/Users/bhushan/Documents/Projects/burnlens"),
+        MagicMock(returncode=1, stdout=""),
         MagicMock(returncode=0, stdout="main"),
         MagicMock(returncode=0, stdout="test@example.com"),
         MagicMock(returncode=0, stdout="abcdef0123456789abcdef0123456789abcdef01"),

@@ -227,8 +227,9 @@ export default function DemoPage() {
             configured budget. Observation only.
           </p>
           <p>
-            <strong style={{ color: "var(--text)" }}>Hard cap</strong> — a per-key daily dollar limit
-            returns HTTP 429 before the upstream call. Off until you set a cap.
+            <strong style={{ color: "var(--text)" }}>Recorded-spend guardrail</strong> — a per-key daily
+            dollar limit returns HTTP 429 before the upstream call. Concurrent requests can overshoot;
+            off until you set a cap.
           </p>
           <p>
             <strong style={{ color: "var(--text)" }}>Explicit model downgrade</strong> —{" "}

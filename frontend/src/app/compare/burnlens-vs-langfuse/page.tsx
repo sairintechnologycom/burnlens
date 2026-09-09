@@ -108,8 +108,9 @@ export default function CompareLangfuse() {
           <h2>When to pick BurnLens</h2>
           <p><strong>You need to stop spend, not just measure it.</strong> Langfuse&apos;s cost analytics are
           comprehensive, but they observe — they do not enforce. If a customer&apos;s API key triggers a loop that
-          burns $5,000 overnight, Langfuse will show you the spike the next morning. BurnLens returns 429 at
-          $50.01 if the daily cap is $50.</p>
+          burns $5,000 overnight, Langfuse will show you the spike the next morning. BurnLens returns 429 once
+          recorded spend reaches the configured cap; simultaneous requests can overshoot, so it is a guardrail
+          rather than an absolute ceiling.</p>
 
           <p><strong>You want zero code changes.</strong> Langfuse requires wrapping every LLM call with its SDK or
           using its OpenTelemetry instrumentation. BurnLens needs one environment variable; your existing SDK code

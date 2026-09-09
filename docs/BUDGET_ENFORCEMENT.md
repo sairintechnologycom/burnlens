@@ -228,7 +228,7 @@ only**, ignoring `reset_timezone`. Weekly periods start Monday.
 ### Fail-open vs fail-closed
 
 Budget checks fail **open**. If the cap lookup, customer-budget query, or
-policy check raises, the error is logged at debug level and the request is
+policy check raises, the error is logged at warning level and the request is
 forwarded (`interceptor.py:529`, `:481`, `:716`). A corrupt or locked database
 degrades to no enforcement, not to an outage.
 
@@ -258,6 +258,14 @@ Documented rather than fixed, in rough order of how likely they are to bite:
 5. **`block_unpriced_models: false` restores the silent-bypass behaviour.** If
    you set it, unpriced traffic is unenforced traffic again — deliberately, but
    the consequence is the same.
+
+## Inspect the applied controls
+
+Run `burnlens controls` (or `burnlens controls --json`) to see which control
+scopes are configured, whether they block, alert, or rewrite requests, and the
+actual failure and concurrency guarantees. The command also reports the
+selected config file and its modification time. It intentionally reports
+`strict_ceiling: false` for the current recorded-spend mechanisms.
 
 Fixed in 1.13.0: unpriced models used to be forwarded under a cap that could
 never fire, and bypassed budget policies entirely via a `$0` estimate. They now

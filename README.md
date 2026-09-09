@@ -33,7 +33,7 @@ burnlens scan
 
 2. **Tag what matters.** Request headers (`X-BurnLens-Tag-Feature`, `X-BurnLens-Tag-Team`, `X-BurnLens-Tag-Customer`, plus `X-BurnLens-Tag-Agent-Id` and `X-BurnLens-Tag-Workflow-Id` for agent workloads) attribute any call to any dimension. Tags are stripped before the request reaches the AI provider. If you enable cloud sync, tag values are uploaded to your workspace alongside cost metadata — never prompt or response bodies.
 
-3. **Cap before you call.** Register an API key with a daily dollar limit. At 100%, BurnLens returns `429` *before* the upstream request is made — not after the bill arrives. 50% and 80% thresholds fire Slack or email alerts. Exact behaviour under concurrency, streaming, retries, and unpriced models is specified in [Budget enforcement semantics](docs/BUDGET_ENFORCEMENT.md).
+3. **Control before you call.** Register an API key with a daily dollar limit. At 100% of recorded spend, BurnLens returns `429` *before* the upstream request is made. 50% and 80% thresholds fire Slack or email alerts. Run `burnlens controls` to inspect scope and concurrency guarantees; exact behaviour is specified in [Budget enforcement semantics](docs/BUDGET_ENFORCEMENT.md).
 
 4. **One dashboard for supported providers.** OpenAI, Anthropic, Google, Groq, Mistral, Together, xAI, DeepSeek, Azure OpenAI, and AWS Bedrock spend in one unified view. Model breakdowns, waste detection, and budget tracking use versioned provider pricing.
 
@@ -106,6 +106,8 @@ Three things worth knowing about the number:
 - **Per accepted = total workflow spend / accepted outcomes.** Failed and rejected attempts are charged to the successes, because that is what one working result actually costs. The `Rework` column shows how much of it was spent on attempts that didn't land.
 - **Unattributed spend is shown, not hidden.** A request is charged to the first outcome of its workflow that follows it within a window (24h by default, `--window` to change). Spend with no outcome after it stays visible in its own column rather than quietly disappearing from the denominator.
 
+If an outcome genuinely changes, use `burnlens outcome correct <outcome-id> --status accepted --reason "..."` (or Cloud `PATCH /v1/outcomes/{outcome_id}`); the current result stays one count and the prior status remains available through `burnlens outcome history <outcome-id>`.
+
 A workflow with spend and no accepted outcomes reports no unit cost at all rather than `$0` — the absence is the signal.
 
 ### Coding agents: no instrumentation required
@@ -176,7 +178,7 @@ against the provider pricing page — they change less often than text but do mo
 | Prompt handling | Prompt bodies are never uploaded to BurnLens Cloud |
 | Economics | Spend + accepted outcomes (merged PR where GitHub data exists) |
 | Missing pricing | Explicit `$ unknown`, never a silent `$0` |
-| Runtime enforcement | Optional local proxy; hard cap returns 429 before upstream |
+| Runtime enforcement | Optional local proxy; recorded-spend guardrail returns 429 before upstream |
 | Budget model changes | Explicit opt-in. Cache and routing stay off by default |
 | Savings | Projected and verified reported separately |
 | Self-hosting | Open-source deployment available |

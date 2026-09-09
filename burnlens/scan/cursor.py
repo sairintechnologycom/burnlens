@@ -44,6 +44,7 @@ from burnlens.cost.calculator import TokenUsage, calculate_cost
 from burnlens.scan._common import (
     _reset_dev_identity_cache,
     repo_workflow_id,
+    repository_identity,
     resolve_dev_identity,
 )
 from burnlens.storage.models import RequestRecord
@@ -265,9 +266,10 @@ def bubble_to_record(bubble: CursorBubble) -> RequestRecord:
 
     tags: dict[str, str] = {"dev": dev, "session": bubble.conversation_id}
     if repo_basename:
-        tags["repo"] = repo_basename
+        display_repo, stable_repo = repository_identity(workspace, repo_basename)
+        tags["repo"] = display_repo or repo_basename
         # Joins this session's cost to merged-PR outcomes for the same repo.
-        tags["workflow_id"] = repo_workflow_id(repo_basename)
+        tags["workflow_id"] = repo_workflow_id(stable_repo)
 
     return RequestRecord(
         provider="cursor",

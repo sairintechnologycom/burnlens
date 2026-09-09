@@ -409,7 +409,9 @@ export default function LandingPage() {
               <p>
                 Register an API key with a daily dollar limit. At 100%, BurnLens
                 returns <code>429</code> before the call is forwarded upstream.
-                50% and 80% thresholds fire Slack or email alerts.
+                50% and 80% thresholds fire Slack or email alerts. This is a
+                recorded-spend guardrail, not an absolute concurrent ceiling;
+                <code>burnlens controls</code> shows the active guarantees.
               </p>
               <p>
                 <a
@@ -580,7 +582,7 @@ export default function LandingPage() {
                 </tr>
                 <tr>
                   <td>Runtime enforcement</td>
-                  <td>Optional local proxy; hard cap returns 429 before upstream</td>
+                  <td>Optional local proxy; recorded-spend guardrail returns 429 before upstream</td>
                 </tr>
                 <tr>
                   <td>Budget model changes</td>

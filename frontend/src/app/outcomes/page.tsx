@@ -122,7 +122,7 @@ function OutcomesContent() {
         {rows.length === 0 ? (
           <EmptyState
             title="No outcome data yet"
-            description="Tag a production workflow or derive merged PR outcomes from your coding-agent history to calculate cost per accepted outcome. Failed and rejected attempts are charged to the successes. Scan-derived spend shows as repo:<name> after you derive merged PRs."
+            description="Tag a production workflow or derive merged PR outcomes from your coding-agent history to calculate cost per accepted outcome. Failed and rejected attempts are charged to the successes. Scan-derived spend joins by canonical repository identity after you derive merged PRs."
             code={"burnlens outcome derive\nburnlens outcome show"}
           />
         ) : (
@@ -141,6 +141,8 @@ function OutcomesContent() {
           Per accepted is total workflow spend ÷ accepted count —{" "}
           <code>—</code> when a workflow has spend and nothing accepted yet.
           Outcomes recorded locally sync to this workspace when cloud sync is on.
+          If a result changes, correct its existing ID; BurnLens keeps one current
+          count and retains the prior status in the audit history.
         </p>
       </div>
 

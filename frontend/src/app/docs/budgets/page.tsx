@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Code, GH } from "@/lib/docs";
 
-const TITLE = "Budgets and hard caps — BurnLens Docs";
+const TITLE = "Budgets and enforcement — BurnLens Docs";
 const DESCRIPTION =
-  "Give an API key a daily dollar cap and the BurnLens proxy returns 429 before the call is forwarded upstream, so it is never billed. Team and customer budgets, virtual keys, unpriced-model blocking, and budget-aware model downgrade.";
+  "Configure BurnLens budget controls and inspect their scope, failure policy, and concurrency guarantees. Team and customer budgets, virtual keys, unpriced-model blocking, and budget-aware model downgrade.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export default function DocsBudgetsPage() {
   return (
     <>
-      <h1>Budgets and hard caps</h1>
+      <h1>Budgets and enforcement</h1>
       <p className="legal-updated">
         Config keys read out of <code>burnlens/config.py</code> and{" "}
         <code>burnlens/proxy/router.py</code> on 2026-08-16.
@@ -75,8 +75,11 @@ burnlens keys --json       # same, machine-readable`}</Code>
     default:                       # registered labels with no override of their own
       daily_usd: 5.0`}</Code>
         <p>
-          At 100% of the cap the proxy returns <code>429</code> before forwarding. The 50%
-          and 80% thresholds fire alerts instead of blocking.
+          At 100% of recorded spend the proxy returns <code>429</code> before forwarding.
+          This is a recorded-spend guardrail, not an absolute concurrent ceiling: requests
+          already in flight and simultaneous uncached checks can overshoot. The 50% and 80%
+          thresholds fire alerts instead of blocking. Run <code>burnlens controls</code> to
+          inspect the active scope and guarantees.
         </p>
       </section>
 

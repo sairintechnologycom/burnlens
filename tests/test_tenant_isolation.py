@@ -66,6 +66,7 @@ TENANT_SCOPED_TABLES = frozenset(
         "cancellation_surveys",
         "invitations",
         "outcomes",
+        "outcome_history",
         "reconciliation_credentials",
         "reconciliation_runs",
         "request_records",

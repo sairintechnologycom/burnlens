@@ -218,6 +218,24 @@ class OutcomeIngestResponse(BaseModel):
     duplicates: int
 
 
+class OutcomeCorrectionRequest(BaseModel):
+    """An explicit correction; replaying the ingest endpoint remains a no-op."""
+    status: Literal["accepted", "rejected", "failed"]
+    reason: str = Field(..., min_length=1, max_length=500)
+    event_time: Optional[datetime] = None
+
+
+class OutcomeHistoryEntry(BaseModel):
+    outcome_id: str
+    prior_status: str
+    new_status: str
+    prior_event_time: Optional[datetime] = None
+    new_event_time: datetime
+    reason: str
+    source: str
+    changed_at: datetime
+
+
 class WorkflowEconomics(BaseModel):
     """Unit economics for one workflow.
 
@@ -348,7 +366,7 @@ class CostConfidence(BaseModel):
     Four classes, in descending order of evidence:
 
     * ``reconciled`` — the provider's own bill agreed with us within the drift
-      threshold for the most recent comparison.
+      threshold for every spend date in the selected reporting window.
     * ``calculated`` — priced from the pricing table, never checked against a
       bill.
     * ``estimated`` — reconstructed from a coding agent's local logs
@@ -626,6 +644,11 @@ class FindingStatusBody(BaseModel):
     change_reference: Optional[str] = Field(None, min_length=1, max_length=500)
     change_type: Optional[str] = Field(None, min_length=1, max_length=32)
     change_url: Optional[str] = Field(None, min_length=1, max_length=1000)
+    owner: Optional[str] = Field(None, min_length=1, max_length=200)
+    acceptance_criteria: Optional[str] = Field(None, min_length=1, max_length=1000)
+    configuration_before: Optional[str] = Field(None, min_length=1, max_length=2000)
+    configuration_after: Optional[str] = Field(None, min_length=1, max_length=2000)
+    effective_at: Optional[datetime] = None
 
 
 class TraceCoverage(BaseModel):
@@ -663,6 +686,11 @@ class SavingsVerdict(BaseModel):
     change_reference: Optional[str] = None
     change_type: Optional[str] = None
     change_url: Optional[str] = None
+    owner: Optional[str] = None
+    acceptance_criteria: Optional[str] = None
+    configuration_before: Optional[str] = None
+    configuration_after: Optional[str] = None
+    effective_at: Optional[datetime] = None
     comparison_rule: str = "same_subject_equal_windows"
 
 

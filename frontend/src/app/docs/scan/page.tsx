@@ -104,6 +104,12 @@ burnlens scan --dry-run                 # parse and print counts, insert nothing
           and the repo the session ran in, and nothing else.
         </p>
         <p>
+          When a checkout has an origin remote, the local display name is kept for humans
+          but the economics join uses its canonical remote identity. That keeps two repos
+          both named <code>api</code> separate across developers and renamed checkouts.
+          A checkout without a remote falls back to its local name and is reported as such.
+        </p>
+        <p>
           <strong>Cost is attributed per repository, not per branch or PR.</strong> Agent
           session logs record which repo a session ran in; they do not record which branch
           it belonged to. With several PRs in flight, per-repo spend divided by accepted
@@ -138,9 +144,11 @@ burnlens scan --dry-run                 # parse and print counts, insert nothing
         <p>
           After a scan that could reach <code>gh</code>,{" "}
           <code>burnlens outcome show</code> is the cost-per-merged-PR number. Re-run
-          derive from another checkout with <code>burnlens outcome derive</code> — see
-          the <Link href="/docs/cli">CLI reference</Link>. To meter production API traffic
-          rather than agent sessions, see <Link href="/docs/proxy">the proxy</Link>.
+          derive from another checkout with <code>burnlens outcome derive</code>. The
+          importer paginates all closed PRs; use <code>--since</code> and{" "}
+          <code>--until</code> for an event-time window. See the <Link href="/docs/cli">CLI
+          reference</Link>. To meter production API traffic rather than agent sessions,
+          see <Link href="/docs/proxy">the proxy</Link>.
         </p>
       </section>
     </>

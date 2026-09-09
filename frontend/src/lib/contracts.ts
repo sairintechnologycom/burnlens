@@ -703,6 +703,11 @@ export interface SavingsVerdict {
   change_reference: string | null;
   change_type: string | null;
   change_url: string | null;
+  owner: string | null;
+  acceptance_criteria: string | null;
+  configuration_before: string | null;
+  configuration_after: string | null;
+  effective_at: string | null;
   comparison_rule: string;
 }
 export const SavingsVerdictFields: Record<keyof SavingsVerdict, true> = {
@@ -729,6 +734,11 @@ export const SavingsVerdictFields: Record<keyof SavingsVerdict, true> = {
   change_reference: true,
   change_type: true,
   change_url: true,
+  owner: true,
+  acceptance_criteria: true,
+  configuration_before: true,
+  configuration_after: true,
+  effective_at: true,
   comparison_rule: true,
 };
 

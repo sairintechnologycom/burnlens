@@ -99,6 +99,11 @@ async def post_finding_status(
             change_reference=body.change_reference,
             change_type=body.change_type,
             change_url=body.change_url,
+            owner=body.owner,
+            acceptance_criteria=body.acceptance_criteria,
+            configuration_before=body.configuration_before,
+            configuration_after=body.configuration_after,
+            effective_at=body.effective_at,
         )
         if not updated:
             raise HTTPException(status_code=404, detail="Finding not found")

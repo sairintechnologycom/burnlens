@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from burnlens.git_context import _parse_pr, read_git_context
+from burnlens.git_context import _parse_pr, _repo_identity, read_git_context
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +43,32 @@ def test_read_git_context_in_git_repo_returns_repo_name(tmp_path: Path) -> None:
     assert ctx.get("repo") == "my-app"
     assert ctx.get("branch") == "main"
     assert ctx.get("dev") == "alice@co.com"
+
+
+@pytest.mark.parametrize(
+    "remote, expected",
+    [
+        ("git@github.com:Acme/api.git", "github.com/acme/api"),
+        ("https://github.com/Other/api", "github.com/other/api"),
+    ],
+)
+def test_repo_identity_separates_same_name_different_owners(remote: str, expected: str):
+    assert _repo_identity(remote) == expected
+
+
+def test_read_git_context_includes_origin_identity(tmp_path: Path) -> None:
+    repo = tmp_path / "api"
+    repo.mkdir()
+    _init_repo(repo, branch="main")
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:Acme/api.git"],
+        check=True,
+    )
+
+    ctx = read_git_context(str(repo))
+
+    assert ctx["repo"] == "api"
+    assert ctx["repo_id"] == "github.com/acme/api"
 
 
 def test_read_git_context_outside_git_repo_returns_empty(tmp_path: Path) -> None:

@@ -135,6 +135,55 @@ async def test_empty_batch_is_a_noop(outcomes_client):
 
 
 @pytest.mark.asyncio
+async def test_patch_corrects_existing_outcome_without_new_row(outcomes_client):
+    ws = str(uuid4())
+    with patch(
+        "burnlens_cloud.outcomes_api.get_workspace_by_api_key",
+        return_value=(ws, "pro"),
+    ), patch(
+        "burnlens_cloud.outcomes_api.correct_cloud_outcome",
+        return_value=True,
+    ) as correct:
+        resp = await outcomes_client.patch(
+            "/v1/outcomes/o1",
+            json={"status": "accepted", "reason": "ticket reopened and fixed"},
+            headers={"X-API-Key": "bl_live_ok"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"outcome_id": "o1", "status": "accepted", "corrected": True}
+    assert correct.call_args.args[:3] == (ws, "o1", "accepted")
+
+
+@pytest.mark.asyncio
+async def test_history_is_workspace_scoped_and_auditable(outcomes_client):
+    ws = str(uuid4())
+    history = [{
+        "outcome_id": "o1",
+        "prior_status": "rejected",
+        "new_status": "accepted",
+        "prior_event_time": datetime(2026, 8, 9, 12, tzinfo=timezone.utc),
+        "new_event_time": datetime(2026, 8, 9, 12, tzinfo=timezone.utc),
+        "reason": "ticket reopened and fixed",
+        "source": "api",
+        "changed_at": datetime(2026, 8, 9, 13, tzinfo=timezone.utc),
+    }]
+    with patch(
+        "burnlens_cloud.outcomes_api.get_workspace_by_api_key",
+        return_value=(ws, "pro"),
+    ), patch(
+        "burnlens_cloud.outcomes_api.execute_query", return_value=history,
+    ) as query:
+        resp = await outcomes_client.get(
+            "/api/v1/outcomes/o1/history", headers={"X-API-Key": "bl_live_ok"}
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["prior_status"] == "rejected"
+    assert query.call_args.args[1:] == (ws, "o1")
+
+
+@pytest.mark.asyncio
 async def test_outcomes_endpoint_is_csrf_exempt():
     """It authenticates by API key and is never cookie-authenticated, so the
     CSRF header requirement would only 403 legitimate machine callers.
