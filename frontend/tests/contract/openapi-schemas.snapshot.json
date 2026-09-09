@@ -1880,6 +1880,13 @@
         "title": "Outcome Id",
         "type": "string"
       },
+      "outcome_type": {
+        "default": "unspecified",
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Outcome Type",
+        "type": "string"
+      },
       "source": {
         "default": "api",
         "maxLength": 32,
@@ -3788,6 +3795,10 @@
         "title": "Failed Count",
         "type": "integer"
       },
+      "outcome_type": {
+        "title": "Outcome Type",
+        "type": "string"
+      },
       "rejected_count": {
         "title": "Rejected Count",
         "type": "integer"
@@ -3799,6 +3810,7 @@
     },
     "required": [
       "workflow_id",
+      "outcome_type",
       "accepted_count",
       "rejected_count",
       "failed_count",

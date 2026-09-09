@@ -297,6 +297,7 @@ async def outcomes_summary(
     return [
         {
             "workflow_id": r.workflow_id,
+            "outcome_type": r.outcome_type,
             "accepted_count": r.accepted_count,
             "rejected_count": r.rejected_count,
             "failed_count": r.failed_count,

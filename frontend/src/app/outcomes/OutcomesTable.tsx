@@ -17,6 +17,7 @@ export function OutcomesTable({ rows }: { rows: WorkflowEconomics[] }) {
       <thead>
         <tr>
           <th>Workflow</th>
+          <th>Outcome unit</th>
           <th>Accepted</th>
           <th>Rejected / failed</th>
           <th>Total cost</th>
@@ -27,8 +28,9 @@ export function OutcomesTable({ rows }: { rows: WorkflowEconomics[] }) {
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.workflow_id}>
+          <tr key={`${r.workflow_id}:${r.outcome_type}`}>
             <td><span className="tag tag-feature">{r.workflow_id}</span></td>
+            <td>{r.outcome_type}</td>
             <td>{r.accepted_count.toLocaleString()}</td>
             <td>{(r.rejected_count + r.failed_count).toLocaleString()}</td>
             <td>${formatUsd(r.cost_total_usd)}</td>

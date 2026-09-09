@@ -132,7 +132,7 @@ async def ingest_outcomes(
             o.currency,
             o.event_time,
             o.source,
-            json.dumps(o.metadata),
+            json.dumps({**o.metadata, "outcome_type": o.outcome_type}),
         )
         if result:
             inserted += 1
@@ -166,6 +166,16 @@ alloc AS (
     SELECT
         req.workflow_id,
         req.cost_usd,
+        COALESCE((
+            SELECT NULLIF(o.metadata->>'outcome_type', '')
+            FROM outcomes o
+            WHERE o.workspace_id = $1
+              AND o.workflow_id = req.workflow_id
+              AND o.event_time >= req.ts
+              AND o.event_time < req.ts + ($3 * interval '1 second')
+            ORDER BY o.event_time ASC
+            LIMIT 1
+        ), 'unattributed') AS outcome_type,
         (
             SELECT o.status
             FROM outcomes o
@@ -181,12 +191,13 @@ alloc AS (
 spend AS (
     SELECT
         workflow_id,
+        outcome_type,
         COALESCE(SUM(cost_usd), 0) AS cost_total,
         COALESCE(SUM(cost_usd) FILTER (WHERE status = 'accepted'), 0) AS cost_accepted,
         COALESCE(SUM(cost_usd) FILTER (WHERE status IN ('rejected', 'failed')), 0) AS cost_rework,
         COALESCE(SUM(cost_usd) FILTER (WHERE status IS NULL), 0) AS cost_unattributed
     FROM alloc
-    GROUP BY workflow_id
+    GROUP BY workflow_id, outcome_type
 ),
 counts AS (
     SELECT
@@ -194,13 +205,15 @@ counts AS (
         COUNT(*) FILTER (WHERE status = 'accepted') AS accepted_count,
         COUNT(*) FILTER (WHERE status = 'rejected') AS rejected_count,
         COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
-        SUM(business_value) FILTER (WHERE status = 'accepted') AS business_value_accepted
+        SUM(business_value) FILTER (WHERE status = 'accepted') AS business_value_accepted,
+        COALESCE(NULLIF(metadata->>'outcome_type', ''), 'unspecified') AS outcome_type
     FROM outcomes
     WHERE workspace_id = $1 AND event_time >= $2
-    GROUP BY workflow_id
+    GROUP BY workflow_id, outcome_type
 )
 SELECT
-    workflow_id,
+    COALESCE(s.workflow_id, c.workflow_id) AS workflow_id,
+    COALESCE(s.outcome_type, c.outcome_type) AS outcome_type,
     COALESCE(s.cost_total, 0) AS cost_total,
     COALESCE(s.cost_accepted, 0) AS cost_accepted,
     COALESCE(s.cost_rework, 0) AS cost_rework,
@@ -210,7 +223,8 @@ SELECT
     COALESCE(c.failed_count, 0) AS failed_count,
     c.business_value_accepted
 FROM spend s
-FULL OUTER JOIN counts c USING (workflow_id)
+FULL OUTER JOIN counts c
+  ON c.workflow_id = s.workflow_id AND c.outcome_type = s.outcome_type
 ORDER BY cost_total DESC
 """
 
@@ -237,6 +251,7 @@ async def outcomes_summary(
         out.append(
             WorkflowEconomics(
                 workflow_id=r["workflow_id"],
+                outcome_type=r.get("outcome_type") or "unspecified",
                 accepted_count=accepted,
                 rejected_count=int(r["rejected_count"]),
                 failed_count=int(r["failed_count"]),

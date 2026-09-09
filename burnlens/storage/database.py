@@ -990,6 +990,8 @@ async def insert_outcome(db_path: str, outcome: "Outcome") -> int:
     from datetime import datetime, timezone
 
     async with aiosqlite.connect(db_path) as db:
+        metadata = dict(outcome.metadata or {})
+        metadata.setdefault("outcome_type", outcome.outcome_type)
         cursor = await db.execute(
             """
             INSERT OR IGNORE INTO outcomes (
@@ -1005,7 +1007,7 @@ async def insert_outcome(db_path: str, outcome: "Outcome") -> int:
                 outcome.currency,
                 outcome.event_time.isoformat(),
                 outcome.source,
-                json.dumps(outcome.metadata),
+                json.dumps(metadata),
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -1028,9 +1030,18 @@ WITH req AS (
 ),
 alloc AS (
     SELECT
-        req.workflow_id,
-        req.cost_usd,
-        (
+           req.workflow_id,
+           req.cost_usd,
+           COALESCE((
+               SELECT NULLIF(json_extract(o.metadata, '$.outcome_type'), '')
+               FROM outcomes o
+               WHERE o.workflow_id = req.workflow_id
+                 AND o.event_time >= req.ts
+                 AND (julianday(o.event_time) - julianday(req.ts)) * 86400.0 < ?
+               ORDER BY o.event_time ASC
+               LIMIT 1
+           ), 'unattributed') AS outcome_type,
+           (
             SELECT o.status FROM outcomes o
             WHERE o.workflow_id = req.workflow_id
               AND o.event_time >= req.ts
@@ -1042,29 +1053,32 @@ alloc AS (
 ),
 spend AS (
     SELECT workflow_id,
+           outcome_type,
            SUM(cost_usd) AS cost_total,
            SUM(CASE WHEN status = 'accepted' THEN cost_usd ELSE 0 END) AS cost_accepted,
            SUM(CASE WHEN status IN ('rejected', 'failed') THEN cost_usd ELSE 0 END) AS cost_rework,
            SUM(CASE WHEN status IS NULL THEN cost_usd ELSE 0 END) AS cost_unattributed
-    FROM alloc GROUP BY workflow_id
+    FROM alloc GROUP BY workflow_id, outcome_type
 ),
 counts AS (
     SELECT workflow_id,
            SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted_count,
            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
-           SUM(CASE WHEN status = 'accepted' THEN business_value ELSE NULL END) AS business_value_accepted
-    FROM outcomes WHERE event_time >= ? GROUP BY workflow_id
+           SUM(CASE WHEN status = 'accepted' THEN business_value ELSE NULL END) AS business_value_accepted,
+           COALESCE(NULLIF(json_extract(metadata, '$.outcome_type'), ''), 'unspecified') AS outcome_type
+    FROM outcomes WHERE event_time >= ? GROUP BY workflow_id, outcome_type
 ),
 -- SQLite has no FULL OUTER JOIN before 3.39, so union the key sets instead:
 -- a workflow that only spent money and one that only produced outcomes must
 -- both still appear.
 keys AS (
-    SELECT workflow_id FROM spend
+    SELECT workflow_id, outcome_type FROM spend
     UNION
-    SELECT workflow_id FROM counts
+    SELECT workflow_id, outcome_type FROM counts
 )
 SELECT k.workflow_id                              AS workflow_id,
+       k.outcome_type                             AS outcome_type,
        COALESCE(s.cost_total, 0.0)                AS cost_total,
        COALESCE(s.cost_accepted, 0.0)             AS cost_accepted,
        COALESCE(s.cost_rework, 0.0)               AS cost_rework,
@@ -1074,8 +1088,8 @@ SELECT k.workflow_id                              AS workflow_id,
        COALESCE(c.failed_count, 0)                AS failed_count,
        c.business_value_accepted                  AS business_value_accepted
 FROM keys k
-LEFT JOIN spend s ON s.workflow_id = k.workflow_id
-LEFT JOIN counts c ON c.workflow_id = k.workflow_id
+LEFT JOIN spend s ON s.workflow_id = k.workflow_id AND s.outcome_type = k.outcome_type
+LEFT JOIN counts c ON c.workflow_id = k.workflow_id AND c.outcome_type = k.outcome_type
 ORDER BY cost_total DESC
 """
 
@@ -1091,7 +1105,8 @@ async def get_workflow_economics(
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            _WORKFLOW_ECONOMICS_SQL, (since, float(window_seconds), since)
+            _WORKFLOW_ECONOMICS_SQL,
+            (since, float(window_seconds), float(window_seconds), since),
         )
         rows = await cursor.fetchall()
 
@@ -1102,6 +1117,7 @@ async def get_workflow_economics(
         results.append(
             WorkflowEconomics(
                 workflow_id=row["workflow_id"],
+                outcome_type=row["outcome_type"],
                 accepted_count=accepted,
                 rejected_count=int(row["rejected_count"]),
                 failed_count=int(row["failed_count"]),

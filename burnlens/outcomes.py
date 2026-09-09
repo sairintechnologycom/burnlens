@@ -185,6 +185,7 @@ def build_outcomes(
             outcome_id=f"github:{prefix}#{number}",
             workflow_id=workflow_id,
             status=status,
+            outcome_type="pull_request",
             event_time=event_time,
             source="derived",
             metadata={

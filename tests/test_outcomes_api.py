@@ -177,6 +177,7 @@ async def test_summary_computes_cost_per_accepted(outcomes_client, valid_jwt_tok
     with patch("burnlens_cloud.outcomes_api.execute_query") as q:
         q.return_value = [{
             "workflow_id": "refund_review",
+            "outcome_type": "ticket",
             "cost_total": 25.0,
             "cost_accepted": 15.0,
             "cost_rework": 7.0,
@@ -195,6 +196,7 @@ async def test_summary_computes_cost_per_accepted(outcomes_client, valid_jwt_tok
     row = resp.json()[0]
     # Total spend / accepted count — failures are charged to the successes.
     assert row["cost_per_accepted_usd"] == pytest.approx(2.5)
+    assert row["outcome_type"] == "ticket"
     assert row["cost_rework_usd"] == pytest.approx(7.0)
     assert row["cost_unattributed_usd"] == pytest.approx(3.0)
 
@@ -299,40 +301,41 @@ async def test_postgres_allocation_matches_sqlite():
         await req(30, 9.00, wf="no_outcomes")   # zero-outcome workflow
 
         cutoff = t0 - timedelta(days=1)
-        rows = {r["workflow_id"]: r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 86_400.0)}
+        rows = {(r["workflow_id"], r["outcome_type"]): r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 86_400.0)}
 
-        s = rows["support_ticket"]
-        assert float(s["cost_total"]) == pytest.approx(2.50)
+        s = rows[("support_ticket", "unspecified")]
+        assert float(s["cost_total"]) == pytest.approx(1.75)
         assert float(s["cost_accepted"]) == pytest.approx(1.50)
         assert float(s["cost_rework"]) == pytest.approx(0.25)
-        assert float(s["cost_unattributed"]) == pytest.approx(0.75)
+        assert float(s["cost_unattributed"]) == pytest.approx(0.0)
         assert s["accepted_count"] == 1 and s["failed_count"] == 1
+        assert float(rows[("support_ticket", "unattributed")]["cost_total"]) == pytest.approx(0.75)
 
-        z = rows["no_outcomes"]
+        z = rows[("no_outcomes", "unattributed")]
         assert z["accepted_count"] == 0
         assert float(z["cost_unattributed"]) == pytest.approx(9.00)
 
         # Duplicate must not inflate the denominator.
         await outcome("t1", 2, "accepted")
-        again = {r["workflow_id"]: r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 86_400.0)}
-        assert again["support_ticket"]["accepted_count"] == 1
+        again = {(r["workflow_id"], r["outcome_type"]): r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 86_400.0)}
+        assert again[("support_ticket", "unspecified")]["accepted_count"] == 1
 
         # Outcome-only workflow must survive the FULL OUTER JOIN.
         await outcome("solo", 0, "accepted", wf="outcome_only")
-        with_solo = {r["workflow_id"]: r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 86_400.0)}
-        assert "outcome_only" in with_solo
-        assert float(with_solo["outcome_only"]["cost_total"]) == pytest.approx(0.0)
+        with_solo = {(r["workflow_id"], r["outcome_type"]): r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 86_400.0)}
+        assert ("outcome_only", "unspecified") in with_solo
+        assert float(with_solo[("outcome_only", "unspecified")]["cost_total"]) == pytest.approx(0.0)
 
         # A narrow window moves spend to unattributed without losing any of it.
         # At 90s: the request at t+1min is 60s before its outcome and still
         # claimed; the one at t+0 is 120s before and is not.
-        narrow = {r["workflow_id"]: r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 90.0)}
-        n = narrow["support_ticket"]
+        narrow = {(r["workflow_id"], r["outcome_type"]): r for r in await conn.fetch(_SUMMARY_SQL, ws, cutoff, 90.0)}
+        n = narrow[("support_ticket", "unspecified")]
         assert float(n["cost_accepted"]) == pytest.approx(0.50)
         assert float(n["cost_rework"]) == pytest.approx(0.25)
-        assert float(n["cost_unattributed"]) == pytest.approx(1.75)
+        assert float(narrow[("support_ticket", "unattributed")]["cost_unattributed"]) == pytest.approx(1.75)
         # The money did not disappear — only its owner changed.
-        assert float(n["cost_total"]) == pytest.approx(2.50)
+        assert sum(float(r["cost_total"]) for r in narrow.values() if r["workflow_id"] == "support_ticket") == pytest.approx(2.50)
     finally:
         await conn.close()
 

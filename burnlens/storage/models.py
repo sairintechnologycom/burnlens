@@ -279,6 +279,7 @@ class Outcome:
     outcome_id: str
     workflow_id: str
     status: str
+    outcome_type: str = "unspecified"
     event_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     business_value: float | None = None
     currency: str | None = None
@@ -291,6 +292,7 @@ class Outcome:
             raise ValueError(
                 f"status must be one of {OUTCOME_STATUSES}, got {self.status!r}"
             )
+        self.outcome_type = (self.outcome_type or "unspecified").strip() or "unspecified"
 
 
 @dataclass
@@ -306,6 +308,7 @@ class WorkflowEconomics:
     """
 
     workflow_id: str
+    outcome_type: str
     accepted_count: int
     rejected_count: int
     failed_count: int
@@ -384,4 +387,3 @@ class AnomalyEvent:
     details: dict = field(default_factory=dict)
     detected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     id: int | None = None
-

@@ -36,10 +36,11 @@ async def _req(db, minutes, cost, workflow="wf"):
     ))
 
 
-async def _outcome(db, oid, minutes, status, workflow="wf", value=None):
+async def _outcome(db, oid, minutes, status, workflow="wf", value=None, outcome_type="unspecified"):
     return await insert_outcome(db, Outcome(
         outcome_id=oid, workflow_id=workflow, status=status,
         event_time=T0 + timedelta(minutes=minutes), business_value=value,
+        outcome_type=outcome_type,
     ))
 
 
@@ -95,11 +96,12 @@ async def test_spend_outside_the_window_is_unattributed(initialized_db):
     assert within.cost_unattributed_usd == pytest.approx(0.0)
 
     # Same data, 60s window: the outcome is too late to claim it.
-    outside = await _one(initialized_db, window_seconds=60)
-    assert outside.cost_unattributed_usd == pytest.approx(3.00)
-    assert outside.cost_accepted_usd == pytest.approx(0.0)
+    outside = await get_workflow_economics(initialized_db, since=SINCE, window_seconds=60)
+    by_type = {row.outcome_type: row for row in outside}
+    assert by_type["unattributed"].cost_unattributed_usd == pytest.approx(3.00)
+    assert by_type["unattributed"].cost_accepted_usd == pytest.approx(0.0)
     # Total spend is unchanged — the money did not disappear, only its owner.
-    assert outside.cost_total_usd == pytest.approx(3.00)
+    assert sum(row.cost_total_usd for row in outside) == pytest.approx(3.00)
 
 
 async def test_zero_outcome_workflow_reports_unattributed_not_zero_division(initialized_db):
@@ -150,6 +152,21 @@ async def test_business_value_sums_for_accepted_only(initialized_db):
 
     row = await _one(initialized_db)
     assert row.business_value_accepted == pytest.approx(150.0)
+
+
+async def test_mixed_outcome_types_are_separate_cost_units(initialized_db):
+    await _req(initialized_db, 0, 1.00)
+    await _outcome(initialized_db, "pr-1", 1, "accepted", value=100.0, outcome_type="pull_request")
+    await _req(initialized_db, 10, 2.00)
+    await _outcome(initialized_db, "ticket-1", 11, "accepted", value=20.0, outcome_type="ticket")
+
+    rows = await get_workflow_economics(initialized_db, since=SINCE)
+    by_type = {row.outcome_type: row for row in rows}
+    assert set(by_type) == {"pull_request", "ticket"}
+    assert by_type["pull_request"].cost_total_usd == pytest.approx(1.00)
+    assert by_type["ticket"].cost_total_usd == pytest.approx(2.00)
+    assert by_type["pull_request"].cost_per_accepted_usd == pytest.approx(1.00)
+    assert by_type["ticket"].cost_per_accepted_usd == pytest.approx(2.00)
 
 
 # -------------------------------------------------------------- idempotency

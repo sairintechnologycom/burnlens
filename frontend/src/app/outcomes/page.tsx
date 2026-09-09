@@ -16,7 +16,8 @@ function KpiStrip({ rows }: { rows: WorkflowEconomics[] }) {
   const total = rows.reduce((s, r) => s + r.cost_total_usd, 0);
   const rework = rows.reduce((s, r) => s + r.cost_rework_usd, 0);
   const unattributed = rows.reduce((s, r) => s + r.cost_unattributed_usd, 0);
-  const perAccepted = accepted > 0 ? total / accepted : null;
+  const outcomeTypes = new Set(rows.map((r) => r.outcome_type));
+  const perAccepted = outcomeTypes.size === 1 && accepted > 0 ? total / accepted : null;
 
   return (
     <div className="stat-strip cols-5">
@@ -41,7 +42,14 @@ function KpiStrip({ rows }: { rows: WorkflowEconomics[] }) {
       </div>
       <div className="stat-cell">
         <div className="stat-label">Cost / accepted</div>
-        <div className="stat-value">{formatPerAccepted(perAccepted)}</div>
+        <div className="stat-value">
+          {outcomeTypes.size > 1 ? "Mixed units" : formatPerAccepted(perAccepted)}
+        </div>
+        {outcomeTypes.size > 1 && (
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+            see the unit breakdown below
+          </div>
+        )}
       </div>
     </div>
   );

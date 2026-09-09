@@ -439,6 +439,7 @@ export const EconomicsOverviewFields: Record<keyof EconomicsOverview, true> = {
 // --- /api/v1/outcomes/summary  ->  WorkflowEconomics ---
 export interface WorkflowEconomics {
   workflow_id: string;
+  outcome_type: string;
   accepted_count: number;
   rejected_count: number;
   failed_count: number;

@@ -2533,6 +2533,7 @@ def routing(
 def outcome_record(
     workflow: str = typer.Option(..., "--workflow", "-w", help="Workflow this outcome belongs to (matches X-BurnLens-Tag-Workflow-Id)"),
     status: str = typer.Option(..., "--status", "-s", help="accepted | rejected | failed"),
+    outcome_type: str = typer.Option("unspecified", "--type", help="Comparable outcome unit, e.g. pull_request, ticket, document"),
     outcome_id: Optional[str] = typer.Option(None, "--id", help="Your id for this business event. Defaults to a generated one; pass it to make re-runs idempotent."),
     value: Optional[float] = typer.Option(None, "--value", help="Business value of this outcome"),
     currency: Optional[str] = typer.Option(None, "--currency", help="Currency for --value, e.g. USD"),
@@ -2576,6 +2577,7 @@ def outcome_record(
         outcome_id=outcome_id,
         workflow_id=workflow,
         status=status,
+        outcome_type=outcome_type,
         event_time=event_time,
         business_value=value,
         currency=currency,
@@ -2662,6 +2664,7 @@ def outcome_show(
             console.print(json_mod.dumps([
                 {
                     "workflow_id": r.workflow_id,
+                    "outcome_type": r.outcome_type,
                     "accepted": r.accepted_count,
                     "rejected": r.rejected_count,
                     "failed": r.failed_count,
@@ -2687,6 +2690,7 @@ def outcome_show(
 
         table = Table(title=f"Cost per accepted outcome (last {days}d)")
         table.add_column("Workflow", style="cyan")
+        table.add_column("Outcome unit", style="magenta")
         table.add_column("Accepted", justify="right")
         table.add_column("Rejected/Failed", justify="right")
         table.add_column("Total cost", justify="right")
@@ -2702,6 +2706,7 @@ def outcome_show(
             )
             table.add_row(
                 r.workflow_id,
+                r.outcome_type,
                 str(r.accepted_count),
                 str(r.rejected_count + r.failed_count),
                 _fmt_cost(r.cost_total_usd),

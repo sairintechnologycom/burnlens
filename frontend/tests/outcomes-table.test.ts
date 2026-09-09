@@ -10,6 +10,7 @@ import type { WorkflowEconomics } from "@/lib/contracts";
 
 const BASE: WorkflowEconomics = {
   workflow_id: "refund_review",
+  outcome_type: "ticket",
   accepted_count: 10,
   rejected_count: 2,
   failed_count: 1,
@@ -45,6 +46,7 @@ describe("outcomes table", () => {
       }),
     );
     expect(html).toContain("repo:burnlens");
+    expect(html).toContain("ticket");
     expect(html).toContain("—");
     expect(html).not.toContain("$0.00");
     // CLI `outcome show` collapses rejected + failed into one column.

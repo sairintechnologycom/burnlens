@@ -195,6 +195,7 @@ class OutcomeRecord(BaseModel):
     outcome_id: str = Field(..., min_length=1, max_length=200)
     workflow_id: str = Field(..., min_length=1, max_length=200)
     status: Literal["accepted", "rejected", "failed"]
+    outcome_type: str = Field("unspecified", min_length=1, max_length=64)
     event_time: datetime
     business_value: Optional[float] = None
     currency: Optional[str] = Field(None, max_length=8)
@@ -230,6 +231,7 @@ class WorkflowEconomics(BaseModel):
     infinity there would be worse than reporting nothing.
     """
     workflow_id: str
+    outcome_type: str
     accepted_count: int
     rejected_count: int
     failed_count: int

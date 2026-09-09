@@ -34,7 +34,7 @@ Update this table as implementation lands. Status means the gap itself, not whet
 |---|---|---|---|
 | BL-ECON-01 | **Partial** | Dashboard, savings page, findings verdicts and product contract explain observed cost/request reduction; workflow acceptance degradation now prevents a verified verdict, while missing evidence remains unavailable. Added before/after acceptance-rate fields, a `quality_qualified` flag, persisted cohort/intervention IDs, optional change references, change type/URL evidence, explicit cohort scope for `workflow:<id>` or `model:<id>`, a visible `same_subject_equal_windows` comparison rule, and best-effort local Git commit capture when no change reference is supplied. | Ingest deployment/configuration systems as evidence and define comparability rules for cohorts that span multiple subjects. |
 | BL-ECON-02 | **Partial** | Overlap risk documented; repeated local and cloud resolutions now retain prior verification evidence in `verification_history`, and savings rollups credit an explicit `(change reference, cohort)` only once while exposing withheld shared predictions. | Add overlap detection when explicit intervention evidence is absent, then report gross, net and shared effects across mixed scopes. |
-| BL-ECON-03 | **Open** | Existing outcome and coverage surfaces documented. | Separate comparable outcome types and show included/excluded spend. |
+| BL-ECON-03 | **Partial** | Outcomes now carry a declared type such as `pull_request` or `ticket`; local and cloud allocation group spend and accepted results by type, while unattributed spend is kept in its own unit row and mixed-unit headline cost is suppressed. | Add explicit run/outcome links and richer included/excluded spend explanations. |
 | BL-ECON-04 | **Open** | Existing reconciliation limitation documented. | Scope reconciliation evidence to provider and reporting dates. |
 | BL-ECON-05 | **Open** | Existing enforcement ceilings documented. | Add explicit control scope/health and tighten ceiling semantics if required. |
 | BL-ECON-06 | **Complete (copy pass)** | Homepage, README, demo metadata, scan copy, FAQ, contract, evidence docs, Open Graph copy, comparison pages and support index aligned to AI economics positioning. | Revisit copy only when product evidence or competitor facts change. |
@@ -180,8 +180,8 @@ Track acquisition success (scan → usable repository economics), pricing and ou
 
 ## Verification and limits
 
-- Latest focused backend run: **51 passed** across savings verification, findings API, cloud savings/findings, and Git context tests.
-- Latest focused frontend run: **295 passed across 3 files** (`api-contract`, `waste-findings`, `product-contract`).
+- Latest focused backend run: **111 passed, 2 skipped** across savings verification, findings, Git context, economics graph and outcomes API tests (with the known optional `pyotp` check excluded in this environment).
+- Latest focused frontend run: **306 passed across 4 files** (`api-contract`, `outcomes-table`, `economics-ia`, `product-contract`).
 - `py_compile` and `git diff --check` also pass for the changed backend paths.
 - The tests validate existing behavior, not the proposed stronger guarantees. New changes require checks matching the acceptance criteria above.
 - Reviewed public rendered text and current source. Did not exercise a logged-in production workspace, real provider billing credentials, visual/mobile interactions, or a full clean-install scanner matrix. The web reader could not retrieve `/docs/limitations`; that alone is not evidence the page is broken.

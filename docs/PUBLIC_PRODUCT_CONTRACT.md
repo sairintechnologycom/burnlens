@@ -13,7 +13,7 @@ If a page disagrees with the JSON, the page is wrong.
 | Cloud connect | `burnlens cloud connect` |
 | Missing pricing | `$ unknown`, never silent `$0` |
 | Scan attribution | Repository grain |
-| Outcome metric | Cost per accepted outcome |
+| Outcome metric | Cost per accepted outcome within a declared outcome unit; mixed units are separated |
 | Coding outcome | Merged PR where GitHub data exists |
 | Prompt content | Never uploaded to BurnLens Cloud |
 | Cache | Off by default |
