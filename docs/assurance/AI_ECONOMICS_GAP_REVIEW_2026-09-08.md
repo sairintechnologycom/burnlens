@@ -180,8 +180,9 @@ Track acquisition success (scan → usable repository economics), pricing and ou
 
 ## Verification and limits
 
-- Focused backend run: **139 passed, 2 skipped, 1 failed to import** because the available global Python environment lacks `pyotp`. The project `.venv` lacks pytest. The failing test was `test_outcomes_endpoint_is_csrf_exempt`; this run does not establish a product CSRF failure.
-- Focused frontend run: **23 passed across 4 files** (`product-contract`, `demo-economics`, `economics-ia`, `evidence-panels`).
+- Latest focused backend run: **51 passed** across savings verification, findings API, cloud savings/findings, and Git context tests.
+- Latest focused frontend run: **295 passed across 3 files** (`api-contract`, `waste-findings`, `product-contract`).
+- `py_compile` and `git diff --check` also pass for the changed backend paths.
 - The tests validate existing behavior, not the proposed stronger guarantees. New changes require checks matching the acceptance criteria above.
 - Reviewed public rendered text and current source. Did not exercise a logged-in production workspace, real provider billing credentials, visual/mobile interactions, or a full clean-install scanner matrix. The web reader could not retrieve `/docs/limitations`; that alone is not evidence the page is broken.
 - Passing contract tests do not mean all metadata or economic claims are correct: demo metadata and verification semantics illustrate gaps beyond those assertions.
