@@ -101,6 +101,7 @@ describe("outcome coverage panel", () => {
 const ROLLUP: SavingsRollup = {
   open_projected_monthly_usd: 120.0,
   resolved_predicted_monthly_usd: 30.0,
+  shared_predicted_monthly_usd: 0.0,
   verified_monthly_usd: 18.0,
   missed_predicted_monthly_usd: 12.0,
   verifying_predicted_monthly_usd: 0.0,

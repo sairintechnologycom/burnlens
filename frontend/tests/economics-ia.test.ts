@@ -34,6 +34,7 @@ const ECON: EconomicsOverview = {
 const SAVINGS: SavingsRollup = {
   open_projected_monthly_usd: 40,
   resolved_predicted_monthly_usd: 20,
+  shared_predicted_monthly_usd: 0,
   verified_monthly_usd: 8.25,
   missed_predicted_monthly_usd: 2,
   verifying_predicted_monthly_usd: 1,

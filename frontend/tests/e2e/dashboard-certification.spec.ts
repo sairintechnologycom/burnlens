@@ -131,6 +131,7 @@ const COVERAGE = {
 const SAVINGS_EMPTY = {
   open_projected_monthly_usd: 0,
   resolved_predicted_monthly_usd: 0,
+  shared_predicted_monthly_usd: 0,
   verified_monthly_usd: 0,
   missed_predicted_monthly_usd: 0,
   verifying_predicted_monthly_usd: 0,

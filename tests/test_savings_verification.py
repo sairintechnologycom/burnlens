@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from burnlens.analysis.waste import ModelOverkillDetector
+from burnlens.analysis.waste import ModelOverkillDetector, WasteFinding
 from burnlens.storage.database import init_db, insert_outcome, insert_request
 from burnlens.storage.findings import (
     list_findings,
@@ -26,6 +26,7 @@ from burnlens.storage.findings import (
     set_finding_status,
     sync_findings,
     verify_savings,
+    SavingsVerdict,
 )
 from burnlens.storage.models import Outcome, RequestRecord
 
@@ -351,6 +352,58 @@ async def test_local_rollup_puts_a_missed_fix_in_the_denominator(db):
     assert out["missed_predicted_monthly_usd"] > 0
     assert out["realisation_pct"] == pytest.approx(0.0)
     assert out["counts"]["missed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_local_rollup_deduplicates_shared_intervention_credit(db, monkeypatch):
+    first = await _seed_and_resolve(db, before_count=40, before_cost=1.00, resolved_days_ago=8)
+    second = WasteFinding(
+        detector="synthetic-overlap",
+        severity="medium",
+        title="Overlapping finding",
+        description="same intervention",
+        estimated_waste_usd=1.0,
+        affected_count=40,
+        subject_type="workflow",
+        subject_key="invoice-gen",
+    )
+    await sync_findings(db, [second])
+    import aiosqlite
+    resolved_at = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    async with aiosqlite.connect(db) as conn:
+        await conn.execute(
+            "UPDATE waste_findings SET baseline_waste_usd=10 WHERE fingerprint=?",
+            (first,),
+        )
+        await conn.execute(
+            """UPDATE waste_findings SET status='resolved', resolved_at=?,
+               baseline_waste_usd=10, baseline_cost_usd=40, baseline_requests=40,
+               baseline_window_days=7 WHERE fingerprint=?""",
+            (resolved_at, second.fingerprint),
+        )
+        await conn.commit()
+
+    async def fake_verify_all(_db):
+        return [
+            SavingsVerdict(
+                fingerprint=first, title="first", subject_type="workflow", subject_key="invoice-gen",
+                status="verified", projected_monthly_savings_usd=4.0,
+                change_reference="commit:shared", cohort_key="workflow:invoice-gen",
+            ),
+            SavingsVerdict(
+                fingerprint=second.fingerprint, title="second", subject_type="workflow", subject_key="invoice-gen",
+                status="verified", projected_monthly_savings_usd=3.0,
+                change_reference="commit:shared", cohort_key="workflow:invoice-gen",
+            ),
+        ]
+
+    monkeypatch.setattr("burnlens.storage.findings.verify_all_resolved", fake_verify_all)
+    out = await savings_rollup(db)
+
+    assert out["resolved_predicted_monthly_usd"] == pytest.approx(10 * 30 / 7)
+    assert out["shared_predicted_monthly_usd"] == pytest.approx(10 * 30 / 7)
+    assert out["verified_monthly_usd"] == pytest.approx(4.0)
+    assert out["counts"]["shared"] == 1
 
 
 @pytest.mark.asyncio

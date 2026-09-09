@@ -308,6 +308,7 @@ export const OutcomeCoverageFields: Record<keyof OutcomeCoverage, true> = {
 export interface SavingsRollup {
   open_projected_monthly_usd: number;
   resolved_predicted_monthly_usd: number;
+  shared_predicted_monthly_usd: number;
   verified_monthly_usd: number;
   missed_predicted_monthly_usd: number;
   verifying_predicted_monthly_usd: number;
@@ -318,6 +319,7 @@ export interface SavingsRollup {
 export const SavingsRollupFields: Record<keyof SavingsRollup, true> = {
   open_projected_monthly_usd: true,
   resolved_predicted_monthly_usd: true,
+  shared_predicted_monthly_usd: true,
   verified_monthly_usd: true,
   missed_predicted_monthly_usd: true,
   verifying_predicted_monthly_usd: true,

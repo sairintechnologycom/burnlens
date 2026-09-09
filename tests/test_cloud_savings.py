@@ -242,9 +242,42 @@ async def test_a_missed_fix_lands_in_the_denominator_and_not_the_numerator():
     out = await savings_rollup(conn, uuid4())
 
     assert out["verified_monthly_usd"] == pytest.approx(0.0)
+    assert out["shared_predicted_monthly_usd"] == pytest.approx(0.0)
     assert out["missed_predicted_monthly_usd"] == pytest.approx(7.0 * 30 / 7)
     assert out["realisation_pct"] == pytest.approx(0.0)
     assert out["counts"]["missed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_rollup_deduplicates_shared_intervention_credit(monkeypatch):
+    from burnlens_cloud import findings as findings_store
+    from burnlens_cloud.findings import savings_rollup
+
+    conn = RollupConn()
+    conn.findings["fp-one"] = _rollup_finding(baseline_waste_usd=7.0)
+    conn.findings["fp-two"] = _rollup_finding(baseline_waste_usd=7.0)
+
+    async def fake_verify_all(_conn, _workspace):
+        return [
+            {
+                "fingerprint": "fp-one", "status": "verified",
+                "projected_monthly_savings_usd": 4.0,
+                "change_reference": "commit:shared", "cohort_key": "workflow:invoice-gen",
+            },
+            {
+                "fingerprint": "fp-two", "status": "verified",
+                "projected_monthly_savings_usd": 3.0,
+                "change_reference": "commit:shared", "cohort_key": "workflow:invoice-gen",
+            },
+        ]
+
+    monkeypatch.setattr(findings_store, "verify_all_resolved", fake_verify_all)
+    out = await savings_rollup(conn, uuid4())
+
+    assert out["resolved_predicted_monthly_usd"] == pytest.approx(7.0 * 30 / 7)
+    assert out["shared_predicted_monthly_usd"] == pytest.approx(7.0 * 30 / 7)
+    assert out["verified_monthly_usd"] == pytest.approx(4.0)
+    assert out["counts"]["shared"] == 1
 
 
 @pytest.mark.asyncio

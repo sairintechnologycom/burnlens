@@ -617,6 +617,13 @@ def _to_monthly(waste_usd: float | None, window_days: int | None) -> float:
     return float(waste_usd or 0.0) * (30.0 / days) if days else 0.0
 
 
+def _savings_credit_key(verdict: SavingsVerdict) -> tuple[str, str]:
+    """Use explicit intervention evidence to keep one rollup credit per change."""
+    if verdict.change_reference and verdict.cohort_key:
+        return (verdict.change_reference, verdict.cohort_key)
+    return ("finding", verdict.fingerprint)
+
+
 async def savings_rollup(db_path: str) -> dict[str, Any]:
     """What was projected, what was acted on, and what actually landed.
 
@@ -653,12 +660,23 @@ async def savings_rollup(db_path: str) -> dict[str, Any]:
     totals = {k: 0.0 for k in ("verified", "missed", "pending", "inconclusive")}
     counts: dict[str, int] = {}
     verified_actual = 0.0
+    credited_predicted = 0.0
+    shared_predicted = 0.0
+    credited_keys: set[tuple[str, str]] = set()
 
     for v in verdicts:
+        credit_key = _savings_credit_key(v)
+        predicted_value = predicted.get(v.fingerprint, 0.0)
+        if credit_key in credited_keys:
+            counts["shared"] = counts.get("shared", 0) + 1
+            shared_predicted += predicted_value
+            continue
+        credited_keys.add(credit_key)
+        credited_predicted += predicted_value
         status = v.status
         counts[status] = counts.get(status, 0) + 1
         if status in totals:
-            totals[status] += predicted.get(v.fingerprint, 0.0)
+            totals[status] += predicted_value
         if status == "verified":
             verified_actual += float(v.projected_monthly_savings_usd or 0.0)
 
@@ -667,7 +685,8 @@ async def savings_rollup(db_path: str) -> dict[str, Any]:
 
     return {
         "open_projected_monthly_usd": round(float(open_row["waste"] or 0), 6),
-        "resolved_predicted_monthly_usd": round(sum(predicted.values()), 6),
+        "resolved_predicted_monthly_usd": round(credited_predicted, 6),
+        "shared_predicted_monthly_usd": round(shared_predicted, 6),
         "verified_monthly_usd": round(verified_actual, 6),
         "missed_predicted_monthly_usd": round(totals["missed"], 6),
         "verifying_predicted_monthly_usd": round(totals["pending"], 6),

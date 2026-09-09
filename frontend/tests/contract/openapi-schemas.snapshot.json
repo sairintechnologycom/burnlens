@@ -2854,6 +2854,10 @@
         "title": "Resolved Predicted Monthly Usd",
         "type": "number"
       },
+      "shared_predicted_monthly_usd": {
+        "title": "Shared Predicted Monthly Usd",
+        "type": "number"
+      },
       "verified_monthly_usd": {
         "title": "Verified Monthly Usd",
         "type": "number"
@@ -2866,6 +2870,7 @@
     "required": [
       "open_projected_monthly_usd",
       "resolved_predicted_monthly_usd",
+      "shared_predicted_monthly_usd",
       "verified_monthly_usd",
       "missed_predicted_monthly_usd",
       "verifying_predicted_monthly_usd",

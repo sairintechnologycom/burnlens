@@ -22,6 +22,8 @@ export function VerifiedSavingsPanel({ r }: { r: SavingsRollup }) {
       help: "Open findings. Nothing has been done about them, so nothing can have been realised." },
     { label: "Predicted for fixes made", value: r.resolved_predicted_monthly_usd, color: "var(--muted)",
       help: "What BurnLens predicted for findings that were resolved, scaled to a month." },
+    { label: "Shared / overlapping", value: r.shared_predicted_monthly_usd, color: "var(--amber)",
+      help: "Prediction withheld because another finding already credits the same intervention and cohort." },
     { label: "Observed cost reduction", value: r.verified_monthly_usd, color: "var(--green)",
       help: "Cost per request fell during the measured follow-up window. Workflow acceptance is checked when outcome evidence exists." },
     { label: "Missed", value: r.missed_predicted_monthly_usd, color: "var(--red, #e5484d)",

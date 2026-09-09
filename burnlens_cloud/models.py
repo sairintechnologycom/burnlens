@@ -680,6 +680,7 @@ class SavingsRollup(BaseModel):
     """
     open_projected_monthly_usd: float
     resolved_predicted_monthly_usd: float
+    shared_predicted_monthly_usd: float
     verified_monthly_usd: float
     missed_predicted_monthly_usd: float
     verifying_predicted_monthly_usd: float
