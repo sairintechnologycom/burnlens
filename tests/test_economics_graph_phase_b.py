@@ -157,6 +157,27 @@ async def test_business_value_sums_for_accepted_only(initialized_db):
     assert row.business_value_accepted == pytest.approx(150.0)
 
 
+async def test_mixed_business_value_currencies_are_not_summed(initialized_db):
+    await _outcome(initialized_db, "usd", 0, "accepted", value=100.0)
+    await _outcome(
+        initialized_db, "eur", 1, "accepted", value=50.0,
+    )
+    # The helper has no currency argument, so set the stored values explicitly
+    # to model two accepted outcomes from different ledgers.
+    import aiosqlite
+
+    async with aiosqlite.connect(initialized_db) as db:
+        await db.execute("UPDATE outcomes SET currency = 'USD' WHERE outcome_id = 'usd'")
+        await db.execute("UPDATE outcomes SET currency = 'EUR' WHERE outcome_id = 'eur'")
+        await db.commit()
+
+    row = await _one(initialized_db)
+    assert row.business_value_accepted is None
+    assert row.business_value_currency is None
+    assert set(row.business_value_currencies) == {"EUR", "USD"}
+    assert row.business_value_excluded is True
+
+
 async def test_mixed_outcome_types_are_separate_cost_units(initialized_db):
     await _req(initialized_db, 0, 1.00)
     await _outcome(initialized_db, "pr-1", 1, "accepted", value=100.0, outcome_type="pull_request")

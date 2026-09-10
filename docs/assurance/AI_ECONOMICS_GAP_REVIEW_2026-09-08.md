@@ -41,7 +41,7 @@ Update this table as implementation lands. Status means the gap itself, not whet
 | BL-ECON-07 | **Partial** | Scanners preserve local display names while joining on canonical origin identity; GitHub PR imports now use `gh api --paginate`, expose scope/completeness, and deduplicate. | Add authenticated workforce identity mapping and unattended GitHub App/webhook collection when team-wide ingestion is demanded. |
 | BL-ECON-08 | **Partial** | Explicit local/Cloud correction endpoints update one current outcome row, append prior/new status history, and derived GitHub imports reconcile reopened PRs without changing the denominator. | Add explicit run-to-outcome links and richer attribution/evidence detail. |
 | BL-ECON-09 | **Partial** | Finding resolution now accepts owner, acceptance criteria, before/after configuration or revision, explicit effective time, and existing commit/deployment evidence; the verification report returns those inputs alongside quality-qualified cost results. | Link recommendations and external deployment/evaluation evidence into a durable intervention record. |
-| BL-ECON-10 | **Open** | Existing organization foundations documented. | Add only customer-requested cost-center, chargeback, currency and federation work. |
+| BL-ECON-10 | **Partial** | Outcome economics now refuses to sum accepted business values across currencies and returns the observed currency set plus an exclusion flag. | Add controlled cost-center/business-unit mappings, shared-cost chargeback, exportable showback, currency conversion/margin semantics, and enterprise federation when demanded. |
 
 Last updated: 2026-09-09. This tracker is intentionally kept beside the gap review so implementation status and the evidence behind each recommendation change together.
 
@@ -151,7 +151,9 @@ The current comparison rule is deliberately narrow: `same_subject_equal_windows`
 
 **Existing:** Teams, customers, features, workflows, workspace access, audit and telemetry already provide foundations.
 
-**Implement when demanded:** Controlled dimension identities and ownership; cost-centre/business-unit mappings; shared-cost allocation with an unallocated bucket; exportable showback/chargeback; revenue imports and currency-safe margin reporting. `business_value` and `currency` fields are only primitives: current aggregation sums values without grouping currency, so do not use it for financial ROI reporting without currency validation/conversion semantics. Add enterprise SAML/OIDC federation/SCIM when procurement requires it; Google/GitHub social login code is not enterprise federation.
+**Implemented:** Accepted business values are now currency-safe in local and Cloud outcome summaries: one currency may be summed, mixed currencies return `null`, the observed currency set is exposed, and an exclusion flag prevents a false financial total. This is a guardrail, not currency conversion or margin reporting.
+
+**Implement when demanded:** Controlled dimension identities and ownership; cost-centre/business-unit mappings; shared-cost allocation with an unallocated bucket; exportable showback/chargeback; revenue imports and currency conversion/margin semantics. Add enterprise SAML/OIDC federation/SCIM when procurement requires it; Google/GitHub social login code is not enterprise federation.
 
 **Acceptance:** Allocations reconcile to the ledger, changes retain history, mixed currencies cannot be summed, reported margins declare excluded costs, and organization permissions apply to every relevant query/export.
 

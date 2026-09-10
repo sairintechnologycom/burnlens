@@ -253,7 +253,16 @@ counts AS (
         COUNT(*) FILTER (WHERE status = 'accepted') AS accepted_count,
         COUNT(*) FILTER (WHERE status = 'rejected') AS rejected_count,
         COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
-        SUM(business_value) FILTER (WHERE status = 'accepted') AS business_value_accepted,
+        CASE WHEN COUNT(DISTINCT NULLIF(currency, '')) FILTER (WHERE status = 'accepted') <= 1
+             THEN SUM(business_value) FILTER (WHERE status = 'accepted')
+             ELSE NULL END AS business_value_accepted,
+        CASE WHEN COUNT(DISTINCT NULLIF(currency, '')) FILTER (WHERE status = 'accepted') <= 1
+             THEN MIN(NULLIF(currency, '')) FILTER (WHERE status = 'accepted')
+             ELSE NULL END AS business_value_currency,
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT NULLIF(currency, '')) FILTER (WHERE status = 'accepted'), NULL)
+             AS business_value_currencies,
+        COUNT(DISTINCT NULLIF(currency, '')) FILTER (WHERE status = 'accepted') > 1
+             AS business_value_excluded,
         COALESCE(NULLIF(metadata->>'outcome_type', ''), 'unspecified') AS outcome_type
     FROM outcomes
     WHERE workspace_id = $1 AND event_time >= $2
@@ -269,7 +278,10 @@ SELECT
     COALESCE(c.accepted_count, 0) AS accepted_count,
     COALESCE(c.rejected_count, 0) AS rejected_count,
     COALESCE(c.failed_count, 0) AS failed_count,
-    c.business_value_accepted
+    c.business_value_accepted,
+    c.business_value_currency,
+    c.business_value_currencies,
+    c.business_value_excluded
 FROM spend s
 FULL OUTER JOIN counts c
   ON c.workflow_id = s.workflow_id AND c.outcome_type = s.outcome_type
@@ -315,6 +327,9 @@ async def outcomes_summary(
                     if r["business_value_accepted"] is not None
                     else None
                 ),
+                business_value_currency=r.get("business_value_currency"),
+                business_value_currencies=list(r.get("business_value_currencies") or []),
+                business_value_excluded=bool(r.get("business_value_excluded")),
             )
         )
     return out

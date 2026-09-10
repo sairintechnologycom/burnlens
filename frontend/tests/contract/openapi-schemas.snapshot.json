@@ -3979,6 +3979,29 @@
         ],
         "title": "Business Value Accepted"
       },
+      "business_value_currencies": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Business Value Currencies",
+        "type": "array"
+      },
+      "business_value_currency": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Business Value Currency"
+      },
+      "business_value_excluded": {
+        "default": false,
+        "title": "Business Value Excluded",
+        "type": "boolean"
+      },
       "cost_accepted_usd": {
         "title": "Cost Accepted Usd",
         "type": "number"

@@ -318,6 +318,9 @@ class WorkflowEconomics:
     cost_unattributed_usd: float
     cost_per_accepted_usd: float | None = None
     business_value_accepted: float | None = None
+    business_value_currency: str | None = None
+    business_value_currencies: list[str] = field(default_factory=list)
+    business_value_excluded: bool = False
 
 
 @dataclass

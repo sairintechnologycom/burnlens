@@ -1223,7 +1223,16 @@ counts AS (
            SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted_count,
            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
-           SUM(CASE WHEN status = 'accepted' THEN business_value ELSE NULL END) AS business_value_accepted,
+           CASE WHEN COUNT(DISTINCT CASE WHEN status = 'accepted' THEN NULLIF(currency, '') END) <= 1
+                THEN SUM(CASE WHEN status = 'accepted' THEN business_value ELSE NULL END)
+                ELSE NULL END AS business_value_accepted,
+           CASE WHEN COUNT(DISTINCT CASE WHEN status = 'accepted' THEN NULLIF(currency, '') END) <= 1
+                THEN MIN(CASE WHEN status = 'accepted' THEN NULLIF(currency, '') END)
+                ELSE NULL END AS business_value_currency,
+           GROUP_CONCAT(DISTINCT CASE WHEN status = 'accepted' THEN NULLIF(currency, '') END)
+                AS business_value_currencies,
+           COUNT(DISTINCT CASE WHEN status = 'accepted' THEN NULLIF(currency, '') END) > 1
+                AS business_value_excluded,
            COALESCE(NULLIF(json_extract(metadata, '$.outcome_type'), ''), 'unspecified') AS outcome_type
     FROM outcomes WHERE event_time >= ? GROUP BY workflow_id, outcome_type
 ),
@@ -1244,7 +1253,10 @@ SELECT k.workflow_id                              AS workflow_id,
        COALESCE(c.accepted_count, 0)              AS accepted_count,
        COALESCE(c.rejected_count, 0)              AS rejected_count,
        COALESCE(c.failed_count, 0)                AS failed_count,
-       c.business_value_accepted                  AS business_value_accepted
+       c.business_value_accepted                  AS business_value_accepted,
+       c.business_value_currency                  AS business_value_currency,
+       c.business_value_currencies                AS business_value_currencies,
+       c.business_value_excluded                  AS business_value_excluded
 FROM keys k
 LEFT JOIN spend s ON s.workflow_id = k.workflow_id AND s.outcome_type = k.outcome_type
 LEFT JOIN counts c ON c.workflow_id = k.workflow_id AND c.outcome_type = k.outcome_type
@@ -1289,6 +1301,12 @@ async def get_workflow_economics(
                     if row["business_value_accepted"] is not None
                     else None
                 ),
+                business_value_currency=row["business_value_currency"],
+                business_value_currencies=(
+                    row["business_value_currencies"].split(",")
+                    if row["business_value_currencies"] else []
+                ),
+                business_value_excluded=bool(row["business_value_excluded"]),
             )
         )
     return results

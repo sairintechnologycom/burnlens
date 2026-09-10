@@ -449,6 +449,9 @@ export interface WorkflowEconomics {
   cost_unattributed_usd: number;
   cost_per_accepted_usd: number | null;
   business_value_accepted: number | null;
+  business_value_currency: string | null;
+  business_value_currencies: string[];
+  business_value_excluded: boolean;
 }
 export const WorkflowEconomicsFields: Record<keyof WorkflowEconomics, true> = {
   workflow_id: true,
@@ -462,6 +465,9 @@ export const WorkflowEconomicsFields: Record<keyof WorkflowEconomics, true> = {
   cost_unattributed_usd: true,
   cost_per_accepted_usd: true,
   business_value_accepted: true,
+  business_value_currency: true,
+  business_value_currencies: true,
+  business_value_excluded: true,
 };
 
 // --- /api/v1/outcomes/concentration  ->  ProviderConcentration ---

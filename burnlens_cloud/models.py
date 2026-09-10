@@ -259,6 +259,9 @@ class WorkflowEconomics(BaseModel):
     cost_unattributed_usd: float
     cost_per_accepted_usd: Optional[float] = None
     business_value_accepted: Optional[float] = None
+    business_value_currency: Optional[str] = None
+    business_value_currencies: list[str] = Field(default_factory=list)
+    business_value_excluded: bool = False
 
 
 class OutcomeCoverageRow(BaseModel):

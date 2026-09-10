@@ -235,6 +235,9 @@ async def test_summary_computes_cost_per_accepted(outcomes_client, valid_jwt_tok
             "rejected_count": 2,
             "failed_count": 1,
             "business_value_accepted": 500.0,
+            "business_value_currency": "USD",
+            "business_value_currencies": ["USD"],
+            "business_value_excluded": False,
         }]
         resp = await outcomes_client.get(
             "/api/v1/outcomes/summary",
@@ -248,6 +251,8 @@ async def test_summary_computes_cost_per_accepted(outcomes_client, valid_jwt_tok
     assert row["outcome_type"] == "ticket"
     assert row["cost_rework_usd"] == pytest.approx(7.0)
     assert row["cost_unattributed_usd"] == pytest.approx(3.0)
+    assert row["business_value_currency"] == "USD"
+    assert row["business_value_excluded"] is False
 
 
 @pytest.mark.asyncio
