@@ -1,0 +1,33 @@
+{
+  "baseline_milestone": "BL-BASELINE",
+  "baseline_commit": "30b821ddb206d9b7b30bd2d1fcfbcc3754bac7ef",
+  "schema_version": "2026.09.08",
+  "fixture_version": "1.0.0",
+  "api_contract_hash": "bb0ca93a626bc88e32cad6cf2b476d9afd0202939eda5161051e9b4d2b7427a0",
+  "expected_ledger_results": {
+    "total_requests": 3,
+    "total_cost_usd": 0.0303,
+    "total_input_tokens": 7000,
+    "total_output_tokens": 1800,
+    "reconciliation_status": "MATCH"
+  },
+  "expected_dashboard_results": {
+    "by_team": {
+      "engineering": 0.0075,
+      "security": 0.0138,
+      "data": 0.0090
+    },
+    "by_provider": {
+      "openai": 0.0075,
+      "anthropic": 0.0138,
+      "google": 0.0090
+    }
+  },
+  "invariants": [
+    "fixture_input -> deterministic_canonical_identity",
+    "fixture_input -> exact_cost_reproducibility",
+    "fixture_input -> deterministic_outcome_association",
+    "fixture_input -> canonical_reconciliation_zero_drift",
+    "workspace_isolation_enforced"
+  ]
+}

@@ -53,8 +53,130 @@ CREATE TABLE IF NOT EXISTS requests (
     prompt_history_tokens INTEGER NOT NULL DEFAULT 0,
     cache_hit            INTEGER NOT NULL DEFAULT 0,
     cache_saved_usd      REAL NOT NULL DEFAULT 0.0,
-    tool_calls           INTEGER NOT NULL DEFAULT 0
+    tool_calls           INTEGER NOT NULL DEFAULT 0,
+    agent_id             TEXT,
+    workflow_id          TEXT,
+    run_id               TEXT,
+    task_id              TEXT,
+    action_id            TEXT,
+    parent_run_id        TEXT
 );
+"""
+
+# Phase 1: BL-AE-001 Agent Economics Domain Tables
+_CREATE_AGENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS agents (
+    agent_id     TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    version      TEXT NOT NULL DEFAULT '1.0.0',
+    owner        TEXT NOT NULL DEFAULT '',
+    environment  TEXT NOT NULL DEFAULT 'production',
+    purpose      TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'active',
+    workspace_id TEXT NOT NULL DEFAULT 'default',
+    created_at   TEXT NOT NULL
+);
+"""
+
+_CREATE_AGENTS_WORKSPACE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents (workspace_id);
+"""
+
+_CREATE_AGENT_WORKFLOWS_TABLE = """
+CREATE TABLE IF NOT EXISTS agent_workflows (
+    workflow_id  TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    workspace_id TEXT NOT NULL DEFAULT 'default',
+    created_at   TEXT NOT NULL
+);
+"""
+
+_CREATE_AGENT_WORKFLOWS_WORKSPACE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_workflows_workspace ON agent_workflows (workspace_id);
+"""
+
+_CREATE_AGENT_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS agent_runs (
+    run_id        TEXT PRIMARY KEY,
+    agent_id      TEXT NOT NULL,
+    workflow_id   TEXT,
+    parent_run_id TEXT,
+    root_run_id   TEXT,
+    workspace_id  TEXT NOT NULL DEFAULT 'default',
+    status        TEXT NOT NULL DEFAULT 'active',
+    started_at    TEXT NOT NULL,
+    completed_at  TEXT
+);
+"""
+
+_CREATE_AGENT_RUNS_WORKSPACE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_runs_workspace ON agent_runs (workspace_id);
+"""
+
+_CREATE_AGENT_RUNS_PARENT_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_runs_parent ON agent_runs (parent_run_id);
+"""
+
+_CREATE_AGENT_RUNS_ROOT_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_runs_root ON agent_runs (root_run_id);
+"""
+
+_CREATE_AGENT_TASKS_TABLE = """
+CREATE TABLE IF NOT EXISTS agent_tasks (
+    task_id      TEXT PRIMARY KEY,
+    run_id       TEXT NOT NULL,
+    name         TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'active',
+    workspace_id TEXT NOT NULL DEFAULT 'default',
+    created_at   TEXT NOT NULL,
+    completed_at TEXT
+);
+"""
+
+_CREATE_AGENT_TASKS_WORKSPACE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_workspace ON agent_tasks (workspace_id);
+"""
+
+_CREATE_AGENT_TASKS_RUN_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_run ON agent_tasks (run_id);
+"""
+
+_CREATE_AGENT_ACTIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS agent_actions (
+    action_id    TEXT PRIMARY KEY,
+    task_id      TEXT NOT NULL,
+    run_id       TEXT NOT NULL,
+    action_type  TEXT NOT NULL DEFAULT 'tool_call',
+    tool_name    TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'completed',
+    cost_usd     REAL NOT NULL DEFAULT 0.0,
+    workspace_id TEXT NOT NULL DEFAULT 'default',
+    created_at   TEXT NOT NULL
+);
+"""
+
+_CREATE_AGENT_ACTIONS_WORKSPACE_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_actions_workspace ON agent_actions (workspace_id);
+"""
+
+_CREATE_AGENT_ACTIONS_TASK_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_actions_task ON agent_actions (task_id);
+"""
+
+_CREATE_REQUESTS_AGENT_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_requests_agent_id ON requests (agent_id);
+"""
+
+_CREATE_REQUESTS_WORKFLOW_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_requests_workflow_id ON requests (workflow_id);
+"""
+
+_CREATE_REQUESTS_RUN_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_requests_run_id ON requests (run_id);
+"""
+
+_CREATE_REQUESTS_TASK_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_requests_task_id ON requests (task_id);
 """
 
 # Economics-graph Phase B. `outcome_id` is the caller's own business-event id
@@ -438,6 +560,10 @@ async def init_db(db_path: str) -> None:
 
     # Phase 7: Semantic Cache fields and table
     await migrate_add_cache_fields_to_requests(db_path)
+
+    # Phase 1 (BL-AE-001): Agent Economics domain tables and correlation fields
+    await migrate_add_agent_economics_tables(db_path)
+    await migrate_add_agent_correlation_fields(db_path)
     await migrate_create_semantic_cache_table(db_path)
     await migrate_add_semantic_cache_integrity_fields(db_path)
 
@@ -633,6 +759,61 @@ async def migrate_add_canonical_event_fields(db_path: str) -> None:
                 "Migration: added canonical event fields to requests table: %s",
                 ", ".join(added),
             )
+
+
+async def migrate_add_agent_correlation_fields(db_path: str) -> None:
+    """Add Phase 1 (BL-AE-001) agent correlation fields to requests table.
+
+    Safe to call multiple times -- uses PRAGMA table_info to check columns.
+    """
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        fields = [
+            "agent_id", "workflow_id", "run_id", "task_id", "action_id", "parent_run_id"
+        ]
+        added = []
+        for col in fields:
+            if col not in columns:
+                await db.execute(f"ALTER TABLE requests ADD COLUMN {col} TEXT")
+                added.append(col)
+
+        await db.execute(_CREATE_REQUESTS_AGENT_INDEX)
+        await db.execute(_CREATE_REQUESTS_WORKFLOW_INDEX)
+        await db.execute(_CREATE_REQUESTS_RUN_INDEX)
+        await db.execute(_CREATE_REQUESTS_TASK_INDEX)
+        await db.commit()
+
+        if added:
+            logger.info(
+                "Migration: added agent correlation fields to requests table: %s",
+                ", ".join(added),
+            )
+
+
+async def migrate_add_agent_economics_tables(db_path: str) -> None:
+    """Create Phase 1 (BL-AE-001) agent domain tables if they do not exist."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(_CREATE_AGENTS_TABLE)
+        await db.execute(_CREATE_AGENTS_WORKSPACE_INDEX)
+
+        await db.execute(_CREATE_AGENT_WORKFLOWS_TABLE)
+        await db.execute(_CREATE_AGENT_WORKFLOWS_WORKSPACE_INDEX)
+
+        await db.execute(_CREATE_AGENT_RUNS_TABLE)
+        await db.execute(_CREATE_AGENT_RUNS_WORKSPACE_INDEX)
+        await db.execute(_CREATE_AGENT_RUNS_PARENT_INDEX)
+        await db.execute(_CREATE_AGENT_RUNS_ROOT_INDEX)
+
+        await db.execute(_CREATE_AGENT_TASKS_TABLE)
+        await db.execute(_CREATE_AGENT_TASKS_WORKSPACE_INDEX)
+        await db.execute(_CREATE_AGENT_TASKS_RUN_INDEX)
+
+        await db.execute(_CREATE_AGENT_ACTIONS_TABLE)
+        await db.execute(_CREATE_AGENT_ACTIONS_WORKSPACE_INDEX)
+        await db.execute(_CREATE_AGENT_ACTIONS_TASK_INDEX)
+        await db.commit()
 
 
 async def migrate_add_budget_counters_table(db_path: str) -> None:
@@ -1841,8 +2022,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 prompt_system_tokens, prompt_user_tokens,
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
-                tool_calls
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                tool_calls,
+                agent_id, workflow_id, run_id, task_id, action_id, parent_run_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -1895,6 +2077,12 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.cache_hit,
                 record.cache_saved_usd,
                 record.tool_calls,
+                record.agent_id or tags.get("agent_id") or None,
+                record.workflow_id or tags.get("workflow_id") or None,
+                record.run_id or tags.get("run_id") or None,
+                record.task_id or tags.get("task_id") or None,
+                record.action_id or tags.get("action_id") or None,
+                record.parent_run_id or tags.get("parent_run_id") or None,
             ),
         )
         await db.commit()

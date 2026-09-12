@@ -198,7 +198,8 @@ _STRIP_RESPONSE_HEADERS = _STRIP_REQUEST_HEADERS | frozenset(["content-encoding"
 _ALLOWED_TAGS = {
     "team", "feature", "app_id", "env", "repo", "branch", "commit_sha",
     "workspace_id", "org_id", "trace_id", "customer", "key_label", "service",
-    "dev", "pr", "agent_id", "workflow_id", "session"
+    "dev", "pr", "agent_id", "workflow_id", "session",
+    "run_id", "task_id", "action_id", "parent_run_id", "root_run_id"
 }
 
 
@@ -1544,6 +1545,13 @@ def _resolve_canonical_metadata(headers: dict[str, str], tags: dict[str, str]) -
         "repo": repo,
         "branch": branch,
         "commit_sha": commit_sha,
+        # Phase 1: BL-AE-001 Agent Economics correlation fields
+        "agent_id": tags.get("agent_id") or headers_lower.get("x-burnlens-tag-agent-id") or os.environ.get("BURNLENS_TAG_AGENT_ID"),
+        "workflow_id": tags.get("workflow_id") or headers_lower.get("x-burnlens-tag-workflow-id") or os.environ.get("BURNLENS_TAG_WORKFLOW_ID"),
+        "run_id": tags.get("run_id") or headers_lower.get("x-burnlens-tag-run-id") or os.environ.get("BURNLENS_TAG_RUN_ID"),
+        "task_id": tags.get("task_id") or headers_lower.get("x-burnlens-tag-task-id") or os.environ.get("BURNLENS_TAG_TASK_ID"),
+        "action_id": tags.get("action_id") or headers_lower.get("x-burnlens-tag-action-id") or os.environ.get("BURNLENS_TAG_ACTION_ID"),
+        "parent_run_id": tags.get("parent_run_id") or headers_lower.get("x-burnlens-tag-parent-run-id") or os.environ.get("BURNLENS_TAG_PARENT_RUN_ID"),
     }
 
 

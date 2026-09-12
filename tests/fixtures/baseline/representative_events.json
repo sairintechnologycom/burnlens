@@ -1,0 +1,61 @@
+{
+  "version": "1.0.0",
+  "generated_for": "BL-BASELINE",
+  "events": [
+    {
+      "id": "baseline-evt-001",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "input_tokens": 1000,
+      "output_tokens": 500,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "reasoning_tokens": 0,
+      "expected_cost_usd": 0.0075,
+      "tags": {
+        "team": "engineering",
+        "feature": "code_review",
+        "workflow_id": "ci-audit-01"
+      }
+    },
+    {
+      "id": "baseline-evt-002",
+      "provider": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "input_tokens": 2000,
+      "output_tokens": 500,
+      "cache_read_tokens": 1000,
+      "cache_write_tokens": 0,
+      "reasoning_tokens": 0,
+      "expected_cost_usd": 0.0138,
+      "tags": {
+        "team": "security",
+        "feature": "dependency_audit",
+        "workflow_id": "cve-patch-42"
+      }
+    },
+    {
+      "id": "baseline-evt-003",
+      "provider": "google",
+      "model": "gemini-1.5-pro",
+      "input_tokens": 4000,
+      "output_tokens": 800,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "reasoning_tokens": 0,
+      "expected_cost_usd": 0.0090,
+      "tags": {
+        "team": "data",
+        "feature": "document_extraction",
+        "workflow_id": "doc-extract-99"
+      }
+    }
+  ],
+  "expected_totals": {
+    "total_requests": 3,
+    "total_input_tokens": 7000,
+    "total_output_tokens": 1800,
+    "total_cache_read_tokens": 1000,
+    "total_cost_usd": 0.0303
+  }
+}

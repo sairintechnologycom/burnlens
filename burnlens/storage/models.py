@@ -138,6 +138,39 @@ class RequestRecord:
     pricing_class: str | None = None
     ttft_ms: float | None = None
 
+    # Phase 1: BL-AE-001 Agent Economics correlation fields
+    agent_id: str | None = None
+    workflow_id: str | None = None
+    run_id: str | None = None
+    task_id: str | None = None
+    action_id: str | None = None
+    parent_run_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.tags:
+            if not self.agent_id:
+                self.agent_id = self.tags.get("agent_id")
+            if not self.workflow_id:
+                self.workflow_id = self.tags.get("workflow_id")
+            if not self.run_id:
+                self.run_id = self.tags.get("run_id")
+            if not self.task_id:
+                self.task_id = self.tags.get("task_id")
+            if not self.action_id:
+                self.action_id = self.tags.get("action_id")
+            if not self.parent_run_id:
+                self.parent_run_id = self.tags.get("parent_run_id")
+
+    @property
+    def tag_agent_id(self) -> str | None:
+        """Fallback property for agent_id."""
+        return self.agent_id or (self.tags or {}).get("agent_id")
+
+    @property
+    def tag_workflow_id(self) -> str | None:
+        """Fallback property for workflow_id."""
+        return self.workflow_id or (self.tags or {}).get("workflow_id")
+
     @property
     def tag_repo(self) -> str | None:
         """Fallback property for backwards compatibility."""
@@ -390,3 +423,76 @@ class AnomalyEvent:
     details: dict = field(default_factory=dict)
     detected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     id: int | None = None
+
+
+# ===========================================================================
+# Phase 1: BL-AE-001 Agent Economics Domain Entities
+# ===========================================================================
+
+@dataclass
+class Agent:
+    """Agent entity registered with BurnLens for economics and lifecycle tracking."""
+
+    agent_id: str
+    name: str
+    workspace_id: str = "default"
+    version: str = "1.0.0"
+    owner: str = ""
+    environment: str = "production"
+    purpose: str = ""
+    status: str = "active"
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class AgentWorkflow:
+    """Workflow grouping related agent runs and tasks."""
+
+    workflow_id: str
+    name: str
+    workspace_id: str = "default"
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class AgentRun:
+    """A discrete execution run of an agent, supporting hierarchical parent-child relationships."""
+
+    run_id: str
+    agent_id: str
+    workflow_id: str | None = None
+    parent_run_id: str | None = None
+    root_run_id: str | None = None
+    workspace_id: str = "default"
+    status: str = "active"
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime | None = None
+
+
+@dataclass
+class AgentTask:
+    """A discrete unit of work within an agent run."""
+
+    task_id: str
+    run_id: str
+    name: str = ""
+    status: str = "active"
+    workspace_id: str = "default"
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime | None = None
+
+
+@dataclass
+class AgentAction:
+    """An action taken by an agent during a task (e.g. tool call, API interaction)."""
+
+    action_id: str
+    task_id: str
+    run_id: str
+    action_type: str = "tool_call"
+    tool_name: str = ""
+    status: str = "completed"
+    cost_usd: float = 0.0
+    workspace_id: str = "default"
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
