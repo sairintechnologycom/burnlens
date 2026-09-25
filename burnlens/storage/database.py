@@ -4,11 +4,14 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
 
 from burnlens.storage.models import AiAsset, DiscoveryEvent, ProviderSignature, RequestRecord, AnomalyEvent
+
+if TYPE_CHECKING:
+    from burnlens.storage.models import Outcome, WorkflowEconomics
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,7 @@ CREATE TABLE IF NOT EXISTS requests (
     branch              TEXT,
     commit_sha          TEXT,
     pricing_version     TEXT,
+    pricing_fingerprint TEXT,
     pricing_class       TEXT,
     ttft_ms             REAL,
     prompt_system_tokens INTEGER NOT NULL DEFAULT 0,
@@ -574,6 +578,7 @@ async def init_db(db_path: str) -> None:
     await migrate_add_tool_calls(db_path)
 
     await migrate_add_pricing_class(db_path)
+    await migrate_add_pricing_fingerprint(db_path)
     await migrate_add_requested_model(db_path)
 
     # Economics graph Phase B: business outcomes
@@ -1001,6 +1006,18 @@ async def migrate_add_pricing_class(db_path: str) -> None:
             await db.execute("ALTER TABLE requests ADD COLUMN pricing_class TEXT")
             await db.commit()
             logger.info("Migration: added pricing_class column to requests table")
+
+
+async def migrate_add_pricing_fingerprint(db_path: str) -> None:
+    """Add optional applied-pricing fingerprint without backfilling history."""
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "pricing_fingerprint" not in columns:
+            await db.execute(
+                "ALTER TABLE requests ADD COLUMN pricing_fingerprint TEXT"
+            )
+            await db.commit()
 
 
 async def migrate_add_requested_model(db_path: str) -> None:
@@ -1992,7 +2009,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
     (``request_id IS NULL``) the partial index doesn't apply, so behavior
     is unchanged. Returns 0 if the row was ignored as a duplicate.
     """
-    from burnlens.cost.calculator import pricing_class_for
+    from burnlens.cost.calculator import pricing_class_for, pricing_fingerprint_for
     from burnlens.storage.models import uuid7
 
     tags = record.tags or {}
@@ -2000,6 +2017,14 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
     pricing_class = record.pricing_class or pricing_class_for(
         record.provider, record.model, record.source
     )
+    pricing_fingerprint = record.pricing_fingerprint or pricing_fingerprint_for(
+        record.provider, record.model, record.input_tokens, record.pricing_version
+    )
+    pricing_version = record.pricing_version
+    if pricing_version is None and pricing_fingerprint is not None:
+        from burnlens.cost.pricing import get_pricing_version
+
+        pricing_version = get_pricing_version(record.provider)
 
     async with aiosqlite.connect(db_path) as db:
         cursor = await db.execute(
@@ -2017,14 +2042,14 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 event_id, trace_id, parent_span_id, workspace_id, org_id,
                 team, feature, customer_hash, app_id,
                 env, repo, branch, commit_sha, pricing_version,
-                pricing_class,
+                pricing_class, pricing_fingerprint,
                 ttft_ms,
                 prompt_system_tokens, prompt_user_tokens,
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
                 tool_calls,
                 agent_id, workflow_id, run_id, task_id, action_id, parent_run_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -2066,8 +2091,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.repo,
                 record.branch,
                 record.commit_sha,
-                record.pricing_version,
+                pricing_version,
                 pricing_class,
+                pricing_fingerprint,
                 record.ttft_ms,
                 record.prompt_system_tokens,
                 record.prompt_user_tokens,

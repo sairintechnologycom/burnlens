@@ -94,6 +94,8 @@ def _init_clickhouse_sync() -> None:
             ts DateTime64(3, 'UTC'),
             provider LowCardinality(String),
             model LowCardinality(String),
+            pricing_version String DEFAULT '',
+            pricing_fingerprint String DEFAULT '',
             input_tokens UInt32,
             output_tokens UInt32,
             reasoning_tokens UInt32,
@@ -121,6 +123,8 @@ def _init_clickhouse_sync() -> None:
             ts String,
             provider String,
             model String,
+            pricing_version String DEFAULT '',
+            pricing_fingerprint String DEFAULT '',
             input_tokens UInt32,
             output_tokens UInt32,
             reasoning_tokens UInt32,
@@ -142,6 +146,31 @@ def _init_clickhouse_sync() -> None:
                  kafka_num_consumers = 1;
     """)
 
+    # Existing installs keep their tables, so add nullable-equivalent empty
+    # defaults before refreshing the queue projection. No historical values are
+    # inferred or backfilled.
+    client.command("""
+        ALTER TABLE request_records_raw
+            ADD COLUMN IF NOT EXISTS pricing_version String DEFAULT '',
+            ADD COLUMN IF NOT EXISTS pricing_fingerprint String DEFAULT ''
+    """)
+    client.command("""
+        ALTER TABLE request_records_queue
+            ADD COLUMN IF NOT EXISTS pricing_version String DEFAULT '',
+            ADD COLUMN IF NOT EXISTS pricing_fingerprint String DEFAULT ''
+    """)
+
+    # Refresh the schema-bound projection only when it predates these fields;
+    # dropping it on every startup would interrupt the Kafka consumer.
+    try:
+        view_ddl = client.query(
+            "SHOW CREATE TABLE mv_request_records_consumer"
+        ).result_rows[0][0]
+    except Exception:
+        view_ddl = ""
+    if "pricing_fingerprint" not in view_ddl:
+        client.command("DROP VIEW IF EXISTS mv_request_records_consumer")
+
     # 3. Consumer Materialized View (pipe queue to raw table)
     client.command("""
         CREATE MATERIALIZED VIEW IF NOT EXISTS mv_request_records_consumer TO request_records_raw AS
@@ -151,6 +180,8 @@ def _init_clickhouse_sync() -> None:
             parseDateTime64BestEffortOrZero(ts) AS ts,
             provider,
             model,
+            pricing_version,
+            pricing_fingerprint,
             input_tokens,
             output_tokens,
             reasoning_tokens,

@@ -1,11 +1,17 @@
 """Convert token usage from API responses into USD cost."""
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
 
-from burnlens.cost.pricing import apply_tiered, get_model_pricing
+from burnlens.cost.pricing import (
+    apply_tiered,
+    get_model_pricing,
+    get_pricing_version,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +93,34 @@ def is_model_priced(provider: str, model: str) -> bool:
     BurnLens is concerned, so no budget can ever be enforced against it.
     """
     return resolve_pricing(provider, model) is not None
+
+
+def pricing_fingerprint_for(
+    provider: str,
+    model: str,
+    input_tokens: int = 0,
+    pricing_version: str | None = None,
+) -> str | None:
+    """Fingerprint the bundled rate record used for this model and tier.
+
+    This identifies the resolved rate data; it does not claim provider-source
+    verification or reconstruct historical rates that are no longer bundled.
+    """
+    pricing = resolve_pricing(provider, model)
+    if pricing is None:
+        return None
+    effective = apply_tiered(pricing, input_tokens)
+    payload = json.dumps(
+        {
+            "provider": provider,
+            "model": model,
+            "version": pricing_version or get_pricing_version(provider),
+            "pricing": effective,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 PRICING_UNPRICED = "unpriced"

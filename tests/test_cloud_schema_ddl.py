@@ -41,3 +41,10 @@ def test_resolve_limits_columns_have_ddl():
         f"resolve_limits() reads workspaces column(s) {missing} that init_db() never "
         f"creates — a fresh database will fail at CREATE FUNCTION resolve_limits"
     )
+
+
+def test_request_pricing_provenance_columns_have_fresh_and_upgrade_ddl():
+    request_table = SRC[SRC.index("CREATE TABLE IF NOT EXISTS request_records") :][:3000]
+    for column in ("pricing_version", "pricing_fingerprint"):
+        assert re.search(rf"\b{column}\s+TEXT", request_table)
+        assert f"ADD COLUMN IF NOT EXISTS {column} TEXT" in SRC

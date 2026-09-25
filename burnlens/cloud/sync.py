@@ -10,12 +10,13 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
 import httpx
 
-from burnlens.config import CloudConfig
+if TYPE_CHECKING:
+    from burnlens.config import BurnLensConfig
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,8 @@ SYNC_ALLOWED_FIELDS = frozenset({
     "event_id",
     "request_id",
     "source",
+    "pricing_version",
+    "pricing_fingerprint",
     "pricing_class",
     "requested_model",
     "routed_model",
@@ -537,6 +540,8 @@ def _row_to_payload(row: dict[str, Any]) -> dict[str, Any]:
         # "proxy" vs scan_claude/scan_codex/...: which collector wrote the row.
         # Not prompt content and not identifying — it names the tool, not the work.
         source=row.get("source"),
+        pricing_version=row.get("pricing_version"),
+        pricing_fingerprint=row.get("pricing_fingerprint"),
         # Local write-time class (unpriced / calculated / estimated). Cloud
         # Cost Confidence overlays reconciled; it does not re-guess unpriced
         # from cost_usd=0. Rows written before the column existed are classified

@@ -240,6 +240,8 @@ async def test_ingest_persists_run_key_columns(ingest_client):
     payload["parent_span_id"] = "b7ad6b7169203331"
     payload["source"] = "scan_claude"
     payload["pricing_class"] = "estimated"
+    payload["pricing_version"] = "2026-09-25"
+    payload["pricing_fingerprint"] = "a" * 64
 
     with patch(
         "burnlens_cloud.ingest.get_workspace_by_api_key",
@@ -274,6 +276,8 @@ async def test_ingest_persists_run_key_columns(ingest_client):
     assert by_name["parent_span_id"] == payload["parent_span_id"]
     assert by_name["source"] == "scan_claude"
     assert by_name["pricing_class"] == "estimated"
+    assert by_name["pricing_version"] == payload["pricing_version"]
+    assert by_name["pricing_fingerprint"] == payload["pricing_fingerprint"]
     assert by_name["tags"] == {"feature": "chat", "team": "backend", "customer": "acme"}
 
 
@@ -326,7 +330,11 @@ async def test_event_id_reaches_the_insert_and_sql_dedups(ingest_client):
     # partial unique index and the statement errors at runtime.
     assert "ON CONFLICT (workspace_id, event_id) WHERE event_id IS NOT NULL" in sql
     assert "DO NOTHING" in sql
-    assert rows[0][-1] == "01931f6e-0000-7000-8000-abcdefabcdef"
+    columns = [
+        column.strip()
+        for column in sql.split("(", 1)[1].split(")", 1)[0].replace("\n", " ").split(",")
+    ]
+    assert dict(zip(columns, rows[0]))["event_id"] == "01931f6e-0000-7000-8000-abcdefabcdef"
 
 
 @pytest.mark.asyncio

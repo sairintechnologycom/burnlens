@@ -209,7 +209,7 @@ async def list_runs(
     async with aiosqlite.connect(db_path) as db:
         s = await _schema(db)
         cursor = await db.execute(
-            f"{_run_select(s)} GROUP BY run_id ORDER BY {order_by} LIMIT ?",
+            f"{_run_select(s)} GROUP BY {s.run_key} ORDER BY {order_by} LIMIT ?",
             (since, limit),
         )
         rows = await cursor.fetchall()
@@ -241,7 +241,7 @@ async def get_run(db_path: str, run_id: str, since: str) -> tuple[Run, list[Step
     async with aiosqlite.connect(db_path) as db:
         s = await _schema(db)
         cursor = await db.execute(
-            f"{_run_select(s)} AND {s.run_key} = ? GROUP BY run_id",
+            f"{_run_select(s)} AND {s.run_key} = ? GROUP BY {s.run_key}",
             (since, run_id),
         )
         row = await cursor.fetchone()

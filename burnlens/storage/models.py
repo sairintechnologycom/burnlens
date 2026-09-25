@@ -77,6 +77,7 @@ class GenAICostEvent:
     duration_ms: float
     status_code: int
     pricing_version: str | None
+    pricing_fingerprint: str | None = None
     ttft_ms: float | None = None
     cache_hit: int = 0
     cache_saved_usd: float = 0.0
@@ -135,6 +136,7 @@ class RequestRecord:
     branch: str | None = None
     commit_sha: str | None = None
     pricing_version: str | None = None
+    pricing_fingerprint: str | None = None
     pricing_class: str | None = None
     ttft_ms: float | None = None
 
@@ -238,6 +240,7 @@ class RequestRecord:
             duration_ms=self.duration_ms,
             status_code=self.status_code,
             pricing_version=self.pricing_version,
+            pricing_fingerprint=self.pricing_fingerprint,
             ttft_ms=self.ttft_ms,
             cache_hit=self.cache_hit,
             cache_saved_usd=self.cache_saved_usd,
@@ -289,6 +292,7 @@ class RequestRecord:
             branch=event.branch,
             commit_sha=event.commit_sha,
             pricing_version=event.pricing_version,
+            pricing_fingerprint=event.pricing_fingerprint,
             ttft_ms=event.ttft_ms,
             cache_hit=event.cache_hit,
             cache_saved_usd=event.cache_saved_usd,
@@ -495,4 +499,3 @@ class AgentAction:
     cost_usd: float = 0.0
     workspace_id: str = "default"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-

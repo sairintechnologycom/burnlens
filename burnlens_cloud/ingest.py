@@ -462,6 +462,8 @@ async def ingest(
                 record.prompt_rag_tokens,
                 record.prompt_history_tokens,
                 record.event_id,
+                record.pricing_version,
+                record.pricing_fingerprint,
             )
         )
 
@@ -486,6 +488,8 @@ async def ingest(
                     "ts": r.timestamp.isoformat() if hasattr(r.timestamp, "isoformat") else str(r.timestamp),
                     "provider": r.provider,
                     "model": r.model,
+                    "pricing_version": r.pricing_version or "",
+                    "pricing_fingerprint": r.pricing_fingerprint or "",
                     "input_tokens": r.input_tokens,
                     "output_tokens": r.output_tokens,
                     "reasoning_tokens": r.reasoning_tokens,
@@ -511,9 +515,10 @@ async def ingest(
                  cache_hit, cache_saved_usd, tool_calls, trace_id, parent_span_id, source,
                  pricing_class, requested_model, routed_model, downgrade_reason,
                  prompt_system_tokens, prompt_tools_tokens, prompt_rag_tokens,
-                 prompt_history_tokens, event_id)
+                 prompt_history_tokens, event_id, pricing_version, pricing_fingerprint)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+                        $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+                        $31, $32)
                 ON CONFLICT (workspace_id, event_id) WHERE event_id IS NOT NULL
                 DO NOTHING
                 """,

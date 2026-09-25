@@ -1,7 +1,6 @@
 """Tests for Phase 1: Canonical Event Contract & Attribution Model."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
@@ -28,7 +27,10 @@ from burnlens.storage.database import (
     migrate_add_prompt_token_fields,
     migrate_add_cache_fields_to_requests,
     migrate_add_tool_calls,
+    migrate_add_agent_correlation_fields,
+    migrate_add_agent_economics_tables,
     migrate_add_pricing_class,
+    migrate_add_pricing_fingerprint,
     migrate_add_requested_model,
 )
 from burnlens.storage.models import (
@@ -265,7 +267,10 @@ async def test_database_migrations_and_insert(tmp_db):
     await migrate_add_prompt_token_fields(tmp_db)
     await migrate_add_cache_fields_to_requests(tmp_db)
     await migrate_add_tool_calls(tmp_db)
+    await migrate_add_agent_economics_tables(tmp_db)
+    await migrate_add_agent_correlation_fields(tmp_db)
     await migrate_add_pricing_class(tmp_db)
+    await migrate_add_pricing_fingerprint(tmp_db)
     await migrate_add_requested_model(tmp_db)
 
     # 3. Check schema columns
@@ -278,6 +283,7 @@ async def test_database_migrations_and_insert(tmp_db):
         assert "org_id" in cols
         assert "customer_hash" in cols
         assert "pricing_version" in cols
+        assert "pricing_fingerprint" in cols
         assert "pricing_class" in cols
         assert "requested_model" in cols
 

@@ -390,7 +390,9 @@ async def init_db():
                 prompt_tools_tokens INT NOT NULL DEFAULT 0,
                 prompt_rag_tokens INT NOT NULL DEFAULT 0,
                 prompt_history_tokens INT NOT NULL DEFAULT 0,
-                event_id TEXT
+                event_id TEXT,
+                pricing_version TEXT,
+                pricing_fingerprint TEXT
             )
         """)
 
@@ -406,6 +408,13 @@ async def init_db():
                     ALTER TABLE request_records ADD COLUMN cache_saved_usd NUMERIC(12, 8) NOT NULL DEFAULT 0;
                 END IF;
             END $$;
+        """)
+
+        # Pricing provenance is optional for old clients and historical rows.
+        await conn.execute("""
+            ALTER TABLE request_records
+                ADD COLUMN IF NOT EXISTS pricing_version TEXT,
+                ADD COLUMN IF NOT EXISTS pricing_fingerprint TEXT
         """)
 
         # Migration: economics-graph Phase A tool-call count for pre-existing installs

@@ -26,6 +26,9 @@ async def test_clickhouse_initialization():
         assert "request_records_raw" in table_names
         assert "request_records_queue" in table_names
         assert "daily_spend_rollup" in table_names
+        for table in ("request_records_raw", "request_records_queue"):
+            columns = {row[0] for row in client.query(f"DESCRIBE TABLE {table}").result_rows}
+            assert {"pricing_version", "pricing_fingerprint"} <= columns
     except Exception as e:
         pytest.skip(f"ClickHouse not available for integration test: {e}")
 

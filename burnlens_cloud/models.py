@@ -102,6 +102,8 @@ class RequestRecordBase(BaseModel):
     # a cloud overlay and is never sent. Optional so older proxies keep
     # ingesting; Cost Confidence infers from source + cost when this is null.
     pricing_class: Optional[str] = None
+    pricing_version: Optional[str] = Field(default=None, max_length=128)
+    pricing_fingerprint: Optional[str] = Field(default=None, max_length=64)
     # Requested vs effective model. Optional so older proxies keep ingesting.
     # Null on historic rows where the original was overwritten and is unknowable.
     requested_model: Optional[str] = None
