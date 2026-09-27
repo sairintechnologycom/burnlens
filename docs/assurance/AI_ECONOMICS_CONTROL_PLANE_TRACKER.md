@@ -77,7 +77,7 @@ The relational store is sufficient for the current relationships; no graph datab
 
 ## Phase 1A — Pricing provenance compatibility
 
-**Status: IMPLEMENTED; production deployment validated; persistence readback pending.** Scope is intentionally limited to evidence BurnLens already has: provider pricing snapshot version and a fingerprint of the resolved bundled rate. Do not invent effective dates, verified sources, contract prices, or historical rates. Keep lookup behavior, `cost_usd`, APIs and recorded history backward compatible. The fingerprint identifies rate inputs; it does not reconstruct old prices or prove provider-source verification.
+**Status: DONE for the active production path.** Scope is intentionally limited to evidence BurnLens already has: provider pricing snapshot version and a fingerprint of the resolved bundled rate. Do not invent effective dates, verified sources, contract prices, or historical rates. Keep lookup behavior, `cost_usd`, APIs and recorded history backward compatible. The fingerprint identifies rate inputs; it does not reconstruct old prices or prove provider-source verification.
 
 ### Implementation tracker
 
@@ -101,7 +101,8 @@ The relational store is sufficient for the current relationships; no graph datab
 - **PASS (automated):** New priced requests retain provider snapshot version and deterministic applied-price fingerprint when available.
 - **PASS:** Unknown/history-missing provenance stays NULL/unknown; no fabricated backfill.
 - **PASS (automated):** Existing cloud clients with omitted fields still ingest; tenant custom-price reconciliation remains workspace-scoped.
-- **PASS (deployment/API write):** GitHub CI and Railway production health verification passed for `09cb9c4`; live OpenAPI exposes `pricing_class`, `pricing_version`, and `pricing_fingerprint`. A uniquely tagged zero-token event was accepted by production ingest (`accepted=1`, `rejected=0`). The ingest key is write-only and no dashboard JWT/browser session was available, so record readback and live ClickHouse projection remain unverified. The test event may remain as a zero-cost row.
+- **PASS (production):** GitHub CI and Railway health verification passed for `09cb9c4`; live OpenAPI exposes `pricing_class`, `pricing_version`, and `pricing_fingerprint`. Production ingest accepted the uniquely tagged zero-token fixture, and a read-only query inside the backend confirmed persisted `pricing_class=calculated`, `pricing_version=phase1a-live-check`, matching fingerprint, source, and tag. Zero-cost verification rows may remain in the workspace.
+- **N/A (production ClickHouse path):** `streaming_enabled=false` in production; writes use PostgreSQL, so there is no active ClickHouse projection to validate. ClickHouse schema/projection unit coverage passed, but live ClickHouse verification remains a prerequisite before enabling streaming.
 - **PASS (automated):** Existing API, CLI, dashboard and unknown-price behavior remain compatible.
 
-**Next gate:** Code, automated criteria, production deployment, and authenticated live ingest pass. Before closing the phase, validate authenticated record readback and ClickHouse projection in the deployment environment. Do not start Phase 1B (explicit source/effective-date history or catalog) until that gate passes and candidate source dates are validated.
+**Phase exit:** PASS for Phase 1A. Production Postgres ingest/readback and the active API contract are verified. ClickHouse remains inactive in production; before enabling streaming, run the ClickHouse projection migration/write/read check. Phase 1B (explicit source/effective-date history or catalog) is separate work and requires candidate source dates to be validated before implementation.
