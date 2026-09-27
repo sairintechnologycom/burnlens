@@ -20,7 +20,14 @@ function fromSource() {
       const models = Object.entries(data.models ?? {})
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([name, rates]) => ({ name, ...(rates as object) }));
-      return { provider: data.provider, updated: data.updated ?? null, models };
+      return {
+        provider: data.provider,
+        updated: data.updated ?? null,
+        models,
+        ...(data.pricing_provenance
+          ? { pricing_provenance: data.pricing_provenance }
+          : {}),
+      };
     });
 }
 

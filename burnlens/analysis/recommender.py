@@ -61,7 +61,7 @@ _CHEAPER_EQUIVALENT: dict[str, str] = {
     "gpt-5.2-codex": "gpt-5.1-codex-mini",
     "gpt-5.4": "gpt-5.4-mini",
     "gpt-5.5": "gpt-5.6-luna",
-    # Cheapest member of the 5.6 family. Terra ($2.5/$15) was the old target
+    # Cheapest member of the 5.6 family. Terra ($2/$12) is itself a downgrade candidate
     # and is itself a downgrade candidate, so pointing at it left money behind.
     "gpt-5.6": "gpt-5.6-luna",
     # Anthropic — family prefixes, so opus-4-5 through opus-5 and every dated
@@ -161,8 +161,8 @@ async def analyse_model_fit(
     # A recommendation that costs money is not a recommendation. Every rule
     # projects both sides from the same price table, so a non-positive saving
     # means the "cheaper equivalent" is not cheaper for this traffic — e.g.
-    # gpt-5.6-luna ($1/$6 per M) prefix-matched the gpt-5.6 family and was told
-    # to switch to gpt-5.6-terra ($2.5/$15), reported as "saving -$343.99
+    # gpt-5.6-luna ($0.20/$1.20 per M) prefix-matched the gpt-5.6 family and was told
+    # to switch to gpt-5.6-terra ($2/$12), reported as a negative saving
     # (-1840.7%)" and summed into the total. Filtered once here rather than in
     # each rule: all three route through this return, and a fourth rule would
     # otherwise have to remember the guard.

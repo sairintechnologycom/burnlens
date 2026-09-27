@@ -10,7 +10,7 @@ from burnlens.cost.calculator import (
     extract_usage_google,
     extract_usage_openai,
 )
-from burnlens.cost.pricing import get_model_pricing
+from burnlens.cost.pricing import apply_tiered, get_model_pricing
 
 
 # ---------------------------------------------------------------------------
@@ -48,19 +48,42 @@ class TestPricingLookup:
         assert p["output_per_million"] == 15.00
         assert p["cache_write_per_million"] == 3.75
 
-    def test_sonnet5_scheduled_price_switches_on_date(self):
+    def test_sonnet5_permanent_introductory_price(self):
         from datetime import date
 
-        # Intro rate ($2/$10) before 2026-09-01...
-        before = get_model_pricing("anthropic", "claude-sonnet-5", today=date(2026, 8, 31))
-        assert before["input_per_million"] == 2.00
-        assert before["output_per_million"] == 10.00
-        assert "scheduled" not in before  # resolver strips the schedule key
-        # ...sticker rate ($3/$15) on and after the effective date.
-        after = get_model_pricing("anthropic", "claude-sonnet-5", today=date(2026, 9, 1))
-        assert after["input_per_million"] == 3.00
-        assert after["output_per_million"] == 15.00
-        assert after["cache_write_per_million"] == 3.75
+        # Anthropic made the introductory price permanent on 2026-08-10.
+        for today in (date(2026, 9, 1), date(2027, 1, 1)):
+            pricing = get_model_pricing("anthropic", "claude-sonnet-5", today=today)
+            assert pricing["input_per_million"] == 2.00
+            assert pricing["output_per_million"] == 10.00
+            assert pricing["cache_write_per_million"] == 2.50
+
+    def test_gpt56_verified_current_rates_include_cache_writes(self):
+        for model, expected in (
+            ("gpt-5.6", (4.00, 20.00, 0.40, 5.00)),
+            ("gpt-5.6-sol", (4.00, 20.00, 0.40, 5.00)),
+            ("gpt-5.6-terra", (2.00, 12.00, 0.20, 2.50)),
+            ("gpt-5.6-luna", (0.20, 1.20, 0.02, 0.25)),
+        ):
+            pricing = get_model_pricing("openai", model)
+            assert pricing is not None
+            assert (
+                pricing["input_per_million"],
+                pricing["output_per_million"],
+                pricing["cache_read_per_million"],
+                pricing["cache_write_per_million"],
+            ) == expected
+
+    def test_gpt56_long_context_tier_starts_above_272k(self):
+        for model, base, long_context in (
+            ("gpt-5.6-sol", 4.00, 8.00),
+            ("gpt-5.6-terra", 2.00, 4.00),
+            ("gpt-5.6-luna", 0.20, 0.40),
+        ):
+            pricing = get_model_pricing("openai", model)
+            assert pricing is not None
+            assert apply_tiered(pricing, 272_000)["input_per_million"] == base
+            assert apply_tiered(pricing, 272_001)["input_per_million"] == long_context
 
     def test_scheduled_price_is_noop_without_schedule(self):
         from datetime import date
@@ -130,12 +153,10 @@ class TestCostCalculation:
             ("openai", "gpt-5.4-nano", 1.45),
             ("openai", "gpt-5.5", 35.00),
             ("openai", "gpt-5.5-pro", 210.00),
-            ("openai", "gpt-5.6", 35.00),
-            ("openai", "gpt-5.6-sol", 35.00),
-            ("openai", "gpt-5.6-terra", 17.50),
-            ("openai", "gpt-5.6-luna", 7.00),
-            # claude-sonnet-5 omitted here — its rate is date-scheduled
-            # (intro $2/$10 → $3/$15 on 2026-09-01); covered date-pinned below.
+            ("openai", "gpt-5.6", 38.00),
+            ("openai", "gpt-5.6-sol", 38.00),
+            ("openai", "gpt-5.6-terra", 22.00),
+            ("openai", "gpt-5.6-luna", 2.20),
             ("anthropic", "claude-mythos-5", 60.00),
             ("anthropic", "claude-opus-5", 30.00),
             ("google", "gemini-3.1-flash-lite", 1.75),

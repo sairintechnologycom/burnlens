@@ -169,18 +169,17 @@
           "input_per_million": 2.0,
           "output_per_million": 10.0,
           "cache_read_per_million": 0.2,
-          "cache_write_per_million": 2.5,
-          "scheduled": [
-            {
-              "effective": "2026-09-01",
-              "input_per_million": 3.0,
-              "output_per_million": 15.0,
-              "cache_read_per_million": 0.3,
-              "cache_write_per_million": 3.75
-            }
-          ]
+          "cache_write_per_million": 2.5
         }
-      ]
+      ],
+      "pricing_provenance": {
+        "claude-sonnet-5": {
+          "source_url": "https://www.anthropic.com/news/claude-sonnet-5",
+          "effective_from": "2026-08-10",
+          "verified_at": "2026-09-27",
+          "pricing_confidence": "VERIFIED_PROVIDER"
+        }
+      }
     },
     {
       "provider": "bedrock",
@@ -487,7 +486,7 @@
     },
     {
       "provider": "openai",
-      "updated": "2026-07-17",
+      "updated": "2026-09-27",
       "models": [
         {
           "name": "gpt-3.5-turbo",
@@ -645,27 +644,67 @@
         },
         {
           "name": "gpt-5.6",
-          "input_per_million": 5.0,
-          "output_per_million": 30.0,
-          "cache_read_per_million": 0.5
+          "input_per_million": 4.0,
+          "output_per_million": 20.0,
+          "cache_read_per_million": 0.4,
+          "cache_write_per_million": 5.0,
+          "tiered": [
+            {
+              "over": 272000,
+              "input_per_million": 8.0,
+              "output_per_million": 30.0,
+              "cache_read_per_million": 0.8,
+              "cache_write_per_million": 10.0
+            }
+          ]
         },
         {
           "name": "gpt-5.6-luna",
-          "input_per_million": 1.0,
-          "output_per_million": 6.0,
-          "cache_read_per_million": 0.1
+          "input_per_million": 0.2,
+          "output_per_million": 1.2,
+          "cache_read_per_million": 0.02,
+          "cache_write_per_million": 0.25,
+          "tiered": [
+            {
+              "over": 272000,
+              "input_per_million": 0.4,
+              "output_per_million": 1.8,
+              "cache_read_per_million": 0.04,
+              "cache_write_per_million": 0.5
+            }
+          ]
         },
         {
           "name": "gpt-5.6-sol",
-          "input_per_million": 5.0,
-          "output_per_million": 30.0,
-          "cache_read_per_million": 0.5
+          "input_per_million": 4.0,
+          "output_per_million": 20.0,
+          "cache_read_per_million": 0.4,
+          "cache_write_per_million": 5.0,
+          "tiered": [
+            {
+              "over": 272000,
+              "input_per_million": 8.0,
+              "output_per_million": 30.0,
+              "cache_read_per_million": 0.8,
+              "cache_write_per_million": 10.0
+            }
+          ]
         },
         {
           "name": "gpt-5.6-terra",
-          "input_per_million": 2.5,
-          "output_per_million": 15.0,
-          "cache_read_per_million": 0.25
+          "input_per_million": 2.0,
+          "output_per_million": 12.0,
+          "cache_read_per_million": 0.2,
+          "cache_write_per_million": 2.5,
+          "tiered": [
+            {
+              "over": 272000,
+              "input_per_million": 4.0,
+              "output_per_million": 18.0,
+              "cache_read_per_million": 0.4,
+              "cache_write_per_million": 5.0
+            }
+          ]
         },
         {
           "name": "gpt-realtime-2.1",
@@ -731,7 +770,39 @@
           "cache_read_per_million": 0.275,
           "reasoning_per_million": 4.4
         }
-      ]
+      ],
+      "pricing_provenance": {
+        "gpt-5.6": {
+          "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+          "change_source_url": "https://openai.com/index/gpt-5-6/",
+          "effective_from": "2026-08-21",
+          "verified_at": "2026-09-27",
+          "pricing_confidence": "VERIFIED_PROVIDER",
+          "minimum_valid_through": "2026-11-21"
+        },
+        "gpt-5.6-sol": {
+          "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+          "change_source_url": "https://openai.com/index/gpt-5-6/",
+          "effective_from": "2026-08-21",
+          "verified_at": "2026-09-27",
+          "pricing_confidence": "VERIFIED_PROVIDER",
+          "minimum_valid_through": "2026-11-21"
+        },
+        "gpt-5.6-terra": {
+          "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+          "change_source_url": "https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/",
+          "effective_from": "2026-07-30",
+          "verified_at": "2026-09-27",
+          "pricing_confidence": "VERIFIED_PROVIDER"
+        },
+        "gpt-5.6-luna": {
+          "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+          "change_source_url": "https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/",
+          "effective_from": "2026-07-30",
+          "verified_at": "2026-09-27",
+          "pricing_confidence": "VERIFIED_PROVIDER"
+        }
+      }
     },
     {
       "provider": "together",

@@ -30,8 +30,8 @@ The relational store is sufficient for the current relationships; no graph datab
 | Economic ledger | SHIPPED | SQLite `requests`; cloud Postgres `request_records` | `burnlens/storage/database.py:15`; `burnlens_cloud/database.py` | No archived rate snapshots sufficient to recompute historical costs | Keep ledger; retain optional rate fingerprint as evidence only |
 | Usage ingestion / normalization | SHIPPED | Proxy, scanners, provider adapters, cloud ingest/sync | `burnlens/proxy/interceptor.py`; `burnlens/providers/`; `burnlens_cloud/ingest.py` | Execution events are not all first-class normalized nodes | Extend current records |
 | Provider registry | SHIPPED | Provider protocol and ten proxy registrations | `burnlens/providers/base.py`; `burnlens/providers/__init__.py:9` | OpenRouter and local/private have no first-party registration | Add only on demand |
-| Model registry / identity | PARTIAL | Bundled per-provider pricing JSON, exact/prefix resolution | `burnlens/cost/pricing.py:16,110` | No explicit deployment identity, model lifecycle/capability catalog, or aliases table | Extend pricing contract compatibly |
-| Pricing provenance | PARTIAL | `pricing_version`, `pricing_class`, applied-rate fingerprint, cloud reconciliation, custom pricing | `burnlens/storage/database.py:46`; `burnlens/cost/calculator.py:95`; `burnlens_cloud/settings_api.py:193` | No archived per-model price history or provider-source verification; fingerprints do not reconstruct historical rates | Phase 1A carries existing version and fingerprint without inventing provenance |
+| Model registry / identity | PARTIAL | Bundled per-provider pricing JSON, exact/prefix resolution | `burnlens/cost/pricing.py:16,110`; `burnlens/cost/pricing_data/openai.json` | No explicit deployment identity, lifecycle/capability catalog, or aliases table | Extend pricing contract compatibly; keep provider data scoped |
+| Pricing provenance | PARTIAL | `pricing_version`, `pricing_class`, applied-rate fingerprint, cloud reconciliation, custom pricing, verified per-model sources for GPT-5.6/Sonnet 5 | `burnlens/storage/database.py:46`; `burnlens/cost/calculator.py:95`; `burnlens/cost/pricing_data/openai.json`; `burnlens/cost/pricing_data/anthropic.json`; `burnlens_cloud/settings_api.py:193` | No archived price snapshots; metadata describes current verified rates but does not reconstruct old costs | Continue provider-by-provider verification; preserve stored historical cost |
 | Unknown-model handling | PARTIAL | `unpriced` class and zero sentinel; proxy rejection and scan warnings | `burnlens/cost/calculator.py:97`; `tests/test_unpriced_model_blocked.py` | Some documentation/UI still describes or renders sentinel zero as known zero | Preserve classification across all surfaces |
 | Workspace / app / repo identity | PARTIAL | Request fields, workspace metadata, repo-derived workflow IDs | `burnlens/storage/database.py:15`; `burnlens/proxy/interceptor.py:1480`; `tests/test_economics_graph_phase_c.py` | No first-class application/project relationships | Add relationships only for proven queries |
 | Agent/workflow/run identity | SHIPPED | Agent/workflow/run/task/action tables and nullable request IDs | `burnlens/storage/database.py:67`; `burnlens/storage/agent_economics.py`; `tests/test_phase1_agent_economics.py` | IDs are not consistently protected by composite workspace constraints | Preserve additive model; strengthen constraints with migration evidence |
@@ -50,7 +50,7 @@ The relational store is sufficient for the current relationships; no graph datab
 | Phase | Capability | Status | Gate / evidence |
 |---|---|---|---|
 | 0 | Baseline and contract protection | SHIPPED; revalidation needed | `tests/test_phase0_regressions.py`, `docs/assurance/PHASE_0_BASELINE_CERTIFICATION_REPORT.md`; validate actual server reachability and public truth |
-| 1 | Model/provider registry foundation | IN PROGRESS | Existing provider registry/pricing JSON; Phase 1A below is the first bounded increment |
+| 1 | Model/provider registry foundation | IN PROGRESS | Existing provider registry/pricing JSON; Phase 1A compatibility and Phase 1B verified-pricing increments are tracked below |
 | 2 | Execution identity | SHIPPED | Agent/workflow/run/task entities and correlation IDs |
 | 3 | Execution graph | PARTIAL | Parent/child run CTE and trace/session run view; explicit model/tool/retry edges absent |
 | 4 | Agent economics | PARTIAL | Agent/workflow/task/run rollups; separate action cost lacks source ledger link |
@@ -106,3 +106,23 @@ The relational store is sufficient for the current relationships; no graph datab
 - **PASS (automated):** Existing API, CLI, dashboard and unknown-price behavior remain compatible.
 
 **Phase exit:** PASS for Phase 1A. Production Postgres ingest/readback and the active API contract are verified. ClickHouse remains inactive in production; before enabling streaming, run the ClickHouse projection migration/write/read check. Phase 1B (explicit source/effective-date history or catalog) is separate work and requires candidate source dates to be validated before implementation.
+
+## Phase 1B — Verified pricing metadata and corrections
+
+**Status: IMPLEMENTED; automated validation and production rollout pending.** Bounded to official-source verification of OpenAI GPT-5.6 Sol/Terra/Luna and Anthropic Claude Sonnet 5. This adds source/effective-date metadata to bundled pricing and the frontend pricing snapshot, corrects these rates, and removes Sonnet 5's superseded scheduled increase. No database, ledger, cost semantics, public API, or historical records change. Other model prices remain as they were and are not newly claimed as verified.
+
+### Implementation tracker
+
+| Work item | Status | Acceptance evidence |
+|---|---|---|
+| Verify supported rates and dates against provider sources | DONE | Official OpenAI model pages and change announcements; Anthropic Sonnet 5 announcement. Sources are embedded with the provider pricing entries. |
+| Correct GPT-5.6 standard/cache-write and >272K token tier rates | DONE | `burnlens/cost/pricing_data/openai.json`; exclusive 272,000-token threshold follows existing `apply_tiered` semantics. |
+| Correct Sonnet 5 price lifecycle | DONE | `burnlens/cost/pricing_data/anthropic.json`; permanent $2/$10 introductory rates, no obsolete Sep 1 scheduled increase. |
+| Expose provider source/effective date metadata in pricing snapshot | DONE | `burnlens/cost/pricing.py`, `scripts/build_pricing_snapshot.py`, `frontend/src/data/llm-pricing.json`; exact and longest-prefix lookup. |
+| Pricing, tier-boundary, snapshot, recommender, and compatibility tests | DONE | Focused suite: 128 passed; full backend/frontend suites pending. |
+| Tracker and rollback notes | DONE | This section. Rollback: revert these pricing JSON/provenance and snapshot changes; already recorded ledger costs and fingerprints remain untouched. |
+| CI, deployment, and production verification | PENDING | Must pass repository CI and pricing snapshot readback before marking phase complete. |
+
+**Expected files:** `burnlens/cost/pricing_data/openai.json`, `burnlens/cost/pricing_data/anthropic.json`, `burnlens/cost/pricing.py`, `scripts/build_pricing_snapshot.py`, generated `frontend/src/data/llm-pricing.json`, `burnlens/analysis/recommender.py` (rate comment), `tests/test_cost.py`, `tests/test_pricing_snapshot.py`, `tests/test_recommender.py`, `frontend/tests/llm-pricing.test.ts`, this tracker.
+
+**Exit criteria:** same existing pricing behavior outside the explicitly corrected models; exact standard and long-context rates; 272,000 stays at base and 272,001 selects tier; Sonnet 5 remains at $2/$10 after Sep 1; provenance is queryable and present in the frontend snapshot; unknown models remain unknown; CI green; production deployment verified. No schema migration is needed. Feature-flag rollback is unnecessary because changes affect only listed prices and metadata; reverting bundled data restores the previous calculation behavior.

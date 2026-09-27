@@ -34,6 +34,8 @@ def build() -> dict:
             "provider": data["provider"],
             "updated": data.get("updated"),
             "models": models,
+            **({"pricing_provenance": data["pricing_provenance"]}
+               if data.get("pricing_provenance") else {}),
         })
     return {
         "source": "burnlens/cost/pricing_data",

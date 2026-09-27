@@ -14,6 +14,7 @@ _PRICING_DIR = Path(__file__).parent / "pricing_data"
 # provider name → {model_name → pricing dict}
 _PRICING_CACHE: dict[str, dict[str, dict[str, Any]]] = {}
 _PRICING_UPDATED_CACHE: dict[str, str | None] = {}
+_PRICING_PROVENANCE_CACHE: dict[str, dict[str, dict[str, Any]]] = {}
 
 
 def _load_provider(provider: str) -> dict[str, dict[str, Any]]:
@@ -24,11 +25,13 @@ def _load_provider(provider: str) -> dict[str, dict[str, Any]]:
             logger.warning("No pricing file for provider %r", provider)
             _PRICING_CACHE[provider] = {}
             _PRICING_UPDATED_CACHE[provider] = None
+            _PRICING_PROVENANCE_CACHE[provider] = {}
         else:
             with open(path) as f:
                 data = json.load(f)
             _PRICING_CACHE[provider] = data.get("models", {})
             _PRICING_UPDATED_CACHE[provider] = data.get("updated")
+            _PRICING_PROVENANCE_CACHE[provider] = data.get("pricing_provenance", {})
     return _PRICING_CACHE[provider]
 
 
@@ -55,6 +58,19 @@ def get_pricing_version(provider: str) -> str | None:
     key = _resolve_pricing_key(provider)
     _load_provider(key)
     return _PRICING_UPDATED_CACHE.get(key)
+
+
+def get_model_pricing_provenance(provider: str, model: str) -> dict[str, Any] | None:
+    """Return explicit source/effective-date metadata for a model, if recorded."""
+    key = _resolve_pricing_key(provider)
+    _load_provider(key)
+    provenance = _PRICING_PROVENANCE_CACHE.get(key, {})
+    match = model if model in provenance else max(
+        (known for known in provenance if model.startswith(known)),
+        key=len,
+        default=None,
+    )
+    return dict(provenance[match]) if match else None
 
 
 

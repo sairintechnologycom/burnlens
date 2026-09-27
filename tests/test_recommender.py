@@ -186,16 +186,15 @@ class TestEmptyDatabase:
 class TestNoNegativeSavingRecommendations:
     @pytest.mark.asyncio
     async def test_dearer_suggestion_is_not_recommended(self, initialized_db: str):
-        """gpt-5.6-luna is $1/$6 per M; the gpt-5.6 family's mapped equivalent
-        gpt-5.6-terra is $2.5/$15. Prefix-matching the family produced a real
-        "switch to save -$343.99 (-1840.7%)" on live data, summed into the
+        """gpt-5.6-luna is $0.20/$1.20 per M; the gpt-5.6 family's mapped equivalent
+        gpt-5.6-terra is $2/$12. Prefix-matching the family can recommend a
+        higher-cost route and sum negative savings into the
         headline total. Anything that does not save must not be emitted."""
-        # cost_usd must be what luna actually charges for this shape, or the
-        # comparison is against a fabricated number: 500 in @ $1/M + 30 out
-        # @ $6/M = $0.00068. Terra bills the same shape at $0.0017.
+        # cost_usd must be what luna actually charges for this shape: 500 in
+        # @ $0.20/M + 30 out @ $1.20/M = $0.000136. Terra bills $0.00136.
         await _seed(initialized_db, [
             {"model": "gpt-5.6-luna", "input_tokens": 500, "output_tokens": 30,
-             "cost_usd": 0.00068, "tags": {"feature": "classify"}}
+             "cost_usd": 0.000136, "tags": {"feature": "classify"}}
             for _ in range(25)
         ])
 

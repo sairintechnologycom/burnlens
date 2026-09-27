@@ -39,3 +39,26 @@ def test_cache_convention_comes_from_the_registry():
 
     snapshot = json.loads(SNAPSHOT.read_text())
     assert snapshot["inclusive_prompt_tokens"] == list(inclusive_prompt_token_providers())
+
+
+def test_provider_price_provenance_is_queryable_and_in_snapshot():
+    from burnlens.cost.pricing import get_model_pricing_provenance
+
+    sonnet = get_model_pricing_provenance("anthropic", "claude-sonnet-5")
+    assert sonnet == {
+        "source_url": "https://www.anthropic.com/news/claude-sonnet-5",
+        "effective_from": "2026-08-10",
+        "verified_at": "2026-09-27",
+        "pricing_confidence": "VERIFIED_PROVIDER",
+    }
+    assert get_model_pricing_provenance("anthropic", "unknown-model") is None
+
+    snapshot = json.loads(SNAPSHOT.read_text())
+    provider = next(p for p in snapshot["providers"] if p["provider"] == "anthropic")
+    assert provider["pricing_provenance"]["claude-sonnet-5"] == sonnet
+
+    openai = get_model_pricing_provenance("openai", "gpt-5.6-sol-2026-09-01")
+    assert openai["effective_from"] == "2026-08-21"
+    assert openai["minimum_valid_through"] == "2026-11-21"
+    provider = next(p for p in snapshot["providers"] if p["provider"] == "openai")
+    assert provider["pricing_provenance"]["gpt-5.6-sol"] == openai
