@@ -77,7 +77,7 @@ The relational store is sufficient for the current relationships; no graph datab
 
 ## Phase 1A — Pricing provenance compatibility
 
-**Status: IMPLEMENTED; deployment validation pending.** Scope is intentionally limited to evidence BurnLens already has: provider pricing snapshot version and a fingerprint of the resolved bundled rate. Do not invent effective dates, verified sources, contract prices, or historical rates. Keep lookup behavior, `cost_usd`, APIs and recorded history backward compatible. The fingerprint identifies rate inputs; it does not reconstruct old prices or prove provider-source verification.
+**Status: IMPLEMENTED; production deployment validated; persistence readback pending.** Scope is intentionally limited to evidence BurnLens already has: provider pricing snapshot version and a fingerprint of the resolved bundled rate. Do not invent effective dates, verified sources, contract prices, or historical rates. Keep lookup behavior, `cost_usd`, APIs and recorded history backward compatible. The fingerprint identifies rate inputs; it does not reconstruct old prices or prove provider-source verification.
 
 ### Implementation tracker
 
@@ -101,7 +101,7 @@ The relational store is sufficient for the current relationships; no graph datab
 - **PASS (automated):** New priced requests retain provider snapshot version and deterministic applied-price fingerprint when available.
 - **PASS:** Unknown/history-missing provenance stays NULL/unknown; no fabricated backfill.
 - **PASS (automated):** Existing cloud clients with omitted fields still ingest; tenant custom-price reconciliation remains workspace-scoped.
-- **PASS (DDL/unit coverage); DEPLOYMENT PENDING:** Local/cloud additive schema changes are covered; live Postgres/ClickHouse upgrade/write checks were not available in this run.
+- **PASS (deployment/API write):** GitHub CI and Railway production health verification passed for `09cb9c4`; live OpenAPI exposes `pricing_class`, `pricing_version`, and `pricing_fingerprint`. A uniquely tagged zero-token event was accepted by production ingest (`accepted=1`, `rejected=0`). The ingest key is write-only and no dashboard JWT/browser session was available, so record readback and live ClickHouse projection remain unverified. The test event may remain as a zero-cost row.
 - **PASS (automated):** Existing API, CLI, dashboard and unknown-price behavior remain compatible.
 
-**Next gate:** Phase 1A code and automated exit criteria pass. Before closing the phase, validate upgraded Postgres and ClickHouse schemas plus ingestion/readback in the deployment environment. Do not start Phase 1B (explicit source/effective-date history or catalog) until that gate passes and candidate source dates are validated.
+**Next gate:** Code, automated criteria, production deployment, and authenticated live ingest pass. Before closing the phase, validate authenticated record readback and ClickHouse projection in the deployment environment. Do not start Phase 1B (explicit source/effective-date history or catalog) until that gate passes and candidate source dates are validated.
