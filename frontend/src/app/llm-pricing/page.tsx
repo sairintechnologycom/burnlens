@@ -59,9 +59,31 @@ type Model = Rate & {
   tiered?: Rate[];
 };
 
-type Provider = { provider: string; updated: string | null; models: Model[] };
+type PricingProvenance = {
+  source_url: string;
+  effective_from: string;
+  pricing_confidence: string;
+};
+
+type Provider = {
+  provider: string;
+  updated: string | null;
+  models: Model[];
+  pricing_provenance?: Record<string, PricingProvenance>;
+};
 
 const providers = pricing.providers as Provider[];
+
+function provenanceFor(provider: Provider, model: Model): PricingProvenance | undefined {
+  const provenance = provider.pricing_provenance ?? {};
+  const key = model.name in provenance
+    ? model.name
+    : Object.keys(provenance)
+        .filter((known) => model.name.startsWith(known))
+        .sort((a, b) => b.length - a.length)[0];
+  const evidence = key ? provenance[key] : undefined;
+  return evidence?.pricing_confidence === "VERIFIED_PROVIDER" ? evidence : undefined;
+}
 
 /** Rates span $0.0028 to $180 per million, so a fixed decimal count lies at one end. */
 function usd(v: number | undefined): string {
@@ -117,6 +139,10 @@ export default function LlmPricing() {
         <p className="legal-updated">
           {pricing.model_count} models · {providers.length} providers · all rates per million tokens, USD
         </p>
+        <p>
+          A catalog date records when BurnLens refreshed its bundled rates. Only models with a linked
+          provider source below are independently source-verified.
+        </p>
 
         <section>
           <p>
@@ -139,7 +165,7 @@ export default function LlmPricing() {
           <section key={p.provider} id={p.provider}>
             <h2>{PROVIDER_LABEL[p.provider] ?? p.provider}</h2>
             <p className="legal-updated">
-              <code>{p.provider}</code> · {p.models.length} models · rates verified {p.updated}
+              <code>{p.provider}</code> · {p.models.length} models · catalog updated {p.updated ?? "unknown"}
             </p>
             <div className="lp-compare-wrap">
               <table className="pricing-table">
@@ -151,19 +177,32 @@ export default function LlmPricing() {
                     <th>Cache read</th>
                     <th>Cache write</th>
                     <th>Notes</th>
+                    <th>Source</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {p.models.map((m) => (
-                    <tr key={m.name}>
-                      <td><code>{m.name}</code></td>
-                      <td>{usd(m.input_per_million)}</td>
-                      <td>{usd(m.output_per_million)}</td>
-                      <td>{usd(m.cache_read_per_million)}</td>
-                      <td>{usd(m.cache_write_per_million)}</td>
-                      <td>{notes(m).join("; ") || "—"}</td>
-                    </tr>
-                  ))}
+                  {p.models.map((m) => {
+                    const evidence = provenanceFor(p, m);
+                    return (
+                      <tr key={m.name}>
+                        <td><code>{m.name}</code></td>
+                        <td>{usd(m.input_per_million)}</td>
+                        <td>{usd(m.output_per_million)}</td>
+                        <td>{usd(m.cache_read_per_million)}</td>
+                        <td>{usd(m.cache_write_per_million)}</td>
+                        <td>{notes(m).join("; ") || "—"}</td>
+                        <td>
+                          {evidence ? (
+                            <a href={evidence.source_url} target="_blank" rel="noreferrer">
+                              Provider verified · effective {evidence.effective_from}
+                            </a>
+                          ) : (
+                            <span>Not source-verified</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

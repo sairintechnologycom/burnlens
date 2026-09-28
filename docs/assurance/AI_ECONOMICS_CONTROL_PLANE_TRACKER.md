@@ -31,7 +31,7 @@ The relational store is sufficient for the current relationships; no graph datab
 | Usage ingestion / normalization | SHIPPED | Proxy, scanners, provider adapters, cloud ingest/sync | `burnlens/proxy/interceptor.py`; `burnlens/providers/`; `burnlens_cloud/ingest.py` | Execution events are not all first-class normalized nodes | Extend current records |
 | Provider registry | SHIPPED | Provider protocol and ten proxy registrations | `burnlens/providers/base.py`; `burnlens/providers/__init__.py:9` | OpenRouter and local/private have no first-party registration | Add only on demand |
 | Model registry / identity | PARTIAL | Bundled per-provider pricing JSON, exact/prefix resolution | `burnlens/cost/pricing.py:16,110`; `burnlens/cost/pricing_data/openai.json` | No explicit deployment identity, lifecycle/capability catalog, or aliases table | Extend pricing contract compatibly; keep provider data scoped |
-| Pricing provenance | PARTIAL | `pricing_version`, `pricing_class`, applied-rate fingerprint, cloud reconciliation, custom pricing, verified per-model sources for GPT-5.6/Sonnet 5 | `burnlens/storage/database.py:46`; `burnlens/cost/calculator.py:95`; `burnlens/cost/pricing_data/openai.json`; `burnlens/cost/pricing_data/anthropic.json`; `burnlens_cloud/settings_api.py:193` | No archived price snapshots; metadata describes current verified rates but does not reconstruct old costs | Continue provider-by-provider verification; preserve stored historical cost |
+| Pricing provenance | PARTIAL | `pricing_version`, `pricing_class`, applied-rate fingerprint, cloud reconciliation, custom pricing, per-model source labels/links for GPT-5.6/Sonnet 5 | `burnlens/storage/database.py:46`; `burnlens/cost/calculator.py:95`; `burnlens/cost/pricing_data/openai.json`; `burnlens/cost/pricing_data/anthropic.json`; `frontend/src/app/llm-pricing/page.tsx`; `burnlens_cloud/settings_api.py:193` | No archived price snapshots; most catalog entries have no independently recorded provider source | Add sources incrementally; label absent provenance as unverified |
 | Unknown-model handling | PARTIAL | `unpriced` class and zero sentinel; proxy rejection and scan warnings | `burnlens/cost/calculator.py:97`; `tests/test_unpriced_model_blocked.py` | Some documentation/UI still describes or renders sentinel zero as known zero | Preserve classification across all surfaces |
 | Workspace / app / repo identity | PARTIAL | Request fields, workspace metadata, repo-derived workflow IDs | `burnlens/storage/database.py:15`; `burnlens/proxy/interceptor.py:1480`; `tests/test_economics_graph_phase_c.py` | No first-class application/project relationships | Add relationships only for proven queries |
 | Agent/workflow/run identity | SHIPPED | Agent/workflow/run/task/action tables and nullable request IDs | `burnlens/storage/database.py:67`; `burnlens/storage/agent_economics.py`; `tests/test_phase1_agent_economics.py` | IDs are not consistently protected by composite workspace constraints | Preserve additive model; strengthen constraints with migration evidence |
@@ -128,3 +128,33 @@ The relational store is sufficient for the current relationships; no graph datab
 **Exit criteria:** PASS. Local focused tests passed (128); full backend suite passed (2,292 passed, 21 skipped); frontend suite/build passed (418 tests); GitHub CI passed; the production pricing page returned GPT-5.6 standard/long-context rates and Sonnet 5 at $2/$10. Pricing provenance remains in the committed data snapshot and is covered by tests. No schema migration is needed. Feature-flag rollback is unnecessary because changes affect only listed prices and metadata; reverting bundled data restores the previous calculation behavior.
 
 **Separate pipeline maintenance:** Azure mirror runs 309 and 311 failed because its `GITHUB_PAT` is invalid. The Phase 1B commit was mirrored directly using the authenticated GitHub account with push permission, then CI and production deployment were verified. Repair the Azure secret before relying on future automatic mirroring.
+
+## Phase 1C — Surface pricing evidence accurately
+
+**Status: IMPLEMENTED; local tests and build pass; production verification pending.** The catalog had labeled each provider's rates as "verified" based only on its JSON refresh date, despite source metadata existing for only a small subset. This increment makes confidence explicit per model. It does not edit prices or attempt to infer evidence for models without a source. No tenant telemetry was queried; per-tenant usage-based prioritization remains future work when an approved aggregate source is available.
+
+### Phase output
+
+- **A. Current state:** The pricing page imports the generated snapshot directly. Only GPT-5.6 entries and Claude Sonnet 5 carry provenance. Provider `updated` dates are bundle refresh dates.
+- **B. Gap:** The page represented refresh dates as universal verification and did not show per-model evidence.
+- **C. Proposed change:** Label provider dates as catalog updates; show a provider-source link and effective date only for `VERIFIED_PROVIDER`; clearly label other catalog rows `Not source-verified`.
+- **D. Graph impact:** None.
+- **E. Database changes:** None.
+- **F. API changes:** None.
+- **G. UI changes:** Pricing catalog only.
+- **H. Security impact:** Source URLs are committed static data; links open with `rel="noreferrer"`. No prompts, telemetry, credentials, or tenant data are introduced.
+- **I. Tests:** Rendered-page evidence test, existing snapshot parity tests, frontend suite/build, GitHub CI and public route smoke.
+- **J. Deployment:** GitHub push triggers the existing Vercel production deployment; no feature flag is needed.
+- **K. Rollback:** Revert the page rendering/test and tracker changes; prices and ledger records are unaffected.
+- **L. Expected outcome:** Users can tell which catalog prices have explicit provider evidence.
+- **M. Exit criteria:** Verified rows link to a source and show effective date; rows with no verified evidence are labeled; no price calculation changes; tests/CI pass; production page is confirmed.
+
+### Implementation tracker
+
+| Work item | Status | Acceptance evidence |
+|---|---|---|
+| Distinguish catalog refresh date from price verification | DONE | `frontend/src/app/llm-pricing/page.tsx` says `catalog updated`, not `rates verified`. |
+| Show per-model verified source/effective date or unverified label | DONE | Source links for records marked `VERIFIED_PROVIDER`; all other rows show `Not source-verified`. |
+| Keep pricing and data contracts unchanged | DONE | UI reads existing snapshot provenance; no rate, DB, API, or schema edits. |
+| Rendered-page regression coverage | DONE | `frontend/tests/llm-pricing-evidence.test.tsx`. |
+| Production verification | PENDING | Await GitHub CI and deployment, then check `https://burnlens.app/llm-pricing`. |
