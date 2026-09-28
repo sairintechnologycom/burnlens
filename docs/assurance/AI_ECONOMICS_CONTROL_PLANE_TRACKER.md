@@ -127,11 +127,11 @@ The relational store is sufficient for the current relationships; no graph datab
 
 **Exit criteria:** PASS. Local focused tests passed (128); full backend suite passed (2,292 passed, 21 skipped); frontend suite/build passed (418 tests); GitHub CI passed; the production pricing page returned GPT-5.6 standard/long-context rates and Sonnet 5 at $2/$10. Pricing provenance remains in the committed data snapshot and is covered by tests. No schema migration is needed. Feature-flag rollback is unnecessary because changes affect only listed prices and metadata; reverting bundled data restores the previous calculation behavior.
 
-**Separate pipeline maintenance:** Azure mirror runs 309 and 311 failed because its `GITHUB_PAT` is invalid. The Phase 1B commit was mirrored directly using the authenticated GitHub account with push permission, then CI and production deployment were verified. Repair the Azure secret before relying on future automatic mirroring.
+**Separate pipeline maintenance:** Azure mirror runs 309, 311, 312, and 313 failed because its `GITHUB_PAT` is invalid. Phase 1B and Phase 1C commits were pushed directly using the authenticated GitHub account with push permission, then CI and production deployments were verified. Repair the Azure secret before relying on future automatic mirroring.
 
 ## Phase 1C — Surface pricing evidence accurately
 
-**Status: IMPLEMENTED; local tests and build pass; production verification pending.** The catalog had labeled each provider's rates as "verified" based only on its JSON refresh date, despite source metadata existing for only a small subset. This increment makes confidence explicit per model. It does not edit prices or attempt to infer evidence for models without a source. No tenant telemetry was queried; per-tenant usage-based prioritization remains future work when an approved aggregate source is available.
+**Status: DONE.** The catalog had labeled each provider's rates as "verified" based only on its JSON refresh date, despite source metadata existing for only a small subset. This increment makes confidence explicit per model. It does not edit prices or attempt to infer evidence for models without a source. No tenant telemetry was queried; per-tenant usage-based prioritization remains future work when an approved aggregate source is available.
 
 ### Phase output
 
@@ -157,4 +157,6 @@ The relational store is sufficient for the current relationships; no graph datab
 | Show per-model verified source/effective date or unverified label | DONE | Source links for records marked `VERIFIED_PROVIDER`; all other rows show `Not source-verified`. |
 | Keep pricing and data contracts unchanged | DONE | UI reads existing snapshot provenance; no rate, DB, API, or schema edits. |
 | Rendered-page regression coverage | DONE | `frontend/tests/llm-pricing-evidence.test.tsx`. |
-| Production verification | PENDING | Await GitHub CI and deployment, then check `https://burnlens.app/llm-pricing`. |
+| Production verification | DONE | GitHub Actions run [36411713410](https://github.com/sairintechnologycom/burnlens/actions/runs/36411713410) passed all three jobs on retry after a transient PyPI timeout. Vercel Production deployment `6708032531` succeeded. Live `https://burnlens.app/llm-pricing` shows linked source/effective dates for GPT-5.6 and Sonnet 5, and `Not source-verified` for entries without provenance. |
+
+**Exit criteria:** PASS. The catalog no longer implies every model has provider-verified rates; verified rows link to evidence and show effective dates, while unverified rows are explicit. Pricing, APIs, and ledger behavior are unchanged. Focused UI/snapshot tests passed (5); full frontend suite passed (419); build passed; GitHub CI and production page verification passed. Lint completed with six existing warnings in unrelated files. Azure mirror run 313 still fails on the unrelated invalid `GITHUB_PAT`; this commit was pushed directly to GitHub and both remotes are synced.
