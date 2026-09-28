@@ -109,7 +109,7 @@ The relational store is sufficient for the current relationships; no graph datab
 
 ## Phase 1B — Verified pricing metadata and corrections
 
-**Status: IMPLEMENTED; automated validation and production rollout pending.** Bounded to official-source verification of OpenAI GPT-5.6 Sol/Terra/Luna and Anthropic Claude Sonnet 5. This adds source/effective-date metadata to bundled pricing and the frontend pricing snapshot, corrects these rates, and removes Sonnet 5's superseded scheduled increase. No database, ledger, cost semantics, public API, or historical records change. Other model prices remain as they were and are not newly claimed as verified.
+**Status: IMPLEMENTED; local validation passed; deployment blocked at the Azure-to-GitHub mirror.** Bounded to official-source verification of OpenAI GPT-5.6 Sol/Terra/Luna and Anthropic Claude Sonnet 5. This adds source/effective-date metadata to bundled pricing and the frontend pricing snapshot, corrects these rates, and removes Sonnet 5's superseded scheduled increase. No database, ledger, cost semantics, public API, or historical records change. Other model prices remain as they were and are not newly claimed as verified.
 
 ### Implementation tracker
 
@@ -119,10 +119,10 @@ The relational store is sufficient for the current relationships; no graph datab
 | Correct GPT-5.6 standard/cache-write and >272K token tier rates | DONE | `burnlens/cost/pricing_data/openai.json`; exclusive 272,000-token threshold follows existing `apply_tiered` semantics. |
 | Correct Sonnet 5 price lifecycle | DONE | `burnlens/cost/pricing_data/anthropic.json`; permanent $2/$10 introductory rates, no obsolete Sep 1 scheduled increase. |
 | Expose provider source/effective date metadata in pricing snapshot | DONE | `burnlens/cost/pricing.py`, `scripts/build_pricing_snapshot.py`, `frontend/src/data/llm-pricing.json`; exact and longest-prefix lookup. |
-| Pricing, tier-boundary, snapshot, recommender, and compatibility tests | DONE | Focused suite: 128 passed; full backend/frontend suites pending. |
+| Pricing, tier-boundary, snapshot, recommender, and compatibility tests | DONE | Focused suite: 128 passed; full backend: 2,292 passed, 21 skipped; frontend: 418 passed and production build passed. |
 | Tracker and rollback notes | DONE | This section. Rollback: revert these pricing JSON/provenance and snapshot changes; already recorded ledger costs and fingerprints remain untouched. |
-| CI, deployment, and production verification | PENDING | Must pass repository CI and pricing snapshot readback before marking phase complete. |
+| CI, deployment, and production verification | BLOCKED | Azure mirror runs 309 and 311 for `48f5cc744fa34b6f27953f5c918e002ef14aaadf` both failed with GitHub `Invalid username or token`; the configured `GITHUB_PAT` cannot push. GitHub returns 404 for the SHA. No production deploy/readback is claimed. |
 
 **Expected files:** `burnlens/cost/pricing_data/openai.json`, `burnlens/cost/pricing_data/anthropic.json`, `burnlens/cost/pricing.py`, `scripts/build_pricing_snapshot.py`, generated `frontend/src/data/llm-pricing.json`, `burnlens/analysis/recommender.py` (rate comment), `tests/test_cost.py`, `tests/test_pricing_snapshot.py`, `tests/test_recommender.py`, `frontend/tests/llm-pricing.test.ts`, this tracker.
 
-**Exit criteria:** same existing pricing behavior outside the explicitly corrected models; exact standard and long-context rates; 272,000 stays at base and 272,001 selects tier; Sonnet 5 remains at $2/$10 after Sep 1; provenance is queryable and present in the frontend snapshot; unknown models remain unknown; CI green; production deployment verified. No schema migration is needed. Feature-flag rollback is unnecessary because changes affect only listed prices and metadata; reverting bundled data restores the previous calculation behavior.
+**Exit criteria:** automated criteria PASS locally: same existing behavior outside corrected models; exact standard and long-context rates; 272,000 stays at base and 272,001 selects tier; Sonnet 5 remains at $2/$10 after Sep 1; provenance is queryable and in the frontend snapshot; unknown models remain unknown. Deployment/production criteria remain FAIL/PENDING until the Azure-to-GitHub mirror succeeds, CI passes on GitHub, and production pricing snapshot is verified. No schema migration is needed. Feature-flag rollback is unnecessary because changes affect only listed prices and metadata; reverting bundled data restores the previous calculation behavior.
