@@ -510,7 +510,10 @@ def test_resolve_export_month_defaults_to_previous_complete_month():
 
 
 @pytest.mark.asyncio
-async def test_monthly_export_returns_csv_with_total_row(dash_client, valid_jwt_token):
+async def test_monthly_export_returns_csv_with_total_row(dash_client, valid_jwt_token, monkeypatch):
+    from burnlens_cloud.config import settings
+
+    monkeypatch.setitem(settings.plan_history_days, "cloud", 365)
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
         mock_query.return_value = _export_rows()
         response = await dash_client.get(
@@ -539,7 +542,10 @@ async def test_monthly_export_returns_csv_with_total_row(dash_client, valid_jwt_
 
 
 @pytest.mark.asyncio
-async def test_monthly_export_queries_only_that_month(dash_client, valid_jwt_token):
+async def test_monthly_export_queries_only_that_month(dash_client, valid_jwt_token, monkeypatch):
+    from burnlens_cloud.config import settings
+
+    monkeypatch.setitem(settings.plan_history_days, "cloud", 365)
     with patch("burnlens_cloud.dashboard_api.execute_query") as mock_query:
         mock_query.return_value = []
         response = await dash_client.get(
