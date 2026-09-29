@@ -8,11 +8,6 @@ qualified with the package it covers.
 
 ## [Unreleased]
 
-### Added
-- **Workflow-run identity for Agent Economics.** The local store can attach
-  requests and agent runs to workspace-scoped workflow runs and scopes run
-  economics to the root workspace. Legacy records remain valid.
-
 ### Changed
 - **Public product contract.** Homepage, `/scan`, `/demo`, `/for/agencies`,
   docs, README, and CLI now derive from one claim set: `burnlens scan` first,
@@ -32,6 +27,13 @@ qualified with the package it covers.
   observable browser and billing transitions. Local `burnlens scan` is not
   tracked. `first_sync` is reserved; activation is `economics_visible` on the
   dashboard once spend exists.
+
+## [OSS `burnlens` v1.26.1] — 2026-09-29
+
+### Added
+- **Workspace-scoped workflow-run identity.** Requests and agent runs can link
+  to workflow runs, and recursive run economics stay within the root workspace.
+  Existing ledger costs and legacy records remain unchanged.
 
 ## [OSS `burnlens` v1.26.0] — 2026-09-03
 
