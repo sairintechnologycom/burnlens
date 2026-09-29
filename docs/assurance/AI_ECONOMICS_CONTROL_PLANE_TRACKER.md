@@ -35,7 +35,7 @@ The relational store is sufficient for the current relationships; no graph datab
 | Unknown-model handling | PARTIAL | `unpriced` class and zero sentinel; proxy rejection and scan warnings | `burnlens/cost/calculator.py:97`; `tests/test_unpriced_model_blocked.py` | Some documentation/UI still describes or renders sentinel zero as known zero | Preserve classification across all surfaces |
 | Workspace / app / repo identity | PARTIAL | Request fields, workspace metadata, repo-derived workflow IDs | `burnlens/storage/database.py:15`; `burnlens/proxy/interceptor.py:1480`; `tests/test_economics_graph_phase_c.py` | No first-class application/project relationships | Add relationships only for proven queries |
 | Agent/workflow/run identity | SHIPPED | First-class local agent/workflow/workflow-run/agent-run records, optional request links, and workspace-scoped recursive run economics | `burnlens/storage/database.py`; `burnlens/storage/agent_economics.py`; `burnlens/storage/models.py`; `burnlens/proxy/interceptor.py`; `tests/test_phase1_agent_economics.py`; PyPI `burnlens` v1.26.1 | Legacy agent/workflow/run keys remain globally unique and workspace relationship safety is application-validated rather than enforced with composite foreign keys | Keep legacy IDs compatible; strengthen constraints only if deployment evidence supports a safe additive migration |
-| Trace/model/tool/retry graph | PARTIAL; Phase 3A implemented locally | W3C trace capture, session/trace view, tool-call count, optional explicit parent/retry/fallback request references and workflow-run graph projection | `burnlens/proxy/interceptor.py`; `burnlens/analysis/runs.py`; `burnlens/storage/database.py`; `burnlens/storage/agent_economics.py`; `tests/test_execution_relationships.py` | Tool identity, own span IDs, internal attempt evidence, and cloud graph persistence remain absent | Release 3A after CI; retain caller-reported provenance |
+| Trace/model/tool/retry graph | PARTIAL; Phase 3A SHIPPED in v1.27.0 | W3C trace capture, session/trace view, tool-call count, optional explicit parent/retry/fallback request references and workflow-run graph projection | `burnlens/proxy/interceptor.py`; `burnlens/analysis/runs.py`; `burnlens/storage/database.py`; `burnlens/storage/agent_economics.py`; `tests/test_execution_relationships.py`; release evidence below | Tool identity, own span IDs, internal attempt evidence, and cloud graph persistence remain absent | Plan 3B tool/source links; retain caller-reported provenance |
 | Outcomes / cost per outcome | SHIPPED | Accepted/rejected/failed, derived PR outcomes, workflow economics | `burnlens/storage/database.py:185`; `burnlens/storage/database.py:1448`; `tests/test_economics_graph_phase_b.py` | Outcome links to workflow/time window, not workflow-run ID | Reuse, then add run linkage |
 | Budgets / proxy routing | SHIPPED | Hard caps, budget counters, optional budget downgrade, semantic cache | `burnlens/proxy/router.py`; `burnlens/config.py`; `docs/BUDGET_ENFORCEMENT.md` | No quality-aware shadow route comparison | Keep distinct from Decision Fabric |
 | Waste detection | SHIPPED | Deterministic prompt/context, duplicate, overkill, cache, tool-schema and RAG detectors | `burnlens/analysis/waste.py:161` | Not execution-graph-aware | Extend after graph links exist |
@@ -52,7 +52,7 @@ The relational store is sufficient for the current relationships; no graph datab
 | 0 | Baseline and contract protection | SHIPPED; revalidation needed | `tests/test_phase0_regressions.py`, `docs/assurance/PHASE_0_BASELINE_CERTIFICATION_REPORT.md`; validate actual server reachability and public truth |
 | 1 | Model/provider registry foundation | SHIPPED for bounded pricing evidence scope (1A–1C) | Phase 1A–1C implementation and production evidence below; this does not claim a complete model registry |
 | 2 | Execution identity | SHIPPED | Phase 2A released as PyPI `burnlens` v1.26.1; CI, publish workflow, installed wheel migration, and workspace-isolation smoke passed. See evidence below. |
-| 3 | Execution graph | PARTIAL; 3A implemented locally | Explicit ledger request links and mounted workflow-run graph; package build and installed-wheel smoke pass. CI/publication pending; tool/attempt slices remain separate. |
+| 3 | Execution graph | PARTIAL; 3A SHIPPED | Explicit ledger request links and mounted workflow-run graph released in v1.27.0; GitHub CI, PyPI publication, and published-wheel smoke pass. Tool/attempt slices remain separate. |
 | 4 | Agent economics | PARTIAL | Agent/workflow/task/run rollups; separate action cost lacks source ledger link |
 | 5 | Cost of failure | PARTIAL | HTTP failures and heuristic retry spend; recovery/fallback/intervention economics incomplete |
 | 6 | Graph-aware waste | PARTIAL | Request-level detectors shipped; execution graph detectors absent |
@@ -131,7 +131,7 @@ The relational store is sufficient for the current relationships; no graph datab
 
 ## Session handoff — next work
 
-**Verified repository state (updated 2026-09-29):** Phase 1A, 1B, 1C, and Phase 2 execution identity are complete. Phase 2A shipped as PyPI `burnlens` v1.26.1. Phase 3A is implemented locally: explicit request relationships, mounted workspace-scoped graph read, local backend tests, v1.27.0 build, and installed-wheel migration/tenant-isolation smoke pass. Next: review/commit, GitHub CI, then publish the proxy package and verify the published wheel. No commit, push, tag, or publication was performed in this increment. The Railway cloud deployment is not the target for this local SQLite capability.
+**Verified repository state (updated 2026-09-29):** Phase 1A, 1B, 1C, Phase 2 execution identity, and Phase 3A explicit request relationships are complete. Phase 3A shipped as PyPI `burnlens` v1.27.0 from `d879879b6c0477dbd2f421bda45bf8d4c94842e3`; GitHub CI, tag-triggered publication, and published-wheel migration/tenant-isolation smoke pass. The release commit and tag are synchronized to GitHub and Azure origin. Next: plan Phase 3B tool invocation/result identity and source-ledger links, keeping action costs from double-counting model charges. Phase 3 overall remains partial. The Railway cloud deployment is not the target for this local SQLite capability.
 
 The prior handoff incorrectly marked Phase 2 shipped based on entity/table presence alone. This source-checked status supersedes that conclusion. The tracker is the session handoff/memory source of truth; re-read it and current source before implementation in a new session.
 
@@ -175,7 +175,7 @@ The prior handoff incorrectly marked Phase 2 shipped based on entity/table prese
 
 ## Phase 3 — Explicit execution graph relationships
 
-**Status: PARTIAL (2026-09-29); Phase 3A implemented locally, CI/publication pending.** A request already represents a model call, an agent run already represents a child agent, and `task_id` / `action_id` already provide optional step/action correlation. Phase 3A adds causal references around these records rather than duplicate financial events or introduce generic graph tables. Tool relationships and internal attempt evidence remain separate slices.
+**Status: PARTIAL (2026-09-29); Phase 3A COMPLETE, released in v1.27.0.** A request already represents a model call, an agent run already represents a child agent, and `task_id` / `action_id` already provide optional step/action correlation. Phase 3A adds causal references around these records rather than duplicate financial events or introduce generic graph tables. Tool relationships and internal attempt evidence remain separate slices.
 
 ### Source-checked baseline before Phase 3A
 
@@ -191,7 +191,7 @@ The prior handoff incorrectly marked Phase 2 shipped based on entity/table prese
 
 | Slice | Deliverable | Gate / boundary |
 |---|---|---|
-| **3A — implemented locally** | Explicit request parent/retry/fallback references; workspace-scoped workflow-run graph read; distinct-ledger cost reconciliation | Caller supplies causality; CI/publication pending; proxy internal attempts are not reconstructed |
+| **3A — COMPLETE, v1.27.0** | Explicit request parent/retry/fallback references; workspace-scoped workflow-run graph read; distinct-ledger cost reconciliation | Caller supplies causality; CI, publication and published-wheel verification pass; proxy internal attempts are not reconstructed |
 | 3B | Tool invocation/result identity and request/action source links, reusing `AgentAction` where suitable | Agree invocation vs execution semantics and eliminate action/model cost overlap before claiming complete tool economics; no arguments/results by default |
 | 3C | Proxy-internal attempt evidence for streaming and non-streaming retries | Separate nonfinancial attempt telemetry from priced ledger events; absent usage/cost remains unknown, never invented as zero |
 | Later integration | Cloud sync/ingest/read projection, OTEL/Beacon adapters, run-linked outcomes | Separate end-to-end contracts and rollout evidence; no cloud graph claim from a local release |
@@ -249,15 +249,19 @@ The prior handoff incorrectly marked Phase 2 shipped based on entity/table prese
 | Focused regressions | PASS locally | Pinned environment: 136 passed across relationships, event contract, Agent Economics, runs view, provider hooks, retries, streaming, WAL, cache and tag plumbing. Final route/CORS and lifecycle checks: 25 passed after the header-exposure change. |
 | Full backend suite | PASS locally | `/tmp/bl-phase1a-venv/bin/python -m pytest tests/ -p no:cacheprovider -q`: 2,314 passed, 21 skipped. Required permission for local mock-server binds/DNS. Existing dashboard regression now uses temporary WAL paths instead of the real home WAL. |
 | Cloud contract and lint | PASS locally | Pinned cloud OpenAPI component snapshot unchanged (89 schemas); Ruff passes changed Python files; `git diff --check` passes |
-| Proxy package | BUILT locally | `packaging/burnlens-proxy/pyproject.toml` prepared for v1.27.0; existing build script produces wheel and source archive |
+| Proxy package | PUBLISHED | [PyPI v1.27.0](https://pypi.org/project/burnlens/1.27.0/) contains wheel and source archive; release tag points to `d879879b6c0477dbd2f421bda45bf8d4c94842e3` |
 | Installed-wheel smoke | PASS locally | Isolated v1.27.0 wheel matches source; migrates an actual installed-v1.26.1 database twice; mounted endpoint returns $2, excludes workspace B's $99, and preserves full totals on a one-request page |
-| GitHub CI / PyPI release | PENDING | No remote mutation or publication performed; published-package verification remains required before marking 3A complete |
+| GitHub CI | PASS | [Run 36537662622](https://github.com/sairintechnologycom/burnlens/actions/runs/36537662622) passed all three jobs on release commit `d879879`: backend 2,314 passed / 21 skipped; frontend 419 passed; browser checks 32 public-route tests and 3 dashboard checks passed |
+| PyPI publish workflow | PASS | Tag-triggered [run 36543137835](https://github.com/sairintechnologycom/burnlens/actions/runs/36543137835) built and published v1.27.0 from the same CI-passed commit |
+| Published-wheel verification | PASS | Refreshed PyPI index and installed `burnlens==1.27.0` into an isolated temporary target; source parity, actual v1.26.1 migration twice, mounted graph, pagination, $2 ledger, and exclusion of workspace B's $99 all pass |
+
+**Published artifact evidence:** PyPI reports wheel `burnlens-1.27.0-py3-none-any.whl` SHA-256 `9eee5ab9e2685ebe5f18f380542f0a4ee72e3b5afdc2a18c44180bce45045d74` and source archive `burnlens-1.27.0.tar.gz` SHA-256 `df5c69bb9bf16eaae91a844f9cd8cd6650721ebdc2826d6a818d3e80b859faf0`. Publication and release smoke did not query tenant production data or rewrite ledger history.
 
 **Read contract details:** `X-BurnLens-Event-Id` is a correlation ID, not a durability receipt: recording remains asynchronous, and a stream that never starts may never create a ledger row. The local server exposes the header through its existing CORS policy. `totals.cost_complete` describes pricing availability of selected ledger requests only; it does not claim complete tool/attempt/intervention economics. Unknown or absent pricing classification makes it false. Legacy nodes with no event ID retain a local `ledger_row_id` for display, never a fabricated causal identity. Causal references remain `caller_reported`.
 
 **Known ceiling:** Recursive cycle checks can be quadratic for a large connected request graph; the code names a materialized validated-link projection as the upgrade if measured latency warrants it. No new dependency or generic graph store was added.
 
-**Exit state: IMPLEMENTED LOCALLY, RELEASE PENDING.** Full Phase 3 remains partial. Next is repository CI and the proxy release, followed by published-wheel verification; then scope 3B tool/source links without combining independent action costs into the ledger total.
+**Exit state: COMPLETE for Phase 3A.** Implementation, migration/compatibility tests, local regressions, all required GitHub CI jobs, PyPI publication, and published-wheel verification pass. Full Phase 3 remains partial. Next: plan 3B tool/source links without combining independent action costs into the ledger total.
 
 ## Phase 1C — Surface pricing evidence accurately
 
