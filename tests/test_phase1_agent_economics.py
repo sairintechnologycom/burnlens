@@ -5,16 +5,15 @@ workspace isolation, and the golden coding agent journey without altering canoni
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import aiosqlite
 import pytest
 
 from burnlens.storage.agent_economics import (
     get_agent,
-    get_agent_economics,
+    get_agent_run,
+    get_workflow_run,
     get_run_economics,
     get_task_economics,
     get_workflow_economics,
@@ -24,6 +23,7 @@ from burnlens.storage.agent_economics import (
     insert_agent_run,
     insert_agent_task,
     insert_agent_workflow,
+    insert_workflow_run,
     list_agents,
 )
 from burnlens.storage.database import (
@@ -39,6 +39,7 @@ from burnlens.storage.models import (
     AgentWorkflow,
     Outcome,
     RequestRecord,
+    WorkflowRun,
 )
 
 
@@ -96,7 +97,7 @@ def test_layer1_unit_domain_entities():
 
 @pytest.mark.asyncio
 async def test_layer2_contract_agent_tables_and_columns(test_db):
-    """Verify that all 5 agent tables and 6 nullable correlation columns exist."""
+    """Verify agent/workflow tables and nullable request correlation columns exist."""
     async with aiosqlite.connect(test_db) as db:
         # Check tables
         cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -107,6 +108,7 @@ async def test_layer2_contract_agent_tables_and_columns(test_db):
             "agent_runs",
             "agent_tasks",
             "agent_actions",
+            "workflow_runs",
         }
         for t in required_tables:
             assert t in tables, f"Missing table {t}"
@@ -117,6 +119,7 @@ async def test_layer2_contract_agent_tables_and_columns(test_db):
         required_columns = {
             "agent_id",
             "workflow_id",
+            "workflow_run_id",
             "run_id",
             "task_id",
             "action_id",
@@ -152,6 +155,115 @@ async def test_layer2_contract_backward_compatibility(test_db):
         assert row[0] == 0.0075
         assert row[1] is None
         assert row[2] is None
+
+
+@pytest.mark.asyncio
+async def test_workflow_run_identity_is_workspace_scoped_and_links_are_optional(test_db):
+    workflow = AgentWorkflow(workflow_id="shared-workflow", name="Support", workspace_id="ws-a")
+    await insert_agent_workflow(test_db, workflow)
+    await insert_workflow_run(
+        test_db,
+        WorkflowRun(workflow_run_id="exec-1", workflow_id="shared-workflow", workspace_id="ws-a"),
+    )
+    await insert_agent_workflow(
+        test_db, AgentWorkflow(workflow_id="workflow-b", name="Support", workspace_id="ws-b")
+    )
+    await insert_workflow_run(
+        test_db,
+        WorkflowRun(workflow_run_id="exec-1", workflow_id="workflow-b", workspace_id="ws-b"),
+    )
+
+    assert (await get_workflow_run(test_db, "exec-1", "ws-a")).workspace_id == "ws-a"
+    assert (await get_workflow_run(test_db, "exec-1", "ws-b")).workspace_id == "ws-b"
+    assert await get_workflow_run(test_db, "exec-1", "ws-c") is None
+    await insert_agent_run(
+        test_db,
+        AgentRun(
+            run_id="agent-exec-1", agent_id="agent-a", workflow_run_id="exec-1",
+            workflow_id="shared-workflow", workspace_id="ws-a",
+        ),
+    )
+    assert (await get_agent_run(test_db, "agent-exec-1", "ws-a")).workflow_run_id == "exec-1"
+    with pytest.raises(ValueError, match="another workspace"):
+        await insert_agent_run(
+            test_db,
+            AgentRun(
+                run_id="agent-exec-c", agent_id="agent-c", workflow_run_id="exec-1",
+                workspace_id="ws-c",
+            ),
+        )
+
+    request = RequestRecord(
+        provider="openai", model="gpt-4o", request_path="/v1/chat/completions",
+        cost_usd=0.25, workspace_id="ws-a", tags={"workflow_run_id": "exec-1"},
+    )
+    assert request.workflow_run_id == "exec-1"
+    row_id = await insert_request(test_db, request)
+    async with aiosqlite.connect(test_db) as db:
+        cursor = await db.execute("SELECT workflow_run_id FROM requests WHERE id = ?", (row_id,))
+        assert (await cursor.fetchone())[0] == "exec-1"
+
+
+@pytest.mark.asyncio
+async def test_workflow_run_schema_migration_is_idempotent(test_db):
+    async with aiosqlite.connect(test_db) as db:
+        # Model an existing pre-Phase-2A database; startup migration restores
+        # only the additive identity structures and leaves economic rows alone.
+        await db.execute("DROP TABLE workflow_runs")
+        await db.execute("DROP INDEX idx_agent_runs_workflow_run_id")
+        await db.execute("DROP INDEX idx_requests_workflow_run_id")
+        await db.execute("ALTER TABLE agent_runs DROP COLUMN workflow_run_id")
+        await db.execute("ALTER TABLE requests DROP COLUMN workflow_run_id")
+        await db.commit()
+    await init_db(test_db)
+    await init_db(test_db)
+    async with aiosqlite.connect(test_db) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        request_columns = {row[1] for row in await cursor.fetchall()}
+        cursor = await db.execute("PRAGMA table_info(agent_runs)")
+        run_columns = {row[1] for row in await cursor.fetchall()}
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_runs'"
+        )
+        assert "workflow_run_id" in request_columns
+        assert "workflow_run_id" in run_columns
+        assert await cursor.fetchone()
+
+
+@pytest.mark.asyncio
+async def test_agent_identity_rejects_cross_workspace_reuse_and_parent(test_db):
+    await insert_agent(test_db, Agent(agent_id="shared-agent", name="Agent", workspace_id="ws-a"))
+    with pytest.raises(ValueError, match="another workspace"):
+        await insert_agent(test_db, Agent(agent_id="shared-agent", name="Agent", workspace_id="ws-b"))
+
+    await insert_agent_run(
+        test_db, AgentRun(run_id="parent-a", agent_id="shared-agent", workspace_id="ws-a")
+    )
+    with pytest.raises(ValueError, match="another workspace"):
+        await insert_agent_run(
+            test_db,
+            AgentRun(run_id="child-b", agent_id="other", parent_run_id="parent-a", workspace_id="ws-b"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_economics_does_not_include_other_workspace_requests(test_db):
+    await insert_agent_run(
+        test_db, AgentRun(run_id="run-a", agent_id="agent-a", workspace_id="ws-a")
+    )
+    for workspace_id, cost in (("ws-a", 1.25), ("ws-b", 50.0)):
+        await insert_request(
+            test_db,
+            RequestRecord(
+                provider="openai", model="gpt-4o", request_path="/v1/chat/completions",
+                cost_usd=cost, workspace_id=workspace_id, run_id="run-a",
+            ),
+        )
+
+    economics = await get_run_economics(test_db, "run-a", workspace_id="ws-a")
+    assert economics["total_rollup_spend_usd"] == 1.25
+    other_workspace = await get_run_economics(test_db, "run-a", workspace_id="ws-b")
+    assert other_workspace["total_rollup_spend_usd"] == 0.0
 
 
 # ===========================================================================

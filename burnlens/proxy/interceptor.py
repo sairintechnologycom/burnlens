@@ -199,7 +199,7 @@ _ALLOWED_TAGS = {
     "team", "feature", "app_id", "env", "repo", "branch", "commit_sha",
     "workspace_id", "org_id", "trace_id", "customer", "key_label", "service",
     "dev", "pr", "agent_id", "workflow_id", "session",
-    "run_id", "task_id", "action_id", "parent_run_id", "root_run_id"
+    "workflow_run_id", "run_id", "task_id", "action_id", "parent_run_id", "root_run_id"
 }
 
 

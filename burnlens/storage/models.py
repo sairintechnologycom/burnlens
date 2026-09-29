@@ -143,6 +143,7 @@ class RequestRecord:
     # Phase 1: BL-AE-001 Agent Economics correlation fields
     agent_id: str | None = None
     workflow_id: str | None = None
+    workflow_run_id: str | None = None
     run_id: str | None = None
     task_id: str | None = None
     action_id: str | None = None
@@ -154,6 +155,8 @@ class RequestRecord:
                 self.agent_id = self.tags.get("agent_id")
             if not self.workflow_id:
                 self.workflow_id = self.tags.get("workflow_id")
+            if not self.workflow_run_id:
+                self.workflow_run_id = self.tags.get("workflow_run_id")
             if not self.run_id:
                 self.run_id = self.tags.get("run_id")
             if not self.task_id:
@@ -459,12 +462,25 @@ class AgentWorkflow:
 
 
 @dataclass
+class WorkflowRun:
+    """A single execution of a registered workflow in one workspace."""
+
+    workflow_run_id: str
+    workflow_id: str
+    workspace_id: str = "default"
+    status: str = "active"
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime | None = None
+
+
+@dataclass
 class AgentRun:
     """A discrete execution run of an agent, supporting hierarchical parent-child relationships."""
 
     run_id: str
     agent_id: str
     workflow_id: str | None = None
+    workflow_run_id: str | None = None
     parent_run_id: str | None = None
     root_run_id: str | None = None
     workspace_id: str = "default"

@@ -31,6 +31,8 @@ The repository contains an earlier ten-phase Agent Economics and Governance prog
 
 The current source-traced engineering status and phase gates live in the [AI Economics Control Plane Engineering Tracker](assurance/AI_ECONOMICS_CONTROL_PLANE_TRACKER.md). The tracker supersedes older capability summaries when they conflict with current code.
 
+**Current handoff (2026-09-29):** Pricing evidence work Phase 1A–1C is complete. Phase 2A adds workflow-run identity and workspace-scoped run economics locally, with 93 focused regressions and lint passing. Release/full-suite validation remains pending; full test collection in the current environment is blocked by missing `pyotp`. Phase 2 remains partial until those gates pass. Defer Phase 3 execution graph. See the tracker’s “Session handoff — next work” section before making changes.
+
 The codebase includes provider/proxy and scan ingestion, cost and pricing, outcomes and cost per accepted outcome, waste and recommendations, projected and verified savings, budgets and hard caps, opt-in budget-aware model downgrade, semantic cache, agent economics and analyst modules, governance, runtime guardrails, and autonomy components. The tracker records where those capabilities are reachable and where certification remains incomplete. Existing behavior and cost totals remain compatibility constraints for every phase.
 
 The next roadmap fills in the evidence needed to make economic decisions dependable: model/pricing intelligence, a richer execution graph, failure-adjusted economics, and shadow decisions before broader control. Certification of existing governance or autonomy does not mean the future decision fabric is already complete.

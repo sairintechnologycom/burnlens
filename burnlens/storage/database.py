@@ -99,6 +99,27 @@ _CREATE_AGENT_WORKFLOWS_WORKSPACE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_agent_workflows_workspace ON agent_workflows (workspace_id);
 """
 
+_CREATE_WORKFLOW_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    workflow_run_id TEXT NOT NULL,
+    workflow_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL DEFAULT 'default',
+    status TEXT NOT NULL DEFAULT 'active',
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    PRIMARY KEY (workspace_id, workflow_run_id)
+);
+"""
+
+_CREATE_WORKFLOW_RUNS_WORKFLOW_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow
+ON workflow_runs (workspace_id, workflow_id, started_at);
+"""
+
+_CREATE_WORKFLOW_RUNS_ID_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_id ON workflow_runs (workflow_run_id);
+"""
+
 _CREATE_AGENT_RUNS_TABLE = """
 CREATE TABLE IF NOT EXISTS agent_runs (
     run_id        TEXT PRIMARY KEY,
@@ -177,6 +198,16 @@ CREATE INDEX IF NOT EXISTS idx_requests_workflow_id ON requests (workflow_id);
 
 _CREATE_REQUESTS_RUN_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_requests_run_id ON requests (run_id);
+"""
+
+_CREATE_REQUESTS_WORKFLOW_RUN_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_requests_workflow_run_id
+ON requests (workspace_id, workflow_run_id);
+"""
+
+_CREATE_AGENT_RUNS_WORKFLOW_RUN_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_agent_runs_workflow_run_id
+ON agent_runs (workspace_id, workflow_run_id);
 """
 
 _CREATE_REQUESTS_TASK_INDEX = """
@@ -776,7 +807,7 @@ async def migrate_add_agent_correlation_fields(db_path: str) -> None:
         columns = {row[1] for row in await cursor.fetchall()}
 
         fields = [
-            "agent_id", "workflow_id", "run_id", "task_id", "action_id", "parent_run_id"
+            "agent_id", "workflow_id", "workflow_run_id", "run_id", "task_id", "action_id", "parent_run_id"
         ]
         added = []
         for col in fields:
@@ -788,6 +819,7 @@ async def migrate_add_agent_correlation_fields(db_path: str) -> None:
         await db.execute(_CREATE_REQUESTS_WORKFLOW_INDEX)
         await db.execute(_CREATE_REQUESTS_RUN_INDEX)
         await db.execute(_CREATE_REQUESTS_TASK_INDEX)
+        await db.execute(_CREATE_REQUESTS_WORKFLOW_RUN_INDEX)
         await db.commit()
 
         if added:
@@ -805,11 +837,19 @@ async def migrate_add_agent_economics_tables(db_path: str) -> None:
 
         await db.execute(_CREATE_AGENT_WORKFLOWS_TABLE)
         await db.execute(_CREATE_AGENT_WORKFLOWS_WORKSPACE_INDEX)
+        await db.execute(_CREATE_WORKFLOW_RUNS_TABLE)
+        await db.execute(_CREATE_WORKFLOW_RUNS_WORKFLOW_INDEX)
+        await db.execute(_CREATE_WORKFLOW_RUNS_ID_INDEX)
 
         await db.execute(_CREATE_AGENT_RUNS_TABLE)
+        cursor = await db.execute("PRAGMA table_info(agent_runs)")
+        run_columns = {row[1] for row in await cursor.fetchall()}
+        if "workflow_run_id" not in run_columns:
+            await db.execute("ALTER TABLE agent_runs ADD COLUMN workflow_run_id TEXT")
         await db.execute(_CREATE_AGENT_RUNS_WORKSPACE_INDEX)
         await db.execute(_CREATE_AGENT_RUNS_PARENT_INDEX)
         await db.execute(_CREATE_AGENT_RUNS_ROOT_INDEX)
+        await db.execute(_CREATE_AGENT_RUNS_WORKFLOW_RUN_INDEX)
 
         await db.execute(_CREATE_AGENT_TASKS_TABLE)
         await db.execute(_CREATE_AGENT_TASKS_WORKSPACE_INDEX)
@@ -2048,8 +2088,8 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
                 tool_calls,
-                agent_id, workflow_id, run_id, task_id, action_id, parent_run_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                agent_id, workflow_id, workflow_run_id, run_id, task_id, action_id, parent_run_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -2105,6 +2145,7 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.tool_calls,
                 record.agent_id or tags.get("agent_id") or None,
                 record.workflow_id or tags.get("workflow_id") or None,
+                record.workflow_run_id or tags.get("workflow_run_id") or None,
                 record.run_id or tags.get("run_id") or None,
                 record.task_id or tags.get("task_id") or None,
                 record.action_id or tags.get("action_id") or None,

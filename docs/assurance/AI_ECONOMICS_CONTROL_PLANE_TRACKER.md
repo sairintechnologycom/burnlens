@@ -34,7 +34,7 @@ The relational store is sufficient for the current relationships; no graph datab
 | Pricing provenance | PARTIAL | `pricing_version`, `pricing_class`, applied-rate fingerprint, cloud reconciliation, custom pricing, per-model source labels/links for GPT-5.6/Sonnet 5 | `burnlens/storage/database.py:46`; `burnlens/cost/calculator.py:95`; `burnlens/cost/pricing_data/openai.json`; `burnlens/cost/pricing_data/anthropic.json`; `frontend/src/app/llm-pricing/page.tsx`; `burnlens_cloud/settings_api.py:193` | No archived price snapshots; most catalog entries have no independently recorded provider source | Add sources incrementally; label absent provenance as unverified |
 | Unknown-model handling | PARTIAL | `unpriced` class and zero sentinel; proxy rejection and scan warnings | `burnlens/cost/calculator.py:97`; `tests/test_unpriced_model_blocked.py` | Some documentation/UI still describes or renders sentinel zero as known zero | Preserve classification across all surfaces |
 | Workspace / app / repo identity | PARTIAL | Request fields, workspace metadata, repo-derived workflow IDs | `burnlens/storage/database.py:15`; `burnlens/proxy/interceptor.py:1480`; `tests/test_economics_graph_phase_c.py` | No first-class application/project relationships | Add relationships only for proven queries |
-| Agent/workflow/run identity | SHIPPED | Agent/workflow/run/task/action tables and nullable request IDs | `burnlens/storage/database.py:67`; `burnlens/storage/agent_economics.py`; `tests/test_phase1_agent_economics.py` | IDs are not consistently protected by composite workspace constraints | Preserve additive model; strengthen constraints with migration evidence |
+| Agent/workflow/run identity | PARTIAL | First-class local agent/workflow/workflow-run/agent-run records, optional request links, and workspace-scoped recursive run economics | `burnlens/storage/database.py`; `burnlens/storage/agent_economics.py`; `burnlens/storage/models.py`; `burnlens/proxy/interceptor.py`; `tests/test_phase1_agent_economics.py` | Phase 2A is local and unreleased; legacy agent/workflow/run keys remain globally unique and their workspace relationship safety is application-validated rather than enforced with composite foreign keys | Validate migration and tenant isolation in CI/deployment; only add stronger constraints if deployment evidence supports a safe additive migration |
 | Trace/model/tool/retry graph | PARTIAL | W3C trace capture, session/trace run view, tool-call count, retry heuristic | `burnlens/proxy/interceptor.py:1447`; `burnlens/analysis/runs.py:97`; `burnlens/storage/database.py:1496` | No model/tool nodes, own span IDs, or causal retry edges | Link events to ledger before adding event storage |
 | Outcomes / cost per outcome | SHIPPED | Accepted/rejected/failed, derived PR outcomes, workflow economics | `burnlens/storage/database.py:185`; `burnlens/storage/database.py:1448`; `tests/test_economics_graph_phase_b.py` | Outcome links to workflow/time window, not workflow-run ID | Reuse, then add run linkage |
 | Budgets / proxy routing | SHIPPED | Hard caps, budget counters, optional budget downgrade, semantic cache | `burnlens/proxy/router.py`; `burnlens/config.py`; `docs/BUDGET_ENFORCEMENT.md` | No quality-aware shadow route comparison | Keep distinct from Decision Fabric |
@@ -50,8 +50,8 @@ The relational store is sufficient for the current relationships; no graph datab
 | Phase | Capability | Status | Gate / evidence |
 |---|---|---|---|
 | 0 | Baseline and contract protection | SHIPPED; revalidation needed | `tests/test_phase0_regressions.py`, `docs/assurance/PHASE_0_BASELINE_CERTIFICATION_REPORT.md`; validate actual server reachability and public truth |
-| 1 | Model/provider registry foundation | IN PROGRESS | Existing provider registry/pricing JSON; Phase 1A compatibility and Phase 1B verified-pricing increments are tracked below |
-| 2 | Execution identity | SHIPPED | Agent/workflow/run/task entities and correlation IDs |
+| 1 | Model/provider registry foundation | SHIPPED for bounded pricing evidence scope (1A–1C) | Phase 1A–1C implementation and production evidence below; this does not claim a complete model registry |
+| 2 | Execution identity | PARTIAL | Phase 2A adds local workflow-run identity and scoped run economics; deployment/full-suite validation remains pending, and legacy entity relations lack composite foreign keys |
 | 3 | Execution graph | PARTIAL | Parent/child run CTE and trace/session run view; explicit model/tool/retry edges absent |
 | 4 | Agent economics | PARTIAL | Agent/workflow/task/run rollups; separate action cost lacks source ledger link |
 | 5 | Cost of failure | PARTIAL | HTTP failures and heuristic retry spend; recovery/fallback/intervention economics incomplete |
@@ -128,6 +128,49 @@ The relational store is sufficient for the current relationships; no graph datab
 **Exit criteria:** PASS. Local focused tests passed (128); full backend suite passed (2,292 passed, 21 skipped); frontend suite/build passed (418 tests); GitHub CI passed; the production pricing page returned GPT-5.6 standard/long-context rates and Sonnet 5 at $2/$10. Pricing provenance remains in the committed data snapshot and is covered by tests. No schema migration is needed. Feature-flag rollback is unnecessary because changes affect only listed prices and metadata; reverting bundled data restores the previous calculation behavior.
 
 **Separate pipeline maintenance:** Azure mirror runs 309, 311, 312, and 313 failed because its `GITHUB_PAT` is invalid. Phase 1B and Phase 1C commits were pushed directly using the authenticated GitHub account with push permission, then CI and production deployments were verified. Repair the Azure secret before relying on future automatic mirroring.
+
+## Session handoff — next work
+
+**Verified repository state:** Phase 1A, 1B, and 1C are complete and production-verified. Phase 2 execution identity is **partial**, not shipped. Phase 2A implementation is now present locally, but has not been released or production-validated. Preserve legacy events and ledger costs. Do not start Phase 3 graph relationships until Phase 2 identity and tenant-isolation gates pass. Keep the ledger authoritative and use relational storage.
+
+The prior handoff incorrectly marked Phase 2 shipped based on entity/table presence alone. This source-checked status supersedes that conclusion. The tracker is the session handoff/memory source of truth; re-read it and current source before implementation in a new session.
+
+## Phase 2A — Workflow-run identity and tenant-safe attribution
+
+**Status: IMPLEMENTED LOCALLY — RELEASE VALIDATION PENDING.** Bounded to the existing local SQLite Agent Economics store. Keep the current globally unique external IDs for compatibility, but reject attempts to move an existing ID between workspaces. Add a first-class workflow-run table keyed by `(workspace_id, workflow_run_id)`, optional links from requests and agent runs, and workspace-scoped recursive run economics. Do not rebuild the ledger or existing identity tables. Cloud Agent Economics persistence is not present in the inspected source and is outside this increment.
+
+### Phase output / implementation plan
+
+- **A. Current state:** `agents`, `agent_workflows`, and `agent_runs` exist; `requests` has nullable agent/workflow/run/task/action correlation. `agent_runs.parent_run_id` supports recursive CTE economics. These tables are local SQLite, with globally unique IDs and workspace columns but no composite foreign keys.
+- **B. Gap:** Workflow execution instances have no entity of their own. `get_run_economics()` traverses and aggregates requests/actions without resolving/scoping to the root run's workspace. Existing `INSERT OR REPLACE` upserts can replace another workspace's entity when IDs collide.
+- **C. Proposed change:** Add `WorkflowRun` and an additive `workflow_runs` table with composite workspace identity; optionally attach it to requests and agent runs; reject cross-workspace ID reuse/parent association; scope run-tree traversal and spend to the root workspace. Keep null/legacy identity valid.
+- **D. Graph impact:** Add `Workflow → WorkflowRun → AgentRun` and optional `Request → WorkflowRun` links. No model-call/tool-call/retry nodes in this phase.
+- **E. Database changes:** Idempotently create the new table and indexes; add nullable `workflow_run_id` to requests/agent_runs. No historical backfill and no rewrite of existing primary keys. Rollback is feature/data inert: code can stop reading/writing the additive fields; leave additive columns/table in place to avoid destructive rollback.
+- **F. API changes:** No public HTTP API changes. Extend storage dataclasses/CRUD and proxy identity-tag extraction with optional `workflow_run_id`.
+- **G. UI changes:** None.
+- **H. Security impact:** Validate workspace consistency on known workflow/run/parent relationships; avoid cross-tenant run-tree traversal and request/action aggregation. IDs remain globally unique to preserve old schema constraints. Unknown/out-of-order telemetry remains nullable/unlinked rather than being assigned across workspaces.
+- **I. Tests:** Legacy request insert without new IDs; workflow-run CRUD and workspace-scoped IDs; request/agent-run optional links; reject cross-workspace duplicate IDs and known cross-workspace parents; same run IDs in request tags do not cause cross-workspace rollup; existing parent/child rollup remains numerically identical within its workspace; idempotent schema initialization.
+- **J. Deployment:** Existing additive SQLite startup migrations; no flag is needed because links are optional and legacy paths remain unchanged. Deploy internally first and monitor failed identity writes / orphan-link coverage before broad use.
+- **K. Rollback:** Disable optional identity extraction/link writes in code if needed. Existing `cost_usd` and old records are untouched; additive schema can safely remain.
+- **L. Expected outcome:** BurnLens can represent a workflow execution separately from its reusable workflow definition and safely calculate a run's economics within one workspace.
+- **M. Exit criteria:** Migration works on a fresh and existing schema; workspace collisions are rejected; run traversal/spend stay within one workspace; legacy events and existing totals remain compatible; focused tests and the relevant regression suite pass.
+
+**Expected files:** `burnlens/storage/models.py`, `burnlens/storage/database.py`, `burnlens/storage/agent_economics.py`, `burnlens/proxy/interceptor.py`, focused `tests/test_phase1_agent_economics.py` coverage, and this tracker. Any expansion beyond these files requires evidence from implementation.
+
+### Phase 2A implementation evidence
+
+| Work item | Status | Evidence |
+|---|---|---|
+| Add first-class workspace-scoped workflow-run identity and optional request/agent-run links | DONE locally | `burnlens/storage/models.py`; `burnlens/storage/database.py`; `burnlens/storage/agent_economics.py`; `burnlens/proxy/interceptor.py` |
+| Prevent known cross-workspace identity reuse and parent/run association | DONE locally | Workspace checks on identity upserts and agent-run relationships in `burnlens/storage/agent_economics.py` |
+| Scope recursive traversal, request spend, action spend, and retry spend to root workspace | DONE locally | `get_run_economics()` in `burnlens/storage/agent_economics.py`; historical cross-workspace parents are excluded by the scoped CTE |
+| Existing-schema migration and backward compatibility | PASS locally | Migration test drops Phase 2A additions, reruns `init_db()` twice, then verifies fields/table are restored; legacy no-ID request test passes |
+| Focused regression suite | PASS | 93 tests passed across Agent Economics, economics graph, analyst, agent API/MCP, and tag plumbing |
+| Lint for changed Python files | PASS | `uv run ruff check` on the five changed Python files |
+| Full repository suite | BLOCKED in environment | Collection fails for four existing cloud/TOTP test modules because `pyotp` is not installed; not a failure in Phase 2A code |
+| Production deployment and post-deploy validation | PENDING | Not performed in this increment |
+
+**Exit state:** Implementation and local acceptance checks pass. Phase 2A and Phase 2 remain PARTIAL until full CI collection passes with declared dependencies and the additive migration/tenant-isolation behavior is validated in the deployment environment. No schema backfill or cost rewrite was performed.
 
 ## Phase 1C — Surface pricing evidence accurately
 

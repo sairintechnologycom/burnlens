@@ -5,9 +5,8 @@ spend rollups, and unit economics without modifying canonical ledger calculation
 """
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import aiosqlite
@@ -18,6 +17,7 @@ from burnlens.storage.models import (
     AgentRun,
     AgentTask,
     AgentWorkflow,
+    WorkflowRun,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 async def insert_agent(db_path: str, agent: Agent) -> str:
     """Register an agent with BurnLens."""
     async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT workspace_id FROM agents WHERE agent_id = ?", (agent.agent_id,)
+        )
+        existing = await cursor.fetchone()
+        if existing and existing[0] != agent.workspace_id:
+            raise ValueError("agent_id is already registered to another workspace")
         await db.execute(
             """
             INSERT INTO agents (
@@ -42,6 +48,7 @@ async def insert_agent(db_path: str, agent: Agent) -> str:
                 environment = excluded.environment,
                 purpose = excluded.purpose,
                 status = excluded.status
+            WHERE agents.workspace_id = excluded.workspace_id
             """,
             (
                 agent.agent_id,
@@ -114,11 +121,22 @@ async def list_agents(db_path: str, workspace_id: str = "default") -> list[Agent
 async def insert_agent_workflow(db_path: str, workflow: AgentWorkflow) -> str:
     """Register an agent workflow."""
     async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT workspace_id FROM agent_workflows WHERE workflow_id = ?",
+            (workflow.workflow_id,),
+        )
+        existing = await cursor.fetchone()
+        if existing and existing[0] != workflow.workspace_id:
+            raise ValueError("workflow_id is already registered to another workspace")
         await db.execute(
             """
-            INSERT OR REPLACE INTO agent_workflows (
+            INSERT INTO agent_workflows (
                 workflow_id, name, workspace_id, created_at
             ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(workflow_id) DO UPDATE SET
+                name = excluded.name,
+                created_at = excluded.created_at
+            WHERE agent_workflows.workspace_id = excluded.workspace_id
             """,
             (
                 workflow.workflow_id,
@@ -131,19 +149,146 @@ async def insert_agent_workflow(db_path: str, workflow: AgentWorkflow) -> str:
     return workflow.workflow_id
 
 
+async def insert_workflow_run(db_path: str, run: WorkflowRun) -> str:
+    """Register one workflow execution without conflating workspace identities."""
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT workspace_id FROM agent_workflows WHERE workflow_id = ?",
+            (run.workflow_id,),
+        )
+        workflow = await cursor.fetchone()
+        if workflow and workflow[0] != run.workspace_id:
+            raise ValueError("workflow_id belongs to another workspace")
+
+        for table in ("agent_runs", "requests"):
+            cursor = await db.execute(
+                f"SELECT 1 FROM {table} WHERE workflow_run_id = ? AND "
+                "COALESCE(workspace_id, 'default') != ? LIMIT 1",
+                (run.workflow_run_id, run.workspace_id),
+            )
+            if await cursor.fetchone():
+                raise ValueError("workflow_run_id is referenced by another workspace")
+
+        await db.execute(
+            """
+            INSERT INTO workflow_runs (
+                workflow_run_id, workflow_id, workspace_id, status, started_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(workspace_id, workflow_run_id) DO UPDATE SET
+                workflow_id = excluded.workflow_id,
+                status = excluded.status,
+                started_at = excluded.started_at,
+                completed_at = excluded.completed_at
+            """,
+            (
+                run.workflow_run_id,
+                run.workflow_id,
+                run.workspace_id,
+                run.status,
+                run.started_at.isoformat(),
+                run.completed_at.isoformat() if run.completed_at else None,
+            ),
+        )
+        await db.commit()
+    return run.workflow_run_id
+
+
+async def get_workflow_run(
+    db_path: str, workflow_run_id: str, workspace_id: str
+) -> WorkflowRun | None:
+    """Get a workflow execution using its workspace-scoped identity."""
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            """SELECT workflow_run_id, workflow_id, workspace_id, status,
+                      started_at, completed_at
+               FROM workflow_runs WHERE workflow_run_id = ? AND workspace_id = ?""",
+            (workflow_run_id, workspace_id),
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return None
+    return WorkflowRun(
+        workflow_run_id=row[0],
+        workflow_id=row[1],
+        workspace_id=row[2],
+        status=row[3],
+        started_at=datetime.fromisoformat(row[4]),
+        completed_at=datetime.fromisoformat(row[5]) if row[5] else None,
+    )
+
+
 async def insert_agent_run(db_path: str, run: AgentRun) -> str:
     """Record an agent execution run."""
     async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute(
+            "SELECT workspace_id FROM agent_runs WHERE run_id = ?", (run.run_id,)
+        )
+        existing = await cursor.fetchone()
+        if existing and existing[0] != run.workspace_id:
+            raise ValueError("run_id is already registered to another workspace")
+        if run.parent_run_id:
+            cursor = await db.execute(
+                "SELECT workspace_id FROM agent_runs WHERE run_id = ?",
+                (run.parent_run_id,),
+            )
+            parent = await cursor.fetchone()
+            if parent and parent[0] != run.workspace_id:
+                raise ValueError("parent_run_id belongs to another workspace")
+        cursor = await db.execute(
+            "SELECT 1 FROM agent_runs WHERE parent_run_id = ? AND workspace_id != ? LIMIT 1",
+            (run.run_id, run.workspace_id),
+        )
+        if await cursor.fetchone():
+            raise ValueError("run_id is referenced as a parent by another workspace")
+        if run.workflow_id:
+            cursor = await db.execute(
+                "SELECT workspace_id FROM agent_workflows WHERE workflow_id = ?",
+                (run.workflow_id,),
+            )
+            workflow = await cursor.fetchone()
+            if workflow and workflow[0] != run.workspace_id:
+                raise ValueError("workflow_id belongs to another workspace")
+        cursor = await db.execute(
+            "SELECT workspace_id FROM agents WHERE agent_id = ?", (run.agent_id,)
+        )
+        agent = await cursor.fetchone()
+        if agent and agent[0] != run.workspace_id:
+            raise ValueError("agent_id belongs to another workspace")
+        if run.workflow_run_id:
+            cursor = await db.execute(
+                "SELECT 1 FROM workflow_runs WHERE workflow_run_id = ? AND workspace_id = ?",
+                (run.workflow_run_id, run.workspace_id),
+            )
+            matching_workflow_run = await cursor.fetchone()
+            if not matching_workflow_run:
+                cursor = await db.execute(
+                    "SELECT 1 FROM workflow_runs WHERE workflow_run_id = ? LIMIT 1",
+                    (run.workflow_run_id,),
+                )
+                if await cursor.fetchone():
+                    raise ValueError("workflow_run_id belongs to another workspace")
         await db.execute(
             """
-            INSERT OR REPLACE INTO agent_runs (
-                run_id, agent_id, workflow_id, parent_run_id, root_run_id, workspace_id, status, started_at, completed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO agent_runs (
+                run_id, agent_id, workflow_id, workflow_run_id, parent_run_id, root_run_id,
+                workspace_id, status, started_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id) DO UPDATE SET
+                agent_id = excluded.agent_id,
+                workflow_id = excluded.workflow_id,
+                workflow_run_id = excluded.workflow_run_id,
+                parent_run_id = excluded.parent_run_id,
+                root_run_id = excluded.root_run_id,
+                status = excluded.status,
+                started_at = excluded.started_at,
+                completed_at = excluded.completed_at
+            WHERE agent_runs.workspace_id = excluded.workspace_id
             """,
             (
                 run.run_id,
                 run.agent_id,
                 run.workflow_id,
+                run.workflow_run_id,
                 run.parent_run_id,
                 run.root_run_id,
                 run.workspace_id,
@@ -160,7 +305,7 @@ async def get_agent_run(
     db_path: str, run_id: str, workspace_id: str | None = None
 ) -> AgentRun | None:
     """Retrieve an agent run by ID."""
-    query = "SELECT run_id, agent_id, workflow_id, parent_run_id, root_run_id, workspace_id, status, started_at, completed_at FROM agent_runs WHERE run_id = ?"
+    query = "SELECT run_id, agent_id, workflow_id, workflow_run_id, parent_run_id, root_run_id, workspace_id, status, started_at, completed_at FROM agent_runs WHERE run_id = ?"
     params: list[Any] = [run_id]
     if workspace_id:
         query += " AND workspace_id = ?"
@@ -175,12 +320,13 @@ async def get_agent_run(
             run_id=row[0],
             agent_id=row[1],
             workflow_id=row[2],
-            parent_run_id=row[3],
-            root_run_id=row[4],
-            workspace_id=row[5],
-            status=row[6],
-            started_at=datetime.fromisoformat(row[7]),
-            completed_at=datetime.fromisoformat(row[8]) if row[8] else None,
+            workflow_run_id=row[3],
+            parent_run_id=row[4],
+            root_run_id=row[5],
+            workspace_id=row[6],
+            status=row[7],
+            started_at=datetime.fromisoformat(row[8]),
+            completed_at=datetime.fromisoformat(row[9]) if row[9] else None,
         )
 
 
@@ -393,18 +539,38 @@ async def get_run_economics(
     Parent Agent = $10, Child A = $3, Child B = $7 -> Total Rollup = $10.
     """
     async with aiosqlite.connect(db_path) as db:
+        root_params: tuple[Any, ...] = (run_id, workspace_id) if workspace_id else (run_id,)
+        root_query = "SELECT workspace_id FROM agent_runs WHERE run_id = ?"
+        if workspace_id:
+            root_query += " AND workspace_id = ?"
+        cursor = await db.execute(root_query, root_params)
+        root = await cursor.fetchone()
+        if not root:
+            return {
+                "run_id": run_id,
+                "total_rollup_spend_usd": 0.0,
+                "direct_spend_usd": 0.0,
+                "children_spend_usd": 0.0,
+                "retry_waste_usd": 0.0,
+                "child_runs_count": 0,
+                "children_breakdown": {},
+            }
+        workspace_id = root[0]
+
         # Find all runs in this hierarchy using a recursive CTE
         # Root run + all descendant children
         tree_query = """
             WITH RECURSIVE run_tree(r_id, p_id) AS (
-                SELECT run_id, parent_run_id FROM agent_runs WHERE run_id = ?
-                UNION ALL
+                SELECT run_id, parent_run_id FROM agent_runs
+                WHERE run_id = ? AND workspace_id = ?
+                UNION
                 SELECT r.run_id, r.parent_run_id FROM agent_runs r
                 JOIN run_tree rt ON r.parent_run_id = rt.r_id
+                WHERE r.workspace_id = ?
             )
             SELECT r_id, p_id FROM run_tree;
         """
-        cursor = await db.execute(tree_query, (run_id,))
+        cursor = await db.execute(tree_query, (run_id, workspace_id, workspace_id))
         tree_rows = await cursor.fetchall()
 
         all_run_ids = [r[0] for r in tree_rows] if tree_rows else [run_id]
@@ -418,14 +584,15 @@ async def get_run_economics(
                 COALESCE(SUM(tool_calls), 0)
             FROM requests
             WHERE (run_id = ? OR json_extract(tags, '$.run_id') = ?)
+              AND (workspace_id = ? OR (workspace_id IS NULL AND ? = 'default'))
         """
-        cursor = await db.execute(parent_spend_query, (run_id, run_id))
+        cursor = await db.execute(parent_spend_query, (run_id, run_id, workspace_id, workspace_id))
         direct_model_spend, direct_req_count, direct_tool_calls = await cursor.fetchone()
 
         # Direct actions
         cursor = await db.execute(
-            "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*) FROM agent_actions WHERE run_id = ?",
-            (run_id,),
+            "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*) FROM agent_actions WHERE run_id = ? AND workspace_id = ?",
+            (run_id, workspace_id),
         )
         direct_action_spend, direct_action_count = await cursor.fetchone()
 
@@ -441,14 +608,15 @@ async def get_run_economics(
                 SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*)
                 FROM requests
                 WHERE (run_id = ? OR json_extract(tags, '$.run_id') = ?)
+                  AND (workspace_id = ? OR (workspace_id IS NULL AND ? = 'default'))
                 """,
-                (c_id, c_id),
+                (c_id, c_id, workspace_id, workspace_id),
             )
             c_model_spend, c_reqs = await cursor.fetchone()
 
             cursor = await db.execute(
-                "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*) FROM agent_actions WHERE run_id = ?",
-                (c_id,),
+                "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*) FROM agent_actions WHERE run_id = ? AND workspace_id = ?",
+                (c_id, workspace_id),
             )
             c_action_spend, c_actions = await cursor.fetchone()
 
@@ -473,9 +641,10 @@ async def get_run_economics(
             SELECT COALESCE(SUM(cost_usd), 0.0)
             FROM requests
             WHERE (run_id IN ({placeholders}) OR json_extract(tags, '$.run_id') IN ({placeholders}))
+              AND (workspace_id = ? OR (workspace_id IS NULL AND ? = 'default'))
               AND status_code >= 400
             """,
-            all_run_ids + all_run_ids,
+            all_run_ids + all_run_ids + [workspace_id, workspace_id],
         )
         total_retry_waste = (await cursor.fetchone())[0]
 
