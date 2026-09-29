@@ -167,10 +167,10 @@ The prior handoff incorrectly marked Phase 2 shipped based on entity/table prese
 | Existing-schema migration and backward compatibility | PASS locally | Migration test drops Phase 2A additions, reruns `init_db()` twice, then verifies fields/table are restored; legacy no-ID request test passes |
 | Focused regression suite | PASS | 93 tests passed across Agent Economics, economics graph, analyst, agent API/MCP, and tag plumbing |
 | Lint for changed Python files | PASS | `uv run ruff check` on the five changed Python files |
-| Full repository suite | BLOCKED in environment | Collection fails for four existing cloud/TOTP test modules because `pyotp` is not installed; not a failure in Phase 2A code |
-| Production deployment and post-deploy validation | PENDING | Not performed in this increment |
+| Full repository suite | PASS in GitHub CI | [Run 36518979100](https://github.com/sairintechnologycom/burnlens/actions/runs/36518979100) passed backend pytest, contract/frontend, and public-route smoke. The preceding run failed two monthly-export tests because their fixed July 2026 fixture exceeded the 90-day retention window on 2026-09-29; `tests/test_dashboard_api.py` now fixes retention for those format/query tests. Local full-suite collection still lacks `pyotp`. |
+| Production deployment and post-deploy validation | NOT DEPLOYED | `/health` returned `{"status":"ok"}` for the existing production service. The Railway workflow was not triggered because its push path filter excludes these local `burnlens/storage/**` changes; the cloud app has no Agent Economics persistence to deploy in this increment. This is a health check only, not validation of deployed Phase 2A code. |
 
-**Exit state:** Implementation and local acceptance checks pass. Phase 2A and Phase 2 remain PARTIAL until full CI collection passes with declared dependencies and the additive migration/tenant-isolation behavior is validated in the deployment environment. No schema backfill or cost rewrite was performed.
+**Exit state:** Implementation, local acceptance checks, and GitHub CI pass. Phase 2A and Phase 2 remain PARTIAL until there is a release/deployment path for the local proxy/store and the additive migration/tenant-isolation behavior is validated on a deployed supported runtime. No schema backfill or cost rewrite was performed.
 
 ## Phase 1C — Surface pricing evidence accurately
 
