@@ -8,6 +8,11 @@ qualified with the package it covers.
 
 ## [Unreleased]
 
+### Added
+- **Workflow-run identity for Agent Economics.** The local store can attach
+  requests and agent runs to workspace-scoped workflow runs and scopes run
+  economics to the root workspace. Legacy records remain valid.
+
 ### Changed
 - **Public product contract.** Homepage, `/scan`, `/demo`, `/for/agencies`,
   docs, README, and CLI now derive from one claim set: `burnlens scan` first,
