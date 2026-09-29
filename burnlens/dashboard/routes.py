@@ -414,6 +414,25 @@ async def economics(
 # ---------------------------------------------------------------- /api/runs
 
 
+@router.get("/workflow-runs/{workflow_run_id}/graph")
+async def workflow_run_graph(
+    request: Request,
+    workflow_run_id: str,
+    workspace_id: str = Query(min_length=1, max_length=128),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> dict:
+    """Local dashboard projection; explicit workspace scope is mandatory."""
+    from burnlens.storage.agent_economics import get_workflow_run_graph
+
+    graph = await get_workflow_run_graph(
+        _db_path(request), workflow_run_id, workspace_id, limit, offset,
+    )
+    if graph is None:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+    return graph
+
+
 @router.get("/runs")
 async def runs(
     request: Request,

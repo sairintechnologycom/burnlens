@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from burnlens.storage.database import insert_request
-from burnlens.storage.models import RequestRecord
+from burnlens.storage.models import RequestRecord, uuid7
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ class WriteAheadLog:
     async def append_event(self, record: RequestRecord) -> None:
         """Append a record to the WAL file in a thread-safe / crash-resistant way."""
         self.wal_path.parent.mkdir(parents=True, exist_ok=True)
+        record.event_id = record.event_id or uuid7()
         record_dict = self._record_to_dict(record)
         line = json.dumps(record_dict) + "\n"
 

@@ -32,6 +32,7 @@ from burnlens.storage.database import (
     migrate_add_pricing_class,
     migrate_add_pricing_fingerprint,
     migrate_add_requested_model,
+    migrate_add_request_relationships,
 )
 from burnlens.storage.models import (
     GenAICostEvent,
@@ -272,6 +273,7 @@ async def test_database_migrations_and_insert(tmp_db):
     await migrate_add_pricing_class(tmp_db)
     await migrate_add_pricing_fingerprint(tmp_db)
     await migrate_add_requested_model(tmp_db)
+    await migrate_add_request_relationships(tmp_db)
 
     # 3. Check schema columns
     async with aiosqlite.connect(tmp_db) as db:

@@ -19,7 +19,7 @@ from burnlens.providers.base import Provider
 from burnlens.proxy.providers import strip_proxy_prefix
 from burnlens.proxy.streaming import extract_usage_from_stream, split_sse_events
 from burnlens.storage.database import insert_request
-from burnlens.storage.models import RequestRecord
+from burnlens.storage.models import REQUEST_RELATION_FIELDS, RequestRecord, uuid7
 
 if TYPE_CHECKING:
     from burnlens.alerts.engine import AlertEngine
@@ -721,6 +721,7 @@ async def handle_request(
                 hit_body, hit_provider, hit_model = cache_hit_res
                 
                 # Async logging task for cache hit
+                event_id = uuid7()
                 asyncio.create_task(_log_cache_hit(
                     provider_name=hit_provider,
                     model=hit_model,
@@ -733,15 +734,16 @@ async def handle_request(
                     db_path=db_path,
                     wal=wal,
                     worker=worker,
-                    original_headers=headers
+                    original_headers=headers,
+                    event_id=event_id,
                 ))
                 
                 if streaming:
                     from burnlens.cache.manager import reconstruct_streaming_chunks
                     stream_iter = reconstruct_streaming_chunks(hit_provider, hit_body)
-                    return 200, {"content-type": "text/event-stream"}, None, stream_iter
+                    return 200, {"content-type": "text/event-stream", "x-burnlens-event-id": event_id}, None, stream_iter
                 else:
-                    return 200, {"content-type": "application/json"}, hit_body, None
+                    return 200, {"content-type": "application/json", "x-burnlens-event-id": event_id}, hit_body, None
         except Exception as cache_exc:
             logger.warning("Cache pipeline failed (fail-open): %s", cache_exc)
 
@@ -1025,6 +1027,7 @@ async def _handle_non_streaming(
         request_id=_extract_request_id(provider.name, response.headers, resp_body),
         trace_id=meta["trace_id"],
         parent_span_id=meta.get("parent_span_id"),
+        **{column: meta.get(column) for column in REQUEST_RELATION_FIELDS},
         workspace_id=meta["workspace_id"],
         org_id=meta["org_id"],
         team=meta["team"],
@@ -1089,6 +1092,7 @@ async def _handle_non_streaming(
         if k.lower() not in _STRIP_RESPONSE_HEADERS
     }
 
+    resp_headers["x-burnlens-event-id"] = record.event_id
     return response.status_code, resp_headers, resp_body, None
 
 
@@ -1253,6 +1257,8 @@ async def _handle_streaming(
         if k.lower() not in _STRIP_RESPONSE_HEADERS
     }
 
+    # Correlation identity; persistence completes asynchronously when the stream closes.
+    resp_headers["x-burnlens-event-id"] = event_id
     return response.status_code, resp_headers, None, _stream_generator()
 
 
@@ -1373,10 +1379,11 @@ async def _log_streaming_usage(
         # — see its docstring for the per-provider shapes and the Bedrock gap.
         tool_calls=tool_calls,
         # Phase 1 fields
-        event_id=event_id,
+        event_id=event_id or uuid7(),
         request_id=request_id,
         trace_id=meta.get("trace_id") if meta else None,
         parent_span_id=meta.get("parent_span_id") if meta else None,
+        **{column: (meta or {}).get(column) for column in REQUEST_RELATION_FIELDS},
         workspace_id=meta.get("workspace_id") if meta else None,
         org_id=meta.get("org_id") if meta else None,
         team=meta.get("team") if meta else None,
@@ -1535,6 +1542,10 @@ def _resolve_canonical_metadata(headers: dict[str, str], tags: dict[str, str]) -
     return {
         "trace_id": trace_id,
         "parent_span_id": _extract_parent_span_id(headers),
+        **{
+            column: headers_lower.get("x-burnlens-" + column.replace("_", "-"))
+            for column in REQUEST_RELATION_FIELDS
+        },
         "workspace_id": workspace_id,
         "org_id": org_id,
         "team": team,
@@ -1618,6 +1629,7 @@ async def _log_cache_hit(
     wal: "WriteAheadLog | None",
     worker: "SQLitePersistenceWorker | None",
     original_headers: dict[str, str] | None = None,
+    event_id: str | None = None,
 ):
     try:
         from burnlens.providers.registry import get as _get_provider
@@ -1680,9 +1692,10 @@ async def _log_cache_hit(
             cache_hit=1,
             cache_saved_usd=saved_cost,
             tool_calls=tool_calls,
-            event_id=uuid7(),
+            event_id=event_id or uuid7(),
             trace_id=meta.get("trace_id"),
             parent_span_id=meta.get("parent_span_id"),
+            **{column: meta.get(column) for column in REQUEST_RELATION_FIELDS},
             workspace_id=meta.get("workspace_id"),
             org_id=meta.get("org_id"),
             team=meta.get("team") or tags.get("team"),

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import aiosqlite
 
 from burnlens.storage.models import AiAsset, DiscoveryEvent, ProviderSignature, RequestRecord, AnomalyEvent
+from burnlens.storage.models import REQUEST_RELATION_FIELDS
 
 if TYPE_CHECKING:
     from burnlens.storage.models import Outcome, WorkflowEconomics
@@ -611,6 +612,7 @@ async def init_db(db_path: str) -> None:
     await migrate_add_pricing_class(db_path)
     await migrate_add_pricing_fingerprint(db_path)
     await migrate_add_requested_model(db_path)
+    await migrate_add_request_relationships(db_path)
 
     # Economics graph Phase B: business outcomes
     await migrate_create_outcomes_table(db_path)
@@ -2040,6 +2042,57 @@ async def get_routing_events(
     return [dict(r) for r in rows]
 
 
+# Reused by insertion validation and the workflow-run graph projection.
+_REQUEST_LINKS_SQL = " UNION ALL ".join(
+    f"SELECT event_id AS source, {column} AS target, '{column}' AS kind "
+    f"FROM requests WHERE workspace_id = :workspace_id AND {column} IS NOT NULL"
+    for column in REQUEST_RELATION_FIELDS
+)
+
+
+async def migrate_add_request_relationships(db_path: str) -> None:
+    """Add optional causal links without rewriting the ledger."""
+    async with aiosqlite.connect(db_path) as db:
+        cursor = await db.execute("PRAGMA table_info(requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        for column in REQUEST_RELATION_FIELDS:
+            if column not in columns:
+                await db.execute(f"ALTER TABLE requests ADD COLUMN {column} TEXT")
+            await db.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_requests_{column} "
+                f"ON requests(workspace_id, {column})"
+            )
+        await db.commit()
+
+
+async def _validate_request_relationships(db: aiosqlite.Connection, record: RequestRecord) -> None:
+    """Drop invalid optional links; never drop a financial event over telemetry."""
+    conflicting = bool(record.retry_of_event_id and record.fallback_of_event_id)
+    for column in REQUEST_RELATION_FIELDS:
+        target = getattr(record, column)
+        if target is None:
+            continue
+        invalid = (
+            not isinstance(target, str) or not target or len(target) > 128
+            or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in target)
+            or target == record.event_id
+            or (conflicting and column != "parent_event_id")
+        )
+        if not invalid and record.workspace_id:
+            cursor = await db.execute(
+                f"""WITH RECURSIVE links AS ({_REQUEST_LINKS_SQL}), walk(id) AS (
+                    SELECT :target
+                    UNION
+                    SELECT links.target FROM links JOIN walk ON links.source = walk.id
+                ) SELECT 1 FROM walk WHERE id = :event_id LIMIT 1""",
+                {"workspace_id": record.workspace_id, "target": target, "event_id": record.event_id},
+            )
+            invalid = await cursor.fetchone() is not None
+        if invalid:
+            setattr(record, column, None)
+            logger.warning("Omitted invalid request relationship: %s", column)
+
+
 async def insert_request(db_path: str, record: RequestRecord) -> int:
     """Insert a RequestRecord and return its new row id.
 
@@ -2053,7 +2106,8 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
     from burnlens.storage.models import uuid7
 
     tags = record.tags or {}
-    event_id = record.event_id or uuid7()
+    record.event_id = record.event_id or uuid7()
+    event_id = record.event_id
     pricing_class = record.pricing_class or pricing_class_for(
         record.provider, record.model, record.source
     )
@@ -2067,6 +2121,10 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
         pricing_version = get_pricing_version(record.provider)
 
     async with aiosqlite.connect(db_path) as db:
+        if any(getattr(record, column) is not None for column in REQUEST_RELATION_FIELDS):
+            # Serialize validation with insertion, including two late-arriving cycle ends.
+            await db.execute("BEGIN IMMEDIATE")
+            await _validate_request_relationships(db, record)
         cursor = await db.execute(
             """
             INSERT OR IGNORE INTO requests (
@@ -2088,8 +2146,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 prompt_tools_tokens, prompt_rag_tokens,
                 prompt_history_tokens, cache_hit, cache_saved_usd,
                 tool_calls,
-                agent_id, workflow_id, workflow_run_id, run_id, task_id, action_id, parent_run_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                agent_id, workflow_id, workflow_run_id, run_id, task_id, action_id, parent_run_id,
+                parent_event_id, retry_of_event_id, fallback_of_event_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record.timestamp.isoformat(),
@@ -2150,6 +2209,9 @@ async def insert_request(db_path: str, record: RequestRecord) -> int:
                 record.task_id or tags.get("task_id") or None,
                 record.action_id or tags.get("action_id") or None,
                 record.parent_run_id or tags.get("parent_run_id") or None,
+                record.parent_event_id,
+                record.retry_of_event_id,
+                record.fallback_of_event_id,
             ),
         )
         await db.commit()

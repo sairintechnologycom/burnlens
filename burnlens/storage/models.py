@@ -11,6 +11,8 @@ import time
 _last_uuid7_ts = 0
 _uuid7_lock = threading.Lock()
 
+REQUEST_RELATION_FIELDS = ("parent_event_id", "retry_of_event_id", "fallback_of_event_id")
+
 
 def uuid7() -> str:
     """Generate an RFC 9562-compatible UUIDv7 string."""
@@ -82,6 +84,16 @@ class GenAICostEvent:
     cache_hit: int = 0
     cache_saved_usd: float = 0.0
     parent_span_id: str | None = None
+    parent_event_id: str | None = None
+    retry_of_event_id: str | None = None
+    fallback_of_event_id: str | None = None
+    agent_id: str | None = None
+    workflow_id: str | None = None
+    workflow_run_id: str | None = None
+    run_id: str | None = None
+    task_id: str | None = None
+    action_id: str | None = None
+    parent_run_id: str | None = None
 
 
 @dataclass
@@ -148,6 +160,9 @@ class RequestRecord:
     task_id: str | None = None
     action_id: str | None = None
     parent_run_id: str | None = None
+    parent_event_id: str | None = None
+    retry_of_event_id: str | None = None
+    fallback_of_event_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.tags:
@@ -225,6 +240,16 @@ class RequestRecord:
             request_id=self.request_id,
             trace_id=self.trace_id,
             parent_span_id=self.parent_span_id,
+            parent_event_id=self.parent_event_id,
+            retry_of_event_id=self.retry_of_event_id,
+            fallback_of_event_id=self.fallback_of_event_id,
+            agent_id=self.agent_id,
+            workflow_id=self.workflow_id,
+            workflow_run_id=self.workflow_run_id,
+            run_id=self.run_id,
+            task_id=self.task_id,
+            action_id=self.action_id,
+            parent_run_id=self.parent_run_id,
             workspace_id=self.workspace_id,
             org_id=self.org_id,
             team=self.team or (self.tags or {}).get("team"),
@@ -284,6 +309,16 @@ class RequestRecord:
             event_id=event.event_id,
             trace_id=event.trace_id,
             parent_span_id=event.parent_span_id,
+            parent_event_id=event.parent_event_id,
+            retry_of_event_id=event.retry_of_event_id,
+            fallback_of_event_id=event.fallback_of_event_id,
+            agent_id=event.agent_id,
+            workflow_id=event.workflow_id,
+            workflow_run_id=event.workflow_run_id,
+            run_id=event.run_id,
+            task_id=event.task_id,
+            action_id=event.action_id,
+            parent_run_id=event.parent_run_id,
             workspace_id=event.workspace_id,
             org_id=event.org_id,
             team=event.team,

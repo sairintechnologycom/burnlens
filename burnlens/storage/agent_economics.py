@@ -11,6 +11,7 @@ from typing import Any
 
 import aiosqlite
 
+from burnlens.storage.database import _REQUEST_LINKS_SQL
 from burnlens.storage.models import (
     Agent,
     AgentAction,
@@ -21,6 +22,130 @@ from burnlens.storage.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def get_workflow_run_graph(
+    db_path: str, workflow_run_id: str, workspace_id: str, limit: int = 100, offset: int = 0,
+) -> dict[str, Any] | None:
+    """Project explicit relationships; costs come only from distinct ledger rows."""
+    if not workspace_id or not 1 <= limit <= 500 or offset < 0:
+        raise ValueError("workspace_id and valid pagination are required")
+    params = {"workspace_id": workspace_id, "workflow_run_id": workflow_run_id,
+              "limit": limit, "offset": offset}
+    # ponytail: cycle walks can be quadratic in a large connected run; use a
+    # materialized validated-link projection if measured query latency warrants it.
+    cte = f"""WITH RECURSIVE run_tree(run_id) AS (
+        SELECT run_id FROM agent_runs
+        WHERE workspace_id = :workspace_id AND workflow_run_id = :workflow_run_id
+        UNION
+        SELECT r.run_id FROM agent_runs r JOIN run_tree t ON r.parent_run_id = t.run_id
+        WHERE r.workspace_id = :workspace_id
+    ), selected AS (
+        SELECT * FROM requests WHERE workspace_id = :workspace_id
+        AND (workflow_run_id = :workflow_run_id OR run_id IN (SELECT run_id FROM run_tree))
+    ), links AS ({_REQUEST_LINKS_SQL}), walk(source, target, id) AS (
+        SELECT source, target, target FROM links WHERE source IN (SELECT event_id FROM selected)
+        UNION
+        SELECT w.source, w.target, l.target FROM walk w JOIN links l ON l.source = w.id
+    ), valid_links AS (
+        SELECT l.* FROM links l JOIN requests d ON d.event_id = l.target
+        WHERE d.workspace_id = :workspace_id AND l.source IN (SELECT event_id FROM selected)
+        AND NOT EXISTS (SELECT 1 FROM walk w
+                        WHERE w.source = l.source AND w.target = l.target AND w.id = l.source)
+    ) """
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute("BEGIN")
+        cursor = await db.execute(
+            "SELECT * FROM workflow_runs WHERE workspace_id = :workspace_id "
+            "AND workflow_run_id = :workflow_run_id", params,
+        )
+        workflow = await cursor.fetchone()
+        if workflow is None:
+            return None
+        cursor = await db.execute(cte + """
+            SELECT COUNT(*) AS request_count, COALESCE(SUM(cost_usd), 0) AS ledger_cost_usd,
+                COALESCE(SUM(CASE WHEN EXISTS (
+                    SELECT 1 FROM valid_links l WHERE l.source = selected.event_id
+                ) THEN cost_usd ELSE 0 END), 0) AS linked_cost_usd,
+                COALESCE(SUM(pricing_class = 'unpriced'), 0) AS unpriced_count,
+                COALESCE(SUM(pricing_class IS NULL OR pricing_class NOT IN
+                    ('calculated', 'estimated', 'unpriced')), 0) AS unknown_pricing_count,
+                (SELECT COUNT(*) FROM links l WHERE source IN (SELECT event_id FROM selected)
+                 AND NOT EXISTS (SELECT 1 FROM requests d
+                     WHERE d.event_id = l.target AND d.workspace_id = :workspace_id)
+                ) AS unresolved_count,
+                (SELECT COUNT(*) FROM links l WHERE source IN (SELECT event_id FROM selected)
+                 AND EXISTS (SELECT 1 FROM walk w WHERE w.source = l.source
+                             AND w.target = l.target AND w.id = l.source)
+                ) AS invalid_count
+            FROM selected""", params)
+        totals = dict(await cursor.fetchone())
+        totals["unlinked_cost_usd"] = totals["ledger_cost_usd"] - totals["linked_cost_usd"]
+        totals["cost_complete"] = not (totals["unpriced_count"] or totals["unknown_pricing_count"])
+        cursor = await db.execute(cte + """
+            SELECT id AS ledger_row_id, event_id, timestamp, provider, model, cost_usd, status_code, pricing_class,
+                   agent_id, run_id, workflow_run_id, task_id, action_id,
+                   trace_id, parent_span_id
+            FROM selected ORDER BY timestamp, event_id, id LIMIT :limit OFFSET :offset""", params)
+        nodes = [dict(row) for row in await cursor.fetchall()]
+        page_ids = {node["event_id"] for node in nodes}
+        cursor = await db.execute(cte + """
+            SELECT l.*, CASE
+                WHEN EXISTS (SELECT 1 FROM walk w WHERE w.source = l.source
+                             AND w.target = l.target AND w.id = l.source) THEN 'invalid'
+                WHEN NOT EXISTS (SELECT 1 FROM requests d
+                    WHERE d.event_id = l.target AND d.workspace_id = :workspace_id) THEN 'unresolved'
+                WHEN NOT EXISTS (SELECT 1 FROM selected s WHERE s.event_id = l.target)
+                    THEN 'outside_selection'
+                ELSE 'resolved' END AS resolution
+            FROM links l WHERE source IN (
+                SELECT event_id FROM selected ORDER BY timestamp, event_id, id LIMIT :limit OFFSET :offset
+            ) ORDER BY source, kind""", params)
+        references = []
+        for row in await cursor.fetchall():
+            link = dict(row)
+            if link["resolution"] == "resolved" and link["target"] not in page_ids:
+                link["resolution"] = "outside_page"
+            link["provenance"] = "caller_reported"
+            references.append(link)
+        cursor = await db.execute(cte + """
+            SELECT run_id, agent_id, parent_run_id, workflow_run_id, status
+            FROM agent_runs WHERE workspace_id = :workspace_id
+            AND run_id IN (SELECT run_id FROM run_tree) ORDER BY run_id LIMIT 501""", params)
+        agent_runs = [dict(row) for row in await cursor.fetchall()]
+
+    # Typed endpoints keep request IDs and run IDs in separate namespaces.
+    edges = []
+    run_ids = {run["run_id"] for run in agent_runs[:500]}
+    for run in agent_runs[:500]:
+        parent = run["parent_run_id"]
+        if run["workflow_run_id"] == workflow_run_id:
+            edges.append({"source": workflow_run_id, "source_type": "workflow_run",
+                          "target": run["run_id"], "target_type": "agent_run",
+                          "kind": "contains", "provenance": "recorded_identity"})
+        if parent in run_ids:
+            edges.append({"source": parent, "source_type": "agent_run",
+                          "target": run["run_id"], "target_type": "agent_run",
+                          "kind": "child_run", "provenance": "recorded_identity"})
+    for node in nodes:
+        run_id = node["run_id"]
+        if node["event_id"] and (run_id in run_ids or node["workflow_run_id"] == workflow_run_id):
+            edges.append({"source": run_id if run_id in run_ids else workflow_run_id,
+                          "source_type": "agent_run" if run_id in run_ids else "workflow_run",
+                          "target": node["event_id"], "target_type": "request",
+                          "kind": "contains", "provenance": "recorded_identity"})
+    for link in references:
+        if link["resolution"] == "resolved":
+            edges.append({"source": link["target"], "target": link["source"],
+                          "source_type": "request", "target_type": "request",
+                          "kind": link["kind"], "provenance": "caller_reported"})
+    return {"workspace_id": workspace_id, "workflow_run": dict(workflow),
+            "agent_runs": agent_runs[:500], "requests": nodes, "edges": edges,
+            "references": references, "totals": totals,
+            "pagination": {"limit": limit, "offset": offset,
+                           "truncated": offset + len(nodes) < totals["request_count"],
+                           "agent_runs_truncated": len(agent_runs) > 500}}
 
 
 # ===========================================================================

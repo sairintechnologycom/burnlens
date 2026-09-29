@@ -249,6 +249,8 @@ def test_dashboard_api_returns_valid_json(tmp_path):
     db_path = str(tmp_path / "test_dash.db")
     config = BurnLensConfig()
     config.db_path = db_path
+    config.wal_path = str(tmp_path / "wal.jsonl")
+    config.dlq_path = str(tmp_path / "wal_dlq.jsonl")
 
     app = get_app(config)
     # TestClient only runs the app lifespan (including SQLite schema creation)
