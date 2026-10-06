@@ -9,7 +9,7 @@ import { PRODUCT_CONTRACT as C } from "@/lib/productContract";
 
 const TERMINAL_LINES = [
   { prompt: true,  text: "pip install burnlens", delay: 0 },
-  { prompt: false, text: "Successfully installed burnlens-1.26.0", delay: 800 },
+  { prompt: false, text: "Successfully installed burnlens", delay: 800 },
   { prompt: true,  text: "burnlens scan", delay: 1400 },
   { prompt: false, text: "Scanning Claude Code   312 sessions \u00b7 $48.21", delay: 2000, highlight: true },
   { prompt: false, text: "Scanning Cursor         89 sessions \u00b7 $12.84", delay: 2500 },
@@ -221,6 +221,7 @@ export default function LandingPage() {
             <a href="#pricing">Pricing</a>
             <Link href="/security">Security</Link>
             <Link href="/docs">Docs</Link>
+            <a href="https://github.com/sairintechnologycom/burnlens" target="_blank" rel="noopener noreferrer">GitHub</a>
             <Link href="/demo" className="outline">Sample demo</Link>
             <Link href="/setup">Log in</Link>
             <Link href="/setup?intent=register" className="primary">Create workspace</Link>
@@ -267,13 +268,13 @@ export default function LandingPage() {
           <div className="lp-hero-grid">
             <div className="lp-hero-left">
               <h1 className="lp-headline">
-                Know what your AI costs — and what that money <span className="acc">produced</span>
+                See what your AI coding agents <span className="acc">actually cost</span> — from logs already on your machine
               </h1>
               <p className="lp-eyebrow">AI Economics Control Plane</p>
               <p className="lp-subline">
-                BurnLens measures, explains and controls the cost of AI agents and LLM applications
-                by repository, team, customer, feature and outcome. Start locally without sending
-                prompts or code to BurnLens Cloud.
+                One command reads your Claude Code, Cursor, Codex and Gemini CLI session logs and
+                shows spend by repo, model and merged PR. No account, no proxy. Prompts and code
+                never leave your machine.
               </p>
               <div className="lp-hero-cta">
                 <Link href="/scan" className="lp-hero-btn primary">
@@ -600,8 +601,10 @@ export default function LandingPage() {
             </table>
           </div>
           <p className="lp-proof" style={{ marginTop: 20, maxWidth: "62ch" }}>
-            Dedicated comparisons come later and are sourced. Until then we describe
-            BurnLens, not other products.{" "}
+            Comparing tools? See BurnLens vs{" "}
+            <Link href="/compare/burnlens-vs-litellm">LiteLLM</Link>,{" "}
+            <Link href="/compare/burnlens-vs-helicone">Helicone</Link> and{" "}
+            <Link href="/compare/burnlens-vs-langfuse">Langfuse</Link>.{" "}
             <Link href="/docs/evidence">Methodology and evidence →</Link>
           </p>
         </section>
