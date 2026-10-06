@@ -38,8 +38,8 @@
     "window": "2026-07-10 to 2026-08-15",
     "grain": "repository"
   },
-  "headline": "Know what your AI costs — and what that money produced.",
-  "subhead": "BurnLens is the economic control plane for AI. Measure, explain and control spend by repository, team, customer, feature and outcome. Start locally without sending prompts or code to BurnLens Cloud.",
+  "headline": "See what your AI coding agents actually cost — from logs already on your machine.",
+  "subhead": "One command reads your Claude Code, Cursor, Codex and Gemini CLI session logs and shows spend by repo, model and merged PR. No account, no proxy. Prompts and code never leave your machine.",
   "cta_scan": "Scan my AI usage — free",
   "cta_team": "Review team economics"
 }
